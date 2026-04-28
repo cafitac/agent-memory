@@ -59,10 +59,18 @@ agent-memory bootstrap
 agent-memory doctor
 ```
 
+Fastest Hermes-oriented path:
+- install via npm
+- run `agent-memory bootstrap`
+- verify with `agent-memory doctor`
+- inspect installed hooks with `hermes hooks list`
+
 The npm launcher is intentionally thin:
 - `bootstrap` maps to the Python CLI command `hermes-bootstrap`
 - `doctor` maps to the Python CLI command `hermes-doctor`
 - runtime resolution prefers `AGENT_MEMORY_PYTHON_EXECUTABLE`, then `uvx`, then `pipx`
+
+Published install smoke recipes live in `docs/install-smoke.md`.
 
 Alternative Python-first install paths:
 
