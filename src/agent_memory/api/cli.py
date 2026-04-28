@@ -32,6 +32,7 @@ from agent_memory.core.curation import (
     dispute_memory,
 )
 from agent_memory.core.ingestion import ingest_source_text
+from agent_memory.core.kb_export import export_kb_markdown
 from agent_memory.core.retrieval import retrieve_memory_packet
 from agent_memory.storage.sqlite import (
     initialize_database,
@@ -120,6 +121,13 @@ def _build_parser() -> argparse.ArgumentParser:
     list_candidate_episodes_parser = subparsers.add_parser("list-candidate-episodes")
     list_candidate_episodes_parser.add_argument("db_path", type=Path)
     list_candidate_episodes_parser.add_argument("--limit", type=int, default=50)
+
+    kb_parser = subparsers.add_parser("kb")
+    kb_subparsers = kb_parser.add_subparsers(dest="kb_action", required=True)
+    kb_export_parser = kb_subparsers.add_parser("export")
+    kb_export_parser.add_argument("db_path", type=Path)
+    kb_export_parser.add_argument("output_dir", type=Path)
+    kb_export_parser.add_argument("--scope")
 
     review_parser = subparsers.add_parser("review")
     review_subparsers = review_parser.add_subparsers(dest="review_action", required=True)
@@ -330,6 +338,13 @@ def main() -> None:
     if args.command == "list-candidate-episodes":
         print(_dump_models(list_candidate_episodes(args.db_path, limit=args.limit)))
         return
+
+    if args.command == "kb":
+        if args.kb_action == "export":
+            result = export_kb_markdown(db_path=args.db_path, output_dir=args.output_dir, scope=args.scope)
+            print(result.model_dump_json(indent=2))
+            return
+        raise ValueError(f"Unsupported kb action: {args.kb_action}")
 
     if args.command == "review":
         if args.review_action == "approve":

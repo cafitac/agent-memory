@@ -506,6 +506,18 @@ def list_candidate_episodes(db_path: Path | str, limit: int = 50) -> list[Episod
     return _list_by_status(db_path, table_name="episodes", status="candidate", limit=limit, row_parser=episode_from_row)
 
 
+def list_approved_facts(db_path: Path | str, scope: str | None = None) -> list[Fact]:
+    return _list_approved_by_scope(db_path, table_name="facts", scope=scope, row_parser=fact_from_row)
+
+
+def list_approved_procedures(db_path: Path | str, scope: str | None = None) -> list[Procedure]:
+    return _list_approved_by_scope(db_path, table_name="procedures", scope=scope, row_parser=procedure_from_row)
+
+
+def list_approved_episodes(db_path: Path | str, scope: str | None = None) -> list[Episode]:
+    return _list_approved_by_scope(db_path, table_name="episodes", scope=scope, row_parser=episode_from_row)
+
+
 def get_source_records_by_ids(db_path: Path | str, source_ids: list[int]) -> list[SourceRecord]:
     unique_ids = sorted({source_id for source_id in source_ids})
     if not unique_ids:
@@ -842,6 +854,24 @@ def _list_by_status(
             f"SELECT * FROM {table_name} WHERE status = ? ORDER BY id ASC LIMIT ?",
             (status, limit),
         ).fetchall()
+    return [row_parser(row) for row in rows]
+
+
+def _list_approved_by_scope(
+    db_path: Path | str,
+    *,
+    table_name: str,
+    scope: str | None,
+    row_parser: Callable[[sqlite3.Row], T],
+) -> list[T]:
+    sql = f"SELECT * FROM {table_name} WHERE status = ?"
+    params: list[Any] = ["approved"]
+    if scope is not None:
+        sql += " AND scope = ?"
+        params.append(scope)
+    sql += " ORDER BY id ASC"
+    with connect(db_path) as connection:
+        rows = connection.execute(sql, params).fetchall()
     return [row_parser(row) for row in rows]
 
 

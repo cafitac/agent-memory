@@ -8,6 +8,8 @@ Verify that published install surfaces work in a clean shell or clean machine wi
 
 When validating multiple install surfaces on the same machine, run each path in a fresh shell or sanitize `PATH` so an earlier `agent-memory` binary does not shadow the surface under test.
 
+Maintainer note: if you also isolate `HOME` during smoke runs, restore your normal maintainer shell context before using `gh` or `git push` against the repo again. For example, run GitHub operations from a fresh maintainer shell or temporarily set `HOME=/path/to/maintainer/home` for that command. Repositories maintained with SSH remotes and host aliases are less sensitive to `gh` HTTPS credential lookup, but the principle still applies to any tooling that reads credentials from `HOME`.
+
 ## npm path
 
 Use this as the primary end-user onboarding path for Hermes-oriented CLI users.

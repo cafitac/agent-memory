@@ -129,6 +129,14 @@ Retrieve the raw `MemoryPacket` for a query:
 uv run agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
 ```
 
+Export approved memories as a human-readable KB draft:
+
+```bash
+uv run agent-memory kb export ~/.agent-memory/memory.db ./kb-draft --scope user:default
+```
+
+The KB export writes markdown files for approved facts, procedures, and episodes. Candidate, disputed, and deprecated memories are intentionally excluded. The SQLite database remains the source of truth; exported markdown is a reviewable artifact for humans and downstream wiki sync workflows.
+
 Render a Hermes-consumable adapter context:
 
 ```bash
