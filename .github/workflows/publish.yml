@@ -1,0 +1,133 @@
+name: publish
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: 'Publish the Python package cafitac-agent-memory to PyPI'
+        required: false
+        default: true
+        type: boolean
+      publish_npm:
+        description: 'Publish the npm launcher package @cafitac/agent-memory to npm'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate release metadata and publish target names
+        run: uv run python scripts/check_release_metadata.py
+
+      - name: Run tests
+        run: uv run pytest tests/ -q
+
+      - name: Run release-readiness smoke
+        run: uv run python scripts/smoke_release_readiness.py
+
+      - name: Build Python distributions
+        run: uvx --from build python -m build
+
+      - name: Dry-run npm package
+        run: npm pack --dry-run
+
+      - name: Upload Python dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  publish-pypi:
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.publish_pypi
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - name: Download Python dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Publish cafitac-agent-memory to PyPI via Trusted Publishing
+        if: env.PYPI_API_TOKEN == ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+      - name: Publish cafitac-agent-memory to PyPI via API token fallback
+        if: env.PYPI_API_TOKEN != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+
+  publish-npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.publish_npm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Final npm package dry-run before publish
+        run: npm pack --dry-run
+
+      - name: Publish @cafitac/agent-memory to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-github-release:
+    needs:
+      - verify
+      - publish-pypi
+      - publish-npm
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Python dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Create GitHub Release for tag
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

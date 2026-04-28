@@ -1,0 +1,872 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from agent_memory.api.cli import main
+from agent_memory.core.curation import approve_fact, create_candidate_fact
+from agent_memory.core.ingestion import ingest_source_text
+from agent_memory.integrations.hermes_hooks import scope_from_cwd
+from agent_memory.storage.sqlite import initialize_database
+
+
+def test_cli_init_creates_database(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "cli-memory.db"
+
+    monkeypatch.setattr("sys.argv", ["agent-memory", "init", str(db_path)])
+    main()
+
+    assert db_path.exists()
+
+
+
+def test_python_module_cli_init_creates_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-memory.db"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "init", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert db_path.exists()
+
+
+
+def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-context.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content=(
+            "Hermes Context uses branch pattern HC-###. "
+            "Hermes Context owner is Team Context."
+        ),
+        metadata={"project": "hermes-context"},
+    )
+    branch_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Context",
+        predicate="branch_pattern",
+        object_ref_or_value="HC-###",
+        evidence_ids=[source.id],
+        scope="project:hermes-context",
+        confidence=0.95,
+    )
+    owner_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Context",
+        predicate="owner",
+        object_ref_or_value="Team Context",
+        evidence_ids=[source.id],
+        scope="project:hermes-context",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=branch_fact.id)
+    approve_fact(db_path=db_path, fact_id=owner_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "What branch pattern does Hermes Context use?",
+            "--preferred-scope",
+            "project:hermes-context",
+            "--top-k",
+            "2",
+            "--max-prompt-lines",
+            "5",
+            "--max-alternatives",
+            "1",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["context"]["should_answer_now"] is True
+    assert payload["context"]["should_verify_first"] is False
+    assert payload["context"]["payload"]["response_mode"] == "direct"
+    assert len(payload["context"]["payload"]["alternative_memories"]) == 1
+    assert len(payload["context"]["prompt_text"].splitlines()) == 5
+    assert "Reason codes:" not in payload["context"]["prompt_text"]
+    assert payload["outcome"] is None
+
+
+
+def test_python_module_cli_hermes_context_applies_verification_results(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-outcome.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Hermes Outcome policy says ALPHA. Hermes Outcome policy says ALPHA.",
+        metadata={"project": "hermes-outcome"},
+    )
+    low_confidence_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Outcome",
+        predicate="policy",
+        object_ref_or_value="ALPHA",
+        evidence_ids=[source.id],
+        scope="project:hermes-outcome",
+        confidence=0.05,
+    )
+    hidden_alternative = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Outcome",
+        predicate="policy",
+        object_ref_or_value="BETA",
+        evidence_ids=[source.id],
+        scope="project:hermes-outcome",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=low_confidence_fact.id)
+    # dispute via CLI command behavior is covered elsewhere; direct helper keeps this test focused on hermes-context output.
+    from agent_memory.core.curation import dispute_memory
+
+    dispute_memory(db_path=db_path, memory_type="fact", memory_id=hidden_alternative.id)
+
+    verification_results = json.dumps(
+        [
+            {
+                "step_action": "cross_check_hidden_alternatives",
+                "status": "passed",
+                "evidence_summary": "No approved alternative contradicted the primary memory.",
+                "target_memory_type": "fact",
+                "target_memory_id": low_confidence_fact.id,
+            },
+            {
+                "step_action": "corroborate_before_answer",
+                "status": "passed",
+                "evidence_summary": "Source text repeated the ALPHA policy note.",
+                "target_memory_type": "fact",
+                "target_memory_id": low_confidence_fact.id,
+            },
+        ]
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "Hermes Outcome policy ALPHA",
+            "--preferred-scope",
+            "project:hermes-outcome",
+            "--verification-results-json",
+            verification_results,
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["context"]["should_verify_first"] is True
+    assert payload["outcome"]["should_answer_now"] is True
+    assert payload["outcome"]["should_verify_first"] is False
+    assert payload["outcome"]["response_mode_after_verification"] == "cautious"
+    assert payload["outcome"]["unresolved_blocking_steps"] == []
+    assert payload["outcome"]["prompt_text"].count("Verification result:") == 2
+
+
+
+def test_python_module_cli_hermes_context_respects_max_prompt_chars(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-char-budget.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content=(
+            "Hermes Char Budget uses branch pattern HCB-###. "
+            "Hermes Char Budget owner is Team Budget."
+        ),
+        metadata={"project": "hermes-char-budget"},
+    )
+    branch_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Char Budget",
+        predicate="branch_pattern",
+        object_ref_or_value="HCB-###",
+        evidence_ids=[source.id],
+        scope="project:hermes-char-budget",
+        confidence=0.95,
+    )
+    owner_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Char Budget",
+        predicate="owner",
+        object_ref_or_value="Team Budget",
+        evidence_ids=[source.id],
+        scope="project:hermes-char-budget",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=branch_fact.id)
+    approve_fact(db_path=db_path, fact_id=owner_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "What branch pattern does Hermes Char Budget use?",
+            "--preferred-scope",
+            "project:hermes-char-budget",
+            "--top-k",
+            "2",
+            "--max-prompt-chars",
+            "120",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    prompt_text = payload["context"]["prompt_text"]
+    assert len(prompt_text) <= 120
+    assert prompt_text.splitlines() == [
+        "Memory response mode: direct",
+        "Prompt prefix: Answer directly using the top-ranked memory.",
+    ]
+    assert len(payload["context"]["payload"]["alternative_memories"]) == 1
+
+
+
+def test_python_module_cli_hermes_context_respects_max_prompt_tokens(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-token-budget.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content=(
+            "Hermes Token Budget uses branch pattern HTB-###. "
+            "Hermes Token Budget owner is Team Token."
+        ),
+        metadata={"project": "hermes-token-budget"},
+    )
+    branch_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Token Budget",
+        predicate="branch_pattern",
+        object_ref_or_value="HTB-###",
+        evidence_ids=[source.id],
+        scope="project:hermes-token-budget",
+        confidence=0.95,
+    )
+    owner_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Token Budget",
+        predicate="owner",
+        object_ref_or_value="Team Token",
+        evidence_ids=[source.id],
+        scope="project:hermes-token-budget",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=branch_fact.id)
+    approve_fact(db_path=db_path, fact_id=owner_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "What branch pattern does Hermes Token Budget use?",
+            "--preferred-scope",
+            "project:hermes-token-budget",
+            "--top-k",
+            "2",
+            "--max-prompt-tokens",
+            "24",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    prompt_text = payload["context"]["prompt_text"]
+    assert len(prompt_text) <= 96
+    assert prompt_text.splitlines() == [
+        "Memory response mode: direct",
+        "Prompt prefix: Answer directly using the top-ranked memory.",
+    ]
+    assert len(payload["context"]["payload"]["alternative_memories"]) == 1
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_hook_payload(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "module-cli-hermes-pre-llm-hook.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Hermes Hook project uses branch pattern HH-###.",
+        metadata={"project": "hermes-hook"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes Hook",
+        predicate="branch_pattern",
+        object_ref_or_value="HH-###",
+        evidence_ids=[source.id],
+        scope="project:hermes-hook",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "tool_name": None,
+        "tool_input": None,
+        "session_id": "test-session",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "What branch pattern does Hermes Hook use?",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:hermes-hook",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "4",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    hook_response = json.loads(result.stdout)
+    assert set(hook_response) == {"context"}
+    assert "<agent_memory_context>" in hook_response["context"]
+    assert "Memory response mode: direct" in hook_response["context"]
+    assert "Top memory: fact" in hook_response["context"]
+    assert "HH-###" not in hook_response["context"]  # compact target context, not raw fact dump
+    assert "Reason codes:" not in hook_response["context"]
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_derives_path_scope_from_payload_cwd(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "module-cli-hermes-cwd-scope.db"
+    project_alpha = tmp_path / "project-alpha"
+    project_beta = tmp_path / "project-beta"
+    project_alpha.mkdir()
+    project_beta.mkdir()
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Project Alpha and Project Beta use different branch patterns.",
+        metadata={"example": "cwd-scope"},
+    )
+    alpha_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Alpha",
+        predicate="branch_pattern",
+        object_ref_or_value="ALPHA-###",
+        evidence_ids=[source.id],
+        scope=scope_from_cwd(str(project_alpha)),
+        confidence=0.95,
+    )
+    beta_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Beta",
+        predicate="branch_pattern",
+        object_ref_or_value="BETA-###",
+        evidence_ids=[source.id],
+        scope=scope_from_cwd(str(project_beta)),
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=alpha_fact.id)
+    approve_fact(db_path=db_path, fact_id=beta_fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "test-session",
+        "cwd": str(project_alpha),
+        "extra": {"user_message": "What branch pattern should I use?"},
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    hook_response = json.loads(result.stdout)
+    assert "Project Alpha" in hook_response["context"]
+    assert "Project Beta" not in hook_response["context"]
+
+
+def test_python_module_cli_hermes_hook_config_snippet_outputs_mergeable_yaml_without_writing_config(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "snippet-memory.db"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("model:\n  provider: openai-codex\n")
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-hook-config-snippet",
+            str(db_path),
+            "--preferred-scope",
+            "project:snippet",
+            "--top-k",
+            "3",
+            "--max-prompt-lines",
+            "8",
+            "--max-prompt-chars",
+            "640",
+            "--max-prompt-tokens",
+            "160",
+            "--max-alternatives",
+            "2",
+            "--timeout",
+            "12",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    snippet = result.stdout
+    assert snippet.startswith("hooks:\n")
+    assert "pre_llm_call:" in snippet
+    assert "command:" in snippet
+    assert "hermes-pre-llm-hook" in snippet
+    assert str(db_path) in snippet
+    assert "--preferred-scope project:snippet" in snippet
+    assert "--top-k 3" in snippet
+    assert "--max-prompt-lines 8" in snippet
+    assert "--max-prompt-chars 640" in snippet
+    assert "--max-prompt-tokens 160" in snippet
+    assert "--max-alternatives 2" in snippet
+    assert "--no-reason-codes" in snippet
+    assert "timeout: 12" in snippet
+    assert "model:\n  provider: openai-codex\n" == config_path.read_text()
+
+
+
+def test_python_module_cli_hermes_install_hook_writes_missing_config_with_snippet(tmp_path: Path) -> None:
+    db_path = tmp_path / "install-memory.db"
+    config_path = tmp_path / "hermes" / "config.yaml"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-install-hook",
+            str(db_path),
+            "--config-path",
+            str(config_path),
+            "--preferred-scope",
+            "project:install",
+            "--top-k",
+            "2",
+            "--max-prompt-tokens",
+            "100",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["changed"] is True
+    assert payload["config_path"] == str(config_path)
+    assert payload["backup_path"] is None
+    assert payload["db_initialized"] is True
+    assert db_path.exists()
+    config_text = config_path.read_text()
+    assert "hooks:" in config_text
+    assert "hermes-pre-llm-hook" in config_text
+    assert "--preferred-scope project:install" in config_text
+    assert "--max-prompt-tokens 100" in config_text
+    assert "--no-reason-codes" in config_text
+
+
+
+def test_python_module_cli_hermes_install_hook_reports_when_database_already_exists(tmp_path: Path) -> None:
+    db_path = tmp_path / "existing-install-memory.db"
+    initialize_database(db_path)
+    config_path = tmp_path / "config.yaml"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-install-hook",
+            str(db_path),
+            "--config-path",
+            str(config_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["db_initialized"] is False
+    assert config_path.exists()
+
+
+
+def test_python_module_cli_hermes_bootstrap_defaults_to_user_paths_and_recommended_budgets(tmp_path: Path) -> None:
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+    default_db_path = tmp_path / ".agent-memory" / "memory.db"
+    default_config_path = tmp_path / ".hermes" / "config.yaml"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-bootstrap",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["config_path"] == str(default_config_path)
+    assert payload["db_initialized"] is True
+    assert default_db_path.exists()
+    config_text = default_config_path.read_text()
+    assert "hermes-pre-llm-hook" in config_text
+    assert str(default_db_path) in config_text
+    assert "--top-k 3" in config_text
+    assert "--max-prompt-lines 8" in config_text
+    assert "--max-prompt-chars 1200" in config_text
+    assert "--max-prompt-tokens 300" in config_text
+    assert "--max-alternatives 2" in config_text
+    assert "timeout: 12" in config_text
+
+
+
+def test_python_module_cli_hermes_doctor_reports_missing_setup_and_fix_command(tmp_path: Path) -> None:
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "hermes-doctor"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "needs_setup"
+    assert payload["db_exists"] is False
+    assert payload["config_exists"] is False
+    assert payload["hook_installed"] is False
+    assert any(check["name"] == "database_exists" and check["ok"] is False for check in payload["checks"])
+    assert "uv run agent-memory hermes-bootstrap" in payload["recommended_command"]
+
+
+
+def test_python_module_cli_hermes_doctor_reports_ok_after_bootstrap(tmp_path: Path) -> None:
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+    cwd = Path(__file__).resolve().parents[1]
+
+    bootstrap = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "hermes-bootstrap"],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert bootstrap.returncode == 0, bootstrap.stderr
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "hermes-doctor"],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert payload["db_exists"] is True
+    assert payload["config_exists"] is True
+    assert payload["hook_installed"] is True
+    assert payload["hook_occurrences"] == 1
+    assert all(check["ok"] is True for check in payload["checks"])
+
+
+
+def test_python_module_cli_hermes_install_hook_merges_existing_pre_llm_hooks(tmp_path: Path) -> None:
+    db_path = tmp_path / "install-merge-memory.db"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "model:\n"
+        "  provider: openai-codex\n"
+        "hooks:\n"
+        "  pre_llm_call:\n"
+        "    - command: \"/existing/context-hook.py\"\n"
+        "      timeout: 15\n"
+        "  on_session_end:\n"
+        "    - command: \"/existing/session-hook.py\"\n"
+        "      timeout: 15\n"
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-install-hook",
+            str(db_path),
+            "--config-path",
+            str(config_path),
+            "--preferred-scope",
+            "project:merge",
+            "--max-prompt-tokens",
+            "120",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["changed"] is True
+    assert payload["reason"] == "merged_existing_hooks_block"
+    assert payload["backup_path"] is not None
+    config_text = config_path.read_text()
+    assert config_text.count("pre_llm_call:") == 1
+    assert "/existing/context-hook.py" in config_text
+    assert "/existing/session-hook.py" in config_text
+    assert "hermes-pre-llm-hook" in config_text
+    assert "--preferred-scope project:merge" in config_text
+    assert config_text.index("hermes-pre-llm-hook") < config_text.index("on_session_end:")
+
+
+
+def test_python_module_cli_hermes_install_hook_is_idempotent_for_existing_command(tmp_path: Path) -> None:
+    db_path = tmp_path / "install-idempotent-memory.db"
+    config_path = tmp_path / "config.yaml"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    base_args = [
+        sys.executable,
+        "-m",
+        "agent_memory.api.cli",
+        "hermes-install-hook",
+        str(db_path),
+        "--config-path",
+        str(config_path),
+        "--top-k",
+        "2",
+    ]
+
+    first = subprocess.run(
+        base_args,
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    second = subprocess.run(
+        base_args,
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert json.loads(first.stdout)["changed"] is True
+    second_payload = json.loads(second.stdout)
+    assert second_payload["changed"] is False
+    assert second_payload["reason"] == "already_installed"
+    assert config_path.read_text().count("hermes-pre-llm-hook") == 1
+
+
+
+def test_python_module_cli_hermes_hook_config_snippet_defaults_to_current_python_module_command(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "snippet-default.db"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-hook-config-snippet",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    snippet = result.stdout
+    assert sys.executable in snippet
+    assert " -m agent_memory.api.cli hermes-pre-llm-hook " in snippet
+    assert "timeout: 10" in snippet
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_noops_for_non_pre_llm_payload(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-pre-llm-hook-noop.db"
+    initialize_database(db_path)
+    hook_payload = {
+        "hook_event_name": "post_tool_call",
+        "tool_name": "terminal",
+        "tool_input": {"command": "echo ok"},
+        "session_id": "test-session",
+        "cwd": str(tmp_path),
+        "extra": {},
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {}
+
+
+
+def test_python_module_cli_retrieve_outputs_json_packet(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-retrieve.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Hermes stores sessions in SQLite with FTS5 search.",
+        metadata={"project": "hermes"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes",
+        predicate="stores_sessions_in",
+        object_ref_or_value="SQLite with FTS5 search",
+        evidence_ids=[source.id],
+        scope="project:hermes",
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "Where does Hermes store sessions?",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    packet = json.loads(result.stdout)
+    assert packet["semantic_facts"][0]["subject_ref"] == "Hermes"
+    assert packet["procedural_guidance"] == []

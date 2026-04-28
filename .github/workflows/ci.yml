@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate release metadata and publish target names
+        run: uv run python scripts/check_release_metadata.py
+
+      - name: Run tests
+        run: uv run pytest tests/ -q
+
+      - name: Run release-readiness smoke
+        run: uv run python scripts/smoke_release_readiness.py
+
+      - name: Build Python distributions
+        run: uvx --from build python -m build
+
+      - name: Dry-run npm package
+        run: npm pack --dry-run

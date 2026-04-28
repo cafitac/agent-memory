@@ -1,0 +1,161 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS source_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    adapter TEXT,
+    external_ref TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    content TEXT NOT NULL,
+    checksum TEXT NOT NULL UNIQUE,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_ref TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    object_ref_or_value TEXT NOT NULL,
+    evidence_ids_json TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    valid_from TEXT,
+    valid_to TEXT,
+    scope TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('candidate', 'approved', 'disputed', 'deprecated')) DEFAULT 'candidate',
+    searchable_text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at TEXT,
+    last_accessed_at TEXT,
+    retrieval_count INTEGER NOT NULL DEFAULT 0,
+    reinforcement_count REAL NOT NULL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS procedures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    trigger_context TEXT NOT NULL,
+    preconditions_json TEXT NOT NULL,
+    steps_json TEXT NOT NULL,
+    evidence_ids_json TEXT NOT NULL,
+    success_rate REAL NOT NULL DEFAULT 0.0,
+    scope TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('candidate', 'approved', 'disputed', 'deprecated')) DEFAULT 'candidate',
+    searchable_text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at TEXT,
+    last_accessed_at TEXT,
+    retrieval_count INTEGER NOT NULL DEFAULT 0,
+    reinforcement_count REAL NOT NULL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT,
+    source_ids_json TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    importance_score REAL NOT NULL DEFAULT 0.0,
+    scope TEXT NOT NULL DEFAULT 'global',
+    status TEXT NOT NULL CHECK (status IN ('candidate', 'approved', 'disputed', 'deprecated')) DEFAULT 'candidate',
+    searchable_text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at TEXT,
+    last_accessed_at TEXT,
+    retrieval_count INTEGER NOT NULL DEFAULT 0,
+    reinforcement_count REAL NOT NULL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_ref TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    to_ref TEXT NOT NULL,
+    weight REAL NOT NULL DEFAULT 1.0,
+    evidence_ids_json TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    valid_from TEXT,
+    valid_to TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_facts_status_scope ON facts(status, scope);
+CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_ref);
+CREATE INDEX IF NOT EXISTS idx_procedures_status_scope ON procedures(status, scope);
+CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
+CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(status, scope, importance_score);
+CREATE INDEX IF NOT EXISTS idx_episodes_title ON episodes(title);
+CREATE INDEX IF NOT EXISTS idx_relations_from_to ON relations(from_ref, to_ref);
+CREATE INDEX IF NOT EXISTS idx_relations_to_ref ON relations(to_ref);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+    searchable_text,
+    content='facts',
+    content_rowid='id'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS procedures_fts USING fts5(
+    searchable_text,
+    content='procedures',
+    content_rowid='id'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
+    searchable_text,
+    content='episodes',
+    content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
+    INSERT INTO facts_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
+    INSERT INTO facts_fts(facts_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
+    INSERT INTO facts_fts(facts_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+    INSERT INTO facts_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS procedures_ai AFTER INSERT ON procedures BEGIN
+    INSERT INTO procedures_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS procedures_ad AFTER DELETE ON procedures BEGIN
+    INSERT INTO procedures_fts(procedures_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS procedures_au AFTER UPDATE ON procedures BEGIN
+    INSERT INTO procedures_fts(procedures_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+    INSERT INTO procedures_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS episodes_ai AFTER INSERT ON episodes BEGIN
+    INSERT INTO episodes_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS episodes_ad AFTER DELETE ON episodes BEGIN
+    INSERT INTO episodes_fts(episodes_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS episodes_au AFTER UPDATE ON episodes BEGIN
+    INSERT INTO episodes_fts(episodes_fts, rowid, searchable_text)
+    VALUES('delete', old.id, old.searchable_text);
+    INSERT INTO episodes_fts(rowid, searchable_text)
+    VALUES (new.id, new.searchable_text);
+END;
