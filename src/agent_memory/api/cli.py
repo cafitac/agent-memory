@@ -45,6 +45,16 @@ def _dump_models(models: list[Any]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models], indent=2)
 
 
+def _normalize_command_aliases(argv: list[str]) -> list[str]:
+    alias_map = {
+        "bootstrap": "hermes-bootstrap",
+        "doctor": "hermes-doctor",
+    }
+    if not argv:
+        return argv
+    return [alias_map.get(argv[0], argv[0]), *argv[1:]]
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-memory")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -237,7 +247,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = _build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(_normalize_command_aliases(sys.argv[1:]))
 
     if args.command == "init":
         initialize_database(args.db_path)

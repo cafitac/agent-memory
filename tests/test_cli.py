@@ -679,6 +679,35 @@ def test_python_module_cli_hermes_doctor_reports_ok_after_bootstrap(tmp_path: Pa
 
 
 
+def test_python_module_cli_bootstrap_and_doctor_aliases_match_hermes_commands(tmp_path: Path) -> None:
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+    cwd = Path(__file__).resolve().parents[1]
+
+    bootstrap = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "bootstrap"],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert bootstrap.returncode == 0, bootstrap.stderr
+
+    doctor = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "doctor"],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert doctor.returncode == 0, doctor.stderr
+    payload = json.loads(doctor.stdout)
+    assert payload["status"] == "ok"
+    assert payload["hook_installed"] is True
+    assert payload["hook_occurrences"] == 1
+
+
+
 def test_python_module_cli_hermes_install_hook_merges_existing_pre_llm_hooks(tmp_path: Path) -> None:
     db_path = tmp_path / "install-merge-memory.db"
     config_path = tmp_path / "config.yaml"
