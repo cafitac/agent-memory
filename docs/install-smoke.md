@@ -78,4 +78,4 @@ Record:
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.4`.
+As of the latest validated public install smoke, the validated tag is `v0.1.5`.
