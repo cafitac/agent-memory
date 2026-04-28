@@ -5,11 +5,15 @@ Last updated: 2026-04-29 01:57 KST
 
 ## Trigger for the next session
 
-If the user starts a fresh session and only says:
+If the user starts a fresh session and only says any of these short prompts:
 
 > 지금 해야하는거 알려줘
 
-then read this file first and answer from the "Ready-to-say answer" section below. Do not ask the user to restate context. The immediate next work is already chosen here.
+> 다음으로 진행할거 해줘
+
+> 다음 거 진행해줘
+
+then read this file first and answer from the "Ready-to-say answer" section below. Do not ask the user to restate context. The immediate next work is already chosen here. If the prompt asks to proceed, start the "Immediate next work" section directly after checking repo state.
 
 ## Ready-to-say answer
 
