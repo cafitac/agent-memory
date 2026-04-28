@@ -42,16 +42,16 @@ agent-memory takes a different approach:
 
 ## CLI quick start
 
-Current status: the repository already exposes a Python CLI (`agent-memory`) and now also includes a thin npm launcher scaffold (`bin/agent-memory.js` + `package.json`). The intended dual-distribution posture is:
-- npm as the shortest onboarding path for Hermes / Claude Code / Codex style CLI users
-- PyPI as the canonical Python runtime package for direct installs, CI, and power users
+Current release posture:
+- npm is the shortest onboarding path for Hermes / Claude Code / Codex style CLI users
+- PyPI is the canonical Python runtime package for direct installs, CI, and power users
 
 Chosen distribution names:
 - npm package: `@cafitac/agent-memory`
 - PyPI package: `cafitac-agent-memory`
 - installed CLI command on both surfaces: `agent-memory`
 
-Target npm UX after publish:
+Shortest onboarding path:
 
 ```bash
 npm install -g @cafitac/agent-memory
@@ -64,7 +64,21 @@ The npm launcher is intentionally thin:
 - `doctor` maps to the Python CLI command `hermes-doctor`
 - runtime resolution prefers `AGENT_MEMORY_PYTHON_EXECUTABLE`, then `uvx`, then `pipx`
 
-Until the npm package is actually published, the reliable path is the source or Python-install flow below.
+Alternative Python-first install paths:
+
+```bash
+pipx install cafitac-agent-memory
+agent-memory bootstrap
+agent-memory doctor
+```
+
+```bash
+uv tool install cafitac-agent-memory
+agent-memory bootstrap
+agent-memory doctor
+```
+
+Source / development flow:
 
 Initialize a SQLite memory database. For real use, prefer one global user-level database and let scopes/provenance separate projects:
 
