@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -55,3 +56,17 @@ def test_built_distributions_include_schema_sql(tmp_path: Path) -> None:
 
     with tarfile.open(sdists[0], "r:gz") as sdist:
         assert any(name.endswith("/src/agent_memory/storage/schema.sql") for name in sdist.getnames())
+
+
+def test_python311_can_compile_hermes_adapter_when_available() -> None:
+    python311 = shutil.which("python3.11")
+    if python311 is None:
+        return
+
+    subprocess.run(
+        [python311, "-m", "py_compile", "src/agent_memory/adapters/hermes.py"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )

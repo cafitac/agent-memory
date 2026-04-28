@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
 from agent_memory.core.models import MemoryPacket, PolicyHintReasonCode, VerificationPlan, VerificationStep
+
+
+T = TypeVar("T")
 
 
 class HermesTopMemory(BaseModel):
@@ -137,7 +140,7 @@ def apply_hermes_verification_results(
     )
 
 
-def _limit_items[T](items: list[T], max_items: int | None) -> list[T]:
+def _limit_items(items: list[T], max_items: int | None) -> list[T]:
     if max_items is None:
         return items
     return items[: max(0, max_items)]

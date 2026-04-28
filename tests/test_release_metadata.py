@@ -11,7 +11,7 @@ def test_release_metadata_versions_and_names_are_synced() -> None:
 
     assert metadata.python_package_name == "cafitac-agent-memory"
     assert metadata.npm_package_name == "@cafitac/agent-memory"
-    assert metadata.python_package_version == "0.1.2"
+    assert metadata.python_package_version == "0.1.3"
     assert metadata.npm_package_version == metadata.python_package_version
     assert metadata.module_version == metadata.python_package_version
     assert metadata.npm_repository_url == "https://github.com/cafitac/agent-memory"
