@@ -1,12 +1,13 @@
 [project]
 name = "cafitac-agent-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reusable memory runtime for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Agent Memory Contributors" }]
 keywords = ["agent", "memory", "rag", "knowledge-base", "sqlite"]
+urls = { Homepage = "https://github.com/cafitac/agent-memory#readme", Repository = "https://github.com/cafitac/agent-memory", Issues = "https://github.com/cafitac/agent-memory/issues" }
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

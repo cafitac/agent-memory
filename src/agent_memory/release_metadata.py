@@ -13,6 +13,7 @@ class ReleaseMetadata:
     npm_package_name: str
     npm_package_version: str
     module_version: str
+    npm_repository_url: str
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,7 @@ PACKAGE_JSON_PATH = PROJECT_ROOT / "package.json"
 MODULE_INIT_PATH = PROJECT_ROOT / "src" / "agent_memory" / "__init__.py"
 EXPECTED_PYTHON_PACKAGE_NAME = "cafitac-agent-memory"
 EXPECTED_NPM_PACKAGE_NAME = "@cafitac/agent-memory"
+EXPECTED_REPOSITORY_URL = "https://github.com/cafitac/agent-memory"
 
 
 def _read_pyproject(path: Path = PYPROJECT_PATH) -> tuple[str, str]:
@@ -29,9 +31,13 @@ def _read_pyproject(path: Path = PYPROJECT_PATH) -> tuple[str, str]:
     return str(project["name"]), str(project["version"])
 
 
-def _read_package_json(path: Path = PACKAGE_JSON_PATH) -> tuple[str, str]:
+def _read_package_json(path: Path = PACKAGE_JSON_PATH) -> tuple[str, str, str]:
     payload = json.loads(path.read_text())
-    return str(payload["name"]), str(payload["version"])
+    repository = payload.get("repository")
+    if not isinstance(repository, dict):
+        raise ValueError(f"repository must be an object in {path}")
+    repository_url = repository.get("url", "")
+    return str(payload["name"]), str(payload["version"]), str(repository_url)
 
 
 def _read_module_version(path: Path = MODULE_INIT_PATH) -> str:
@@ -47,7 +53,7 @@ def load_release_metadata(project_root: Path = PROJECT_ROOT) -> ReleaseMetadata:
     module_init_path = project_root / "src" / "agent_memory" / "__init__.py"
 
     python_name, python_version = _read_pyproject(pyproject_path)
-    npm_name, npm_version = _read_package_json(package_json_path)
+    npm_name, npm_version, npm_repository_url = _read_package_json(package_json_path)
     module_version = _read_module_version(module_init_path)
     return ReleaseMetadata(
         python_package_name=python_name,
@@ -55,6 +61,7 @@ def load_release_metadata(project_root: Path = PROJECT_ROOT) -> ReleaseMetadata:
         npm_package_name=npm_name,
         npm_package_version=npm_version,
         module_version=module_version,
+        npm_repository_url=npm_repository_url,
     )
 
 
@@ -71,6 +78,12 @@ def validate_release_metadata(project_root: Path = PROJECT_ROOT) -> ReleaseMetad
         raise ValueError(
             "Unexpected npm package name: "
             f"{metadata.npm_package_name!r} != {EXPECTED_NPM_PACKAGE_NAME!r}"
+        )
+
+    if metadata.npm_repository_url != EXPECTED_REPOSITORY_URL:
+        raise ValueError(
+            "Unexpected npm repository URL: "
+            f"{metadata.npm_repository_url!r} != {EXPECTED_REPOSITORY_URL!r}"
         )
 
     versions = {
