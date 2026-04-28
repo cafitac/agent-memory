@@ -4,6 +4,7 @@ import json
 import math
 import sqlite3
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar
 
@@ -41,6 +42,11 @@ def _schema_path() -> Path:
     return Path(__file__).with_name("schema.sql")
 
 
+def _schema_sql() -> str:
+    resource = files("agent_memory.storage").joinpath("schema.sql")
+    return resource.read_text()
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +58,7 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
 
 def initialize_database(db_path: Path | str) -> None:
     with connect(db_path) as connection:
-        connection.executescript(_schema_path().read_text())
+        connection.executescript(_schema_sql())
         _ensure_memory_table_columns(
             connection,
             table_name="facts",
