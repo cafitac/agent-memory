@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+
+const PYTHON_PACKAGE_NAME = 'cafitac-agent-memory';
 
 const COMMAND_ALIASES = new Map([
   ['bootstrap', 'hermes-bootstrap'],
@@ -26,6 +30,18 @@ function mapArgs(argv) {
   return [mapped, ...rest];
 }
 
+function pythonPackageSpec() {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+    if (packageJson.version) {
+      return `${PYTHON_PACKAGE_NAME}==${packageJson.version}`;
+    }
+  } catch (_) {
+    // Fall back to an unpinned package name only if package metadata is unavailable.
+  }
+  return PYTHON_PACKAGE_NAME;
+}
+
 function buildInvocation(args) {
   const forcedPython = process.env.AGENT_MEMORY_PYTHON_EXECUTABLE;
   if (forcedPython) {
@@ -39,7 +55,7 @@ function buildInvocation(args) {
   if (commandExists('uvx')) {
     return {
       command: 'uvx',
-      args: ['--from', 'cafitac-agent-memory', 'agent-memory', ...args],
+      args: ['--from', pythonPackageSpec(), 'agent-memory', ...args],
       source: 'uvx',
     };
   }
@@ -47,7 +63,7 @@ function buildInvocation(args) {
   if (commandExists('pipx')) {
     return {
       command: 'pipx',
-      args: ['run', 'cafitac-agent-memory', ...args],
+      args: ['run', pythonPackageSpec(), ...args],
       source: 'pipx',
     };
   }
