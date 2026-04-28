@@ -221,7 +221,7 @@ Keep these decisions unless a later document explicitly overturns them:
 ## 10. Current repo reality check
 
 Current known repo state at time of this handoff:
-- release posture is validated through `v0.1.7`
+- release posture is validated through `v0.1.8`
 - KB M1 vertical slice has been implemented and released: approved facts/procedures/episodes can be exported to markdown through `agent-memory kb export`
 - KB M1+ source-aware export is implemented locally in this workstream: exported markdown now includes source details/excerpts and CLI JSON includes counts plus referenced source IDs
 - working tree may contain local M1+ edits until they are committed; check `git status --short --branch` before release or tagging work
