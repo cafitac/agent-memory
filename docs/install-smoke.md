@@ -6,6 +6,8 @@ This document records the approved post-publish smoke paths for agent-memory.
 
 Verify that published install surfaces work in a clean shell or clean machine without relying on the source checkout.
 
+When validating multiple install surfaces on the same machine, run each path in a fresh shell or sanitize `PATH` so an earlier `agent-memory` binary does not shadow the surface under test.
+
 ## npm path
 
 Use this as the primary end-user onboarding path for Hermes-oriented CLI users.
@@ -76,4 +78,4 @@ Record:
 
 ## Release note
 
-As of the first successful public release, the validated tag is `v0.1.1`.
+As of the latest validated public install smoke, the validated tag is `v0.1.4`.
