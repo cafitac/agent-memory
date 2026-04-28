@@ -135,7 +135,7 @@ Export approved memories as a human-readable KB draft:
 uv run agent-memory kb export ~/.agent-memory/memory.db ./kb-draft --scope user:default
 ```
 
-The KB export writes markdown files for approved facts, procedures, and episodes. Candidate, disputed, and deprecated memories are intentionally excluded. The SQLite database remains the source of truth; exported markdown is a reviewable artifact for humans and downstream wiki sync workflows.
+The KB export writes markdown files for approved facts, procedures, and episodes. Candidate, disputed, and deprecated memories are intentionally excluded. Each exported memory includes its referenced source IDs; when source records exist, the markdown also includes source type, created timestamp, adapter/external reference, metadata, and a short source excerpt for human review. The CLI prints JSON with generated files, per-type counts, total exported items, and referenced source IDs. The SQLite database remains the source of truth; exported markdown is a reviewable artifact for humans and downstream wiki sync workflows.
 
 Render a Hermes-consumable adapter context:
 

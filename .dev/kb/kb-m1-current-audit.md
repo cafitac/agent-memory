@@ -420,9 +420,25 @@ Most of the foundational pieces exist:
 - approved-only retrieval
 - Hermes thin consumption boundary
 
-The main missing piece is a deterministic KB export path and its CLI/test coverage.
+The main missing piece at the time of the original audit was a deterministic KB export path and its CLI/test coverage.
 
-Recommended next implementation task:
+## Update: KB M1 and M1+ implementation status
 
-- review the local KB export implementation and decide whether to commit it as the M1 export slice
-- after commit, consider expanding M1 with source-aware export excerpts or richer provenance rendering
+After the original audit, the M1 export slice was implemented and released in `v0.1.7`:
+
+- `src/agent_memory/core/kb_export.py`
+- `agent-memory kb export <db_path> <output_dir> [--scope <scope>]`
+- approved-only markdown output for facts, procedures, and episodes
+- scoped export filtering
+- vertical-slice tests in `tests/test_kb_export.py`
+
+The current M1+ workstream enriches that export with source-aware provenance:
+
+- exported markdown renders source type, created timestamp, adapter, external reference, metadata, and short source excerpts when referenced source records exist
+- missing source IDs are shown as missing instead of crashing the export
+- `KbExportResult` includes `counts` and `source_ids` for automation-friendly CLI JSON output
+
+Recommended next implementation task after this lands:
+
+- cut a patch release if the user wants the richer KB export available publicly
+- then implement retrieval evaluation fixtures before adding embeddings/reranking

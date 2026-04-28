@@ -196,7 +196,16 @@ class KbExportedFile(BaseModel):
     item_count: int
 
 
+class KbExportCounts(BaseModel):
+    facts: int = 0
+    procedures: int = 0
+    episodes: int = 0
+    total_items: int = 0
+
+
 class KbExportResult(BaseModel):
     output_dir: str
     scope: str | None = None
     files: list[KbExportedFile] = Field(default_factory=list)
+    counts: KbExportCounts = Field(default_factory=KbExportCounts)
+    source_ids: list[int] = Field(default_factory=list)

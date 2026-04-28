@@ -129,6 +129,98 @@ def test_export_kb_markdown_writes_procedures_and_episodes(tmp_path: Path) -> No
     assert f"Source ids: {source.id}" in episodes_md
 
 
+def test_export_kb_markdown_includes_source_details_for_facts(tmp_path: Path) -> None:
+    db_path = tmp_path / "agent-memory.db"
+    output_dir = tmp_path / "kb"
+    initialize_database(db_path)
+
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="session_note",
+        content="Project M1+ keeps source-aware provenance in KB exports so humans can review excerpts.",
+        metadata={"project": "m1-plus", "author": "tester"},
+        adapter="hermes",
+        external_ref="session:abc123",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project M1+",
+        predicate="keeps",
+        object_ref_or_value="source-aware provenance",
+        evidence_ids=[source.id],
+        scope="project:m1-plus",
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    result = export_kb_markdown(db_path=db_path, output_dir=output_dir, scope="project:m1-plus")
+
+    facts_md = (output_dir / "facts.md").read_text()
+    assert "### Sources" in facts_md
+    assert f"Source {source.id}" in facts_md
+    assert "Type: session_note" in facts_md
+    assert "Adapter: hermes" in facts_md
+    assert "External ref: session:abc123" in facts_md
+    assert "Metadata: author=tester, project=m1-plus" in facts_md
+    assert "Excerpt: Project M1+ keeps source-aware provenance" in facts_md
+    assert result.counts.facts == 1
+    assert result.counts.procedures == 0
+    assert result.counts.episodes == 0
+    assert result.counts.total_items == 1
+    assert result.source_ids == [source.id]
+
+
+def test_export_kb_markdown_includes_source_details_for_procedures_and_episodes(tmp_path: Path) -> None:
+    db_path = tmp_path / "agent-memory.db"
+    output_dir = tmp_path / "kb"
+    initialize_database(db_path)
+
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="runbook",
+        content="Release KB exports should preserve enough source context for reviewer trust.",
+        metadata={"kind": "release"},
+    )
+    procedure = create_candidate_procedure(
+        db_path=db_path,
+        name="Review KB export",
+        trigger_context="Before publishing source-aware export",
+        preconditions=[],
+        steps=["Export KB draft", "Review source excerpts"],
+        evidence_ids=[source.id, 9999],
+        scope="project:m1-plus",
+    )
+    from agent_memory.core.curation import approve_procedure
+
+    approve_procedure(db_path=db_path, procedure_id=procedure.id)
+    create_episode(
+        db_path=db_path,
+        title="Source-aware export shipped",
+        summary="A reviewer confirmed source excerpts appear in markdown.",
+        source_ids=[source.id],
+        tags=["kb", "provenance"],
+        importance_score=0.8,
+        scope="project:m1-plus",
+        status="approved",
+    )
+
+    result = export_kb_markdown(db_path=db_path, output_dir=output_dir, scope="project:m1-plus")
+
+    procedures_md = (output_dir / "procedures.md").read_text()
+    episodes_md = (output_dir / "episodes.md").read_text()
+    assert "### Sources" in procedures_md
+    assert f"Source {source.id}" in procedures_md
+    assert "Type: runbook" in procedures_md
+    assert "Source 9999: missing" in procedures_md
+    assert "Excerpt: Release KB exports should preserve enough source context" in procedures_md
+    assert "### Sources" in episodes_md
+    assert f"Source {source.id}" in episodes_md
+    assert "Metadata: kind=release" in episodes_md
+    assert result.counts.procedures == 1
+    assert result.counts.episodes == 1
+    assert result.counts.total_items == 2
+    assert result.source_ids == [source.id, 9999]
+
+
 def test_cli_kb_export_runs_vertical_slice(tmp_path: Path) -> None:
     db_path = tmp_path / "agent-memory.db"
     output_dir = tmp_path / "kb"
@@ -214,5 +306,10 @@ def test_cli_kb_export_runs_vertical_slice(tmp_path: Path) -> None:
     assert export.returncode == 0, export.stderr
     payload = json.loads(export.stdout)
     assert payload["scope"] == "project:m1"
+    assert payload["counts"] == {"facts": 1, "procedures": 0, "episodes": 0, "total_items": 1}
+    assert payload["source_ids"] == [source_id]
     assert (output_dir / "facts.md").exists()
-    assert "approved memory to markdown" in (output_dir / "facts.md").read_text()
+    facts_md = (output_dir / "facts.md").read_text()
+    assert "approved memory to markdown" in facts_md
+    assert "### Sources" in facts_md
+    assert f"Source {source_id}" in facts_md

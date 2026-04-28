@@ -222,14 +222,16 @@ Keep these decisions unless a later document explicitly overturns them:
 
 Current known repo state at time of this handoff:
 - release posture is validated through `v0.1.7`
-- working tree may contain local doc edits outside this handoff document; check `git status --short --branch` before release or tagging work
-- this document should become the single up-to-date planning handoff for the next phase instead of scattering status across chat memory
+- KB M1 vertical slice has been implemented and released: approved facts/procedures/episodes can be exported to markdown through `agent-memory kb export`
+- KB M1+ source-aware export is implemented locally in this workstream: exported markdown now includes source details/excerpts and CLI JSON includes counts plus referenced source IDs
+- working tree may contain local M1+ edits until they are committed; check `git status --short --branch` before release or tagging work
+- this document should remain the single up-to-date planning handoff for the next phase instead of scattering status across chat memory
 
 ## 11. Immediate next action
 
-Next recommended action in this repo:
-- use `.dev/kb/kb-m1-implementation-plan.md` as the execution handoff
-- start with the smallest vertical slice: source -> candidate -> approval -> KB draft export
+Next recommended action in this repo after KB M1+ lands:
+- decide whether to cut a patch release for source-aware KB export, likely `v0.1.8`
+- start the next planning/implementation slice for retrieval evaluation fixtures before adding embeddings or reranking
 - keep all behavior changes test-first and preserve the already-validated Hermes bootstrap/doctor path
 
-That is the cleanest continuation because it turns the current design set into an execution-ready milestone without prematurely committing to unnecessary retrieval complexity.
+That is the cleanest continuation because it improves explainability and gives future memory-palace experiments a measurable baseline before adding retrieval complexity.
