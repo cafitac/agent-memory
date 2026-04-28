@@ -1,237 +1,369 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-29
+Last updated: 2026-04-29 01:57 KST
 
-## 1. Executive summary
+## Trigger for the next session
 
-agent-memory is no longer a raw idea. It is now a published, installable, Hermes-usable memory runtime with a working onboarding path:
-- npm package: `@cafitac/agent-memory`
-- PyPI package: `cafitac-agent-memory`
-- latest validated release: `v0.1.7`
-- one-line UX: `agent-memory bootstrap` + `agent-memory doctor`
+If the user starts a fresh session and only says:
 
-What is complete today:
-- SQLite-first local runtime
-- global user-level DB default
-- privacy-preserving `cwd:<hash>` scope derivation for Hermes hook use
-- Hermes hook installer with structured merge behavior
-- Hermes bootstrap and doctor commands
-- npm thin launcher over Python runtime
-- GitHub Actions CI/publish workflow
-- published install smoke validated on npm / pipx / uv tool
-- repo-local cafitac SSH/author setup for active OSS repos
+> 지금 해야하는거 알려줘
 
-What is not complete today:
-- KB-grade ingestion and curation workflow
-- hybrid retrieval with optional embeddings and measured reranking
-- memory lifecycle features like decay / archival / consolidation
-- benchmark harness proving retrieval quality improvements
-- multi-harness adapters beyond the current Hermes-first practical path
+then read this file first and answer from the "Ready-to-say answer" section below. Do not ask the user to restate context. The immediate next work is already chosen here.
 
-Bottom line:
-agent-memory has crossed from "concept" into "usable runtime v0", but it has not yet crossed into the stronger goal: a reusable memory OS / KB-capable memory plane for multiple harnesses.
+## Ready-to-say answer
 
-## 2. Current product position
+지금 바로 해야 할 건 `agent-memory`에서 retrieval evaluation fixture/harness를 시작하는 거야.
 
-The right framing is:
-- Hermes session storage is not the same thing as agent-memory
-- session logs are raw evidence, not durable memory by themselves
-- a KB is also not identical to raw memory storage
+KB M1/M1+와 v0.1.8 release/smoke까지 끝났고, 다음 단계는 embeddings/reranking 같은 복잡도를 넣기 전에 retrieval 품질을 측정하는 최소 평가 루프를 만드는 거야.
 
-Recommended separation:
-- host runtime (Hermes, Codex-like, Claude-style) owns sessions, orchestration, tools, UI
-- agent-memory owns machine-usable memory objects, retrieval, provenance, scope, lifecycle, and review
-- KB/wiki layer owns human-facing curated explanations and narrative documentation
+진행 순서는:
+1. `~/Project/agent-memory` 상태 확인
+2. `.dev/kb/retrieval-evaluation-v0.md`를 기준으로 `.dev/kb/retrieval-eval-m1-implementation-plan.md` 작성
+3. TDD로 `tests/test_retrieval_evaluation.py`부터 추가
+4. `agent-memory eval retrieval <db_path> <fixtures_dir>` 또는 최소 core API를 구현
+5. fixture 기반으로 expected memory IDs / drift / counts를 검증
+6. README는 검증 후 짧게만 업데이트
 
-So the target architecture is not:
-- "put KB directly inside Hermes"
+이 작업부터 진행하면 돼.
 
-The target architecture is:
-- "make agent-memory the reusable memory runtime"
-- "let KB capabilities sit above or beside that runtime as a curation/export/sync layer"
+## Current repo state
 
-## 3. What has already been proven
+Canonical repo path:
 
-### 3.1 Runtime / packaging / distribution
-- dual distribution works in practice
-- npm is a thin onboarding surface, not the canonical runtime
-- PyPI remains the canonical Python package/runtime
-- release metadata sync and publish verification exist
-- GitHub Releases and package publishes are real, not aspirational
+- `~/Project/agent-memory`
 
-### 3.2 Hermes integration
-- `hermes-bootstrap` works as the shortest setup path
-- `hermes-doctor` works as read-only verification
-- existing Hermes `hooks:` and `pre_llm_call:` config can be merged safely in normal cases
-- missing DB can be auto-initialized during bootstrap/install flow
-- prompt-time memory injection works as a thin adapter layer
+Current branch/release state at this handoff:
 
-### 3.3 Storage / scope model
-- one global user DB is the default posture
-- `user:default` is the durable default scope
-- `cwd:<hash>` gives project/folder-sensitive retrieval without leaking raw paths
-- project/workspace scopes remain available as explicit narrowing tools
+- branch: `main`
+- remote: `origin` -> `git@github.com-cafitac:cafitac/agent-memory.git`
+- git status at last check: clean, `main...origin/main`
+- latest commit: `750ef36 chore: release v0.1.8`
+- latest validated release: `v0.1.8`
+- npm: `@cafitac/agent-memory@0.1.8`
+- PyPI: `cafitac-agent-memory==0.1.8`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.8`
 
-### 3.4 OSS posture
-- README is npm-first for onboarding
-- user-specific example paths and metadata were scrubbed from public docs/examples
-- release workflows are in place and validated
+Important run IDs:
 
-## 4. What is still missing relative to the original ambition
+- `25065915434` — CI success for `b468166 feat: enrich KB export provenance`
+- `25066123570` — main CI success for `750ef36 chore: release v0.1.8`
+- `25066195998` — publish workflow success for `v0.1.8`
+- `25066196035` — tag CI success for `v0.1.8`
 
-The original ambition is stronger than "remember a little context in Hermes". The bigger target is something like:
-- reusable memory runtime
-- explainable retrieval
-- layered memory systems
-- long-term semantic + procedural accumulation
-- optional KB sync/export surface
-- reusable across multiple agent harnesses
+Published install smoke for `v0.1.8` was completed after registry propagation:
 
-The biggest missing capabilities are:
+- npm global install path passed
+- npm wrapper `agent-memory kb export --help` passed
+- npm wrapper `agent-memory bootstrap` passed
+- npm wrapper `agent-memory doctor` returned `status: ok`
+- pipx install path passed
+- pipx `kb export --help`, `bootstrap`, `doctor` passed
+- uv tool install path passed
+- uv tool `kb export --help`, `bootstrap`, `doctor` passed
+- final smoke output: `published install smoke ok`
 
-### 4.1 KB-grade ingestion
-Today agent-memory can serve as a memory runtime, but it does not yet have a first-class KB pipeline for:
-- source ingestion from notes/docs/transcripts/web/code
-- extracting candidate facts/entities/procedures from those sources
-- reviewing/promoting/deprecating them at scale
-- generating durable, human-curated KB outputs from approved machine memory
+Note: the first npm smoke attempt for `v0.1.8` failed because the npm launcher correctly pinned `cafitac-agent-memory==0.1.8` before uv/PyPI simple-index resolution had caught up. A retry after propagation succeeded. This is the same known registry-propagation behavior seen in v0.1.7 and is not currently a code blocker.
 
-### 4.2 Retrieval maturity
-Current retrieval is useful, but the long-term target still needs:
-- better lexical + graph + metadata composition
-- optional embedding candidate generation
-- contradiction-aware ranking
-- richer retrieval explanation packets
-- measured evaluation against transcript grep / lexical-only baselines
+## What is complete
 
-### 4.3 Memory lifecycle maturity
-Still missing or immature:
-- decay / forgetting
-- archival tiers
-- consolidation from episodic -> semantic/procedural memory
-- validity windows and historical truth handling
-- procedural success/failure learning loops
+### Runtime and distribution
 
-### 4.4 Harness-generalization
-Hermes is the best validated integration path today, but the broader target still needs:
-- cleaner runtime-neutral adapter interfaces
-- non-Hermes ingestion/retrieval contracts
-- testable adapter boundaries for Codex-like / Claude-style / generic MCP harnesses
+- SQLite-first local memory runtime exists.
+- Package is published to npm and PyPI.
+- npm is the shortest onboarding surface; PyPI is the canonical Python runtime.
+- npm thin launcher pins the delegated Python package to the npm package version.
+- GitHub Actions CI/publish flow is validated.
+- Actual published install smoke is validated through `v0.1.8`.
 
-## 5. Recommended next goal
+### Hermes integration
 
-## Goal: make agent-memory "KB-ready" without collapsing memory and KB into the same thing
+- `agent-memory bootstrap` works as the short onboarding command.
+- `agent-memory doctor` works as the read-only health check.
+- Hermes hook installer performs conservative config merge for normal YAML config.
+- Hermes adapter remains thin: prompt-time memory injection only.
+- The adapter does not execute tools or verification itself.
 
-This is the most important next milestone because it matches the original intent:
-- not just session recall
-- not just hook-time context injection
-- not just transcript storage
-- but a reusable runtime that can power a KB layer
+### KB M1
 
-The design stance should be:
-- agent-memory core = machine memory plane
-- KB layer = human-facing curation / sync / export / browse layer
-- shared truth = approved structured memory objects + provenance
+Implemented and released:
 
-That lets Hermes and other harnesses consume the same memory runtime, while future KB tooling can read from the same approved memory substrate.
+- source -> candidate -> approved memory -> KB draft export vertical slice
+- command: `agent-memory kb export <db_path> <output_dir> [--scope <scope>]`
+- exports markdown files:
+  - `index.md`
+  - `facts.md`
+  - `procedures.md`
+  - `episodes.md`
+- approved facts/procedures/episodes only
+- candidate/disputed/deprecated memories are excluded
+- scope filtering works
 
-## 6. Concrete next milestone
+### KB M1+
 
-## Milestone M1: KB-ready memory plane
+Implemented and released in `v0.1.8`:
 
-Success criteria:
-- define the boundary between raw source, candidate memory, approved memory, and KB export
-- define the canonical ingestion flow for docs/transcripts/notes/code/web inputs
-- define how approved memory can be rendered into human-facing KB pages without making KB the storage truth
-- define the evaluation loop for memory extraction quality and retrieval usefulness
-- keep Hermes adapter thin during all of this
+- source-aware provenance in KB markdown export
+- exported memory sections render source details when source records exist:
+  - source id
+  - source type
+  - created timestamp
+  - adapter
+  - external reference
+  - sorted metadata
+  - short source excerpt
+- missing source IDs render as missing instead of crashing export
+- CLI JSON output includes:
+  - generated file list
+  - `counts.facts`
+  - `counts.procedures`
+  - `counts.episodes`
+  - `counts.total_items`
+  - `source_ids`
 
-Deliverables:
-1. KB architecture/status doc
-2. ingestion pipeline plan
-3. curation/review workflow plan
-4. retrieval evaluation plan
-5. adapter boundary note for Hermes vs future harnesses
+Key commits:
 
-## 7. Proposed document set for the next phase
+- `a01f762 feat: add KB markdown export`
+- `b468166 feat: enrich KB export provenance`
+- `750ef36 chore: release v0.1.8`
 
-The next-phase KB planning set now exists under `.dev/kb/`:
+## Current planning docs
 
-1. `.dev/kb/kb-architecture-v0.md`
-- memory vs KB boundary
-- truth source
-- export/sync directions
-- scope/provenance rules
+The active planning surface is under `.dev/kb/`:
 
-2. `.dev/kb/source-ingestion-v0.md`
-- supported source classes
-- normalization model
-- source-to-candidate extraction stages
-- idempotency/dedup strategy
+- `.dev/kb/kb-architecture-v0.md`
+  - memory vs KB boundary, truth source, export/sync direction
+- `.dev/kb/source-ingestion-v0.md`
+  - source classes, normalization, candidate extraction direction
+- `.dev/kb/curation-and-promotion-v0.md`
+  - candidate -> approved -> deprecated workflow
+- `.dev/kb/retrieval-evaluation-v0.md`
+  - the next active workstream; evaluation before embeddings/reranking
+- `.dev/kb/harness-boundary-v0.md`
+  - Hermes vs agent-memory vs future harness responsibilities
+- `.dev/kb/kb-m1-implementation-plan.md`
+  - historical M1 plan, now implemented
+- `.dev/kb/kb-m1-plus-implementation-plan.md`
+  - historical M1+ source-aware export plan, now implemented
+- `.dev/kb/kb-m1-current-audit.md`
+  - audit plus post-M1/M1+ status updates
+- `.dev/kb/kb-m1-scope-freeze.md`
+  - M1 scope/non-goals
 
-3. `.dev/kb/curation-and-promotion-v0.md`
-- candidate -> approved -> deprecated workflow
-- review queues
-- human approval points
-- contradiction handling
+## Immediate next work: retrieval evaluation M1
 
-4. `.dev/kb/retrieval-evaluation-v0.md`
-- baseline tasks
-- lexical vs graph vs hybrid comparisons
-- prompt budget metrics
-- explanation quality metrics
+Do this next before adding embeddings, reranking, graph visualization, or memory-palace style lifecycle complexity.
 
-5. `.dev/kb/harness-boundary-v0.md`
-- what Hermes should do
-- what agent-memory should do
-- what future Codex/Claude/MCP adapters should do
+Goal:
 
-## 8. Recommended implementation order after the docs
+- Add a small reproducible evaluation loop that proves whether retrieval is getting better or worse.
+- Establish fixtures and metrics before changing retrieval algorithms.
 
-### Phase A: planning/docs first
-1. write the `.dev/kb/` design set
-2. decide the machine-memory vs KB sync contract
-3. freeze milestone M1 scope
+Why this is next:
 
-### Phase B: smallest code slice for KB readiness
-1. add explicit source ingestion model if current one is too transcript-centric
-2. add candidate extraction interfaces for facts/entities/procedures
-3. add review/promotion CLI surfaces if missing
-4. add export shape for a human-facing KB page draft
-5. add tests proving approved memory can generate stable KB-ready outputs
+- KB export/provenance is now good enough for reviewable artifacts.
+- The long-term ambition is memory OS / memory palace, but that needs measurable retrieval quality.
+- Embeddings/reranking should only be added after a baseline shows where lexical/current retrieval fails.
 
-### Phase C: evaluation before overbuilding
-1. define 5-10 retrieval tasks
-2. compare transcript search vs current retrieval vs next retrieval
-3. measure token budget and explanation usefulness
-4. only then decide whether embeddings are worth adding immediately
+Recommended branch:
 
-## 9. Important decisions to keep
+```bash
+cd ~/Project/agent-memory
+git status -sb
+git checkout -b feat/retrieval-eval-fixtures
+```
 
-Keep these decisions unless a later document explicitly overturns them:
-- SQLite-first, local-first remains the default
-- one global user DB remains the default posture
-- `user:default` remains the durable baseline scope
-- `cwd:<hash>` remains the privacy-preserving project-sensitive retrieval fallback
-- Hermes adapter remains thin and prompt-time only
-- KB should not replace the memory runtime data plane
-- npm remains the shortest onboarding path; PyPI remains canonical runtime distribution
+If `main` is already dirty, stop and inspect before branching. Preserve unrelated dirty work.
 
-## 10. Current repo reality check
+### Retrieval evaluation M1 scope
 
-Current known repo state at time of this handoff:
-- release posture is validated through `v0.1.8`
-- KB M1 vertical slice has been implemented and released: approved facts/procedures/episodes can be exported to markdown through `agent-memory kb export`
-- KB M1+ source-aware export is implemented locally in this workstream: exported markdown now includes source details/excerpts and CLI JSON includes counts plus referenced source IDs
-- working tree may contain local M1+ edits until they are committed; check `git status --short --branch` before release or tagging work
-- this document should remain the single up-to-date planning handoff for the next phase instead of scattering status across chat memory
+In scope:
 
-## 11. Immediate next action
+- fixture file format for retrieval tasks
+- core evaluator function using existing `retrieve_memory_packet`
+- CLI surface to run evaluation
+- JSON result output
+- tests with a small seeded SQLite database
+- docs update after tests pass
 
-Next recommended action in this repo after KB M1+ lands:
-- decide whether to cut a patch release for source-aware KB export, likely `v0.1.8`
-- start the next planning/implementation slice for retrieval evaluation fixtures before adding embeddings or reranking
-- keep all behavior changes test-first and preserve the already-validated Hermes bootstrap/doctor path
+Out of scope:
 
-That is the cleanest continuation because it improves explainability and gives future memory-palace experiments a measurable baseline before adding retrieval complexity.
+- embeddings
+- reranking
+- graph expansion changes
+- web UI
+- changes to Hermes hook behavior
+- automatic LLM judging
+
+### Suggested fixture format
+
+Prefer a simple JSON file or directory of JSON files. Start with one file:
+
+`tests/fixtures/retrieval_eval/basic.json`
+
+Suggested shape:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "project-scope-fact",
+      "query": "What does Project M1 use for KB export?",
+      "preferred_scope": "project:m1",
+      "expected": {
+        "facts": [1],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [2],
+        "procedures": [],
+        "episodes": []
+      },
+      "limit": 5
+    }
+  ]
+}
+```
+
+Do not hardcode production DB IDs in user-facing docs. In tests, build the DB in `tmp_path` and use created IDs.
+
+### Suggested models
+
+Add Pydantic models in `src/agent_memory/core/models.py` or a small new module if cleaner:
+
+- `RetrievalEvalExpected`
+- `RetrievalEvalTask`
+- `RetrievalEvalTaskResult`
+- `RetrievalEvalSummary`
+
+Minimum output should include:
+
+- task id
+- query
+- preferred scope
+- hit/miss per expected memory id
+- avoided/drift memory ids that appeared
+- counts
+- pass/fail boolean
+
+### Suggested implementation files
+
+Likely create:
+
+- `src/agent_memory/core/retrieval_eval.py`
+- `tests/test_retrieval_evaluation.py`
+
+Likely modify:
+
+- `src/agent_memory/core/models.py`
+- `src/agent_memory/api/cli.py`
+- `README.md` after behavior is verified
+- `.dev/kb/retrieval-evaluation-v0.md` or create `.dev/kb/retrieval-eval-m1-implementation-plan.md`
+- `.dev/status/current-handoff.md` after completing the slice
+
+### Suggested CLI
+
+Prefer:
+
+```bash
+agent-memory eval retrieval <db_path> <fixtures_path> [--limit 5]
+```
+
+Expected behavior:
+
+- reads JSON fixtures
+- runs current retrieval with `retrieve_memory_packet`
+- compares returned fact/procedure/episode IDs against expected/avoid lists
+- prints JSON summary
+- exits nonzero only for malformed fixtures or runtime errors, not necessarily for failed eval tasks unless an explicit `--fail-on-regression` flag is added later
+
+Keep the first version boring and deterministic.
+
+### TDD checklist for the next session
+
+1. Write failing model/fixture parsing test.
+2. Run targeted test and confirm RED.
+3. Implement minimal fixture parser.
+4. Run targeted test and confirm GREEN.
+5. Write failing evaluator test with tmp SQLite DB and seeded approved/candidate memories.
+6. Confirm RED.
+7. Implement evaluator using existing `retrieve_memory_packet`.
+8. Confirm GREEN.
+9. Add CLI test for `agent-memory eval retrieval`.
+10. Confirm RED, then implement CLI parser/handler.
+11. Run focused tests.
+12. Run full tests.
+13. Update README only after tests pass.
+14. Commit and push.
+15. Watch CI.
+
+Suggested verification commands:
+
+```bash
+uv run pytest tests/test_retrieval_evaluation.py -q
+uv run pytest -q
+uv run agent-memory eval retrieval --help
+git status -sb
+gh run list --branch main --limit 3
+```
+
+## Commands to verify current release if needed
+
+Use these if future context is uncertain:
+
+```bash
+cd ~/Project/agent-memory
+git status -sb
+git log --oneline -5
+git tag --list 'v0.1.*' --sort=-version:refname | head -5
+gh release view v0.1.8 --json tagName,isDraft,isPrerelease,url,assets
+python - <<'PY'
+import json, urllib.request
+for name, url in [
+    ('npm', 'https://registry.npmjs.org/@cafitac%2Fagent-memory/latest'),
+    ('pypi', 'https://pypi.org/pypi/cafitac-agent-memory/json'),
+]:
+    data=json.load(urllib.request.urlopen(url, timeout=20))
+    print(name, data.get('version') or data.get('info',{}).get('version'))
+PY
+```
+
+Expected current versions:
+
+- npm: `0.1.8`
+- PyPI: `0.1.8`
+
+## Things not to redo
+
+Do not redo these unless evidence shows they regressed:
+
+- do not redesign Hermes hook integration before retrieval evaluation exists
+- do not add embeddings before evaluation fixtures exist
+- do not split `agent-brain` / `agent-memory-palace` into a new repo yet
+- do not rerun old v0.1.7 release work
+- do not change unrelated `.claude/`, `.hermes/`, or local user config files unless explicitly requested
+- do not commit temp smoke directories or generated local DBs
+
+## Secrets and privacy
+
+Never preserve or print real token values.
+
+Token names that may appear in docs are okay:
+
+- `NPM_TOKEN`
+- `PYPI_API_TOKEN`
+
+Actual token values must remain redacted. Do not include private keys, passwords, or real credential helper output in handoff docs.
+
+## Durable decisions to keep
+
+- SQLite-first, local-first remains the default.
+- One global user DB remains the default posture.
+- `user:default` remains the durable baseline scope.
+- `cwd:<hash>` remains the privacy-preserving project-sensitive Hermes fallback.
+- Hermes adapter remains thin and prompt-time only.
+- KB markdown export is a derived artifact; SQLite remains the source of truth.
+- npm remains the shortest onboarding path; PyPI remains the canonical Python runtime distribution.
+- Use TDD for behavior changes.
+- For published CLI/package changes, validate actual published artifacts, not just green CI.
