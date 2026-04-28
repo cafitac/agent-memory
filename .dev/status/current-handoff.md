@@ -8,7 +8,7 @@ Last updated: 2026-04-29
 agent-memory is no longer a raw idea. It is now a published, installable, Hermes-usable memory runtime with a working onboarding path:
 - npm package: `@cafitac/agent-memory`
 - PyPI package: `cafitac-agent-memory`
-- latest validated release: `v0.1.5`
+- latest validated release: `v0.1.6`
 - one-line UX: `agent-memory bootstrap` + `agent-memory doctor`
 
 What is complete today:
@@ -221,7 +221,7 @@ Keep these decisions unless a later document explicitly overturns them:
 ## 10. Current repo reality check
 
 Current known repo state at time of this handoff:
-- release posture is validated through `v0.1.5`
+- release posture is validated through `v0.1.6`
 - working tree may contain local doc edits outside this handoff document; check `git status --short --branch` before release or tagging work
 - this document should become the single up-to-date planning handoff for the next phase instead of scattering status across chat memory
 

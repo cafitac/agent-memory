@@ -14,7 +14,7 @@ This document identifies what already exists, what is missing, and the smallest 
 ## Current package state
 
 - Python package: `cafitac-agent-memory`
-- Current version: `0.1.5`
+- Current version: `0.1.6`
 - CLI entrypoint: `agent-memory = agent_memory.api.cli:main`
 - Runtime dependency baseline: Pydantic + SQLite stdlib
 - Test runner: pytest through `uv run pytest`
