@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: auto-release-main
@@ -80,3 +81,11 @@ jobs:
           git push origin HEAD:main
           TAG="${{ steps.bump.outputs.tag }}"
           git push origin "$TAG"
+
+      - name: Dispatch publish workflow for bot-created tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.bump.outputs.tag }}"
+          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true
