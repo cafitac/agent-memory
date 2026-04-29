@@ -596,6 +596,46 @@ def test_render_retrieval_eval_text_report_summarizes_passes_and_type_rollups(tm
     assert "failed tasks: none" in report
 
 
+def test_render_retrieval_eval_text_report_shows_failed_task_details(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures, render_retrieval_eval_text_report
+
+    db_path = tmp_path / "retrieval-eval-text-failure.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = tmp_path / "retrieval-eval-failure.json"
+    payload = _fixture_payload(seeded_ids)
+    payload["tasks"] = [payload["tasks"][0]]
+    payload["tasks"][0]["expected"]["facts"] = [seeded_ids["drift_fact_id"]]
+    payload["tasks"][0]["avoid"]["facts"] = [seeded_ids["fact_id"]]
+    fixture_path.write_text(json.dumps(payload, indent=2))
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, baseline_mode="lexical")
+    report = render_retrieval_eval_text_report(result)
+
+    assert "failed tasks:" in report
+    assert "  - project-m1-kb-export" in report
+    assert "    missing: facts=[2]" in report
+    assert "    avoid: facts=[1]" in report
+    assert "    baseline: fail" in report
+    assert "    query: What command does Project M1 use for KB export?" in report
+
+
+def test_render_retrieval_eval_text_report_shows_baseline_weak_spots(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures, render_retrieval_eval_text_report
+
+    db_path = tmp_path / "retrieval-eval-text-baseline-weak-spots.db"
+    _seed_checked_in_fixture_eval_db(db_path)
+    fixture_path = _checked_in_fixture_dir() / "staleness" / "branch-only-current.json"
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, baseline_mode="lexical-global")
+    report = render_retrieval_eval_text_report(result)
+
+    assert "baseline weak spots:" in report
+    assert "  - branch-only-current-policy" in report
+    assert "    baseline missing: none" in report
+    assert "    baseline avoid: facts=[" in report
+    assert "current regressions vs baseline: none" in report
+
+
 def test_cli_eval_retrieval_text_format_outputs_human_summary(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieval-eval-cli-text.db"
     seeded_ids = _seed_retrieval_eval_db(db_path)

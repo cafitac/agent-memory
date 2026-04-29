@@ -506,6 +506,35 @@ def _format_type_summary(memory_type: str, summary: RetrievalEvalMemoryTypeSumma
     )
 
 
+def _format_id_map(ids_by_type: dict[str, list[int]]) -> str:
+    parts = [f"{memory_type}={ids_by_type[memory_type]}" for memory_type in _MEMORY_TYPES if ids_by_type.get(memory_type)]
+    return ", ".join(parts) if parts else "none"
+
+
+def _format_pass_label(passed: bool) -> str:
+    return "pass" if passed else "fail"
+
+
+def _append_task_detail(lines: list[str], task: RetrievalEvalTaskResult, *, include_current: bool) -> None:
+    lines.append(f"  - {task.task_id}")
+    lines.append(f"    query: {task.query}")
+    if include_current:
+        lines.append(f"    missing: {_format_id_map(task.missing_expected)}")
+        lines.append(f"    avoid: {_format_id_map(task.avoid_hits)}")
+    if task.baseline is not None:
+        lines.append(f"    baseline: {_format_pass_label(task.baseline.pass_)}")
+        lines.append(f"    baseline missing: {_format_id_map(task.baseline.missing_expected)}")
+        lines.append(f"    baseline avoid: {_format_id_map(task.baseline.avoid_hits)}")
+    if task.delta is not None:
+        lines.append(
+            "    delta: "
+            f"expected_hits={_signed_delta(task.delta.expected_hit_delta)} "
+            f"missing={_signed_delta(task.delta.missing_expected_delta)} "
+            f"avoid={_signed_delta(task.delta.avoid_hit_delta)} "
+            f"pass_changed={task.delta.pass_changed}"
+        )
+
+
 def render_retrieval_eval_text_report(result_set: RetrievalEvalResultSet) -> str:
     summary = result_set.summary
     lines = [
@@ -531,12 +560,29 @@ def render_retrieval_eval_text_report(result_set: RetrievalEvalResultSet) -> str
         type_summary = summary.by_primary_task_type.get(memory_type, RetrievalEvalMemoryTypeSummary())
         lines.append(_format_type_summary(memory_type, type_summary))
 
-    failed_task_ids = [task.task_id for task in result_set.results if not task.pass_]
-    if failed_task_ids:
+    failed_tasks = [task for task in result_set.results if not task.pass_]
+    if failed_tasks:
         lines.append("failed tasks:")
-        lines.extend(f"  - {task_id}" for task_id in failed_task_ids)
+        for task in failed_tasks:
+            _append_task_detail(lines, task, include_current=True)
     else:
         lines.append("failed tasks: none")
+
+    if result_set.baseline_summary is not None:
+        baseline_weak_spots = [task for task in result_set.results if task.pass_ and task.baseline is not None and not task.baseline.pass_]
+        current_regressions = [task for task in result_set.results if not task.pass_ and task.baseline is not None and task.baseline.pass_]
+        if baseline_weak_spots:
+            lines.append("baseline weak spots:")
+            for task in baseline_weak_spots:
+                _append_task_detail(lines, task, include_current=False)
+        else:
+            lines.append("baseline weak spots: none")
+        if current_regressions:
+            lines.append("current regressions vs baseline:")
+            for task in current_regressions:
+                _append_task_detail(lines, task, include_current=True)
+        else:
+            lines.append("current regressions vs baseline: none")
 
     if result_set.advisories:
         lines.append("advisories:")
