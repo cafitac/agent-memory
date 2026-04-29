@@ -883,6 +883,9 @@ def test_python_module_cli_hermes_install_hook_preserves_two_space_hook_list_sty
     assert "/existing/session-hook.py" in config_text
     assert "hermes-pre-llm-hook" in config_text
     assert "--preferred-scope project:two-space" in config_text
+    assert "timeout: 15\n  - command: \"/" in config_text
+    assert "timeout: 15\n    - command:" not in config_text
+    assert config_text.index("/existing/context-hook.py") < config_text.index("hermes-pre-llm-hook") < config_text.index("on_session_end:")
 
 
 def test_python_module_cli_hermes_install_hook_is_idempotent_for_existing_command(tmp_path: Path) -> None:
