@@ -1,0 +1,82 @@
+name: auto-release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+jobs:
+  bump-tag-and-publish:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '[skip release]'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main with full history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Configure release bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump release metadata
+        id: bump
+        run: |
+          set -euo pipefail
+          NEXT_VERSION=$(uv run python scripts/bump_release_version.py --patch)
+          uv lock
+          TAG="v${NEXT_VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists" >&2
+            exit 1
+          fi
+          echo "version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate bumped release
+        run: |
+          uv run python scripts/check_release_metadata.py
+          uv run pytest tests/ -q
+          uv run python scripts/smoke_release_readiness.py
+          uvx --from build python -m build
+          npm pack --dry-run
+
+      - name: Commit bumped release metadata
+        run: |
+          set -euo pipefail
+          git add pyproject.toml package.json src/agent_memory/__init__.py uv.lock
+          git commit -m "chore: release v${{ steps.bump.outputs.version }} [skip release]"
+          git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
+
+      - name: Push release commit and tag
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+          TAG="${{ steps.bump.outputs.tag }}"
+          git push origin "$TAG"
