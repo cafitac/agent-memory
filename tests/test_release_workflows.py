@@ -12,10 +12,13 @@ def test_auto_release_workflow_bumps_versions_on_main_merges() -> None:
     assert "branches:" in workflow
     assert "- main" in workflow
     assert "contents: write" in workflow
+    assert "actions: write" in workflow
     assert "[skip release]" in workflow
     assert "scripts/bump_release_version.py --patch" in workflow
     assert "git push origin HEAD:main" in workflow
     assert "git push origin \"$TAG\"" in workflow
+    assert "gh workflow run publish.yml" in workflow
+    assert "--ref \"$TAG\"" in workflow
 
 
 def test_publish_workflow_remains_tag_driven_only() -> None:
@@ -26,3 +29,5 @@ def test_publish_workflow_remains_tag_driven_only() -> None:
     assert "branches:" not in workflow
     assert "npm publish --access public --provenance" in workflow
     assert "softprops/action-gh-release" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "startsWith(github.ref, 'refs/tags/v')" in workflow
