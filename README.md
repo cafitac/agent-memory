@@ -204,6 +204,24 @@ The `hermes-context` output is JSON with:
 - `context`: `HermesMemoryContext`, including `prompt_text`, answer flags, blocking steps, and full adapter payload
 - `outcome`: `null` unless verification results are supplied
 
+For Codex- or Claude-style CLI wrappers that just want a plain prompt string instead of the full JSON payload, use:
+
+```bash
+uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+```
+
+Both commands print only the rendered prompt text, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
+
+If you want a reusable wrapper script instead of assembling the prompt yourself, use:
+
+```bash
+python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --codex-model gpt-5.4-mini
+python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --max-turns 1
+```
+
+Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-prompt` internally, append the live user request, and then invoke the target CLI. Use `--dry-run` to inspect the final prompt and command without executing Codex or Claude Code.
+
 Apply harness-supplied verification results and print a `HermesVerificationOutcome`:
 
 ```bash

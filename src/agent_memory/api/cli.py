@@ -47,6 +47,26 @@ def _dump_models(models: list[Any]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models], indent=2)
 
 
+def _render_memory_context_for_prompt(args: argparse.Namespace):
+    packet = retrieve_memory_packet(
+        db_path=args.db_path,
+        query=args.query,
+        limit=args.limit,
+        preferred_scope=args.preferred_scope,
+    )
+    return prepare_hermes_memory_context(
+        packet,
+        top_k=args.top_k,
+        max_prompt_lines=args.max_prompt_lines,
+        max_prompt_chars=args.max_prompt_chars,
+        max_prompt_tokens=args.max_prompt_tokens,
+        max_verification_steps=args.max_verification_steps,
+        max_alternatives=args.max_alternatives,
+        max_guidelines=args.max_guidelines,
+        include_reason_codes=not args.no_reason_codes,
+    )
+
+
 def _normalize_command_aliases(argv: list[str]) -> list[str]:
     alias_map = {
         "bootstrap": "hermes-bootstrap",
@@ -175,6 +195,34 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_context_parser.add_argument("--max-guidelines", type=int)
     hermes_context_parser.add_argument("--no-reason-codes", action="store_true")
     hermes_context_parser.add_argument("--verification-results-json")
+
+    codex_prompt_parser = subparsers.add_parser("codex-prompt")
+    codex_prompt_parser.add_argument("db_path", type=Path)
+    codex_prompt_parser.add_argument("query")
+    codex_prompt_parser.add_argument("--limit", type=int, default=5)
+    codex_prompt_parser.add_argument("--preferred-scope")
+    codex_prompt_parser.add_argument("--top-k", type=int, default=1)
+    codex_prompt_parser.add_argument("--max-prompt-lines", type=int)
+    codex_prompt_parser.add_argument("--max-prompt-chars", type=int)
+    codex_prompt_parser.add_argument("--max-prompt-tokens", type=int)
+    codex_prompt_parser.add_argument("--max-verification-steps", type=int)
+    codex_prompt_parser.add_argument("--max-alternatives", type=int)
+    codex_prompt_parser.add_argument("--max-guidelines", type=int)
+    codex_prompt_parser.add_argument("--no-reason-codes", action="store_true")
+
+    claude_prompt_parser = subparsers.add_parser("claude-prompt")
+    claude_prompt_parser.add_argument("db_path", type=Path)
+    claude_prompt_parser.add_argument("query")
+    claude_prompt_parser.add_argument("--limit", type=int, default=5)
+    claude_prompt_parser.add_argument("--preferred-scope")
+    claude_prompt_parser.add_argument("--top-k", type=int, default=1)
+    claude_prompt_parser.add_argument("--max-prompt-lines", type=int)
+    claude_prompt_parser.add_argument("--max-prompt-chars", type=int)
+    claude_prompt_parser.add_argument("--max-prompt-tokens", type=int)
+    claude_prompt_parser.add_argument("--max-verification-steps", type=int)
+    claude_prompt_parser.add_argument("--max-alternatives", type=int)
+    claude_prompt_parser.add_argument("--max-guidelines", type=int)
+    claude_prompt_parser.add_argument("--no-reason-codes", action="store_true")
 
     hermes_pre_llm_hook_parser = subparsers.add_parser("hermes-pre-llm-hook")
     hermes_pre_llm_hook_parser.add_argument("db_path", type=Path)
@@ -407,23 +455,7 @@ def main() -> None:
         raise ValueError(f"Unsupported eval action: {args.eval_action}")
 
     if args.command == "hermes-context":
-        packet = retrieve_memory_packet(
-            db_path=args.db_path,
-            query=args.query,
-            limit=args.limit,
-            preferred_scope=args.preferred_scope,
-        )
-        context = prepare_hermes_memory_context(
-            packet,
-            top_k=args.top_k,
-            max_prompt_lines=args.max_prompt_lines,
-            max_prompt_chars=args.max_prompt_chars,
-            max_prompt_tokens=args.max_prompt_tokens,
-            max_verification_steps=args.max_verification_steps,
-            max_alternatives=args.max_alternatives,
-            max_guidelines=args.max_guidelines,
-            include_reason_codes=not args.no_reason_codes,
-        )
+        context = _render_memory_context_for_prompt(args)
         outcome = None
         if args.verification_results_json is not None:
             verification_results = [
@@ -440,6 +472,11 @@ def main() -> None:
                 indent=2,
             )
         )
+        return
+
+    if args.command in {"codex-prompt", "claude-prompt"}:
+        context = _render_memory_context_for_prompt(args)
+        print(context.prompt_text)
         return
 
     if args.command == "hermes-pre-llm-hook":

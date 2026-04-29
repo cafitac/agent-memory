@@ -108,6 +108,87 @@ def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path
 
 
 
+def test_python_module_cli_codex_prompt_outputs_plain_prompt_text(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-codex-prompt.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Codex Prompt project uses branch pattern CP-###.",
+        metadata={"project": "codex-prompt"},
+    )
+    branch_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Codex Prompt",
+        predicate="branch_pattern",
+        object_ref_or_value="CP-###",
+        evidence_ids=[source.id],
+        scope="project:codex-prompt",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=branch_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "codex-prompt",
+            str(db_path),
+            "What branch pattern does Codex Prompt use?",
+            "--preferred-scope",
+            "project:codex-prompt",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "4",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Memory response mode:" in result.stdout
+    assert "Top memory:" in result.stdout
+    assert "Codex Prompt" in result.stdout
+    assert result.stdout.strip()
+
+
+
+def test_python_module_cli_claude_prompt_outputs_plain_prompt_text(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-claude-prompt.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "claude-prompt",
+            str(db_path),
+            "What should I know before answering?",
+            "--preferred-scope",
+            "user:default",
+            "--max-prompt-lines",
+            "4",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Memory response mode:" in result.stdout
+    assert "Prompt prefix:" in result.stdout
+    assert result.stdout.strip()
+
+
+
 def test_python_module_cli_hermes_context_applies_verification_results(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-outcome.db"
     initialize_database(db_path)
@@ -757,6 +838,51 @@ def test_python_module_cli_hermes_install_hook_merges_existing_pre_llm_hooks(tmp
     assert "--preferred-scope project:merge" in config_text
     assert config_text.index("hermes-pre-llm-hook") < config_text.index("on_session_end:")
 
+
+def test_python_module_cli_hermes_install_hook_preserves_two_space_hook_list_style(tmp_path: Path) -> None:
+    db_path = tmp_path / "install-two-space-memory.db"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "model:\n"
+        "  provider: openai-codex\n"
+        "hooks:\n"
+        "  pre_llm_call:\n"
+        "  - command: /existing/context-hook.py\n"
+        "    timeout: 15\n"
+        "  on_session_end:\n"
+        "  - command: /existing/session-hook.py\n"
+        "    timeout: 15\n"
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-install-hook",
+            str(db_path),
+            "--config-path",
+            str(config_path),
+            "--preferred-scope",
+            "project:two-space",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["changed"] is True
+    assert payload["reason"] == "merged_existing_hooks_block"
+    config_text = config_path.read_text()
+    assert config_text.count("pre_llm_call:") == 1
+    assert "/existing/context-hook.py" in config_text
+    assert "/existing/session-hook.py" in config_text
+    assert "hermes-pre-llm-hook" in config_text
+    assert "--preferred-scope project:two-space" in config_text
 
 
 def test_python_module_cli_hermes_install_hook_is_idempotent_for_existing_command(tmp_path: Path) -> None:
