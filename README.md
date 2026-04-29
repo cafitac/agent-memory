@@ -96,6 +96,12 @@ uv run agent-memory init ~/.agent-memory/memory.db
 
 If you want the shortest real Hermes onboarding path, `hermes-bootstrap` is the primary one-line command. It initializes the database if missing, writes or merges the Hermes hook config, and keeps existing Hermes hooks intact.
 
+Fresh-install and upgrade notes:
+- brand-new Hermes users can run `uv run agent-memory hermes-bootstrap` first; if `~/.hermes/config.yaml` does not exist yet, the command creates it with the agent-memory hook installed.
+- existing Hermes users with their own `pre_llm_call` / `on_session_end` hooks can also use `hermes-bootstrap`; the installer preserves the existing hook list and appends the agent-memory hook without rewriting the whole config.
+- after bootstrap, run `uv run agent-memory hermes-doctor` and `hermes hooks doctor` once to confirm the config path, hook install, and runtime allowlist state.
+- the first real Hermes run may still require `--accept-hooks` (or an interactive approval prompt) because Hermes itself will not fire unapproved shell hooks at runtime.
+
 ```bash
 uv run agent-memory hermes-bootstrap
 ```
@@ -249,6 +255,19 @@ The lower-level explicit form remains available:
 ```bash
 uv run agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
 ```
+
+Recommended post-install verification for external users:
+
+```bash
+uv run agent-memory hermes-doctor ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml
+hermes hooks list
+hermes hooks doctor
+# approve the hook on first real use if Hermes reports it is not allowlisted yet
+hermes --accept-hooks chat -q 'Reply with OK only.' --quiet
+hermes hooks test pre_llm_call
+```
+
+The bootstrap/install path has been smoke-tested both for a fresh `config.yaml` creation flow and for configs that already contain other Hermes shell hooks. If `hermes hooks doctor` still reports failures after bootstrap, they are usually pre-existing hook path/auth problems elsewhere in the user's Hermes setup rather than an agent-memory install failure.
 
 ## Release and distribution notes
 
