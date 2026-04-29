@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-29 01:57 KST
+Last updated: 2026-04-30 06:43 KST
 
 ## Trigger for the next session
 
@@ -17,17 +17,17 @@ then read this file first and answer from the "Ready-to-say answer" section belo
 
 ## Ready-to-say answer
 
-지금 바로 해야 할 건 `agent-memory`에서 retrieval evaluation fixture/harness를 시작하는 거야.
+지금 바로 해야 할 건 `agent-memory`의 retrieval evaluation 결과를 사람이 빠르게 읽고 triage할 수 있게 만드는 거야.
 
-KB M1/M1+와 v0.1.8 release/smoke까지 끝났고, 다음 단계는 embeddings/reranking 같은 복잡도를 넣기 전에 retrieval 품질을 측정하는 최소 평가 루프를 만드는 거야.
+Runtime adapters, retrieval fixture harness, npm/PyPI distribution, 그리고 main-merge 자동 릴리즈는 검증됐어. 다음 단계는 embeddings/reranking 같은 검색 복잡도를 더 넣기 전에, fixture 결과를 사람이 한눈에 보고 어떤 memory type / task type이 약한지 판단할 수 있는 report surface를 다듬는 거야.
 
 진행 순서는:
 1. `~/Project/agent-memory` 상태 확인
-2. `.dev/kb/retrieval-evaluation-v0.md`를 기준으로 `.dev/kb/retrieval-eval-m1-implementation-plan.md` 작성
-3. TDD로 `tests/test_retrieval_evaluation.py`부터 추가
-4. `agent-memory eval retrieval <db_path> <fixtures_dir>` 또는 최소 core API를 구현
-5. fixture 기반으로 expected memory IDs / drift / counts를 검증
-6. README는 검증 후 짧게만 업데이트
+2. retrieval eval report/CLI 현재 구조 확인
+3. TDD로 `--format text` 또는 동등한 human summary surface 테스트 추가
+4. JSON contract는 유지하면서 compact text report 구현
+5. README와 이 handoff를 검증 결과 기준으로 갱신
+6. PR/CI/merge 후 main auto-release가 새 patch를 배포하는지 확인
 
 이 작업부터 진행하면 돼.
 
@@ -39,23 +39,25 @@ Canonical repo path:
 
 Current branch/release state at this handoff:
 
-- branch: `main`
-- remote: `origin` -> `git@github.com-cafitac:cafitac/agent-memory.git`
-- git status at last check: clean, `main...origin/main`
-- latest commit: `750ef36 chore: release v0.1.8`
-- latest validated release: `v0.1.8`
-- npm: `@cafitac/agent-memory@0.1.8`
-- PyPI: `cafitac-agent-memory==0.1.8`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.8`
+- branch: `main` before the current report-summary branch
+- remote: `origin` -> `https://github.com/cafitac/agent-memory.git` in the local checkout after gh HTTPS push repair
+- git status at last check: tracked files clean on main; pre-existing untracked local agent/dev state remains intentionally preserved
+- latest commit before this branch: `67653e9 chore: release v0.1.11 [skip release]`
+- latest validated release: `v0.1.11`
+- npm: `@cafitac/agent-memory@0.1.11`
+- PyPI: `cafitac-agent-memory==0.1.11`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.11`
+- main-merge auto-release is active: `auto-release.yml` bumps patch metadata, commits `[skip release]`, tags, and dispatches `publish.yml` because `GITHUB_TOKEN` tag pushes do not trigger downstream tag workflows reliably
 
 Important run IDs:
 
-- `25065915434` — CI success for `b468166 feat: enrich KB export provenance`
-- `25066123570` — main CI success for `750ef36 chore: release v0.1.8`
-- `25066195998` — publish workflow success for `v0.1.8`
-- `25066196035` — tag CI success for `v0.1.8`
+- `25134278544` — first auto-release main run, created `v0.1.10` but exposed the bot-created tag dispatch gap
+- `25134636398` — fixed auto-release main run for PR #5, successfully bumped/tagged `v0.1.11` and dispatched publish
+- `25134684685` — publish workflow success for `v0.1.11`
+- `25134830075` — manual repair publish workflow success for the earlier `v0.1.10` tag
+- `25133706803` — publish workflow success for `v0.1.9`
 
-Published install smoke for `v0.1.8` was completed after registry propagation:
+Published install smoke for `v0.1.11` was completed after registry propagation:
 
 - npm global install path passed
 - npm wrapper `agent-memory kb export --help` passed
@@ -67,7 +69,7 @@ Published install smoke for `v0.1.8` was completed after registry propagation:
 - uv tool `kb export --help`, `bootstrap`, `doctor` passed
 - final smoke output: `published install smoke ok`
 
-Note: the first npm smoke attempt for `v0.1.8` failed because the npm launcher correctly pinned `cafitac-agent-memory==0.1.8` before uv/PyPI simple-index resolution had caught up. A retry after propagation succeeded. This is the same known registry-propagation behavior seen in v0.1.7 and is not currently a code blocker.
+Note: registry metadata and delegated installer resolvers can briefly disagree after publish. This happened again during `v0.1.10`/`v0.1.11` validation; retrying with propagation time or `uvx --refresh` confirmed the published packages. This is not currently a code blocker.
 
 ## What is complete
 
@@ -78,7 +80,7 @@ Note: the first npm smoke attempt for `v0.1.8` failed because the npm launcher c
 - npm is the shortest onboarding surface; PyPI is the canonical Python runtime.
 - npm thin launcher pins the delegated Python package to the npm package version.
 - GitHub Actions CI/publish flow is validated.
-- Actual published install smoke is validated through `v0.1.8`.
+- Actual published install smoke is validated through `v0.1.11`.
 
 ### Hermes integration
 
@@ -180,6 +182,7 @@ Current verified behavior:
 - optional `--fail-on-baseline-regression-memory-type {facts,procedures,episodes}` can scope baseline-relative gating down to selected primary task types instead of failing on every current<baseline task; lexical-global and source-global comparisons still only gate when current is worse, not when the comparator is worse
 - optional `--fail-on-regression` exits nonzero when any current task has `pass=false`
 - optional `--fail-on-baseline-regression` exits nonzero only when current retrieval is worse than the chosen baseline for at least one task
+- optional `--format text` prints a compact terminal summary with current/baseline/delta totals, primary-task-type rollups, failed task IDs, and advisory messages while preserving JSON as the default machine-readable contract
 - symbolic fixture selectors now support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include`
 - current fact retrieval now suppresses lower-priority cross-scope fact drift when exact-scope fact matches exist and hides lower-ranked conflicting facts in the same subject/predicate/scope slot from surfaced results
 - checked-in fixture families are now directly runnable against a suitably seeded DB and also covered by regression tests in `tests/test_retrieval_evaluation.py`; the seeded family now includes a branch-only adversarial staleness case plus procedure-, episode-, and source-global-oriented stale-fact/stale-source guardrails where current retrieval passes and at least one comparator baseline still fails
@@ -202,6 +205,7 @@ uv run pytest tests/test_cli.py -q
 uv run pytest tests/ -q
 uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
 uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
 uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
 uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
 uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression

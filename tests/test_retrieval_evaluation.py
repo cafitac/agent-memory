@@ -575,6 +575,60 @@ def test_cli_eval_retrieval_outputs_json_summary(tmp_path: Path) -> None:
 
 
 
+
+def test_render_retrieval_eval_text_report_summarizes_passes_and_type_rollups(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures, render_retrieval_eval_text_report
+
+    db_path = tmp_path / "retrieval-eval-text.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = _write_fixture_file(tmp_path, seeded_ids)
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, baseline_mode="lexical")
+    report = render_retrieval_eval_text_report(result)
+
+    assert "Retrieval evaluation: 2/2 tasks passed" in report
+    assert "current: failures=0 missing=0 avoid=0 expected_hits=2" in report
+    assert "baseline lexical: 2/2 tasks passed" in report
+    assert "delta: pass_count=+0 expected_hits=+0 missing=+0 avoid=+0" in report
+    assert "by primary task type:" in report
+    assert "facts: 1/1 passed, missing=0, avoid=0" in report
+    assert "procedures: 1/1 passed, missing=0, avoid=0" in report
+    assert "failed tasks: none" in report
+
+
+def test_cli_eval_retrieval_text_format_outputs_human_summary(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieval-eval-cli-text.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = _write_fixture_file(tmp_path, seeded_ids)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "eval",
+            "retrieval",
+            str(db_path),
+            str(fixture_path),
+            "--baseline-mode",
+            "lexical",
+            "--format",
+            "text",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("Retrieval evaluation: 2/2 tasks passed")
+    assert "baseline lexical: 2/2 tasks passed" in result.stdout
+    assert "by primary task type:" in result.stdout
+    assert not result.stdout.lstrip().startswith("{")
+
+
 def test_evaluate_retrieval_fixtures_preserves_task_rationale_and_notes(tmp_path: Path) -> None:
     from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures
 
