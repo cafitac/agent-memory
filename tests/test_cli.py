@@ -161,6 +161,22 @@ def test_python_module_cli_codex_prompt_outputs_plain_prompt_text(tmp_path: Path
 def test_python_module_cli_claude_prompt_outputs_plain_prompt_text(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-claude-prompt.db"
     initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Claude Prompt project uses wrapper target CLAUDE_MEMORY_OK.",
+        metadata={"project": "claude-prompt"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Claude Prompt",
+        predicate="wrapper_target",
+        object_ref_or_value="CLAUDE_MEMORY_OK",
+        evidence_ids=[source.id],
+        scope="project:claude-prompt",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
     env = {**os.environ, "PYTHONPATH": "src"}
 
     result = subprocess.run(
@@ -170,11 +186,11 @@ def test_python_module_cli_claude_prompt_outputs_plain_prompt_text(tmp_path: Pat
             "agent_memory.api.cli",
             "claude-prompt",
             str(db_path),
-            "What should I know before answering?",
+            "What wrapper target does Claude Prompt use?",
             "--preferred-scope",
-            "user:default",
+            "project:claude-prompt",
             "--max-prompt-lines",
-            "4",
+            "8",
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
@@ -185,6 +201,7 @@ def test_python_module_cli_claude_prompt_outputs_plain_prompt_text(tmp_path: Pat
     assert result.returncode == 0, result.stderr
     assert "Memory response mode:" in result.stdout
     assert "Prompt prefix:" in result.stdout
+    assert "CLAUDE_MEMORY_OK" in result.stdout
     assert result.stdout.strip()
 
 

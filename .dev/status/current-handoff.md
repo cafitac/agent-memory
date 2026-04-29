@@ -183,6 +183,8 @@ Current verified behavior:
 - symbolic fixture selectors now support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include`
 - current fact retrieval now suppresses lower-priority cross-scope fact drift when exact-scope fact matches exist and hides lower-ranked conflicting facts in the same subject/predicate/scope slot from surfaced results
 - checked-in fixture families are now directly runnable against a suitably seeded DB and also covered by regression tests in `tests/test_retrieval_evaluation.py`; the seeded family now includes a branch-only adversarial staleness case plus procedure-, episode-, and source-global-oriented stale-fact/stale-source guardrails where current retrieval passes and at least one comparator baseline still fails
+- `codex-prompt` / `claude-prompt` now render not just policy/guidance lines but also short snippets from the top retrieved memories, so external CLI wrappers can answer from the actual retrieved content instead of only metadata
+- both reusable CLI wrapper scripts now have real-CLI smoke coverage in this environment: Codex and Claude Code both complete a retrieval-backed one-shot successfully once the target CLI is authenticated
 
 Recommended next work:
 

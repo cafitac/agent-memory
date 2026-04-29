@@ -115,6 +115,7 @@ def test_run_claude_with_memory_dry_run_outputs_command_and_prompt(tmp_path: Pat
     assert "--permission-mode=acceptEdits" in payload["command"]
     assert "Memory response mode:" in payload["prompt"]
     assert "Reason codes:" in payload["prompt"]
+    assert "SQLite-first agent memory with Hermes integration" in payload["prompt"]
     assert "User request:" in payload["prompt"]
     assert "What does Project X use?" in payload["prompt"]
 
