@@ -1,0 +1,40 @@
+{
+  "references": {
+    "project_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests",
+      "trigger_context": "Before opening a PR"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure-stale-fact-guardrail",
+      "query": "What command should I run before a PR?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "rationale": "Keep stale branch facts out of procedure-oriented pre-PR guidance.",
+      "notes": [
+        "The retrieval target is still the project-scoped pre-PR procedure.",
+        "A lexical baseline can keep the legacy branch fact in surfaced facts even when the procedure itself matches."
+      ],
+      "expected": {
+        "facts": [],
+        "procedures": ["project_scope_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["stale_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

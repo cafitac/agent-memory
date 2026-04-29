@@ -1,0 +1,58 @@
+{
+  "references": {
+    "project_scope_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "kb_export_command",
+      "object_ref_or_value": "agent-memory kb export"
+    },
+    "drift_fact": {
+      "memory_type": "fact",
+      "scope": "project:drift",
+      "subject_ref": "Project Drift",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "ZZ-999"
+    },
+    "project_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests",
+      "trigger_context": "Before opening a PR"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-fact",
+      "query": "What command does Project M1 use for KB export?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": ["project_scope_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["drift_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    },
+    {
+      "id": "project-scope-procedure",
+      "query": "What should run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": ["project_scope_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["drift_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

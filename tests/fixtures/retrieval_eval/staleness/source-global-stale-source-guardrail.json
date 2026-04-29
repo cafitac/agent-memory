@@ -1,0 +1,41 @@
+{
+  "references": {
+    "current_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "EP-123"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "source-global-stale-source-guardrail",
+      "query": "What branch pattern should I use for the current Project M1 workflow?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "rationale": "Lock in a checked-in source-global regression case where shared source text can resurface stale branch facts.",
+      "notes": [
+        "Current retrieval should keep only the active branch fact surfaced.",
+        "A source-global baseline can resurface the stale branch fact because all approved memories share one source note in the seeded fixture DB."
+      ],
+      "expected": {
+        "facts": ["current_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["stale_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

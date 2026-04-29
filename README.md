@@ -96,6 +96,12 @@ uv run agent-memory init ~/.agent-memory/memory.db
 
 If you want the shortest real Hermes onboarding path, `hermes-bootstrap` is the primary one-line command. It initializes the database if missing, writes or merges the Hermes hook config, and keeps existing Hermes hooks intact.
 
+Fresh-install and upgrade notes:
+- brand-new Hermes users can run `uv run agent-memory hermes-bootstrap` first; if `~/.hermes/config.yaml` does not exist yet, the command creates it with the agent-memory hook installed.
+- existing Hermes users with their own `pre_llm_call` / `on_session_end` hooks can also use `hermes-bootstrap`; the installer preserves the existing hook list and appends the agent-memory hook without rewriting the whole config.
+- after bootstrap, run `uv run agent-memory hermes-doctor` and `hermes hooks doctor` once to confirm the config path, hook install, and runtime allowlist state.
+- the first real Hermes run may still require `--accept-hooks` (or an interactive approval prompt) because Hermes itself will not fire unapproved shell hooks at runtime.
+
 ```bash
 uv run agent-memory hermes-bootstrap
 ```
@@ -129,6 +135,63 @@ Retrieve the raw `MemoryPacket` for a query:
 uv run agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
 ```
 
+Evaluate retrieval fixtures against the current retrieval path:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
+```
+
+Or include a simple lexical baseline for side-by-side comparison:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+```
+
+Or fail the command when any current task regresses:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
+```
+
+Or fail the command only when the current retrieval path is worse than the lexical baseline:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
+```
+
+Or compare against a source-linked lexical baseline that scores approved memories by the lexical overlap of their linked source content within the same preferred scope:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
+```
+
+Or compare against a source-linked lexical baseline that ignores preferred scope and lets cross-scope source evidence compete in the baseline ranking:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
+```
+
+Or compare against a lexical baseline that ignores preferred scope and lets cross-scope drift compete in the baseline ranking (this can make the baseline strictly worse than current retrieval, which is useful for drift-sensitive diagnostics but will not trip baseline-regression gates on its own):
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical-global
+```
+
+Or fail the command only when the current retrieval path is worse than the lexical baseline for selected primary task types:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression-memory-type facts
+```
+
+Or emit non-fatal soft-gate advisories when current regressions exceed a threshold:
+
+```bash
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
+```
+
+The retrieval evaluator accepts either one JSON fixture file or a fixture directory. Directory input is recursive, so fixture families can live under nested folders such as `scope/`, `procedure/`, `drift/`, `staleness/`, and `episode/`. Fixtures may use direct numeric IDs or top-level symbolic `references` that resolve against approved memories in the target database, which makes checked-in fixture families directly runnable from the CLI. Symbolic selectors now also support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include` when exact field equality is too brittle for checked-in fixtures. Each task may also carry optional human-authored `rationale` text and `notes` arrays; these are preserved verbatim in the JSON report so fixture reviews can explain why a hit matters without introducing LLM judging. The evaluator runs `retrieve_memory_packet` for each task and prints JSON with fixture paths, per-task rationale/notes, retrieved IDs, expected hits, missing expected IDs, avoid/drift hits, a derived per-task `pass` flag, any non-fatal soft-gate `advisories`, and an aggregate summary. Summary objects now also include top-level task counts (`total_tasks`, `passed_tasks`, `failed_tasks`), `by_memory_type` rollups for facts/procedures/episodes, and `by_primary_task_type` rollups keyed by each task's main target surface so regressions can be reviewed both by memory-slice participation and by per-task intent; the per-type summaries expose the same task counts plus hit/miss/avoid totals. With `--baseline-mode lexical`, the same output also includes per-task baseline metrics, per-task delta fields (`expected_hit_delta`, `missing_expected_delta`, `avoid_hit_delta`, `pass_changed`), plus baseline and delta summaries using a simpler lexical-only retrieval path scoped to the same preferred scope; `--baseline-mode source-lexical` keeps that preferred-scope restriction but scores approved memories by lexical overlap in their linked source content instead of normalized memory text; `--baseline-mode source-global` uses the same source-linked lexical scoring while ignoring preferred scope; and `--baseline-mode lexical-global` keeps normalized-text lexical scoring but ignores preferred scope. Soft-gate thresholds never change the per-task `pass` semantics or process exit code on their own; they only populate `advisories` when the observed current or baseline-relative regression count exceeds the requested threshold.
+
 Export approved memories as a human-readable KB draft:
 
 ```bash
@@ -146,6 +209,24 @@ uv run agent-memory hermes-context ~/.agent-memory/memory.db "What does Project 
 The `hermes-context` output is JSON with:
 - `context`: `HermesMemoryContext`, including `prompt_text`, answer flags, blocking steps, and full adapter payload
 - `outcome`: `null` unless verification results are supplied
+
+For Codex- or Claude-style CLI wrappers that just want a plain prompt string instead of the full JSON payload, use:
+
+```bash
+uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+```
+
+Both commands print only the rendered prompt text, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
+
+If you want a reusable wrapper script instead of assembling the prompt yourself, use:
+
+```bash
+python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --codex-model gpt-5.4-mini
+python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --max-turns 1
+```
+
+Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-prompt` internally, append the live user request, and then invoke the target CLI. Use `--dry-run` to inspect the final prompt and command without executing Codex or Claude Code.
 
 Apply harness-supplied verification results and print a `HermesVerificationOutcome`:
 
@@ -174,6 +255,19 @@ The lower-level explicit form remains available:
 ```bash
 uv run agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
 ```
+
+Recommended post-install verification for external users:
+
+```bash
+uv run agent-memory hermes-doctor ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml
+hermes hooks list
+hermes hooks doctor
+# approve the hook on first real use if Hermes reports it is not allowlisted yet
+hermes --accept-hooks chat -q 'Reply with OK only.' --quiet
+hermes hooks test pre_llm_call
+```
+
+The bootstrap/install path has been smoke-tested both for a fresh `config.yaml` creation flow and for configs that already contain other Hermes shell hooks. If `hermes hooks doctor` still reports failures after bootstrap, they are usually pre-existing hook path/auth problems elsewhere in the user's Hermes setup rather than an agent-memory install failure.
 
 ## Release and distribution notes
 

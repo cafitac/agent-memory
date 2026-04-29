@@ -1,0 +1,34 @@
+{
+  "references": {
+    "rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Retrieval evaluation rollout"
+    },
+    "drift_fact": {
+      "memory_type": "fact",
+      "scope": "project:drift",
+      "subject_ref": "Project Drift",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "ZZ-999"
+    }
+  },
+  "tasks": [
+    {
+      "id": "episode-recall",
+      "query": "What happened during the retrieval evaluation rollout?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": ["rollout_episode"]
+      },
+      "avoid": {
+        "facts": ["drift_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

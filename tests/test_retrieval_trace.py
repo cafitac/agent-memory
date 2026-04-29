@@ -399,36 +399,25 @@ def test_retrieval_trace_conflict_penalty_demotes_conflicting_fact_and_excludes_
 
     returned_ids = [fact.id for fact in packet.semantic_facts]
     assert canonical_fact.id in returned_ids
-    assert conflicting_fact.id in returned_ids
+    assert conflicting_fact.id not in returned_ids
     assert disputed_fact.id not in returned_ids
     assert deprecated_fact.id not in returned_ids
     assert packet.semantic_facts[0].id == canonical_fact.id
 
-    canonical_trace = next(trace for trace in packet.retrieval_trace if trace.memory_id == canonical_fact.id)
-    conflicting_trace = next(trace for trace in packet.retrieval_trace if trace.memory_id == conflicting_fact.id)
-    canonical_trust = next(trust for trust in packet.trust_summaries if trust.memory_id == canonical_fact.id)
-    conflicting_trust = next(trust for trust in packet.trust_summaries if trust.memory_id == conflicting_fact.id)
+    assert [trace.memory_id for trace in packet.retrieval_trace] == [canonical_fact.id]
+    assert [trust.memory_id for trust in packet.trust_summaries] == [canonical_fact.id]
+
+    canonical_trace = packet.retrieval_trace[0]
+    canonical_trust = packet.trust_summaries[0]
     assert canonical_trace.conflict_count == 1
-    assert conflicting_trace.conflict_count == 1
     assert canonical_trace.hidden_disputed_alternatives_count == 1
     assert canonical_trace.hidden_deprecated_alternatives_count == 1
     assert canonical_trace.hidden_alternative_count == 2
-    assert conflicting_trace.hidden_disputed_alternatives_count == 1
-    assert conflicting_trace.hidden_deprecated_alternatives_count == 1
-    assert conflicting_trace.hidden_alternative_count == 2
     assert canonical_trace.conflict_penalty < 0
-    assert conflicting_trace.conflict_penalty < 0
-    assert canonical_trace.reinforcement_score > conflicting_trace.reinforcement_score
-    assert canonical_trace.total_score > conflicting_trace.total_score
     assert canonical_trust.has_hidden_alternatives is True
-    assert conflicting_trust.has_hidden_alternatives is True
     assert canonical_trust.review_risk_score == _expected_review_risk_score(
         canonical_trace.conflict_count,
         canonical_trace.hidden_alternative_count,
-    )
-    assert conflicting_trust.review_risk_score == _expected_review_risk_score(
-        conflicting_trace.conflict_count,
-        conflicting_trace.hidden_alternative_count,
     )
     assert canonical_trust.uncertainty_score == _expected_uncertainty_score(
         rank_value=canonical_trace.rank_value,
@@ -437,16 +426,7 @@ def test_retrieval_trace_conflict_penalty_demotes_conflicting_fact_and_excludes_
         relation_match_count=canonical_trace.relation_match_count,
         reinforcement_score=canonical_trace.reinforcement_score,
     )
-    assert conflicting_trust.uncertainty_score == _expected_uncertainty_score(
-        rank_value=conflicting_trace.rank_value,
-        review_risk_score=conflicting_trust.review_risk_score,
-        text_match_count=conflicting_trace.text_match_count,
-        relation_match_count=conflicting_trace.relation_match_count,
-        reinforcement_score=conflicting_trace.reinforcement_score,
-    )
-    assert canonical_trust.uncertainty_score < conflicting_trust.uncertainty_score
     assert canonical_trust.trust_band == "high"
-    assert conflicting_trust.trust_band == "medium"
     assert packet.decision_summary.model_dump() == {
         "recommended_answer_mode": "verify_first",
         "target_memory_type": "fact",
@@ -474,8 +454,8 @@ def test_retrieval_trace_conflict_penalty_demotes_conflicting_fact_and_excludes_
                 "target_label": "Project X",
                 "reason_code": "hidden_alternatives_present",
                 "blocking": True,
-                "compare_against_memory_ids": [2],
-                "instruction": "Cross-check fact #1 (Project X) against ranked alternatives before asserting a final answer.",
+                "compare_against_memory_ids": [],
+                "instruction": "Cross-check fact #1 (Project X) against hidden alternatives before asserting a final answer.",
             },
         ],
     }

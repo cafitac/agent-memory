@@ -154,30 +154,69 @@ The active planning surface is under `.dev/kb/`:
 - `.dev/kb/kb-m1-scope-freeze.md`
   - M1 scope/non-goals
 
-## Immediate next work: retrieval evaluation M1
+## Immediate next work: retrieval evaluation M1+ follow-up
 
-Do this next before adding embeddings, reranking, graph visualization, or memory-palace style lifecycle complexity.
+Retrieval evaluation M1 is now implemented on branch `feat/retrieval-eval-fixtures`.
 
-Goal:
+Completed in this slice:
 
-- Add a small reproducible evaluation loop that proves whether retrieval is getting better or worse.
-- Establish fixtures and metrics before changing retrieval algorithms.
+- `.dev/kb/retrieval-eval-m1-implementation-plan.md` drafted
+- `src/agent_memory/core/retrieval_eval.py` added
+- `agent-memory eval retrieval <db_path> <fixtures_path>` added
+- recursive directory fixture loading added for nested task-family folders
+- `tests/test_retrieval_evaluation.py` added
+- checked-in fixture examples expanded to 9 JSON files across task families
+- focused tests and full suite passed locally
 
-Why this is next:
+Current verified behavior:
 
-- KB export/provenance is now good enough for reviewable artifacts.
-- The long-term ambition is memory OS / memory palace, but that needs measurable retrieval quality.
-- Embeddings/reranking should only be added after a baseline shows where lexical/current retrieval fails.
+- evaluator accepts one JSON fixture file or a directory of JSON fixtures
+- directory input is recursive, so nested task-family folders are supported
+- fixtures can use direct numeric IDs or symbolic top-level `references` that resolve against approved memories in the target DB
+- it runs current `retrieve_memory_packet` for each task
+- it reports optional per-task rationale/notes, expected hits, missing expected IDs, avoid/drift hits, retrieved IDs, aggregate counts, per-memory-type summary rollups, and a derived per-task `pass` flag; current/baseline summaries now also expose top-level `total_tasks`, `passed_tasks`, and `failed_tasks`, plus both `by_memory_type` and `by_primary_task_type` rollups so memory-slice-local and task-intent views can be compared side by side
+- optional `--baseline-mode lexical` adds per-task baseline metrics, per-task delta fields, and both baseline and delta summaries for a simpler lexical-only retrieval path in the same preferred scope; `--baseline-mode source-lexical` keeps that scope restriction but ranks approved memories by lexical overlap in their linked source content instead of normalized memory text; `--baseline-mode source-global` uses that same source-linked lexical scoring while ignoring preferred scope so cross-scope source evidence can compete in the comparator; `--baseline-mode lexical-global` keeps the lexical ranking but ignores preferred scope so cross-scope drift can compete in the comparator; current summary, baseline summary, and delta summary objects now all carry `by_memory_type` rollups for facts/procedures/episodes, and delta rollups now also include `tasks_with_pass_change` per memory type plus an explicit `by_primary_task_type` mirror of the primary-type delta view
+- optional `--warn-on-regression-threshold N` and `--warn-on-baseline-regression-threshold N` emit non-fatal `advisories` entries when current failures or current<baseline regressions exceed the requested threshold; they never change per-task `pass` semantics or exit codes on their own
+- optional `--fail-on-baseline-regression-memory-type {facts,procedures,episodes}` can scope baseline-relative gating down to selected primary task types instead of failing on every current<baseline task; lexical-global and source-global comparisons still only gate when current is worse, not when the comparator is worse
+- optional `--fail-on-regression` exits nonzero when any current task has `pass=false`
+- optional `--fail-on-baseline-regression` exits nonzero only when current retrieval is worse than the chosen baseline for at least one task
+- symbolic fixture selectors now support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include`
+- current fact retrieval now suppresses lower-priority cross-scope fact drift when exact-scope fact matches exist and hides lower-ranked conflicting facts in the same subject/predicate/scope slot from surfaced results
+- checked-in fixture families are now directly runnable against a suitably seeded DB and also covered by regression tests in `tests/test_retrieval_evaluation.py`; the seeded family now includes a branch-only adversarial staleness case plus procedure-, episode-, and source-global-oriented stale-fact/stale-source guardrails where current retrieval passes and at least one comparator baseline still fails
 
-Recommended branch:
+Recommended next work:
+
+1. if needed next, consider richer comparator families or matrix summaries beyond the current lexical/source × scope-aware/global coverage
+2. if needed later, extend symbolic selectors again beyond the current contains/tag support
+3. once retrieval changes get bolder, consider thresholded hard-gate variants or per-slice gating beyond binary pass/fail
+4. if fixture reviews get denser, consider lightweight grouping or labels for rationale/notes without changing pass/fail semantics
+
+Recommended verification commands:
 
 ```bash
 cd ~/Project/agent-memory
-git status -sb
-git checkout -b feat/retrieval-eval-fixtures
+uv run pytest tests/test_retrieval_evaluation.py -q
+uv run pytest tests/test_cli.py -q
+uv run pytest tests/ -q
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
+uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
+uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
+uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
+python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --dry-run
+python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --dry-run
 ```
 
-If `main` is already dirty, stop and inspect before branching. Preserve unrelated dirty work.
+Notes:
+
+- the repo still had pre-existing untracked `.agent-learner/` state while this slice was implemented; it was preserved untouched
+- current retrieval no longer surfaces the seeded cross-scope drift fact or the lower-ranked stale conflicting fact in the checked-in retrieval eval family, and the new branch-only/procedure/episode adversarial fixtures lock in those lexical-baseline failure modes explicitly, so those regressions are now covered by tests instead of only observed as known issues
+- checked-in retrieval fixture examples now use symbolic top-level `references` instead of hard-coded IDs, selectors can now use contains/tag matching when exact equality would be too brittle, tasks may include rationale/notes that round-trip into the JSON report, and summary/baseline summary/delta summary payloads now include top-level pass/fail counts plus both `by_memory_type` and `by_primary_task_type` rollups, with delta pass-change counts available in both views for compatibility and clearer intent-based triage; baseline-relative failure gating can now also be scoped to selected primary task types, comparator mode can now switch between scope-aware lexical, source-linked lexical, source-linked all-scopes, and normalized-text all-scopes variants, checked-in aggregate regression tests now lock the full comparator matrix, source-global inherits the same selected-type gating semantics as other comparators, both drift-sensitive global comparators are verified to avoid false failures when current retrieval outperforms the comparator, soft threshold flags now surface non-fatal `advisories` without changing pass/fail semantics or exit codes, and reusable Codex/Claude wrapper scripts now build a retrieval-backed prompt and invoke the target CLI directly (`run_codex_with_memory.py` has also been smoke-tested against the real Codex CLI in this environment)
 
 ### Retrieval evaluation M1 scope
 

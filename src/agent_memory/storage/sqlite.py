@@ -680,6 +680,22 @@ def _search_model_rows_with_trace(
         scored_rows.append((score_tuple, model, trace))
 
     scored_rows.sort(key=lambda item: item[0])
+
+    if table_name == "facts":
+        if preferred_scope and any(trace.scope_priority == 0 for _score, _model, trace in scored_rows):
+            scored_rows = [item for item in scored_rows if item[2].scope_priority == 0]
+
+        deduplicated_rows: list[tuple[tuple[Any, ...], T, RetrievalTraceEntry]] = []
+        seen_claim_slots: set[tuple[str, str, str]] = set()
+        for item in scored_rows:
+            model = item[1]
+            claim_slot = (model.subject_ref, model.predicate, model.scope)
+            if claim_slot in seen_claim_slots:
+                continue
+            seen_claim_slots.add(claim_slot)
+            deduplicated_rows.append(item)
+        scored_rows = deduplicated_rows
+
     return [(model, trace) for _, model, trace in scored_rows[:limit]]
 
 

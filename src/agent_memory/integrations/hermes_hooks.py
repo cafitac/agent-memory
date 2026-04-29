@@ -143,8 +143,21 @@ def build_hermes_hook_config_snippet(options: HermesHookConfigSnippetOptions) ->
     )
 
 
-def _hook_item_lines(snippet: str) -> list[str]:
-    return [line for line in snippet.splitlines() if line.startswith("    ")]
+def _hook_item_lines(snippet: str, indent: str = "    ") -> list[str]:
+    lines = [line for line in snippet.splitlines() if line.startswith("    ")]
+    if indent == "    ":
+        return lines
+    return [f"{indent}{line[4:]}" for line in lines]
+
+
+def _detect_event_item_indent(lines: list[str], event_index: int) -> str:
+    end_index = _find_next_hooks_event_or_top_level_line(lines, event_index)
+    for index in range(event_index + 1, end_index):
+        line = lines[index]
+        stripped = line.lstrip()
+        if stripped.startswith("- "):
+            return line[: len(line) - len(stripped)]
+    return "    "
 
 
 def _find_top_level_hooks_line(lines: list[str]) -> int | None:
@@ -173,7 +186,11 @@ def _find_hooks_event_line(lines: list[str], hooks_index: int, event_name: str) 
 def _find_next_hooks_event_or_top_level_line(lines: list[str], start_index: int) -> int:
     for index in range(start_index + 1, len(lines)):
         line = lines[index]
-        if line.strip() and (not line.startswith(" ") or (line.startswith("  ") and not line.startswith("    "))):
+        if not line.strip():
+            continue
+        if not line.startswith(" "):
+            return index
+        if line.startswith("  ") and not line.startswith("    ") and not line.startswith("  -"):
             return index
     return len(lines)
 
@@ -181,7 +198,6 @@ def _find_next_hooks_event_or_top_level_line(lines: list[str], start_index: int)
 def _merge_hook_snippet_into_config(current: str, snippet: str) -> str:
     lines = current.splitlines()
     snippet_lines = snippet.splitlines()
-    hook_item_lines = _hook_item_lines(snippet)
     hooks_index = _find_top_level_hooks_line(lines)
     if hooks_index is None:
         separator = [""] if lines and lines[-1].strip() else []
@@ -190,9 +206,11 @@ def _merge_hook_snippet_into_config(current: str, snippet: str) -> str:
     event_index = _find_hooks_event_line(lines, hooks_index, "pre_llm_call")
     if event_index is None:
         insert_index = _find_next_top_level_line(lines, hooks_index)
+        hook_item_lines = _hook_item_lines(snippet)
         merged_lines = [*lines[:insert_index], "  pre_llm_call:", *hook_item_lines, *lines[insert_index:]]
     else:
         insert_index = _find_next_hooks_event_or_top_level_line(lines, event_index)
+        hook_item_lines = _hook_item_lines(snippet, indent=_detect_event_item_indent(lines, event_index))
         merged_lines = [*lines[:insert_index], *hook_item_lines, *lines[insert_index:]]
     return "\n".join([*merged_lines, ""])
 

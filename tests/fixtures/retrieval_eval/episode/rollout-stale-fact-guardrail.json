@@ -1,0 +1,39 @@
+{
+  "references": {
+    "rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Retrieval evaluation rollout"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "episode-recall-stale-fact-guardrail",
+      "query": "What rollout note should I remember about branch policy?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "rationale": "Keep stale branch facts out of rollout-history recall tasks.",
+      "notes": [
+        "The retrieval target is the rollout episode, not branch-policy facts.",
+        "A lexical baseline can keep the legacy branch fact in surfaced facts when the query mixes rollout history with branch language."
+      ],
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": ["rollout_episode"]
+      },
+      "avoid": {
+        "facts": ["stale_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "references": {
+    "current_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "EP-123"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "current-vs-stale-fact",
+      "query": "What is the current approved branch policy for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": ["current_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["stale_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}
