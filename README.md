@@ -217,7 +217,7 @@ uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X 
 uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
 ```
 
-Both commands print only the rendered prompt text, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
+Both commands print only the rendered prompt text, including the normal response/verification guidance plus short snippets from the top retrieved facts, procedures, or episodes, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
 
 If you want a reusable wrapper script instead of assembling the prompt yourself, use:
 
@@ -226,7 +226,7 @@ python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Pro
 python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --max-turns 1
 ```
 
-Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-prompt` internally, append the live user request, and then invoke the target CLI. Use `--dry-run` to inspect the final prompt and command without executing Codex or Claude Code.
+Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-prompt` internally, append the live user request, and then invoke the target CLI. Use `--dry-run` to inspect the final prompt and command without executing Codex or Claude Code. In this repository's current verified state, both wrappers have now been smoke-tested against the real target CLIs in this environment.
 
 Apply harness-supplied verification results and print a `HermesVerificationOutcome`:
 

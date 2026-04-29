@@ -644,8 +644,8 @@ def _search_model_rows_with_trace(
             + rank_signal_score
         )
         score_tuple = (
-            -total_score,
             scope_priority,
+            -total_score,
             -max(text_matches, relation_match_count),
             -relation_match_count,
             -recency_score,

@@ -9,6 +9,7 @@ from typing import Any
 from agent_memory.adapters import (
     HermesVerificationResult,
     apply_hermes_verification_results,
+    estimate_prompt_tokens,
     prepare_hermes_memory_context,
 )
 from agent_memory.integrations.hermes_hooks import (
@@ -47,13 +48,17 @@ def _dump_models(models: list[Any]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models], indent=2)
 
 
-def _render_memory_context_for_prompt(args: argparse.Namespace):
-    packet = retrieve_memory_packet(
+def _retrieve_packet_for_prompt(args: argparse.Namespace):
+    return retrieve_memory_packet(
         db_path=args.db_path,
         query=args.query,
         limit=args.limit,
         preferred_scope=args.preferred_scope,
     )
+
+
+def _render_memory_context_for_prompt(args: argparse.Namespace):
+    packet = _retrieve_packet_for_prompt(args)
     return prepare_hermes_memory_context(
         packet,
         top_k=args.top_k,
@@ -65,6 +70,86 @@ def _render_memory_context_for_prompt(args: argparse.Namespace):
         max_guidelines=args.max_guidelines,
         include_reason_codes=not args.no_reason_codes,
     )
+
+
+def _render_memory_snippet_lines(packet, *, top_k: int) -> list[str]:
+    facts_by_id = {fact.id: fact for fact in packet.semantic_facts}
+    procedures_by_id = {procedure.id: procedure for procedure in packet.procedural_guidance}
+    episodes_by_id = {episode.id: episode for episode in packet.episodic_context}
+
+    lines: list[str] = []
+    for trace in packet.retrieval_trace[: max(0, top_k)]:
+        if trace.memory_type == "fact":
+            fact = facts_by_id.get(trace.memory_id)
+            if fact is None:
+                continue
+            lines.append(
+                f"Retrieved fact #{fact.id}: {fact.subject_ref} | {fact.predicate} | {fact.object_ref_or_value}"
+            )
+            continue
+        if trace.memory_type == "procedure":
+            procedure = procedures_by_id.get(trace.memory_id)
+            if procedure is None:
+                continue
+            step_preview = "; ".join(procedure.steps[:2]) or procedure.trigger_context
+            lines.append(
+                f"Retrieved procedure #{procedure.id}: {procedure.name} | trigger={procedure.trigger_context} | steps={step_preview}"
+            )
+            continue
+        if trace.memory_type == "episode":
+            episode = episodes_by_id.get(trace.memory_id)
+            if episode is None:
+                continue
+            lines.append(f"Retrieved episode #{episode.id}: {episode.title} | {episode.summary}")
+    return lines
+
+
+def _apply_prompt_size_budgets(lines: list[str], args: argparse.Namespace) -> list[str]:
+    budgeted = lines
+    if args.max_prompt_lines is not None:
+        budgeted = budgeted[: max(0, args.max_prompt_lines)]
+
+    if args.max_prompt_chars is not None:
+        remaining = max(0, args.max_prompt_chars)
+        char_budgeted: list[str] = []
+        for line in budgeted:
+            line_cost = len(line) if not char_budgeted else len(line) + 1
+            if line_cost > remaining:
+                break
+            char_budgeted.append(line)
+            remaining -= line_cost
+        budgeted = char_budgeted
+
+    if args.max_prompt_tokens is not None:
+        token_budgeted: list[str] = []
+        for line in budgeted:
+            candidate_lines = [*token_budgeted, line]
+            if estimate_prompt_tokens("\n".join(candidate_lines)) > max(0, args.max_prompt_tokens):
+                break
+            token_budgeted.append(line)
+        budgeted = token_budgeted
+
+    return budgeted
+
+
+def _render_external_agent_prompt_text(args: argparse.Namespace) -> str:
+    packet = _retrieve_packet_for_prompt(args)
+    context = prepare_hermes_memory_context(
+        packet,
+        top_k=args.top_k,
+        max_prompt_lines=None,
+        max_prompt_chars=None,
+        max_prompt_tokens=None,
+        max_verification_steps=args.max_verification_steps,
+        max_alternatives=args.max_alternatives,
+        max_guidelines=args.max_guidelines,
+        include_reason_codes=not args.no_reason_codes,
+    )
+    lines = context.prompt_text.splitlines()
+    snippet_lines = _render_memory_snippet_lines(packet, top_k=args.top_k)
+    if snippet_lines:
+        lines.extend(snippet_lines)
+    return "\n".join(_apply_prompt_size_budgets(lines, args))
 
 
 def _normalize_command_aliases(argv: list[str]) -> list[str]:
@@ -475,8 +560,7 @@ def main() -> None:
         return
 
     if args.command in {"codex-prompt", "claude-prompt"}:
-        context = _render_memory_context_for_prompt(args)
-        print(context.prompt_text)
+        print(_render_external_agent_prompt_text(args))
         return
 
     if args.command == "hermes-pre-llm-hook":
