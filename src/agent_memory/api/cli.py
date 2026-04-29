@@ -35,7 +35,11 @@ from agent_memory.core.curation import (
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.kb_export import export_kb_markdown
 from agent_memory.core.retrieval import retrieve_memory_packet
-from agent_memory.core.retrieval_eval import RetrievalEvalRegressionError, evaluate_retrieval_fixtures
+from agent_memory.core.retrieval_eval import (
+    RetrievalEvalRegressionError,
+    evaluate_retrieval_fixtures,
+    render_retrieval_eval_text_report,
+)
 from agent_memory.storage.sqlite import (
     initialize_database,
     list_candidate_episodes,
@@ -255,6 +259,7 @@ def _build_parser() -> argparse.ArgumentParser:
     eval_retrieval_parser.add_argument("db_path", type=Path)
     eval_retrieval_parser.add_argument("fixtures_path", type=Path)
     eval_retrieval_parser.add_argument("--baseline-mode", choices=["lexical", "lexical-global", "source-lexical", "source-global"])
+    eval_retrieval_parser.add_argument("--format", choices=["json", "text"], default="json")
     eval_retrieval_parser.add_argument("--fail-on-regression", action="store_true")
     eval_retrieval_parser.add_argument("--warn-on-regression-threshold", type=int)
     eval_retrieval_parser.add_argument("--fail-on-baseline-regression", action="store_true")
@@ -535,7 +540,10 @@ def main() -> None:
             except RetrievalEvalRegressionError as exc:
                 print(str(exc), file=sys.stderr)
                 raise SystemExit(1) from exc
-            print(result.model_dump_json(indent=2, by_alias=True))
+            if args.format == "text":
+                print(render_retrieval_eval_text_report(result))
+            else:
+                print(result.model_dump_json(indent=2, by_alias=True))
             return
         raise ValueError(f"Unsupported eval action: {args.eval_action}")
 

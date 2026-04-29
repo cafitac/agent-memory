@@ -486,6 +486,65 @@ def _build_summary(task_metrics: list[tuple[str, RetrievalEvalRunMetrics]]) -> R
     return summary
 
 
+def _signed_delta(value: int) -> str:
+    return f"{value:+d}"
+
+
+def _format_summary_line(prefix: str, summary: RetrievalEvalSummary) -> str:
+    return (
+        f"{prefix}: failures={summary.failed_tasks} "
+        f"missing={summary.total_missing_expected} "
+        f"avoid={summary.total_avoid_hits} "
+        f"expected_hits={summary.total_expected_hits}"
+    )
+
+
+def _format_type_summary(memory_type: str, summary: RetrievalEvalMemoryTypeSummary) -> str:
+    return (
+        f"  {memory_type}: {summary.passed_tasks}/{summary.total_tasks} passed, "
+        f"missing={summary.total_missing_expected}, avoid={summary.total_avoid_hits}"
+    )
+
+
+def render_retrieval_eval_text_report(result_set: RetrievalEvalResultSet) -> str:
+    summary = result_set.summary
+    lines = [
+        f"Retrieval evaluation: {summary.passed_tasks}/{summary.total_tasks} tasks passed",
+        _format_summary_line("current", summary),
+    ]
+
+    if result_set.baseline_summary is not None:
+        baseline = result_set.baseline_summary
+        lines.append(f"baseline {baseline.mode}: {baseline.passed_tasks}/{baseline.total_tasks} tasks passed")
+    if result_set.delta_summary is not None:
+        delta = result_set.delta_summary
+        lines.append(
+            "delta: "
+            f"pass_count={_signed_delta(delta.total_pass_count_delta)} "
+            f"expected_hits={_signed_delta(delta.total_expected_hit_delta)} "
+            f"missing={_signed_delta(delta.total_missing_expected_delta)} "
+            f"avoid={_signed_delta(delta.total_avoid_hit_delta)}"
+        )
+
+    lines.append("by primary task type:")
+    for memory_type in _MEMORY_TYPES:
+        type_summary = summary.by_primary_task_type.get(memory_type, RetrievalEvalMemoryTypeSummary())
+        lines.append(_format_type_summary(memory_type, type_summary))
+
+    failed_task_ids = [task.task_id for task in result_set.results if not task.pass_]
+    if failed_task_ids:
+        lines.append("failed tasks:")
+        lines.extend(f"  - {task_id}" for task_id in failed_task_ids)
+    else:
+        lines.append("failed tasks: none")
+
+    if result_set.advisories:
+        lines.append("advisories:")
+        lines.extend(f"  - {advisory.code}: {advisory.message}" for advisory in result_set.advisories)
+
+    return "\n".join(lines)
+
+
 def evaluate_retrieval_fixtures(
     db_path: Path | str,
     fixtures_path: Path | str,
