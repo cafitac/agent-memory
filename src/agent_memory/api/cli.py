@@ -34,6 +34,7 @@ from agent_memory.core.curation import (
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.kb_export import export_kb_markdown
 from agent_memory.core.retrieval import retrieve_memory_packet
+from agent_memory.core.retrieval_eval import RetrievalEvalRegressionError, evaluate_retrieval_fixtures
 from agent_memory.storage.sqlite import (
     initialize_database,
     list_candidate_episodes,
@@ -142,6 +143,23 @@ def _build_parser() -> argparse.ArgumentParser:
     retrieve_parser.add_argument("query")
     retrieve_parser.add_argument("--limit", type=int, default=5)
     retrieve_parser.add_argument("--preferred-scope")
+
+    eval_parser = subparsers.add_parser("eval")
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_action", required=True)
+    eval_retrieval_parser = eval_subparsers.add_parser("retrieval")
+    eval_retrieval_parser.add_argument("db_path", type=Path)
+    eval_retrieval_parser.add_argument("fixtures_path", type=Path)
+    eval_retrieval_parser.add_argument("--baseline-mode", choices=["lexical", "lexical-global", "source-lexical", "source-global"])
+    eval_retrieval_parser.add_argument("--fail-on-regression", action="store_true")
+    eval_retrieval_parser.add_argument("--warn-on-regression-threshold", type=int)
+    eval_retrieval_parser.add_argument("--fail-on-baseline-regression", action="store_true")
+    eval_retrieval_parser.add_argument("--warn-on-baseline-regression-threshold", type=int)
+    eval_retrieval_parser.add_argument(
+        "--fail-on-baseline-regression-memory-type",
+        action="append",
+        choices=["facts", "procedures", "episodes"],
+        dest="fail_on_baseline_regression_memory_types",
+    )
 
     hermes_context_parser = subparsers.add_parser("hermes-context")
     hermes_context_parser.add_argument("db_path", type=Path)
@@ -367,6 +385,26 @@ def main() -> None:
         )
         print(packet.model_dump_json(indent=2))
         return
+
+    if args.command == "eval":
+        if args.eval_action == "retrieval":
+            try:
+                result = evaluate_retrieval_fixtures(
+                    db_path=args.db_path,
+                    fixtures_path=args.fixtures_path,
+                    baseline_mode=args.baseline_mode,
+                    fail_on_regression=args.fail_on_regression,
+                    warn_on_regression_threshold=args.warn_on_regression_threshold,
+                    fail_on_baseline_regression=args.fail_on_baseline_regression,
+                    warn_on_baseline_regression_threshold=args.warn_on_baseline_regression_threshold,
+                    fail_on_baseline_regression_memory_types=args.fail_on_baseline_regression_memory_types,
+                )
+            except RetrievalEvalRegressionError as exc:
+                print(str(exc), file=sys.stderr)
+                raise SystemExit(1) from exc
+            print(result.model_dump_json(indent=2, by_alias=True))
+            return
+        raise ValueError(f"Unsupported eval action: {args.eval_action}")
 
     if args.command == "hermes-context":
         packet = retrieve_memory_packet(

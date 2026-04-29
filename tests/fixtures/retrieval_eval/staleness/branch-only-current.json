@@ -1,0 +1,41 @@
+{
+  "references": {
+    "current_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "EP-123"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "branch-only-current-policy",
+      "query": "What branch pattern should I use?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "rationale": "Use a branch-only query that isolates stale conflicting branch facts.",
+      "notes": [
+        "The current retrieval path should surface only the active branch pattern.",
+        "The lexical baseline tends to keep the stale branch fact in the surfaced set."
+      ],
+      "expected": {
+        "facts": ["current_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["stale_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

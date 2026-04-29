@@ -1,0 +1,35 @@
+{
+  "references": {
+    "project_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests",
+      "trigger_context": "Before opening a PR"
+    },
+    "drift_fact": {
+      "memory_type": "fact",
+      "scope": "project:drift",
+      "subject_ref": "Project Drift",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "ZZ-999"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure",
+      "query": "What should run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": ["project_scope_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["drift_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}

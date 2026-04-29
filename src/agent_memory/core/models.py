@@ -209,3 +209,135 @@ class KbExportResult(BaseModel):
     files: list[KbExportedFile] = Field(default_factory=list)
     counts: KbExportCounts = Field(default_factory=KbExportCounts)
     source_ids: list[int] = Field(default_factory=list)
+
+
+class RetrievalEvalMemorySelector(BaseModel):
+    memory_type: Literal["fact", "procedure", "episode"]
+    scope: str | None = None
+    subject_ref: str | None = None
+    predicate: str | None = None
+    object_ref_or_value: str | None = None
+    name: str | None = None
+    trigger_context: str | None = None
+    title: str | None = None
+    searchable_text_contains: str | None = None
+    step_contains: str | None = None
+    tags_include: list[str] = Field(default_factory=list)
+
+
+class RetrievalEvalExpected(BaseModel):
+    facts: list[int | str] = Field(default_factory=list)
+    procedures: list[int | str] = Field(default_factory=list)
+    episodes: list[int | str] = Field(default_factory=list)
+
+
+class RetrievalEvalTask(BaseModel):
+    id: str
+    query: str
+    preferred_scope: str | None = None
+    limit: int = 5
+    rationale: str | None = None
+    notes: list[str] = Field(default_factory=list)
+    expected: RetrievalEvalExpected = Field(default_factory=RetrievalEvalExpected)
+    avoid: RetrievalEvalExpected = Field(default_factory=RetrievalEvalExpected)
+
+
+class RetrievalEvalFixture(BaseModel):
+    references: dict[str, RetrievalEvalMemorySelector] = Field(default_factory=dict)
+    tasks: list[RetrievalEvalTask] = Field(default_factory=list)
+
+
+class RetrievalEvalRunMetrics(BaseModel):
+    mode: str
+    expected_hits: dict[str, list[int]] = Field(default_factory=dict)
+    missing_expected: dict[str, list[int]] = Field(default_factory=dict)
+    avoid_hits: dict[str, list[int]] = Field(default_factory=dict)
+    retrieved_ids: dict[str, list[int]] = Field(default_factory=dict)
+    pass_: bool = Field(default=False, serialization_alias="pass")
+
+
+class RetrievalEvalDelta(BaseModel):
+    expected_hit_delta: int = 0
+    missing_expected_delta: int = 0
+    avoid_hit_delta: int = 0
+    pass_changed: bool = False
+
+
+class RetrievalEvalMemoryTypeDeltaSummary(BaseModel):
+    total_expected_hit_delta: int = 0
+    total_missing_expected_delta: int = 0
+    total_avoid_hit_delta: int = 0
+    total_pass_count_delta: int = 0
+    tasks_with_pass_change: int = 0
+
+
+class RetrievalEvalDeltaSummary(BaseModel):
+    total_expected_hit_delta: int = 0
+    total_missing_expected_delta: int = 0
+    total_avoid_hit_delta: int = 0
+    total_pass_count_delta: int = 0
+    by_memory_type: dict[str, RetrievalEvalMemoryTypeDeltaSummary] = Field(default_factory=dict)
+    by_primary_task_type: dict[str, RetrievalEvalMemoryTypeDeltaSummary] = Field(default_factory=dict)
+
+
+class RetrievalEvalTaskResult(BaseModel):
+    task_id: str
+    query: str
+    preferred_scope: str | None = None
+    limit: int = 5
+    rationale: str | None = None
+    notes: list[str] = Field(default_factory=list)
+    expected_hits: dict[str, list[int]] = Field(default_factory=dict)
+    missing_expected: dict[str, list[int]] = Field(default_factory=dict)
+    avoid_hits: dict[str, list[int]] = Field(default_factory=dict)
+    retrieved_ids: dict[str, list[int]] = Field(default_factory=dict)
+    pass_: bool = Field(default=False, serialization_alias="pass")
+    baseline: RetrievalEvalRunMetrics | None = None
+    delta: RetrievalEvalDelta | None = None
+
+
+class RetrievalEvalMemoryTypeSummary(BaseModel):
+    total_tasks: int = 0
+    passed_tasks: int = 0
+    failed_tasks: int = 0
+    tasks_with_missing_expected: int = 0
+    tasks_with_avoid_hits: int = 0
+    total_expected_hits: int = 0
+    total_missing_expected: int = 0
+    total_avoid_hits: int = 0
+
+
+class RetrievalEvalSummary(BaseModel):
+    total_tasks: int = 0
+    passed_tasks: int = 0
+    failed_tasks: int = 0
+    tasks_with_missing_expected: int = 0
+    tasks_with_avoid_hits: int = 0
+    total_expected_hits: int = 0
+    total_missing_expected: int = 0
+    total_avoid_hits: int = 0
+    by_memory_type: dict[str, RetrievalEvalMemoryTypeSummary] = Field(default_factory=dict)
+    by_primary_task_type: dict[str, RetrievalEvalMemoryTypeSummary] = Field(default_factory=dict)
+
+
+class RetrievalEvalBaselineSummary(RetrievalEvalSummary):
+    mode: str
+
+
+class RetrievalEvalAdvisory(BaseModel):
+    code: str
+    message: str
+    observed: int
+    threshold: int
+    task_ids: list[str] = Field(default_factory=list)
+    baseline_mode: str | None = None
+
+
+class RetrievalEvalResultSet(BaseModel):
+    fixture_paths: list[str] = Field(default_factory=list)
+    summary: RetrievalEvalSummary = Field(default_factory=RetrievalEvalSummary)
+    results: list[RetrievalEvalTaskResult] = Field(default_factory=list)
+    baseline_mode: str | None = None
+    baseline_summary: RetrievalEvalBaselineSummary | None = None
+    delta_summary: RetrievalEvalDeltaSummary | None = None
+    advisories: list[RetrievalEvalAdvisory] = Field(default_factory=list)

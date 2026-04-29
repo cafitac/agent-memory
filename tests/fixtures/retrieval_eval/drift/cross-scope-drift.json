@@ -1,0 +1,36 @@
+{
+  "references": {
+    "current_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "EP-123"
+    },
+    "drift_fact": {
+      "memory_type": "fact",
+      "scope": "project:drift",
+      "subject_ref": "Project Drift",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "ZZ-999"
+    }
+  },
+  "tasks": [
+    {
+      "id": "cross-scope-drift-check",
+      "query": "What branch pattern does Project M1 use?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": ["current_branch_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["drift_fact"],
+        "procedures": [],
+        "episodes": []
+      }
+    }
+  ]
+}
