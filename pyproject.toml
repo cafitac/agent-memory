@@ -1,6 +1,6 @@
 [project]
 name = "cafitac-agent-memory"
-version = "0.1.17"
+version = "0.1.18"
 description = "Reusable memory runtime for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
