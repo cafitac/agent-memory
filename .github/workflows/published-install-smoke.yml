@@ -42,10 +42,7 @@ jobs:
         run: |
           python -m pip install pipx
           mkdir -p "$RUNNER_TEMP/bin"
-          cat > "$RUNNER_TEMP/bin/pipx" <<'SH'
-#!/usr/bin/env bash
-exec python -c 'from pipx.main import cli; raise SystemExit(cli())' "$@"
-SH
+          printf '%s\n' '#!/usr/bin/env bash' "exec python -c 'from pipx.main import cli; raise SystemExit(cli())' \"\$@\"" > "$RUNNER_TEMP/bin/pipx"
           chmod +x "$RUNNER_TEMP/bin/pipx"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
