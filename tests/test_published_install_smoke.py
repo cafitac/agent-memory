@@ -59,6 +59,19 @@ def test_published_install_script_uses_package_json_version_by_default() -> None
     assert version == package_json["version"]
 
 
+def test_published_install_workflows_use_python_module_pipx_wrapper() -> None:
+    workflow_paths = [
+        REPO_ROOT / ".github" / "workflows" / "published-install-smoke.yml",
+        REPO_ROOT / ".github" / "workflows" / "publish.yml",
+    ]
+
+    for workflow_path in workflow_paths:
+        content = workflow_path.read_text()
+        assert "python -m pip install pipx" in content
+        assert 'exec python -c \'from pipx.main import cli; raise SystemExit(cli())\' "$@"' in content
+        assert "pip install --user pipx" not in content
+
+
 def test_published_install_script_appends_isolated_bootstrap_paths(tmp_path: Path) -> None:
     command = SmokeCommand("uvx-bootstrap", ["uvx", "--from", "cafitac-agent-memory==1.2.3", "agent-memory", "bootstrap"])
 
@@ -110,7 +123,8 @@ def test_standalone_published_install_workflow_is_manual() -> None:
     assert "workflow_dispatch:" in workflow
     assert "version:" in workflow
     assert "scripts/smoke_published_install.py" in workflow
-    assert "python -m pip install --user pipx" in workflow
+    assert "python -m pip install pipx" in workflow
+    assert 'exec python -c \'from pipx.main import cli; raise SystemExit(cli())\' "$@"' in workflow
 
 
 def test_published_install_script_does_not_mask_missing_required_tool(monkeypatch: pytest.MonkeyPatch) -> None:
