@@ -345,6 +345,16 @@ class RetrievalEvalAdvisory(BaseModel):
     baseline_mode: str | None = None
 
 
+class RetrievalEvalAdvisoryReport(BaseModel):
+    severity: Literal["ok", "medium", "high"] = "ok"
+    summary: str = "No retrieval advisory actions."
+    current_failure_task_ids: list[str] = Field(default_factory=list)
+    baseline_weak_spot_task_ids: list[str] = Field(default_factory=list)
+    current_regression_task_ids: list[str] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+    baseline_mode: str | None = None
+
+
 class RetrievalEvalResultSet(BaseModel):
     fixture_paths: list[str] = Field(default_factory=list)
     summary: RetrievalEvalSummary = Field(default_factory=RetrievalEvalSummary)
@@ -353,3 +363,4 @@ class RetrievalEvalResultSet(BaseModel):
     baseline_summary: RetrievalEvalBaselineSummary | None = None
     delta_summary: RetrievalEvalDeltaSummary | None = None
     advisories: list[RetrievalEvalAdvisory] = Field(default_factory=list)
+    advisory_report: RetrievalEvalAdvisoryReport = Field(default_factory=RetrievalEvalAdvisoryReport)

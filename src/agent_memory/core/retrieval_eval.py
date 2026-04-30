@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agent_memory.core.models import (
     RetrievalEvalAdvisory,
+    RetrievalEvalAdvisoryReport,
     RetrievalEvalBaselineSummary,
     RetrievalEvalDelta,
     RetrievalEvalDeltaSummary,
@@ -649,6 +650,71 @@ def _append_task_detail(lines: list[str], task: RetrievalEvalTaskResult, *, incl
         )
 
 
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    label = singular if count == 1 else (plural or f"{singular}s")
+    return f"{count} {label}"
+
+
+def _build_advisory_report(
+    *,
+    results: list[RetrievalEvalTaskResult],
+    baseline_mode: str | None,
+) -> RetrievalEvalAdvisoryReport:
+    current_failure_task_ids = [task.task_id for task in results if not task.pass_]
+    missing_task_ids = [task.task_id for task in results if any(task.missing_expected[memory_type] for memory_type in _MEMORY_TYPES)]
+    avoid_hit_task_ids = [task.task_id for task in results if any(task.avoid_hits[memory_type] for memory_type in _MEMORY_TYPES)]
+    baseline_weak_spot_task_ids = [
+        task.task_id
+        for task in results
+        if task.pass_ and task.baseline is not None and not task.baseline.pass_
+    ]
+    current_regression_task_ids = [
+        task.task_id
+        for task in results
+        if not task.pass_ and task.baseline is not None and task.baseline.pass_
+    ]
+
+    summary_parts: list[str] = []
+    if current_failure_task_ids:
+        summary_parts.append(f"{_plural(len(current_failure_task_ids), 'current task')} failed")
+    if missing_task_ids:
+        summary_parts.append(f"{_plural(len(missing_task_ids), 'task')} has missing expected memories")
+    if avoid_hit_task_ids:
+        summary_parts.append(f"{_plural(len(avoid_hit_task_ids), 'task')} has avoid-hit memories")
+    if current_regression_task_ids and baseline_mode is not None:
+        summary_parts.append(f"{_plural(len(current_regression_task_ids), 'current regression')} against {baseline_mode}")
+    if baseline_weak_spot_task_ids and not current_failure_task_ids and baseline_mode is not None:
+        summary_parts.append(f"{_plural(len(baseline_weak_spot_task_ids), 'baseline weak spot')} found against {baseline_mode}")
+
+    recommended_actions: list[str] = []
+    if current_failure_task_ids:
+        recommended_actions.append("Inspect failed task details and compare retrieved_details against expected_details.")
+    if missing_task_ids:
+        recommended_actions.append("Seed or approve missing expected memories, or tighten fixture expectations if they are stale.")
+    if avoid_hit_task_ids:
+        recommended_actions.append("Review avoid-hit details for stale, cross-scope, or conflicting approved memories.")
+    if current_regression_task_ids:
+        recommended_actions.append("Compare current regressions against the selected baseline before merging retrieval changes.")
+    if baseline_weak_spot_task_ids and not current_failure_task_ids:
+        recommended_actions.append("Use baseline weak spots as coverage wins: keep the fixture checked in and watch for future regressions.")
+
+    severity = "ok"
+    if current_failure_task_ids or current_regression_task_ids:
+        severity = "high"
+    elif baseline_weak_spot_task_ids:
+        severity = "medium"
+
+    return RetrievalEvalAdvisoryReport(
+        severity=severity,
+        summary="; ".join(summary_parts) if summary_parts else "No retrieval advisory actions.",
+        current_failure_task_ids=current_failure_task_ids,
+        baseline_weak_spot_task_ids=baseline_weak_spot_task_ids,
+        current_regression_task_ids=current_regression_task_ids,
+        recommended_actions=recommended_actions,
+        baseline_mode=baseline_mode,
+    )
+
+
 def render_retrieval_eval_text_report(result_set: RetrievalEvalResultSet) -> str:
     summary = result_set.summary
     lines = [
@@ -701,6 +767,12 @@ def render_retrieval_eval_text_report(result_set: RetrievalEvalResultSet) -> str
     if result_set.advisories:
         lines.append("advisories:")
         lines.extend(f"  - {advisory.code}: {advisory.message}" for advisory in result_set.advisories)
+
+    advisory_report = result_set.advisory_report
+    lines.append(f"advisory report: {advisory_report.severity} - {advisory_report.summary}")
+    if advisory_report.recommended_actions:
+        lines.append("recommended actions:")
+        lines.extend(f"  - {action}" for action in advisory_report.recommended_actions)
 
     return "\n".join(lines)
 
@@ -829,6 +901,7 @@ def evaluate_retrieval_fixtures(
         baseline_summary=baseline_summary,
         delta_summary=delta_summary,
         advisories=advisories,
+        advisory_report=_build_advisory_report(results=results, baseline_mode=baseline_mode),
     )
     if fail_on_baseline_regression or selected_baseline_regression_memory_types is not None:
         if baseline_mode is None:
