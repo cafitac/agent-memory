@@ -115,6 +115,7 @@ def test_published_install_workflow_runs_script_after_publish() -> None:
     assert "needs:" in workflow
     assert "publish-pypi" in workflow
     assert "publish-npm" in workflow
+    assert "--attempts 36" in workflow
 
 
 def test_standalone_published_install_workflow_is_manual() -> None:
@@ -124,6 +125,7 @@ def test_standalone_published_install_workflow_is_manual() -> None:
     assert "workflow_dispatch:" in workflow
     assert "version:" in workflow
     assert "scripts/smoke_published_install.py" in workflow
+    assert "default: '18'" in workflow
     assert "python -m pip install pipx" in workflow
     assert "from pipx.main import cli; raise SystemExit(cli())" in workflow
 

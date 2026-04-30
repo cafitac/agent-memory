@@ -10,7 +10,7 @@ on:
       attempts:
         description: 'Retry attempts for registry propagation'
         required: false
-        default: '6'
+        default: '18'
         type: string
       delay_seconds:
         description: 'Delay between retry attempts'
