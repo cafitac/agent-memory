@@ -94,7 +94,24 @@ CREATE TABLE IF NOT EXISTS memory_status_transitions (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS retrieval_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    surface TEXT NOT NULL,
+    query_sha256 TEXT NOT NULL,
+    query_preview TEXT,
+    preferred_scope TEXT,
+    limit_value INTEGER NOT NULL,
+    statuses_json TEXT NOT NULL DEFAULT '["approved"]',
+    retrieved_memory_refs_json TEXT NOT NULL DEFAULT '[]',
+    top_memory_ref TEXT,
+    response_mode TEXT CHECK (response_mode IN ('direct', 'cautious', 'verify_first')),
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_memory_status_transitions_memory ON memory_status_transitions(memory_type, memory_id, id);
+CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id);
+CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_facts_status_scope ON facts(status, scope);
 CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_ref);

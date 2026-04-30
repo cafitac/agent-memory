@@ -50,6 +50,7 @@ from agent_memory.storage.sqlite import (
     list_facts_by_claim_slot,
     list_memory_status_history,
     list_relations_for_node,
+    list_retrieval_observations,
 )
 
 
@@ -416,6 +417,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default="approved",
         help="Memory status to retrieve. Defaults to approved; use all for forensic/debug review.",
     )
+    retrieve_parser.add_argument(
+        "--observe",
+        metavar="SURFACE",
+        help="Record a secret-safe local retrieval observation for this query.",
+    )
+
+    observations_parser = subparsers.add_parser("observations")
+    observations_subparsers = observations_parser.add_subparsers(dest="observations_action", required=True)
+    observations_list_parser = observations_subparsers.add_parser("list")
+    observations_list_parser.add_argument("db_path", type=Path)
+    observations_list_parser.add_argument("--limit", type=int, default=50)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -815,9 +827,26 @@ def main() -> None:
             limit=args.limit,
             preferred_scope=args.preferred_scope,
             statuses=statuses,
+            observation_surface=args.observe,
         )
         print(packet.model_dump_json(indent=2))
         return
+
+    if args.command == "observations":
+        if args.observations_action == "list":
+            observations = list_retrieval_observations(args.db_path, limit=args.limit)
+            print(
+                json.dumps(
+                    {
+                        "kind": "retrieval_observations",
+                        "read_only": True,
+                        "observations": [observation.model_dump(mode="json") for observation in observations],
+                    },
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported observations action: {args.observations_action}")
 
     if args.command == "graph":
         if args.graph_action == "inspect":

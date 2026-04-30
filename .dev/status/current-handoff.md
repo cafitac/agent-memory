@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 23:00 KST
+Last updated: 2026-05-01 00:20 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-지금 agent-memory는 v0.1.33까지 release fallback rerun idempotency와 Hermes v0.1.33 QA까지 끝났고, 현재 진행 중인 통합 slice는 v0.1.34 후보야. 세 가지를 한 PR로 묶어 진행 중이야: published smoke propagation/backoff hardening, release-sync PR CI validation dispatch, read-only relation graph inspect CLI.
+agent-memory는 v0.1.34까지 배포/Hermes QA가 완료됐고, 지금은 Priority 5 dogfood/noise monitoring 첫 slice인 v0.1.35 후보 작업 중이야. 현재 브랜치는 `feat/retrieval-observation-log`이고, 목표는 Hermes/CLI retrieval이 어떤 memory를 주입했는지 secret-safe local observation log로 남겨 이후 noisy memory audit의 기반을 만드는 거야.
 
 ## Current repo state
 
@@ -32,16 +32,15 @@ Expected GitHub identity:
 
 Verified base before this slice:
 
-- branch: `main`
-- latest completed release: `v0.1.33`
-- v0.1.33 included release-sync fallback rerun idempotency.
-- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.33/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- latest completed release: `v0.1.34`
+- v0.1.34 included published smoke propagation retry/backoff, release-sync PR CI dispatch, and read-only relation graph inspect CLI.
+- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.34/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 
 Active slice/worktree:
 
-- branch: `feat/release-graph-hardening`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/release-graph-hardening`
-- intended release after merge: likely `v0.1.34`
+- branch: `feat/retrieval-observation-log`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/retrieval-observation-log`
+- intended release after merge: likely `v0.1.35`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -53,159 +52,107 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## What is complete through v0.1.33
+## What is complete through v0.1.34
 
 ### Distribution and release automation
 
 - npm package and PyPI package are published from the same versioned source.
 - npm-first user install path is documented and verified.
 - Publish workflow gates GitHub Release creation on `published-install-smoke` after npm/PyPI publish.
-- Published smoke uploads `published-install-smoke-result` JSON artifact with success/failure diagnostics.
-- v0.1.28+ smoke covers npm/npx/npm-exec/uvx/pipx and Hermes hook stdin payload handling.
-- Protected `main` fallback is automated: auto-release creates `release-sync/vX.Y.Z` PR when direct metadata write-back is rejected; after merge, auto-release tags and dispatches publish.
-- v0.1.33 made that fallback safe to rerun when the branch or PR already exists.
+- Published smoke uploads JSON diagnostics artifacts.
+- v0.1.34 distinguishes normal retry budget from propagation/transient resolver failure budget and adds registry probe diagnostics.
+- Protected `main` fallback is automated and rerun-idempotent.
+- release-sync fallback now dispatches `ci.yml` on the bot-created release-sync branch and comments/step-summarizes that handoff.
 
 ### Runtime adapter readiness
 
 - Hermes bootstrap/doctor/install flow exists and defaults to the conservative preset.
-- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.33/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.34/.venv/bin/agent-memory`.
 - Hermes hook fails closed: unavailable DB/schema returns `{}` and exit 0 instead of breaking prompt flow.
 - Conservative preset remains default: small prompt budgets, one top memory, no alternative-memory detail, no reason-code noise.
 - `--preset balanced` is explicit opt-in for more context/noise.
 
-### Truth lifecycle and eval readiness
+### Truth lifecycle, eval, and graph foundation
 
 - Normal retrieval is approved-only by default.
 - Candidate/disputed/deprecated facts remain available only behind explicit forensic/review surfaces.
-- `memory_status_transitions` records status changes with from/to status, reason, actor, evidence IDs, and timestamp.
-- `agent-memory review history fact|procedure|episode ...` exposes transition history.
-- `agent-memory review supersede fact <db> <old> <new>` records fact replacement as a relation edge.
-- Replacement relation direction: `fact:<old> --superseded_by--> fact:<new>`.
-- Superseding a fact deprecates the old fact and approves the replacement fact, preserving reason/actor/evidence in transition history.
-- `agent-memory review replacements fact ...` exposes replacement chains.
-- `agent-memory review explain fact ...` explains status, default retrieval visibility, same claim-slot alternatives, replacement chain, and review follow-up commands.
-- Retrieval eval calls the real retrieval path but suppresses retrieval bookkeeping writes (`retrieval_count`, `reinforcement_count`, `last_accessed_at`).
+- `memory_status_transitions` records status changes.
+- `review history`, `review supersede`, `review replacements`, and `review explain` exist.
+- Retrieval eval calls the real retrieval path but suppresses retrieval bookkeeping writes.
+- `agent-memory graph inspect <db_path> <start_ref> --depth N --limit N` traverses stored `Relation` edges read-only and does not mutate memory state.
 
-## Current slice: release/package/graph hardening
+## Current slice: local retrieval observation log
 
-User asked to do all three next recommended tasks:
+Goal:
 
-1. Published smoke propagation/backoff improvement.
-2. release-sync PR CI dispatch/status automation.
-3. Graph foundation first safe slice: read-only relation graph inspect CLI.
+- Build a local-only, secret-safe observation log that records what retrieval injected during real dogfood use.
+- This is the first Priority 5 dogfood/noise monitoring slice and should feed later noisy-memory audit commands.
 
-Current implementation direction:
+Implemented so far:
 
-### Published smoke propagation/backoff
+- New SQLite table `retrieval_observations`.
+- New model `RetrievalObservation`.
+- New storage APIs:
+  - `record_retrieval_observation(...)`
+  - `list_retrieval_observations(...)`
+- `retrieve_memory_packet(...)` accepts:
+  - `observation_surface`
+  - `observation_metadata`
+- `agent-memory retrieve ... --observe <surface>` records an opt-in observation.
+- Hermes pre-LLM hook records an observation automatically with surface `hermes-pre-llm-hook`.
+- New CLI:
+  - `agent-memory observations list <db_path> --limit 50`
 
-Files:
+Secret-safety contract:
 
-- `scripts/smoke_published_install.py`
-- `tests/test_published_install_smoke.py`
-- `.github/workflows/publish.yml`
-- `.github/workflows/published-install-smoke.yml`
+- raw query text is not stored.
+- stores `query_sha256` and a short redacted preview.
+- redacts secret-like assignments such as password/token/api_key/secret/credential/connection_string.
+- stores selected memory refs, top memory ref, response mode, statuses, preferred scope, and small metadata.
 
-Behavior:
+Files changed:
 
-- Detect resolver/package-index propagation-like failures such as `No solution found`, `No matching distribution found`, npm 404/ETARGET/NOTARGET, and exact `cafitac-agent-memory==X.Y.Z` misses.
-- Apply a separate longer retry budget only for propagation-like failures:
-  - normal attempts remain bounded
-  - propagation attempts can extend with exponential backoff
-- Failure artifacts include registry probe diagnostics:
-  - npm version present/latest
-  - PyPI JSON release present
-  - PyPI simple index mentions version
-  - probe errors
-- `publish.yml` uses `--attempts 12`, `--propagation-attempts 36`, `--propagation-delay-seconds 20`.
-- Manual `published-install-smoke.yml` exposes propagation attempt/delay inputs.
-
-### release-sync PR CI validation dispatch
-
-Files:
-
-- `.github/workflows/auto-release.yml`
-- `tests/test_release_workflows.py`
-
-Behavior:
-
-- When fallback creates a new `release-sync/vX.Y.Z` PR, capture the PR URL.
-- Dispatch `ci.yml` explicitly on `release-sync/vX.Y.Z` with `gh workflow run ci.yml --ref "${RELEASE_SYNC_BRANCH}"`.
-- Comment on the PR explaining that bot-created refs may suppress automatic PR checks and that maintainers should wait for the dispatched `ci.yml` run before merging.
-
-### read-only relation graph inspect CLI
-
-Files:
-
-- `src/agent_memory/api/cli.py`
+- `src/agent_memory/core/models.py`
+- `src/agent_memory/storage/schema.sql`
 - `src/agent_memory/storage/sqlite.py`
+- `src/agent_memory/core/retrieval.py`
+- `src/agent_memory/integrations/hermes_hooks.py`
+- `src/agent_memory/api/cli.py`
 - `tests/test_cli.py`
 - `README.md`
+- `docs/hermes-dogfood.md`
+- `.dev/status/current-handoff.md`
 
-New command:
-
-```bash
-agent-memory graph inspect <db_path> <start_ref> --depth 1 --limit 100
-```
-
-Example:
+Current focused verification already passed:
 
 ```bash
-agent-memory graph inspect ~/.agent-memory/memory.db fact:1 --depth 2 --limit 50
+uv run pytest tests/test_cli.py::test_python_module_cli_retrieve_observe_records_secret_safe_local_observation tests/test_cli.py::test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_hook_payload -q
+# 2 passed
+
+uv run pytest tests/test_cli.py tests/test_retrieval_evaluation.py -q
+# 83 passed
 ```
 
-Behavior:
+## Remaining work for this slice
 
-- Traverses stored `Relation` edges only.
-- JSON output includes:
-  - `kind: relation_graph_inspection`
-  - `start_ref`
-  - `depth`
-  - `limit`
-  - `read_only: true`
-  - `nodes`
-  - `edges`
-  - `truncated`
-- Does not change retrieval behavior.
-- Does not mutate memory state.
-- Intended as the first safe graph-foundation slice before default retrieval graph traversal.
+1. Run real smoke for observation CLI and Hermes hook from the worktree.
+2. Run full verification:
+   ```bash
+   uv run pytest tests/ -q
+   uv run python scripts/check_release_metadata.py
+   uv run python scripts/smoke_release_readiness.py
+   npm pack --dry-run
+   git diff --check
+   node --check bin/agent-memory.js
+   ```
+3. Run static diff secret scan and confirm finding_count 0.
+4. Commit branch and open PR.
+5. Watch PR CI, merge when green.
+6. Verify auto-release/release-sync/publish for likely v0.1.35.
+7. Verify GitHub Release/npm/PyPI/published smoke artifact.
+8. Install pinned Hermes runtime v0.1.35 and run Hermes QA.
+9. Cleanup worktree/branch and update durable memory.
 
-## Verification checklist for this slice
+## Next likely slice after this
 
-Run from the active worktree:
-
-```bash
-uv run pytest tests/test_published_install_smoke.py -q
-uv run pytest tests/test_release_workflows.py -q
-uv run pytest tests/test_cli.py::test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood -q
-uv run pytest tests/test_published_install_smoke.py tests/test_release_workflows.py tests/test_cli.py -q
-uv run pytest tests/ -q
-uv run python scripts/check_release_metadata.py
-uv run python scripts/smoke_release_readiness.py
-npm pack --dry-run
-git diff --check
-node --check bin/agent-memory.js
-```
-
-Before PR, run a static diff secret scan and confirm finding_count 0.
-
-## PR/release notes
-
-This slice affects release automation, published install smoke, and a new read-only CLI command. Treat it as a patch release candidate, likely v0.1.34 after PR merge.
-
-Expected live verification after merge:
-
-1. PR merge should trigger auto-release and bump metadata to v0.1.34.
-2. Protected `main` should trigger fallback.
-3. Fallback should create `release-sync/v0.1.34` PR and dispatch `ci.yml` on that branch.
-4. Wait for the dispatched CI run before merging release-sync PR.
-5. Merge the release-sync PR.
-6. Confirm release-sync follow-up creates tag `v0.1.34`, dispatches publish, and published smoke passes.
-7. Verify GitHub Release/npm/PyPI/published-install-smoke artifact.
-8. Update local Hermes runtime to v0.1.34 only after package release is verified.
-
-## Next likely slices after this
-
-1. Actual Hermes dogfood observations and noise/latency notes.
-2. Expand graph inspection with node metadata/status summaries, still read-only.
-3. Later graph retrieval eval fixtures before any default graph expansion.
-4. PyPI Trusted Publisher later; user deferred it.
+After observation logging is released and dogfooded, build a read-only noisy memory audit command over `retrieval_observations`, for example frequently injected memory refs, surprising scopes, high hidden-alternative counts, and stale/deprecated-nearby risks.

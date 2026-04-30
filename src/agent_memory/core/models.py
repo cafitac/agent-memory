@@ -83,6 +83,22 @@ class MemoryStatusTransition(BaseModel):
     created_at: str
 
 
+class RetrievalObservation(BaseModel):
+    id: int
+    created_at: str
+    surface: str
+    query_sha256: str
+    query_text: None = None
+    query_preview: str | None = None
+    preferred_scope: str | None = None
+    limit: int
+    statuses: list[MemoryStatus] = Field(default_factory=list)
+    retrieved_memory_refs: list[str] = Field(default_factory=list)
+    top_memory_ref: str | None = None
+    response_mode: Literal["direct", "cautious", "verify_first"] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ProvenanceSummary(BaseModel):
     source_id: int
     source_type: str

@@ -103,6 +103,15 @@ agent-memory graph inspect "$DB" fact:1 --depth 2 --limit 50
 
 The JSON output includes the start ref, visited node refs, relation edges, traversal depth per edge, and a `read_only: true` marker. It is intended as a safe graph-foundation slice before enabling any broader graph traversal in default retrieval.
 
+For local dogfood and noise monitoring, retrievals can leave a secret-safe observation log. Normal `retrieve` only records an observation when explicitly asked; the Hermes pre-LLM hook records one automatically in the local SQLite DB. Observations store a query hash, a redacted short preview, selected memory refs, top memory ref, response mode, scope, and surface. They do not store the raw query text.
+
+```bash
+agent-memory retrieve "$DB" "How should I install agent-memory?" --preferred-scope user:default --observe cli
+agent-memory observations list "$DB" --limit 20
+```
+
+Use the observation log to spot frequently injected or surprising memories before changing retrieval behavior. Treat it as local operator telemetry, not a synced analytics stream.
+
 ## Hermes quickstart
 
 For most Hermes users:

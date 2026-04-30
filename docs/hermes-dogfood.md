@@ -36,8 +36,19 @@ Capture these observations for each dogfood run:
 - whether returned context includes only approved memory
 - whether unrelated scopes stay out of the prompt
 - whether failure paths fail closed with no broken prompt text
+- whether `agent-memory observations list ~/.agent-memory/memory.db --limit 20` shows the expected memory refs without raw query text or secrets
 
-A good conservative smoke has low latency, at most one surfaced memory, no noisy reason codes, and no workflow-blocking error if the memory DB is missing.
+A good conservative smoke has low latency, at most one surfaced memory, no noisy reason codes, no workflow-blocking error if the memory DB is missing, and a local observation entry that explains what memory was injected.
+
+## Local observation log
+
+Hermes pre-LLM hook retrievals write a secret-safe local observation row to the SQLite DB. The row is intended for dogfood/noise review and stores the surface, query hash, redacted query preview, selected memory refs, top memory ref, response mode, scope, and small metadata. It does not store the raw query text.
+
+```bash
+agent-memory observations list ~/.agent-memory/memory.db --limit 20
+```
+
+Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, and whether the top memory is surprising. Keep this data local unless you intentionally export it.
 
 ## Fallback and rollback
 
