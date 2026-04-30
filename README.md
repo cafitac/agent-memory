@@ -91,10 +91,10 @@ On first real Hermes use, Hermes may ask you to approve the shell hook or requir
 The installed hook calls:
 
 ```bash
-agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 1 --max-prompt-lines 6 --max-prompt-chars 800 --max-prompt-tokens 200 --max-verification-steps 1 --max-alternatives 0 --max-guidelines 1 --no-reason-codes
 ```
 
-The hook receives the Hermes event JSON on stdin, retrieves relevant approved memories, and returns bounded ephemeral context for the current prompt. It does not write back to Hermes session storage.
+The hook receives the Hermes event JSON on stdin, retrieves relevant approved memories, and returns bounded ephemeral context for the current prompt. It does not write back to Hermes session storage. `agent-memory bootstrap` uses the conservative Hermes preset by default: one top memory, small prompt budgets, no alternative-memory detail in the prompt, no reason-code noise, and fail-closed behavior if retrieval is unavailable.
 
 If you only want to inspect the YAML snippet and not modify config:
 
@@ -105,8 +105,11 @@ agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db
 If you want explicit paths and budgets:
 
 ```bash
-agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --timeout 12
+agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --preset conservative --timeout 8
+agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --preset balanced
 ```
+
+Use `--preset balanced` if you intentionally want the older, more verbose hook shape (`--top-k 3`, larger budgets, and reason codes). Explicit flags such as `--top-k`, `--max-prompt-tokens`, or `--no-reason-codes` override the selected preset.
 
 ## Codex and Claude prompt wrappers
 

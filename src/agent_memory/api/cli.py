@@ -102,6 +102,55 @@ def _normalize_command_aliases(argv: list[str]) -> list[str]:
     return [alias_map.get(argv[0], argv[0]), *argv[1:]]
 
 
+HERMES_HOOK_PRESETS = {
+    "conservative": {
+        "top_k": 1,
+        "max_prompt_lines": 6,
+        "max_prompt_chars": 800,
+        "max_prompt_tokens": 200,
+        "max_verification_steps": 1,
+        "max_alternatives": 0,
+        "max_guidelines": 1,
+        "no_reason_codes": True,
+        "timeout": 8,
+    },
+    "balanced": {
+        "top_k": 3,
+        "max_prompt_lines": 8,
+        "max_prompt_chars": 1200,
+        "max_prompt_tokens": 300,
+        "max_verification_steps": None,
+        "max_alternatives": 2,
+        "max_guidelines": None,
+        "no_reason_codes": False,
+        "timeout": 12,
+    },
+}
+
+
+def _add_hermes_hook_preset_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--preset",
+        choices=sorted(HERMES_HOOK_PRESETS),
+        default="conservative",
+        help="Apply a Hermes hook budget preset before explicit flag overrides.",
+    )
+
+
+def _apply_hermes_hook_preset(args: argparse.Namespace) -> None:
+    preset_name = getattr(args, "preset", None)
+    if preset_name is None:
+        return
+    preset = HERMES_HOOK_PRESETS[preset_name]
+    for field, value in preset.items():
+        if field == "no_reason_codes":
+            if value:
+                args.no_reason_codes = True
+            continue
+        if hasattr(args, field) and getattr(args, field) is None:
+            setattr(args, field, value)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-memory")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -268,9 +317,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     hermes_pre_llm_hook_parser = subparsers.add_parser("hermes-pre-llm-hook")
     hermes_pre_llm_hook_parser.add_argument("db_path", type=Path)
+    _add_hermes_hook_preset_argument(hermes_pre_llm_hook_parser)
     hermes_pre_llm_hook_parser.add_argument("--limit", type=int, default=5)
     hermes_pre_llm_hook_parser.add_argument("--preferred-scope")
-    hermes_pre_llm_hook_parser.add_argument("--top-k", type=int, default=1)
+    hermes_pre_llm_hook_parser.add_argument("--top-k", type=int)
     hermes_pre_llm_hook_parser.add_argument("--max-prompt-lines", type=int)
     hermes_pre_llm_hook_parser.add_argument("--max-prompt-chars", type=int)
     hermes_pre_llm_hook_parser.add_argument("--max-prompt-tokens", type=int)
@@ -281,10 +331,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     hermes_hook_config_snippet_parser = subparsers.add_parser("hermes-hook-config-snippet")
     hermes_hook_config_snippet_parser.add_argument("db_path", type=Path)
+    _add_hermes_hook_preset_argument(hermes_hook_config_snippet_parser)
     hermes_hook_config_snippet_parser.add_argument("--python-executable")
     hermes_hook_config_snippet_parser.add_argument("--limit", type=int, default=5)
     hermes_hook_config_snippet_parser.add_argument("--preferred-scope")
-    hermes_hook_config_snippet_parser.add_argument("--top-k", type=int, default=1)
+    hermes_hook_config_snippet_parser.add_argument("--top-k", type=int)
     hermes_hook_config_snippet_parser.add_argument("--max-prompt-lines", type=int)
     hermes_hook_config_snippet_parser.add_argument("--max-prompt-chars", type=int)
     hermes_hook_config_snippet_parser.add_argument("--max-prompt-tokens", type=int)
@@ -292,15 +343,16 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_hook_config_snippet_parser.add_argument("--max-alternatives", type=int)
     hermes_hook_config_snippet_parser.add_argument("--max-guidelines", type=int)
     hermes_hook_config_snippet_parser.add_argument("--no-reason-codes", action="store_true")
-    hermes_hook_config_snippet_parser.add_argument("--timeout", type=int, default=10)
+    hermes_hook_config_snippet_parser.add_argument("--timeout", type=int)
 
     hermes_install_hook_parser = subparsers.add_parser("hermes-install-hook")
     hermes_install_hook_parser.add_argument("db_path", type=Path)
+    _add_hermes_hook_preset_argument(hermes_install_hook_parser)
     hermes_install_hook_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
     hermes_install_hook_parser.add_argument("--python-executable")
     hermes_install_hook_parser.add_argument("--limit", type=int, default=5)
     hermes_install_hook_parser.add_argument("--preferred-scope")
-    hermes_install_hook_parser.add_argument("--top-k", type=int, default=1)
+    hermes_install_hook_parser.add_argument("--top-k", type=int)
     hermes_install_hook_parser.add_argument("--max-prompt-lines", type=int)
     hermes_install_hook_parser.add_argument("--max-prompt-chars", type=int)
     hermes_install_hook_parser.add_argument("--max-prompt-tokens", type=int)
@@ -308,7 +360,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_install_hook_parser.add_argument("--max-alternatives", type=int)
     hermes_install_hook_parser.add_argument("--max-guidelines", type=int)
     hermes_install_hook_parser.add_argument("--no-reason-codes", action="store_true")
-    hermes_install_hook_parser.add_argument("--timeout", type=int, default=10)
+    hermes_install_hook_parser.add_argument("--timeout", type=int)
 
     hermes_bootstrap_parser = subparsers.add_parser(
         "hermes-bootstrap",
@@ -320,19 +372,20 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=Path.home() / ".agent-memory" / "memory.db",
     )
+    _add_hermes_hook_preset_argument(hermes_bootstrap_parser)
     hermes_bootstrap_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
     hermes_bootstrap_parser.add_argument("--python-executable")
     hermes_bootstrap_parser.add_argument("--limit", type=int, default=5)
     hermes_bootstrap_parser.add_argument("--preferred-scope")
-    hermes_bootstrap_parser.add_argument("--top-k", type=int, default=3)
-    hermes_bootstrap_parser.add_argument("--max-prompt-lines", type=int, default=8)
-    hermes_bootstrap_parser.add_argument("--max-prompt-chars", type=int, default=1200)
-    hermes_bootstrap_parser.add_argument("--max-prompt-tokens", type=int, default=300)
+    hermes_bootstrap_parser.add_argument("--top-k", type=int)
+    hermes_bootstrap_parser.add_argument("--max-prompt-lines", type=int)
+    hermes_bootstrap_parser.add_argument("--max-prompt-chars", type=int)
+    hermes_bootstrap_parser.add_argument("--max-prompt-tokens", type=int)
     hermes_bootstrap_parser.add_argument("--max-verification-steps", type=int)
-    hermes_bootstrap_parser.add_argument("--max-alternatives", type=int, default=2)
+    hermes_bootstrap_parser.add_argument("--max-alternatives", type=int)
     hermes_bootstrap_parser.add_argument("--max-guidelines", type=int)
     hermes_bootstrap_parser.add_argument("--no-reason-codes", action="store_true")
-    hermes_bootstrap_parser.add_argument("--timeout", type=int, default=12)
+    hermes_bootstrap_parser.add_argument("--timeout", type=int)
 
     hermes_doctor_parser = subparsers.add_parser(
         "hermes-doctor",
@@ -344,19 +397,20 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=Path.home() / ".agent-memory" / "memory.db",
     )
+    _add_hermes_hook_preset_argument(hermes_doctor_parser)
     hermes_doctor_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
     hermes_doctor_parser.add_argument("--python-executable")
     hermes_doctor_parser.add_argument("--limit", type=int, default=5)
     hermes_doctor_parser.add_argument("--preferred-scope")
-    hermes_doctor_parser.add_argument("--top-k", type=int, default=3)
-    hermes_doctor_parser.add_argument("--max-prompt-lines", type=int, default=8)
-    hermes_doctor_parser.add_argument("--max-prompt-chars", type=int, default=1200)
-    hermes_doctor_parser.add_argument("--max-prompt-tokens", type=int, default=300)
+    hermes_doctor_parser.add_argument("--top-k", type=int)
+    hermes_doctor_parser.add_argument("--max-prompt-lines", type=int)
+    hermes_doctor_parser.add_argument("--max-prompt-chars", type=int)
+    hermes_doctor_parser.add_argument("--max-prompt-tokens", type=int)
     hermes_doctor_parser.add_argument("--max-verification-steps", type=int)
-    hermes_doctor_parser.add_argument("--max-alternatives", type=int, default=2)
+    hermes_doctor_parser.add_argument("--max-alternatives", type=int)
     hermes_doctor_parser.add_argument("--max-guidelines", type=int)
     hermes_doctor_parser.add_argument("--no-reason-codes", action="store_true")
-    hermes_doctor_parser.add_argument("--timeout", type=int, default=12)
+    hermes_doctor_parser.add_argument("--timeout", type=int)
 
     return parser
 
@@ -364,6 +418,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args(_normalize_command_aliases(sys.argv[1:]))
+    _apply_hermes_hook_preset(args)
 
     if args.command == "init":
         initialize_database(args.db_path)
@@ -581,6 +636,7 @@ def main() -> None:
             HermesHookConfigSnippetOptions(
                 db_path=args.db_path,
                 python_executable=args.python_executable,
+                render_default_arguments=True,
                 limit=args.limit,
                 preferred_scope=args.preferred_scope,
                 top_k=args.top_k,
@@ -604,6 +660,7 @@ def main() -> None:
                 snippet_options=HermesHookConfigSnippetOptions(
                     db_path=args.db_path,
                     python_executable=args.python_executable,
+                    render_default_arguments=True,
                     limit=args.limit,
                     preferred_scope=args.preferred_scope,
                     top_k=args.top_k,
@@ -628,6 +685,7 @@ def main() -> None:
                 snippet_options=HermesHookConfigSnippetOptions(
                     db_path=args.db_path,
                     python_executable=args.python_executable,
+                    render_default_arguments=True,
                     limit=args.limit,
                     preferred_scope=args.preferred_scope,
                     top_k=args.top_k,

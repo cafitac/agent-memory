@@ -915,7 +915,7 @@ def test_python_module_cli_hermes_install_hook_reports_when_database_already_exi
 
 
 
-def test_python_module_cli_hermes_bootstrap_defaults_to_user_paths_and_recommended_budgets(tmp_path: Path) -> None:
+def test_python_module_cli_hermes_bootstrap_defaults_to_user_paths_and_conservative_preset(tmp_path: Path) -> None:
     env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
     default_db_path = tmp_path / ".agent-memory" / "memory.db"
     default_config_path = tmp_path / ".hermes" / "config.yaml"
@@ -941,12 +941,46 @@ def test_python_module_cli_hermes_bootstrap_defaults_to_user_paths_and_recommend
     config_text = default_config_path.read_text()
     assert "hermes-pre-llm-hook" in config_text
     assert str(default_db_path) in config_text
-    assert "--top-k 3" in config_text
-    assert "--max-prompt-lines 8" in config_text
-    assert "--max-prompt-chars 1200" in config_text
-    assert "--max-prompt-tokens 300" in config_text
-    assert "--max-alternatives 2" in config_text
-    assert "timeout: 12" in config_text
+    assert "--top-k 1" in config_text
+    assert "--max-prompt-lines 6" in config_text
+    assert "--max-prompt-chars 800" in config_text
+    assert "--max-prompt-tokens 200" in config_text
+    assert "--max-verification-steps 1" in config_text
+    assert "--max-alternatives 0" in config_text
+    assert "--max-guidelines 1" in config_text
+    assert "--no-reason-codes" in config_text
+    assert "timeout: 8" in config_text
+
+
+def test_python_module_cli_hermes_hook_config_snippet_can_use_balanced_preset(tmp_path: Path) -> None:
+    db_path = tmp_path / "balanced-snippet-memory.db"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-hook-config-snippet",
+            str(db_path),
+            "--preset",
+            "balanced",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    snippet = result.stdout
+    assert "--top-k 3" in snippet
+    assert "--max-prompt-lines 8" in snippet
+    assert "--max-prompt-chars 1200" in snippet
+    assert "--max-prompt-tokens 300" in snippet
+    assert "--max-alternatives 2" in snippet
+    assert "--no-reason-codes" not in snippet
+    assert "timeout: 12" in snippet
 
 
 
@@ -1247,7 +1281,13 @@ def test_python_module_cli_hermes_hook_config_snippet_defaults_to_installed_agen
     assert "agent-memory hermes-pre-llm-hook" in snippet
     assert sys.executable not in snippet
     assert "agent_memory.api.cli" not in snippet
-    assert "timeout: 10" in snippet
+    assert "--top-k 1" in snippet
+    assert "--max-prompt-lines 6" in snippet
+    assert "--max-prompt-chars 800" in snippet
+    assert "--max-prompt-tokens 200" in snippet
+    assert "--max-alternatives 0" in snippet
+    assert "--no-reason-codes" in snippet
+    assert "timeout: 8" in snippet
 
 
 

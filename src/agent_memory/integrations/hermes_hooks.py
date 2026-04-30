@@ -61,6 +61,7 @@ class HermesPreLlmHookOptions(BaseModel):
 class HermesHookConfigSnippetOptions(BaseModel):
     db_path: Path
     python_executable: str | None = None
+    render_default_arguments: bool = False
     limit: int = 5
     preferred_scope: str | None = None
     top_k: int = 1
@@ -120,7 +121,7 @@ def build_hermes_hook_config_snippet(options: HermesHookConfigSnippetOptions) ->
         argv.extend(["--limit", str(options.limit)])
     if options.preferred_scope:
         argv.extend(["--preferred-scope", options.preferred_scope])
-    if options.top_k != 1:
+    if options.render_default_arguments or options.top_k != 1:
         argv.extend(["--top-k", str(options.top_k)])
     if options.max_prompt_lines is not None:
         argv.extend(["--max-prompt-lines", str(options.max_prompt_lines)])
