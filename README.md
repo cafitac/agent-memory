@@ -186,7 +186,7 @@ Supported baseline modes include:
 - `source-lexical`: lexical comparator over linked source content within preferred scope
 - `source-global`: source-linked comparator that ignores preferred scope
 
-Reports include per-task retrieved IDs, expected hits, missing IDs, avoid hits, pass/fail state, aggregate summaries, advisories, and failure triage details such as snippets, lifecycle status, scopes, and policy signals. Text reports are meant for maintainers reviewing failed retrieval tasks in a terminal; JSON is the stable machine-readable surface.
+Reports include per-task retrieved IDs, expected hits, missing IDs, avoid hits, pass/fail state, aggregate summaries, soft-threshold advisories, and failure triage details such as snippets, lifecycle status, scopes, and policy signals. Every JSON result also includes an `advisory_report` with severity, affected task IDs, and recommended next actions. Text reports render the same advisory report as terminal-friendly guidance for maintainers reviewing failed retrieval tasks; JSON is the stable machine-readable surface.
 
 ## Current maturity
 

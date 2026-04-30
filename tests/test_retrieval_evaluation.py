@@ -572,6 +572,15 @@ def test_cli_eval_retrieval_outputs_json_summary(tmp_path: Path) -> None:
     }
     assert payload["results"][0]["task_id"] == "project-m1-kb-export"
     assert payload["results"][0]["pass"] is True
+    assert payload["advisory_report"] == {
+        "severity": "ok",
+        "summary": "No retrieval advisory actions.",
+        "current_failure_task_ids": [],
+        "baseline_weak_spot_task_ids": [],
+        "current_regression_task_ids": [],
+        "recommended_actions": [],
+        "baseline_mode": None,
+    }
 
 
 
@@ -641,6 +650,60 @@ def test_render_retrieval_eval_text_report_shows_baseline_weak_spots(tmp_path: P
     assert "    baseline missing: none" in report
     assert "    baseline avoid: facts=[" in report
     assert "current regressions vs baseline: none" in report
+
+
+
+def test_evaluate_retrieval_fixtures_builds_advisory_report_for_failures_and_baseline_weak_spots(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures, render_retrieval_eval_text_report
+
+    db_path = tmp_path / "retrieval-eval-advisory-report.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = tmp_path / "retrieval-eval-advisory-report.json"
+    payload = _fixture_payload(seeded_ids)
+    payload["tasks"] = [payload["tasks"][0]]
+    payload["tasks"][0]["expected"]["facts"] = [seeded_ids["drift_fact_id"]]
+    payload["tasks"][0]["avoid"]["facts"] = [seeded_ids["fact_id"]]
+    fixture_path.write_text(json.dumps(payload, indent=2))
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, baseline_mode="lexical")
+
+    assert result.advisory_report.severity == "high"
+    assert result.advisory_report.summary == "1 current task failed; 1 task has missing expected memories; 1 task has avoid-hit memories"
+    assert result.advisory_report.current_failure_task_ids == ["project-m1-kb-export"]
+    assert result.advisory_report.baseline_weak_spot_task_ids == []
+    assert result.advisory_report.current_regression_task_ids == []
+    assert result.advisory_report.recommended_actions == [
+        "Inspect failed task details and compare retrieved_details against expected_details.",
+        "Seed or approve missing expected memories, or tighten fixture expectations if they are stale.",
+        "Review avoid-hit details for stale, cross-scope, or conflicting approved memories.",
+    ]
+    assert result.advisory_report.baseline_mode == "lexical"
+
+    report = render_retrieval_eval_text_report(result)
+    assert "advisory report: high - 1 current task failed; 1 task has missing expected memories; 1 task has avoid-hit memories" in report
+    assert "recommended actions:" in report
+    assert "  - Inspect failed task details and compare retrieved_details against expected_details." in report
+
+
+
+def test_evaluate_retrieval_fixtures_advisory_report_summarizes_baseline_weak_spots(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures
+
+    db_path = tmp_path / "retrieval-eval-baseline-advisory-report.db"
+    _seed_checked_in_fixture_eval_db(db_path)
+    fixture_path = _checked_in_fixture_dir() / "staleness" / "branch-only-current.json"
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, baseline_mode="lexical-global")
+
+    assert result.advisory_report.severity == "medium"
+    assert result.advisory_report.summary == "1 baseline weak spot found against lexical-global"
+    assert result.advisory_report.current_failure_task_ids == []
+    assert result.advisory_report.baseline_weak_spot_task_ids == ["branch-only-current-policy"]
+    assert result.advisory_report.current_regression_task_ids == []
+    assert result.advisory_report.recommended_actions == [
+        "Use baseline weak spots as coverage wins: keep the fixture checked in and watch for future regressions.",
+    ]
+
 
 
 def test_evaluate_retrieval_fixtures_emits_triage_detail_contract(tmp_path: Path) -> None:
