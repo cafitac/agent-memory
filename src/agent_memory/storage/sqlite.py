@@ -111,30 +111,34 @@ def initialize_database(db_path: Path | str) -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(status, scope, importance_score)"
         )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS retrieval_observations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                surface TEXT NOT NULL,
-                query_sha256 TEXT NOT NULL,
-                query_preview TEXT,
-                preferred_scope TEXT,
-                limit_value INTEGER NOT NULL,
-                statuses_json TEXT NOT NULL DEFAULT '["approved"]',
-                retrieved_memory_refs_json TEXT NOT NULL DEFAULT '[]',
-                top_memory_ref TEXT,
-                response_mode TEXT CHECK (response_mode IN ('direct', 'cautious', 'verify_first')),
-                metadata_json TEXT NOT NULL DEFAULT '{}'
-            )
-            """
+        _ensure_retrieval_observations_schema(connection)
+
+
+def _ensure_retrieval_observations_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS retrieval_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            surface TEXT NOT NULL,
+            query_sha256 TEXT NOT NULL,
+            query_preview TEXT,
+            preferred_scope TEXT,
+            limit_value INTEGER NOT NULL,
+            statuses_json TEXT NOT NULL DEFAULT '["approved"]',
+            retrieved_memory_refs_json TEXT NOT NULL DEFAULT '[]',
+            top_memory_ref TEXT,
+            response_mode TEXT CHECK (response_mode IN ('direct', 'cautious', 'verify_first')),
+            metadata_json TEXT NOT NULL DEFAULT '{}'
         )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id)"
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at)"
-        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at)"
+    )
 
 
 def _ensure_memory_table_columns(
@@ -829,6 +833,7 @@ def record_retrieval_observation(
     top_memory_ref = retrieved_memory_refs[0] if retrieved_memory_refs else None
     query_sha256 = hashlib.sha256(query.encode("utf-8")).hexdigest()
     with connect(db_path) as connection:
+        _ensure_retrieval_observations_schema(connection)
         cursor = connection.execute(
             """
             INSERT INTO retrieval_observations (
@@ -864,6 +869,7 @@ def record_retrieval_observation(
 
 def list_retrieval_observations(db_path: Path | str, *, limit: int = 50) -> list[RetrievalObservation]:
     with connect(db_path) as connection:
+        _ensure_retrieval_observations_schema(connection)
         rows = connection.execute(
             """
             SELECT *

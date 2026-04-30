@@ -166,6 +166,32 @@ def test_python_module_cli_retrieve_observe_records_secret_safe_local_observatio
     assert "abc123" not in list_result.stdout
 
 
+def test_python_module_cli_observations_list_migrates_existing_database_without_observation_table(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-observation.db"
+    initialize_database(db_path)
+    import sqlite3
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("DROP TABLE retrieval_observations")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "list",
+            str(db_path),
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["observations"] == []
+
+
 def test_python_module_cli_retrieve_defaults_to_approved_and_hides_disputed_content(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieve-approved-only.db"
     initialize_database(db_path)
