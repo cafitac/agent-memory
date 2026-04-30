@@ -134,3 +134,15 @@ def test_user_docs_show_installed_agent_memory_command_after_npm_install() -> No
     assert "agent-memory doctor" in npm_section
     assert "uv run agent-memory" not in readme
     assert "agent-memory [command]" in install_smoke
+
+
+def test_install_smoke_docs_cover_external_user_trust_matrix() -> None:
+    install_smoke = (REPO_ROOT / "docs" / "install-smoke.md").read_text()
+
+    assert "Fresh-user trust matrix" in install_smoke
+    for surface in ["npm", "npx", "uvx", "Hermes", "Codex/Claude prompts", "Forensic review"]:
+        assert surface in install_smoke
+    assert "external temp directory" in install_smoke
+    assert "approved memory" in install_smoke
+    assert "disputed/deprecated" in install_smoke
+    assert "fails closed" in install_smoke

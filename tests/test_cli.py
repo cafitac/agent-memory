@@ -38,6 +38,199 @@ def test_python_module_cli_init_creates_database(tmp_path: Path) -> None:
 
 
 
+def test_python_module_cli_retrieve_defaults_to_approved_and_hides_disputed_content(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieve-approved-only.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Status QA target phrase appears in curated memory records.",
+        metadata={"project": "status-qa"},
+    )
+    approved = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    disputed = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="DISPUTED_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved.id)
+    from agent_memory.core.curation import dispute_memory
+
+    dispute_memory(db_path=db_path, memory_type="fact", memory_id=disputed.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the Status QA target phrase?",
+            "--preferred-scope",
+            "project:status-qa",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert [fact["object_ref_or_value"] for fact in payload["semantic_facts"]] == ["APPROVED_OK"]
+    assert "DISPUTED_BAD" not in result.stdout
+    assert payload["retrieval_trace"][0]["hidden_disputed_alternatives_count"] == 1
+    assert payload["decision_summary"]["recommended_answer_mode"] == "verify_first"
+
+
+def test_python_module_cli_retrieve_can_intentionally_include_disputed_for_forensic_review(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieve-forensic.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Status QA target phrase appears in curated memory records.",
+        metadata={"project": "status-qa"},
+    )
+    approved = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    disputed = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="DISPUTED_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved.id)
+    from agent_memory.core.curation import dispute_memory
+
+    dispute_memory(db_path=db_path, memory_type="fact", memory_id=disputed.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the Status QA target phrase?",
+            "--preferred-scope",
+            "project:status-qa",
+            "--status",
+            "all",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    facts_by_value = {fact["object_ref_or_value"]: fact["status"] for fact in payload["semantic_facts"]}
+    assert facts_by_value == {"APPROVED_OK": "approved", "DISPUTED_BAD": "disputed"}
+    assert any("Forensic retrieval" in hint for hint in payload["working_hints"])
+    assert payload["verification_plan"]["required"] is True
+
+
+def test_python_module_cli_review_conflicts_shows_claim_lifecycle_across_statuses(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-conflicts.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Review conflicts source text.",
+        metadata={"project": "status-qa"},
+    )
+    approved = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    disputed = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="DISPUTED_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    deprecated = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="OLD_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved.id)
+    from agent_memory.core.curation import deprecate_memory, dispute_memory
+
+    dispute_memory(db_path=db_path, memory_type="fact", memory_id=disputed.id)
+    deprecate_memory(db_path=db_path, memory_type="fact", memory_id=deprecated.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "conflicts",
+            "fact",
+            str(db_path),
+            "Status QA",
+            "target_phrase",
+            "--scope",
+            "project:status-qa",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["claim_slot"] == {
+        "subject_ref": "Status QA",
+        "predicate": "target_phrase",
+        "scope": "project:status-qa",
+    }
+    assert payload["counts"] == {"approved": 1, "candidate": 0, "disputed": 1, "deprecated": 1}
+    assert [item["object_ref_or_value"] for item in payload["facts"]] == ["APPROVED_OK", "DISPUTED_BAD", "OLD_BAD"]
+    assert payload["default_retrieval_policy"] == "approved_only"
+
+
 def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-context.db"
     initialize_database(db_path)
@@ -560,6 +753,36 @@ def test_python_module_cli_hermes_pre_llm_hook_derives_path_scope_from_payload_c
     hook_response = json.loads(result.stdout)
     assert "Project Alpha" in hook_response["context"]
     assert "Project Beta" not in hook_response["context"]
+
+
+def test_python_module_cli_hermes_pre_llm_hook_fails_closed_when_db_is_unavailable(tmp_path: Path) -> None:
+    missing_db_path = tmp_path / "missing" / "memory.db"
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "test-session",
+        "cwd": str(tmp_path),
+        "extra": {"user_message": "What should I remember?"},
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(missing_db_path),
+            "--max-prompt-lines",
+            "8",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {}
 
 
 def test_python_module_cli_hermes_hook_config_snippet_outputs_mergeable_yaml_without_writing_config(

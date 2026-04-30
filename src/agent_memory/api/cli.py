@@ -44,6 +44,7 @@ from agent_memory.storage.sqlite import (
     list_candidate_episodes,
     list_candidate_facts,
     list_candidate_procedures,
+    list_facts_by_claim_slot,
 )
 
 
@@ -182,11 +183,27 @@ def _build_parser() -> argparse.ArgumentParser:
         action_parser.add_argument("db_path", type=Path)
         action_parser.add_argument("memory_id", type=int)
 
+    review_conflicts_parser = review_subparsers.add_parser(
+        "conflicts",
+        help="Inspect all fact statuses for one subject/predicate claim slot without changing default retrieval policy.",
+    )
+    review_conflicts_parser.add_argument("memory_type", choices=["fact"])
+    review_conflicts_parser.add_argument("db_path", type=Path)
+    review_conflicts_parser.add_argument("subject_ref")
+    review_conflicts_parser.add_argument("predicate")
+    review_conflicts_parser.add_argument("--scope")
+
     retrieve_parser = subparsers.add_parser("retrieve")
     retrieve_parser.add_argument("db_path", type=Path)
     retrieve_parser.add_argument("query")
     retrieve_parser.add_argument("--limit", type=int, default=5)
     retrieve_parser.add_argument("--preferred-scope")
+    retrieve_parser.add_argument(
+        "--status",
+        choices=["approved", "candidate", "disputed", "deprecated", "all"],
+        default="approved",
+        help="Memory status to retrieve. Defaults to approved; use all for forensic/debug review.",
+    )
 
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_action", required=True)
@@ -444,17 +461,49 @@ def main() -> None:
             memory = dispute_memory(db_path=args.db_path, memory_type=args.memory_type, memory_id=args.memory_id)
         elif args.review_action == "deprecate":
             memory = deprecate_memory(db_path=args.db_path, memory_type=args.memory_type, memory_id=args.memory_id)
+        elif args.review_action == "conflicts":
+            facts = list_facts_by_claim_slot(
+                args.db_path,
+                subject_ref=args.subject_ref,
+                predicate=args.predicate,
+                scope=args.scope,
+            )
+            counts = {"approved": 0, "candidate": 0, "disputed": 0, "deprecated": 0}
+            for fact in facts:
+                counts[fact.status] += 1
+            print(
+                json.dumps(
+                    {
+                        "claim_slot": {
+                            "subject_ref": args.subject_ref,
+                            "predicate": args.predicate,
+                            "scope": args.scope,
+                        },
+                        "counts": counts,
+                        "default_retrieval_policy": "approved_only",
+                        "facts": [fact.model_dump(mode="json") for fact in facts],
+                    },
+                    indent=2,
+                )
+            )
+            return
         else:
             raise ValueError(f"Unsupported review action: {args.review_action}")
         print(memory.model_dump_json(indent=2))
         return
 
     if args.command == "retrieve":
+        statuses = (
+            ("candidate", "approved", "disputed", "deprecated")
+            if args.status == "all"
+            else (args.status,)
+        )
         packet = retrieve_memory_packet(
             db_path=args.db_path,
             query=args.query,
             limit=args.limit,
             preferred_scope=args.preferred_scope,
+            statuses=statuses,
         )
         print(packet.model_dump_json(indent=2))
         return

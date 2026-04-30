@@ -5,6 +5,7 @@ from pathlib import Path
 from agent_memory.core.models import (
     DecisionSummary,
     MemoryPacket,
+    MemoryStatus,
     MemoryTrustSummary,
     PolicyHint,
     ProvenanceSummary,
@@ -17,6 +18,9 @@ from agent_memory.storage.sqlite import (
     search_ranked_approved_episodes,
     search_ranked_approved_facts,
     search_ranked_approved_procedures,
+    search_ranked_episodes,
+    search_ranked_facts,
+    search_ranked_procedures,
     search_relations_for_refs,
     search_relations_matching_query,
 )
@@ -283,25 +287,49 @@ def retrieve_memory_packet(
     query: str,
     limit: int = 5,
     preferred_scope: str | None = None,
+    statuses: tuple[MemoryStatus, ...] = ("approved",),
 ) -> MemoryPacket:
-    ranked_facts = search_ranked_approved_facts(
-        db_path,
-        query=query,
-        limit=limit,
-        preferred_scope=preferred_scope,
-    )
-    ranked_procedures = search_ranked_approved_procedures(
-        db_path,
-        query=query,
-        limit=limit,
-        preferred_scope=preferred_scope,
-    )
-    ranked_episodes = search_ranked_approved_episodes(
-        db_path,
-        query=query,
-        limit=limit,
-        preferred_scope=preferred_scope,
-    )
+    if statuses == ("approved",):
+        ranked_facts = search_ranked_approved_facts(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+        )
+        ranked_procedures = search_ranked_approved_procedures(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+        )
+        ranked_episodes = search_ranked_approved_episodes(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+        )
+    else:
+        ranked_facts = search_ranked_facts(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+            statuses=statuses,
+        )
+        ranked_procedures = search_ranked_procedures(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+            statuses=statuses,
+        )
+        ranked_episodes = search_ranked_episodes(
+            db_path,
+            query=query,
+            limit=limit,
+            preferred_scope=preferred_scope,
+            statuses=statuses,
+        )
 
     semantic_facts = [fact for fact, _trace in ranked_facts]
     procedural_guidance = [procedure for procedure, _trace in ranked_procedures]
@@ -373,12 +401,34 @@ def retrieve_memory_packet(
     decision_summary = _build_decision_summary(retrieval_trace, trust_summaries, policy_hints)
     verification_plan = _build_verification_plan(retrieval_trace, decision_summary)
 
+    if statuses != ("approved",):
+        statuses_label = ", ".join(statuses)
+        working_hints.insert(
+            0,
+            f"Forensic retrieval includes non-default statuses ({statuses_label}); do not use it as normal answer memory without review.",
+        )
+        verification_plan = VerificationPlan(
+            required=True,
+            fallback_answer_mode="verify_first",
+            steps=[
+                VerificationStep(
+                    action="corroborate_before_answer",
+                    severity="high",
+                    blocking=True,
+                    instruction="Forensic retrieval may include candidate, disputed, or deprecated memories; corroborate before making definitive claims.",
+                )
+            ],
+        )
+
     for fact in semantic_facts:
-        record_memory_retrieval(db_path, memory_type="fact", memory_id=fact.id)
+        if fact.status == "approved":
+            record_memory_retrieval(db_path, memory_type="fact", memory_id=fact.id)
     for procedure in procedural_guidance:
-        record_memory_retrieval(db_path, memory_type="procedure", memory_id=procedure.id)
+        if procedure.status == "approved":
+            record_memory_retrieval(db_path, memory_type="procedure", memory_id=procedure.id)
     for episode in episodic_context:
-        record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
+        if episode.status == "approved":
+            record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
 
     return MemoryPacket(
         query=query,
