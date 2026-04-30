@@ -338,6 +338,30 @@ def insert_relation(
     return relation_from_row(row)
 
 
+def get_fact(db_path: Path | str, *, fact_id: int) -> Fact:
+    with connect(db_path) as connection:
+        row = connection.execute("SELECT * FROM facts WHERE id = ?", (fact_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"No fact memory found with id {fact_id}")
+    return fact_from_row(row)
+
+
+def list_fact_replacement_relations(db_path: Path | str, *, fact_id: int) -> list[Relation]:
+    fact_ref = f"fact:{fact_id}"
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM relations
+            WHERE relation_type IN ('superseded_by', 'replaces')
+              AND (from_ref = ? OR to_ref = ?)
+            ORDER BY id ASC
+            """,
+            (fact_ref, fact_ref),
+        ).fetchall()
+    return [relation_from_row(row) for row in rows]
+
+
 def update_memory_status(
     db_path: Path | str,
     *,

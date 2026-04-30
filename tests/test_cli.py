@@ -302,6 +302,117 @@ def test_python_module_cli_review_history_shows_transition_reasons(tmp_path: Pat
     assert payload["history"][0]["actor"] == "maintainer"
     assert payload["history"][0]["evidence_ids"] == [source.id]
 
+def test_python_module_cli_review_supersede_fact_shows_replacement_chain(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-supersede.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Status QA target phrase changed from OLD_BAD to APPROVED_OK.",
+        metadata={"project": "status-qa"},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="OLD_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    replacement_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    supersede_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "supersede",
+            "fact",
+            str(db_path),
+            str(old_fact.id),
+            str(replacement_fact.id),
+            "--reason",
+            "Current note replaces stale value.",
+            "--actor",
+            "maintainer",
+            "--evidence-ids-json",
+            json.dumps([source.id]),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert supersede_result.returncode == 0, supersede_result.stderr
+    relation_payload = json.loads(supersede_result.stdout)
+    assert relation_payload["relation_type"] == "superseded_by"
+    assert relation_payload["from_ref"] == f"fact:{old_fact.id}"
+    assert relation_payload["to_ref"] == f"fact:{replacement_fact.id}"
+
+    replacements_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "replacements",
+            "fact",
+            str(db_path),
+            str(old_fact.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert replacements_result.returncode == 0, replacements_result.stderr
+    payload = json.loads(replacements_result.stdout)
+    assert payload["memory_type"] == "fact"
+    assert payload["memory_id"] == old_fact.id
+    assert payload["replacements"] == [
+        {
+            "relation_id": relation_payload["id"],
+            "superseded_fact_id": old_fact.id,
+            "replacement_fact_id": replacement_fact.id,
+            "relation_type": "superseded_by",
+            "evidence_ids": [source.id],
+        }
+    ]
+
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the Status QA target phrase?",
+            "--preferred-scope",
+            "project:status-qa",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+    retrieve_payload = json.loads(retrieve_result.stdout)
+    assert [fact["object_ref_or_value"] for fact in retrieve_payload["semantic_facts"]] == ["APPROVED_OK"]
+    assert all(fact["status"] == "approved" for fact in retrieve_payload["semantic_facts"])
+
+
 def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-context.db"
     initialize_database(db_path)

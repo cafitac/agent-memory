@@ -5,6 +5,7 @@ from typing import Literal
 
 from agent_memory.core.models import Episode, Fact, MemoryStatus, Procedure, Relation
 from agent_memory.storage.sqlite import (
+    get_fact,
     insert_episode,
     insert_fact,
     insert_procedure,
@@ -158,6 +159,52 @@ def dispute_memory(
         reason=reason,
         actor=actor,
         evidence_ids=evidence_ids,
+    )
+
+
+def supersede_fact(
+    db_path: Path | str,
+    *,
+    superseded_fact_id: int,
+    replacement_fact_id: int,
+    reason: str | None = None,
+    actor: str | None = None,
+    evidence_ids: list[int] | None = None,
+) -> Relation:
+    if superseded_fact_id == replacement_fact_id:
+        raise ValueError("A fact cannot supersede itself")
+
+    superseded_fact = get_fact(db_path, fact_id=superseded_fact_id)
+    replacement_fact = get_fact(db_path, fact_id=replacement_fact_id)
+    transition_evidence_ids = evidence_ids or []
+
+    if replacement_fact.status != "approved":
+        approve_memory(
+            db_path=db_path,
+            memory_type="fact",
+            memory_id=replacement_fact_id,
+            reason=reason,
+            actor=actor,
+            evidence_ids=transition_evidence_ids,
+        )
+    if superseded_fact.status != "deprecated":
+        deprecate_memory(
+            db_path=db_path,
+            memory_type="fact",
+            memory_id=superseded_fact_id,
+            reason=reason,
+            actor=actor,
+            evidence_ids=transition_evidence_ids,
+        )
+
+    return create_relation(
+        db_path=db_path,
+        from_ref=f"fact:{superseded_fact.id}",
+        relation_type="superseded_by",
+        to_ref=f"fact:{replacement_fact.id}",
+        evidence_ids=transition_evidence_ids,
+        weight=1.0,
+        confidence=min(superseded_fact.confidence, replacement_fact.confidence),
     )
 
 

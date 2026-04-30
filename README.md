@@ -82,11 +82,13 @@ agent-memory retrieve "$DB" "What obsolete install notes exist?" --status all
 agent-memory review conflicts fact "$DB" "agent-memory" "primary-install-path"
 ```
 
-Review transitions can carry operator context and remain inspectable later:
+Review transitions can carry operator context and remain inspectable later. If one fact replaces another, record the replacement chain so stale facts can be explained without entering normal retrieval:
 
 ```bash
 agent-memory review approve fact "$DB" 1 --reason "Verified from current setup guide." --actor maintainer --evidence-ids-json '[1]'
 agent-memory review history fact "$DB" 1
+agent-memory review supersede fact "$DB" 1 2 --reason "Newer source replaces the old install path." --actor maintainer --evidence-ids-json '[2]'
+agent-memory review replacements fact "$DB" 1
 ```
 
 ## Hermes quickstart
