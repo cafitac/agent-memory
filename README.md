@@ -218,8 +218,11 @@ cd agent-memory
 uv run pytest tests/ -q
 uv run python scripts/check_release_metadata.py
 uv run python scripts/smoke_release_readiness.py
+uv run pytest tests/test_published_install_smoke.py -q
 npm pack --dry-run
 ```
+
+After a release publishes, the `published-install-smoke` workflow verifies the exact npm/PyPI version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx`. Maintainers can also run it manually with `gh workflow run published-install-smoke.yml -f version=<version>`.
 
 Useful source-checkout commands:
 

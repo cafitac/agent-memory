@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 11:17 KST
+Last updated: 2026-04-30 11:46 KST
 
 ## Trigger for the next session
 
@@ -21,12 +21,12 @@ read this file first. Do not ask the user to restate context. Answer from the "R
 
 지금 다음으로 할 일은 agent-memory의 외부 사용자 신뢰를 실제 사용자 피드백/품질 관측으로 이어가는 다음 slice야.
 
-현재 v0.1.17까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, retrieval-eval failure triage, OSS trust README/SECURITY/PRIVACY/CONTRIBUTING/community templates, published package smoke까지 완료됐어.
+현재 v0.1.18까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, retrieval-eval failure triage, OSS trust README/SECURITY/PRIVACY/CONTRIBUTING/community templates, published package smoke까지 완료됐어.
 
 다음 1순위는 공개 이후 사용자가 바로 겪을 수 있는 friction을 줄이는 거야. 추천 slice는 `ci: automate published install smoke matrix` 또는 `feat: add conservative Hermes memory preset` 중 하나야.
 
 진행 순서:
-1. `/Users/reddit/Project/agent-memory`에서 main이 `v0.1.17`인지 확인한다.
+1. `/Users/reddit/Project/agent-memory`에서 main이 `v0.1.18`인지 확인한다.
 2. 열린 PR/실패한 Actions가 없는지 확인한다.
 3. 다음 slice를 하나 고른다: published install smoke 자동화 또는 Hermes 보수적 preset.
 4. 작은 PR로 구현하고 focused/full tests를 통과시킨다.
@@ -50,12 +50,13 @@ Expected GitHub identity:
 Current verified base:
 
 - branch: `main`
-- HEAD: `39477b8 chore: release v0.1.17 [skip release]`
-- tag: `v0.1.17`
-- PR #11 merged: `docs: improve OSS trust and onboarding`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.17`
-- npm: `@cafitac/agent-memory@0.1.17`
-- PyPI: `cafitac-agent-memory==0.1.17`
+- HEAD: `be4e832 chore: release v0.1.18 [skip release]`
+- tag: `v0.1.18`
+- PR #12 merged: `docs: refresh handoff after OSS trust release`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.18`
+- npm: `@cafitac/agent-memory@0.1.18`
+- PyPI: `cafitac-agent-memory==0.1.18`
+- active branch/worktree: `test/published-install-smoke-matrix` in `.worktrees/published-install-smoke-matrix`
 
 Expected local untracked artifacts to preserve:
 
@@ -64,6 +65,7 @@ Expected local untracked artifacts to preserve:
 - `.dev/kb/retrieval-eval-m1-implementation-plan.md`
 - `.omc/`
 - `.tmp-test/`
+- `.worktrees/` while a scoped worktree task is active
 
 Do not delete or commit these unless the user explicitly asks.
 
@@ -81,7 +83,7 @@ Do not delete or commit these unless the user explicitly asks.
   - `[skip release]` release commit
   - annotated tag
   - explicit publish workflow dispatch
-- Verified through `v0.1.17`:
+- Verified through `v0.1.18`:
   - GitHub Release
   - npm package
   - PyPI package
@@ -134,46 +136,80 @@ Do not delete or commit these unless the user explicitly asks.
 - Hook failure returns `{}` and exit 0 instead of breaking the user prompt flow.
 - This matters for always-on memory use.
 
-## Immediate next work: choose the next external-confidence slice
+## Immediate next work: finish published install smoke matrix PR
 
 Goal:
 
-After v0.1.17, the repo has a credible external trust surface. The next work should convert that trust into repeated evidence from real install paths or safer always-on defaults.
+Land the automated published package smoke matrix so every release verifies real install surfaces after npm/PyPI publish, not just source-checkout tests.
 
-Recommended next options:
-
-1. `test: automate published install smoke matrix`
-   - automate npm/npx/uvx/pipx smoke checks in a script or workflow
-   - verify exact published package versions outside the source checkout
-   - fail clearly on launcher/runtime resolver regressions
-
-2. `feat: add Hermes conservative memory preset`
-   - provide a named low-risk preset for always-on memory injection
-   - keep prompt budgets small
-   - approved-only retrieval by default
-   - document how users can opt into wider context
-
-3. `ci: run retrieval eval advisory report on main`
-   - run checked-in retrieval fixtures on main as an advisory signal
-   - publish/report failures without prematurely blocking docs-only releases
-   - keep JSON/text reports available for triage
-
-Suggested first pick:
+Active branch/worktree:
 
 ```bash
-cd /Users/reddit/Project/agent-memory
-HOME=/Users/reddit gh auth switch --hostname github.com --user cafitac || true
-git checkout main
-HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git pull --ff-only
-git checkout -b test/published-install-smoke-matrix
+cd /Users/reddit/Project/agent-memory/.worktrees/published-install-smoke-matrix
 ```
 
-Acceptance for the next slice:
-- local focused tests pass
-- full tests pass
-- CI passes on PR
-- release workflow still avoids recursive publish loops
-- published-install smoke remains verified after merge if a release is cut
+Implemented in this slice:
+
+1. `scripts/smoke_published_install.py`
+   - validates exact published versions outside the source checkout
+   - covers npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx`
+   - runs bootstrap+doctor in isolated temporary homes
+   - retries for registry/index propagation
+   - uses `--python <current interpreter>` for pipx so Python >=3.11 packages do not accidentally resolve through an older default interpreter
+
+2. `.github/workflows/published-install-smoke.yml`
+   - manual workflow dispatch for a specific published version
+
+3. `.github/workflows/publish.yml`
+   - adds `published-install-smoke` after `publish-pypi` and `publish-npm`
+   - gates GitHub Release creation on the published install smoke job
+
+4. Tests/docs:
+   - `tests/test_published_install_smoke.py`
+   - README maintainer commands mention published smoke
+   - `docs/install-smoke.md` documents the automated/manual published smoke workflow
+
+Verification already run locally:
+
+```bash
+uv run pytest tests/test_published_install_smoke.py tests/test_repository_trust_docs.py tests/test_npm_launcher.py::test_install_smoke_docs_cover_external_user_trust_matrix -q
+uv run python scripts/smoke_published_install.py --version 0.1.18 --attempts 1 --delay-seconds 0 --timeout 180 --skip-pipx
+PATH="<temp pipx wrapper>:$PATH" uv run python scripts/smoke_published_install.py --version 0.1.18 --attempts 1 --delay-seconds 0 --timeout 240
+uv run pytest tests/ -q
+uv run python scripts/check_release_metadata.py
+uv run python scripts/smoke_release_readiness.py
+npm pack --dry-run
+git diff --check
+```
+
+Latest observed results:
+- focused tests: `13 passed`
+- published smoke without pipx: npm registry, npx, npm exec, uvx all passed for `0.1.18`
+- published smoke with temp pipx wrapper: npm registry, npx, npm exec, uvx, pipx all passed for `0.1.18`
+- full tests: `144 passed`
+- release metadata: all versions `0.1.18`
+- release readiness smoke: OK
+- npm pack dry-run: OK
+- diff check: OK
+- actionlint unavailable locally, skipped
+
+Remaining steps:
+
+```bash
+git status -sb
+git commit -m "ci: add published install smoke matrix"
+HOME=/Users/reddit gh auth switch --hostname github.com --user cafitac || true
+HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git push -u origin HEAD
+HOME=/Users/reddit gh pr create --repo cafitac/agent-memory --title "ci: add published install smoke matrix" --body-file /tmp/agent-memory-published-smoke-pr.md --base main --head test/published-install-smoke-matrix
+HOME=/Users/reddit gh pr checks <PR_NUMBER> --repo cafitac/agent-memory --watch
+HOME=/Users/reddit gh pr merge <PR_NUMBER> --repo cafitac/agent-memory --squash --delete-branch
+```
+
+After merge:
+- watch main CI and auto-release
+- confirm publish workflow includes `published-install-smoke`
+- verify npm/PyPI/GitHub Release for the new version
+- verify exact published install smoke output from the release workflow
 
 ## Sequential roadmap to final goal
 
