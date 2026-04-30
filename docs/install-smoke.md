@@ -80,7 +80,7 @@ gh workflow run published-install-smoke.yml \
   -f delay_seconds=10
 ```
 
-The workflow executes `scripts/smoke_published_install.py`, which validates the exact published version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx` from isolated temporary homes.
+The workflow executes `scripts/smoke_published_install.py`, which validates the exact published version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx` from isolated temporary homes. Both the release workflow and the manual workflow pass `--output-json .artifacts/published-install-smoke.json` and upload that file as the `published-install-smoke-result` artifact, including failure summaries.
 
 Local maintainer smoke for the current `package.json` version:
 

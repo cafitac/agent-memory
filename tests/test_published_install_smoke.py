@@ -113,6 +113,9 @@ def test_published_install_workflow_runs_script_after_publish() -> None:
 
     assert "published-install-smoke" in workflow
     assert "scripts/smoke_published_install.py" in workflow
+    assert "--output-json .artifacts/published-install-smoke.json" in workflow
+    assert "actions/upload-artifact" in workflow
+    assert "published-install-smoke-result" in workflow
     assert "needs:" in workflow
     assert "publish-pypi" in workflow
     assert "publish-npm" in workflow
@@ -128,6 +131,8 @@ def test_standalone_published_install_workflow_is_manual() -> None:
     assert "scripts/smoke_published_install.py" in workflow
     assert "default: '18'" in workflow
     assert "uv pip install pipx" in workflow
+    assert "--output-json .artifacts/published-install-smoke.json" in workflow
+    assert "actions/upload-artifact" in workflow
 
 
 def test_published_install_script_does_not_mask_missing_required_tool(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,3 +160,37 @@ def test_run_with_retries_reports_all_failed_attempts(monkeypatch: pytest.Monkey
 
     assert "attempt 1: registry not ready" in str(error.value)
     assert "attempt 2: registry not ready" in str(error.value)
+
+
+
+def test_published_install_cli_writes_failure_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def fail_once(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("deterministic import failure")
+
+    output_path = tmp_path / "published-install-smoke.json"
+    monkeypatch.setattr(smoke_published_install, "_run_once", fail_once)
+    monkeypatch.setattr(smoke_published_install.time, "sleep", lambda _seconds: None)
+
+    exit_code = smoke_published_install.main(
+        [
+            "--version",
+            "1.2.3",
+            "--attempts",
+            "2",
+            "--delay-seconds",
+            "0",
+            "--output-json",
+            str(output_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text())
+    assert exit_code == 1
+    assert "published install smoke failed" in captured.err
+    assert payload["status"] == "failed"
+    assert payload["version"] == "1.2.3"
+    assert payload["failures"] == [
+        "attempt 1: deterministic import failure",
+        "attempt 2: deterministic import failure",
+    ]

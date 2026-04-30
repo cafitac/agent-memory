@@ -13,6 +13,8 @@ def test_external_trust_docs_exist_and_are_linked_from_readme() -> None:
         "PRIVACY.md",
         "CONTRIBUTING.md",
         "docs/install-smoke.md",
+        "docs/first-run-memory-layer.md",
+        "docs/hermes-dogfood.md",
     ]:
         assert (ROOT / relative_path).exists()
         assert relative_path in readme
@@ -22,6 +24,39 @@ def test_external_trust_docs_exist_and_are_linked_from_readme() -> None:
     assert "agent-memory doctor" in readme
     assert "https://www.npmjs.com/package/@cafitac/agent-memory" in readme
     assert "https://pypi.org/project/cafitac-agent-memory/" in readme
+
+
+def test_first_run_memory_layer_guide_covers_safe_bootstrap_and_cleanup() -> None:
+    guide = (ROOT / "docs" / "first-run-memory-layer.md").read_text()
+
+    for expected in [
+        "agent-memory bootstrap",
+        "agent-memory doctor",
+        "~/.agent-memory/memory.db",
+        "~/.hermes/config.yaml",
+        "conservative",
+        "disable",
+        "delete",
+        "local-first",
+    ]:
+        assert expected in guide
+
+
+def test_hermes_dogfood_guide_covers_ops_smoke_and_fallbacks() -> None:
+    guide = (ROOT / "docs" / "hermes-dogfood.md").read_text()
+
+    for expected in [
+        "dogfood",
+        "agent-memory bootstrap",
+        "agent-memory doctor",
+        "hermes hooks doctor",
+        "--preset conservative",
+        "--preset balanced",
+        "latency",
+        "fail closed",
+        "rollback",
+    ]:
+        assert expected in guide
 
 
 def test_issue_and_pr_templates_exist() -> None:

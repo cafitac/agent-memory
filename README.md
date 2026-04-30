@@ -26,6 +26,12 @@ Use it when you want:
 - bounded prompt rendering for Hermes/Codex/Claude wrappers
 - retrieval regression fixtures with lexical/source baselines and failure triage
 
+Docs for first-run and operational validation:
+
+- [First-run memory layer setup](docs/first-run-memory-layer.md)
+- [Hermes dogfood and operations guide](docs/hermes-dogfood.md)
+- [Install smoke recipes](docs/install-smoke.md)
+
 ## 30-second install
 
 Recommended path for CLI agent users:

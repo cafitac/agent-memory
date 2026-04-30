@@ -577,7 +577,9 @@ def main() -> None:
                     fail_on_baseline_regression_memory_types=args.fail_on_baseline_regression_memory_types,
                 )
             except RetrievalEvalRegressionError as exc:
-                print(str(exc), file=sys.stderr)
+                print(f"retrieval eval failed: {exc}", file=sys.stderr)
+                if exc.result_set is not None:
+                    print(render_retrieval_eval_text_report(exc.result_set), file=sys.stderr)
                 raise SystemExit(1) from exc
             if args.format == "text":
                 print(render_retrieval_eval_text_report(result))

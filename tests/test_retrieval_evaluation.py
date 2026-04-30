@@ -767,6 +767,43 @@ def test_cli_eval_retrieval_text_format_outputs_human_summary(tmp_path: Path) ->
     assert not result.stdout.lstrip().startswith("{")
 
 
+
+def test_cli_eval_retrieval_failure_prints_advisory_summary(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieval-eval-cli-failure-summary.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = tmp_path / "retrieval-eval-cli-failure-summary.json"
+    payload = _fixture_payload(seeded_ids)
+    payload["tasks"][0]["expected"] = {"facts": [seeded_ids["drift_fact_id"]], "procedures": [], "episodes": []}
+    payload["tasks"][0]["avoid"] = {"facts": [seeded_ids["fact_id"]], "procedures": [], "episodes": []}
+    fixture_path.write_text(json.dumps(payload, indent=2))
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "eval",
+            "retrieval",
+            str(db_path),
+            str(fixture_path),
+            "--fail-on-regression",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "retrieval eval failed: regression detected for task(s): project-m1-kb-export" in result.stderr
+    assert "advisory report: high - 1 current task failed" in result.stderr
+    assert "recommended actions:" in result.stderr
+    assert "Inspect failed task details" in result.stderr
+
+
+
 def test_evaluate_retrieval_fixtures_preserves_task_rationale_and_notes(tmp_path: Path) -> None:
     from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures
 
