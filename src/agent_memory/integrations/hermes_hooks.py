@@ -35,6 +35,25 @@ def scope_from_cwd(cwd: str | Path | None) -> str | None:
 def resolve_effective_preferred_scope(payload: "HermesShellHookPayload", options: "HermesPreLlmHookOptions") -> str | None:
     return options.preferred_scope or scope_from_cwd(payload.cwd)
 
+
+def is_synthetic_hermes_doctor_payload(payload: "HermesShellHookPayload") -> bool:
+    """Detect the deterministic pre-LLM payload used by `hermes hooks doctor/test`.
+
+    Doctor/test payloads should still exercise hook context injection, but they
+    should not be counted as dogfood retrieval observations because they look like
+    real user turns and otherwise pollute noisy-memory audits.
+    """
+    return (
+        payload.hook_event_name == "pre_llm_call"
+        and payload.session_id == "test-session"
+        and payload.extra.get("user_message") == "What is the weather?"
+        and payload.extra.get("conversation_history") == []
+        and payload.extra.get("is_first_turn") is True
+        and payload.extra.get("model") == "gpt-4"
+        and payload.extra.get("platform") == "cli"
+    )
+
+
 class HermesShellHookPayload(BaseModel):
     hook_event_name: str
     tool_name: str | None = None
@@ -369,13 +388,14 @@ def build_pre_llm_hook_context(
         return {}
 
     effective_preferred_scope = resolve_effective_preferred_scope(payload, options)
+    observation_surface = None if is_synthetic_hermes_doctor_payload(payload) else "hermes-pre-llm-hook"
     try:
         packet = retrieve_memory_packet(
             db_path=options.db_path,
             query=user_message,
             limit=options.limit,
             preferred_scope=effective_preferred_scope,
-            observation_surface="hermes-pre-llm-hook",
+            observation_surface=observation_surface,
             observation_metadata={"hook_event_name": payload.hook_event_name},
         )
         context = prepare_hermes_memory_context(

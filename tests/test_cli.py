@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -160,6 +161,7 @@ def test_python_module_cli_retrieve_observe_records_secret_safe_local_observatio
     assert payload["observations"][0]["surface"] == "cli-test"
     assert payload["observations"][0]["query_sha256"]
     assert payload["observations"][0]["query_text"] is None
+    assert payload["observations"][0]["query_preview"] is None
     assert payload["observations"][0]["retrieved_memory_refs"] == [f"fact:{fact.id}"]
     assert payload["observations"][0]["top_memory_ref"] == f"fact:{fact.id}"
     assert "SUPERSECRET" not in list_result.stdout
@@ -257,6 +259,123 @@ def test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_wi
     assert top_ref["sample_observation_ids"]
     assert "SUPERSECRET" not in audit_result.stdout
     assert "abc123" not in audit_result.stdout
+
+
+def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
+    db_path = tmp_path / "observation-audit-empty.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for query in ("no matching alpha", "no matching beta"):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                query,
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    audit_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "audit",
+            str(db_path),
+            "--limit",
+            "20",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert audit_result.returncode == 0, audit_result.stderr
+    payload = json.loads(audit_result.stdout)
+    assert payload["observation_count"] == 2
+    assert payload["empty_retrieval_count"] == 2
+    assert payload["empty_retrieval_ratio"] == 1.0
+    assert "low_observation_count" in payload["quality_warnings"]
+    assert "high_empty_retrieval_ratio" in payload["quality_warnings"]
+
+
+
+def test_python_module_cli_approve_fact_migrates_existing_database_without_status_transition_table(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "legacy-status-transition.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Legacy status transition migration smoke.",
+        metadata={"project": "legacy-status-transition"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Legacy transition",
+        predicate="marker",
+        object_ref_or_value="STATUS_TRANSITION_OK",
+        evidence_ids=[source.id],
+        scope="project:legacy-status-transition",
+        confidence=0.95,
+    )
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("DROP TABLE memory_status_transitions")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    approve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "approve-fact",
+            str(db_path),
+            str(fact.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert approve_result.returncode == 0, approve_result.stderr
+    approve_payload = json.loads(approve_result.stdout)
+    assert approve_payload["status"] == "approved"
+
+    history_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "history",
+            "fact",
+            str(db_path),
+            str(fact.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert history_result.returncode == 0, history_result.stderr
+    history_payload = json.loads(history_result.stdout)
+    assert history_payload["history"][0]["from_status"] == "candidate"
+    assert history_payload["history"][0]["to_status"] == "approved"
+
 
 
 def test_python_module_cli_observations_list_migrates_existing_database_without_observation_table(tmp_path: Path) -> None:
@@ -1227,6 +1346,161 @@ def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_
     assert observation["surface"] == "hermes-pre-llm-hook"
     assert observation["retrieved_memory_refs"] == [f"fact:{fact.id}"]
     assert observation["metadata"] == {"hook_event_name": "pre_llm_call"}
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_skips_synthetic_doctor_observation(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-synthetic-observation.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Synthetic hook doctor weather memory should not become dogfood observation data.",
+        metadata={"project": "synthetic-hook"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Weather",
+        predicate="qa_marker",
+        object_ref_or_value="SYNTHETIC_SKIP",
+        evidence_ids=[source.id],
+        scope="project:synthetic-hook",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "test-session",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "What is the weather?",
+            "conversation_history": [],
+            "is_first_turn": True,
+            "model": "gpt-4",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:synthetic-hook",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SYNTHETIC_SKIP" in json.loads(result.stdout)["context"]
+
+    observations_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "list",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert observations_result.returncode == 0, observations_result.stderr
+    observations_payload = json.loads(observations_result.stdout)
+    assert observations_payload["observations"] == []
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_injects_retrieved_memory_context(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-injection-proof.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="The live Hermes QA marker is AM_LIVE_QA_137.",
+        metadata={"project": "hermes-injection-proof"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes live QA",
+        predicate="marker",
+        object_ref_or_value="AM_LIVE_QA_137",
+        evidence_ids=[source.id],
+        scope="project:hermes-injection-proof",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "real-session-shape",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "What is the live Hermes QA marker?",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:hermes-injection-proof",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+            "--no-reason-codes",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    hook_response = json.loads(result.stdout)
+    assert "<agent_memory_context>" in hook_response["context"]
+    assert "Retrieved fact" in hook_response["context"]
+    assert "AM_LIVE_QA_137" in hook_response["context"]
+
+    observations_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "list",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert observations_result.returncode == 0, observations_result.stderr
+    observations_payload = json.loads(observations_result.stdout)
+    assert observations_payload["observations"][0]["retrieved_memory_refs"] == [f"fact:{fact.id}"]
 
 
 
