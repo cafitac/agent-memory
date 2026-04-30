@@ -369,6 +369,15 @@ def insert_relation(
     return relation_from_row(row)
 
 
+def get_memory_status(db_path: Path | str, *, memory_type: MemoryType, memory_id: int) -> MemoryStatus:
+    table_name = TABLE_NAME_BY_MEMORY_TYPE[memory_type]
+    with connect(db_path) as connection:
+        row = connection.execute(f"SELECT status FROM {table_name} WHERE id = ?", (memory_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"No {memory_type} memory found with id {memory_id}")
+    return row["status"]
+
+
 def get_fact(db_path: Path | str, *, fact_id: int) -> Fact:
     with connect(db_path) as connection:
         row = connection.execute("SELECT * FROM facts WHERE id = ?", (fact_id,)).fetchone()

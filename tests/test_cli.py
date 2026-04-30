@@ -8,7 +8,7 @@ from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.integrations.hermes_hooks import scope_from_cwd
-from agent_memory.storage.sqlite import initialize_database, insert_relation
+from agent_memory.storage.sqlite import initialize_database, insert_relation, update_memory_status
 
 
 def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood(tmp_path: Path) -> None:
@@ -164,6 +164,99 @@ def test_python_module_cli_retrieve_observe_records_secret_safe_local_observatio
     assert payload["observations"][0]["top_memory_ref"] == f"fact:{fact.id}"
     assert "SUPERSECRET" not in list_result.stdout
     assert "abc123" not in list_result.stdout
+
+
+def test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_without_raw_queries(tmp_path: Path) -> None:
+    db_path = tmp_path / "observation-audit.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Noisy audit target phrase appears in curated memory records.",
+        metadata={"project": "observation-audit"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Noisy audit",
+        predicate="target_phrase",
+        object_ref_or_value="AUDIT_OK",
+        evidence_ids=[source.id],
+        scope="project:observation-audit",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for secret_query in (
+        "What is the noisy audit target phrase? password=SUPERSECRET",
+        "Repeat the noisy audit target phrase token=abc123",
+    ):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                secret_query,
+                "--preferred-scope",
+                "project:observation-audit",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    update_memory_status(
+        db_path,
+        memory_type="fact",
+        memory_id=fact.id,
+        status="deprecated",
+        reason="audit regression smoke",
+        actor="test",
+    )
+
+    audit_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "audit",
+            str(db_path),
+            "--limit",
+            "50",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert audit_result.returncode == 0, audit_result.stderr
+    payload = json.loads(audit_result.stdout)
+    assert payload["kind"] == "retrieval_observation_audit"
+    assert payload["read_only"] is True
+    assert payload["observation_count"] == 2
+    assert payload["surface_counts"] == {"cli-test": 2}
+    assert payload["preferred_scope_counts"] == {"project:observation-audit": 2}
+    assert payload["empty_retrieval_count"] == 0
+    top_ref = payload["top_memory_refs"][0]
+    assert top_ref["memory_ref"] == f"fact:{fact.id}"
+    assert top_ref["injection_count"] == 2
+    assert top_ref["current_status"] == "deprecated"
+    assert top_ref["signals"] == ["frequently_injected", "current_status_not_approved"]
+    assert top_ref["sample_observation_ids"]
+    assert "SUPERSECRET" not in audit_result.stdout
+    assert "abc123" not in audit_result.stdout
 
 
 def test_python_module_cli_observations_list_migrates_existing_database_without_observation_table(tmp_path: Path) -> None:

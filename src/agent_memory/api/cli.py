@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ from agent_memory.core.retrieval_eval import (
 )
 from agent_memory.storage.sqlite import (
     get_fact,
+    get_memory_status,
     initialize_database,
     list_candidate_episodes,
     list_candidate_facts,
@@ -121,6 +123,79 @@ def _status_counts_for_facts(facts) -> dict[str, int]:
     for fact in facts:
         counts[fact.status] += 1
     return counts
+
+
+def _current_status_for_memory_ref(db_path: Path, memory_ref: str) -> str | None:
+    memory_type, separator, raw_id = memory_ref.partition(":")
+    if separator != ":" or not raw_id.isdigit() or memory_type not in {"fact", "procedure", "episode"}:
+        return None
+    try:
+        return get_memory_status(db_path, memory_type=memory_type, memory_id=int(raw_id))
+    except ValueError:
+        return "missing"
+
+
+def _audit_retrieval_observations(
+    db_path: Path,
+    *,
+    limit: int,
+    top: int,
+    frequent_threshold: int,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("observations audit limit must be >= 1")
+    if top < 1:
+        raise ValueError("observations audit top must be >= 1")
+    if frequent_threshold < 1:
+        raise ValueError("observations audit frequent threshold must be >= 1")
+
+    observations = list_retrieval_observations(db_path, limit=limit)
+    surface_counts = Counter(observation.surface for observation in observations)
+    preferred_scope_counts = Counter(
+        observation.preferred_scope for observation in observations if observation.preferred_scope is not None
+    )
+    memory_ref_counts: Counter[str] = Counter()
+    sample_observation_ids_by_ref: dict[str, list[int]] = defaultdict(list)
+    empty_retrieval_count = 0
+    for observation in observations:
+        if not observation.retrieved_memory_refs:
+            empty_retrieval_count += 1
+        for memory_ref in observation.retrieved_memory_refs:
+            memory_ref_counts[memory_ref] += 1
+            sample_ids = sample_observation_ids_by_ref[memory_ref]
+            if len(sample_ids) < 5:
+                sample_ids.append(observation.id)
+
+    top_memory_refs = []
+    for memory_ref, injection_count in sorted(memory_ref_counts.items(), key=lambda item: (-item[1], item[0]))[:top]:
+        current_status = _current_status_for_memory_ref(db_path, memory_ref)
+        signals = []
+        if injection_count >= frequent_threshold:
+            signals.append("frequently_injected")
+        if current_status is not None and current_status != "approved":
+            signals.append("current_status_not_approved")
+        top_memory_refs.append(
+            {
+                "memory_ref": memory_ref,
+                "injection_count": injection_count,
+                "current_status": current_status,
+                "signals": signals,
+                "sample_observation_ids": sample_observation_ids_by_ref[memory_ref],
+            }
+        )
+
+    return {
+        "kind": "retrieval_observation_audit",
+        "read_only": True,
+        "observation_count": len(observations),
+        "limit": limit,
+        "top": top,
+        "frequent_threshold": frequent_threshold,
+        "surface_counts": dict(sorted(surface_counts.items())),
+        "preferred_scope_counts": dict(sorted(preferred_scope_counts.items())),
+        "empty_retrieval_count": empty_retrieval_count,
+        "top_memory_refs": top_memory_refs,
+    }
 
 
 def _inspect_relation_graph(db_path: Path, *, start_ref: str, depth: int, limit: int) -> dict[str, Any]:
@@ -428,6 +503,11 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_list_parser = observations_subparsers.add_parser("list")
     observations_list_parser.add_argument("db_path", type=Path)
     observations_list_parser.add_argument("--limit", type=int, default=50)
+    observations_audit_parser = observations_subparsers.add_parser("audit")
+    observations_audit_parser.add_argument("db_path", type=Path)
+    observations_audit_parser.add_argument("--limit", type=int, default=200)
+    observations_audit_parser.add_argument("--top", type=int, default=10)
+    observations_audit_parser.add_argument("--frequent-threshold", type=int, default=3)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -842,6 +922,19 @@ def main() -> None:
                         "read_only": True,
                         "observations": [observation.model_dump(mode="json") for observation in observations],
                     },
+                    indent=2,
+                )
+            )
+            return
+        if args.observations_action == "audit":
+            print(
+                json.dumps(
+                    _audit_retrieval_observations(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        frequent_threshold=args.frequent_threshold,
+                    ),
                     indent=2,
                 )
             )
