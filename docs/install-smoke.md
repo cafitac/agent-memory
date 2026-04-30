@@ -99,7 +99,7 @@ Before treating a release as ready for external users, validate these surfaces f
 | uvx | `uvx --refresh cafitac-agent-memory==<version> agent-memory --help` | PyPI package resolves independently of npm wrapper |
 | Hermes | `agent-memory bootstrap`; `agent-memory doctor`; `hermes hooks doctor`; one QA prompt with hooks accepted | hook install is merge-safe, bounded by conservative prompt budgets, and fails closed if memory DB is unavailable |
 | Codex/Claude prompts | `agent-memory codex-prompt ...`; `agent-memory claude-prompt ...` after seeding approved memory | prompt wrappers include actual approved snippets and exclude disputed/deprecated content by default |
-| Forensic review | `agent-memory retrieve ... --status all`; `agent-memory review conflicts fact ...` | obsolete/conflicting memory can be inspected intentionally without entering normal prompts |
+| Forensic review | `agent-memory retrieve ... --status all`; `agent-memory review conflicts fact ...`; `agent-memory review history fact ...` | obsolete/conflicting memory can be inspected intentionally with status-transition reason/evidence history without entering normal prompts |
 
 ## What to capture if smoke fails
 

@@ -71,6 +71,18 @@ class Relation(BaseModel):
     valid_to: str | None = None
 
 
+class MemoryStatusTransition(BaseModel):
+    id: int
+    memory_type: Literal["fact", "procedure", "episode"]
+    memory_id: int
+    from_status: MemoryStatus
+    to_status: MemoryStatus
+    reason: str | None = None
+    actor: str | None = None
+    evidence_ids: list[int] = Field(default_factory=list)
+    created_at: str
+
+
 class ProvenanceSummary(BaseModel):
     source_id: int
     source_type: str

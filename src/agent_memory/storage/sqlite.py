@@ -8,7 +8,16 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar
 
-from agent_memory.core.models import Episode, Fact, MemoryStatus, Procedure, Relation, RetrievalTraceEntry, SourceRecord
+from agent_memory.core.models import (
+    Episode,
+    Fact,
+    MemoryStatus,
+    MemoryStatusTransition,
+    Procedure,
+    Relation,
+    RetrievalTraceEntry,
+    SourceRecord,
+)
 
 T = TypeVar("T")
 MemoryType = Literal["fact", "procedure", "episode"]
@@ -335,10 +344,42 @@ def update_memory_status(
     memory_type: MemoryType,
     memory_id: int,
     status: MemoryStatus,
+    reason: str | None = None,
+    actor: str | None = None,
+    evidence_ids: list[int] | None = None,
 ) -> Fact | Procedure | Episode:
     table_name = TABLE_NAME_BY_MEMORY_TYPE[memory_type]
     row_parser = ROW_PARSER_BY_MEMORY_TYPE[memory_type]
-    return _update_status(db_path, table_name=table_name, object_id=memory_id, status=status, row_parser=row_parser)
+    return _update_status(
+        db_path,
+        table_name=table_name,
+        memory_type=memory_type,
+        object_id=memory_id,
+        status=status,
+        row_parser=row_parser,
+        reason=reason,
+        actor=actor,
+        evidence_ids=evidence_ids or [],
+    )
+
+
+def list_memory_status_history(
+    db_path: Path | str,
+    *,
+    memory_type: MemoryType,
+    memory_id: int,
+) -> list[MemoryStatusTransition]:
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM memory_status_transitions
+            WHERE memory_type = ? AND memory_id = ?
+            ORDER BY id ASC
+            """,
+            (memory_type, memory_id),
+        ).fetchall()
+    return [memory_status_transition_from_row(row) for row in rows]
 
 
 def search_approved_facts(
@@ -619,11 +660,19 @@ def _update_status(
     db_path: Path | str,
     *,
     table_name: str,
+    memory_type: MemoryType,
     object_id: int,
     status: MemoryStatus,
     row_parser: Callable[[sqlite3.Row], T],
+    reason: str | None,
+    actor: str | None,
+    evidence_ids: list[int],
 ) -> T:
     with connect(db_path) as connection:
+        current_row = connection.execute(f"SELECT * FROM {table_name} WHERE id = ?", (object_id,)).fetchone()
+        if current_row is None:
+            raise ValueError(f"No {memory_type} memory found with id {object_id}")
+        from_status = current_row["status"]
         if status == "approved":
             connection.execute(
                 f"""
@@ -640,6 +689,21 @@ def _update_status(
                 f"UPDATE {table_name} SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (status, object_id),
             )
+        connection.execute(
+            """
+            INSERT INTO memory_status_transitions (
+                memory_type,
+                memory_id,
+                from_status,
+                to_status,
+                reason,
+                actor,
+                evidence_ids_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (memory_type, object_id, from_status, status, reason, actor, json.dumps(evidence_ids)),
+        )
         row = connection.execute(f"SELECT * FROM {table_name} WHERE id = ?", (object_id,)).fetchone()
     return row_parser(row)
 
@@ -1042,6 +1106,20 @@ def episode_from_row(row: sqlite3.Row) -> Episode:
         scope=row["scope"],
         status=row["status"],
         searchable_text=row["searchable_text"],
+    )
+
+
+def memory_status_transition_from_row(row: sqlite3.Row) -> MemoryStatusTransition:
+    return MemoryStatusTransition(
+        id=row["id"],
+        memory_type=row["memory_type"],
+        memory_id=row["memory_id"],
+        from_status=row["from_status"],
+        to_status=row["to_status"],
+        reason=row["reason"],
+        actor=row["actor"],
+        evidence_ids=json.loads(row["evidence_ids_json"]),
+        created_at=row["created_at"],
     )
 
 

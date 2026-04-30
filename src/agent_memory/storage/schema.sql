@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS relations (
     valid_to TEXT
 );
 
+CREATE TABLE IF NOT EXISTS memory_status_transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_type TEXT NOT NULL CHECK (memory_type IN ('fact', 'procedure', 'episode')),
+    memory_id INTEGER NOT NULL,
+    from_status TEXT NOT NULL CHECK (from_status IN ('candidate', 'approved', 'disputed', 'deprecated')),
+    to_status TEXT NOT NULL CHECK (to_status IN ('candidate', 'approved', 'disputed', 'deprecated')),
+    reason TEXT,
+    actor TEXT,
+    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_status_transitions_memory ON memory_status_transitions(memory_type, memory_id, id);
+
 CREATE INDEX IF NOT EXISTS idx_facts_status_scope ON facts(status, scope);
 CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_ref);
 CREATE INDEX IF NOT EXISTS idx_procedures_status_scope ON procedures(status, scope);

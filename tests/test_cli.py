@@ -231,6 +231,77 @@ def test_python_module_cli_review_conflicts_shows_claim_lifecycle_across_statuse
     assert payload["default_retrieval_policy"] == "approved_only"
 
 
+def test_python_module_cli_review_history_shows_transition_reasons(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-history.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Review history source text.",
+        metadata={"project": "status-qa"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    approve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "approve",
+            "fact",
+            str(db_path),
+            str(fact.id),
+            "--reason",
+            "Verified during review.",
+            "--actor",
+            "maintainer",
+            "--evidence-ids-json",
+            json.dumps([source.id]),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert approve_result.returncode == 0, approve_result.stderr
+
+    history_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "history",
+            "fact",
+            str(db_path),
+            str(fact.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert history_result.returncode == 0, history_result.stderr
+    payload = json.loads(history_result.stdout)
+    assert payload["memory_type"] == "fact"
+    assert payload["memory_id"] == fact.id
+    assert payload["history"][0]["from_status"] == "candidate"
+    assert payload["history"][0]["to_status"] == "approved"
+    assert payload["history"][0]["reason"] == "Verified during review."
+    assert payload["history"][0]["actor"] == "maintainer"
+    assert payload["history"][0]["evidence_ids"] == [source.id]
+
 def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-context.db"
     initialize_database(db_path)
