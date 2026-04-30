@@ -86,42 +86,44 @@ agent-memory bootstrap
 agent-memory doctor
 ```
 
-Source / development flow:
+Installed CLI usage:
+
+After npm install, use `agent-memory [command]` directly from the shell. For local source development, maintainers may still prefix commands with `uv run`, but end-user docs should show the installed command.
 
 Initialize a SQLite memory database. For real use, prefer one global user-level database and let scopes/provenance separate projects:
 
 ```bash
-uv run agent-memory init ~/.agent-memory/memory.db
+agent-memory init ~/.agent-memory/memory.db
 ```
 
 If you want the shortest real Hermes onboarding path, `hermes-bootstrap` is the primary one-line command. It initializes the database if missing, writes or merges the Hermes hook config, and keeps existing Hermes hooks intact.
 
 Fresh-install and upgrade notes:
-- brand-new Hermes users can run `uv run agent-memory hermes-bootstrap` first; if `~/.hermes/config.yaml` does not exist yet, the command creates it with the agent-memory hook installed.
+- brand-new Hermes users can run `agent-memory bootstrap` first; if `~/.hermes/config.yaml` does not exist yet, the command creates it with the agent-memory hook installed.
 - existing Hermes users with their own `pre_llm_call` / `on_session_end` hooks can also use `hermes-bootstrap`; the installer preserves the existing hook list and appends the agent-memory hook without rewriting the whole config.
-- after bootstrap, run `uv run agent-memory hermes-doctor` and `hermes hooks doctor` once to confirm the config path, hook install, and runtime allowlist state.
+- after bootstrap, run `agent-memory doctor` and `hermes hooks doctor` once to confirm the config path, hook install, and runtime allowlist state.
 - the first real Hermes run may still require `--accept-hooks` (or an interactive approval prompt) because Hermes itself will not fire unapproved shell hooks at runtime.
 
 ```bash
-uv run agent-memory hermes-bootstrap
+agent-memory bootstrap
 ```
 
 If you want a one-line health check for that setup:
 
 ```bash
-uv run agent-memory hermes-doctor
+agent-memory doctor
 ```
 
 If you want the same flow with explicit paths and budgets, `hermes-install-hook` remains available:
 
 ```bash
-uv run agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --timeout 12
+agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --timeout 12
 ```
 
 For throwaway experiments, a temp database is fine:
 
 ```bash
-uv run agent-memory init /tmp/agent-memory.db
+agent-memory init /tmp/agent-memory.db
 ```
 
 Scope model:
@@ -132,68 +134,68 @@ Scope model:
 Retrieve the raw `MemoryPacket` for a query:
 
 ```bash
-uv run agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
+agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
 ```
 
 Evaluate retrieval fixtures against the current retrieval path:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
 ```
 
 Or include a simple lexical baseline for side-by-side comparison:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
 ```
 
 For a compact terminal-oriented summary instead of the full JSON payload, use text format:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
 ```
 
 Or fail the command when any current task regresses:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
 ```
 
 Or fail the command only when the current retrieval path is worse than the lexical baseline:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
 ```
 
 Or compare against a source-linked lexical baseline that scores approved memories by the lexical overlap of their linked source content within the same preferred scope:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
 ```
 
 Or compare against a source-linked lexical baseline that ignores preferred scope and lets cross-scope source evidence compete in the baseline ranking:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
 ```
 
 Or compare against a lexical baseline that ignores preferred scope and lets cross-scope drift compete in the baseline ranking (this can make the baseline strictly worse than current retrieval, which is useful for drift-sensitive diagnostics but will not trip baseline-regression gates on its own):
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical-global
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical-global
 ```
 
 Or fail the command only when the current retrieval path is worse than the lexical baseline for selected primary task types:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression-memory-type facts
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression-memory-type facts
 ```
 
 Or emit non-fatal soft-gate advisories when current regressions exceed a threshold:
 
 ```bash
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
 ```
 
 The retrieval evaluator accepts either one JSON fixture file or a fixture directory. Directory input is recursive, so fixture families can live under nested folders such as `scope/`, `procedure/`, `drift/`, `staleness/`, and `episode/`. Fixtures may use direct numeric IDs or top-level symbolic `references` that resolve against approved memories in the target database, which makes checked-in fixture families directly runnable from the CLI. Symbolic selectors now also support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include` when exact field equality is too brittle for checked-in fixtures. Each task may also carry optional human-authored `rationale` text and `notes` arrays; these are preserved verbatim in the JSON report so fixture reviews can explain why a hit matters without introducing LLM judging. The evaluator runs `retrieve_memory_packet` for each task and prints JSON by default with fixture paths, per-task rationale/notes, retrieved IDs, expected hits, missing expected IDs, avoid/drift hits, a derived per-task `pass` flag, any non-fatal soft-gate `advisories`, and an aggregate summary. Use `--format text` when you want a short human-readable terminal report with pass counts, current/baseline/delta totals, primary-task-type rollups, failed task details, baseline weak spots, current regressions versus the selected baseline, and advisory messages. Summary objects now also include top-level task counts (`total_tasks`, `passed_tasks`, `failed_tasks`), `by_memory_type` rollups for facts/procedures/episodes, and `by_primary_task_type` rollups keyed by each task's main target surface so regressions can be reviewed both by memory-slice participation and by per-task intent; the per-type summaries expose the same task counts plus hit/miss/avoid totals. With `--baseline-mode lexical`, the same output also includes per-task baseline metrics, per-task delta fields (`expected_hit_delta`, `missing_expected_delta`, `avoid_hit_delta`, `pass_changed`), plus baseline and delta summaries using a simpler lexical-only retrieval path scoped to the same preferred scope; `--baseline-mode source-lexical` keeps that preferred-scope restriction but scores approved memories by lexical overlap in their linked source content instead of normalized memory text; `--baseline-mode source-global` uses the same source-linked lexical scoring while ignoring preferred scope; and `--baseline-mode lexical-global` keeps normalized-text lexical scoring but ignores preferred scope. Soft-gate thresholds never change the per-task `pass` semantics or process exit code on their own; they only populate `advisories` when the observed current or baseline-relative regression count exceeds the requested threshold.
@@ -201,7 +203,7 @@ The retrieval evaluator accepts either one JSON fixture file or a fixture direct
 Export approved memories as a human-readable KB draft:
 
 ```bash
-uv run agent-memory kb export ~/.agent-memory/memory.db ./kb-draft --scope user:default
+agent-memory kb export ~/.agent-memory/memory.db ./kb-draft --scope user:default
 ```
 
 The KB export writes markdown files for approved facts, procedures, and episodes. Candidate, disputed, and deprecated memories are intentionally excluded. Each exported memory includes its referenced source IDs; when source records exist, the markdown also includes source type, created timestamp, adapter/external reference, metadata, and a short source excerpt for human review. The CLI prints JSON with generated files, per-type counts, total exported items, and referenced source IDs. The SQLite database remains the source of truth; exported markdown is a reviewable artifact for humans and downstream wiki sync workflows.
@@ -209,7 +211,7 @@ The KB export writes markdown files for approved facts, procedures, and episodes
 Render a Hermes-consumable adapter context:
 
 ```bash
-uv run agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
 ```
 
 The `hermes-context` output is JSON with:
@@ -219,8 +221,8 @@ The `hermes-context` output is JSON with:
 For Codex- or Claude-style CLI wrappers that just want a plain prompt string instead of the full JSON payload, use:
 
 ```bash
-uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
-uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
+agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
 ```
 
 Both commands print only the rendered prompt text, including the normal response/verification guidance plus short snippets from the top retrieved facts, procedures, or episodes, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
@@ -237,7 +239,7 @@ Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-pro
 Apply harness-supplied verification results and print a `HermesVerificationOutcome`:
 
 ```bash
-uv run agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --verification-results-json '[{"step_action":"cross_check_hidden_alternatives","status":"passed","evidence_summary":"No approved alternative contradicted the primary memory.","target_memory_type":"fact","target_memory_id":1}]'
+agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --verification-results-json '[{"step_action":"cross_check_hidden_alternatives","status":"passed","evidence_summary":"No approved alternative contradicted the primary memory.","target_memory_type":"fact","target_memory_id":1}]'
 ```
 
 The CLI does not execute verification itself; it only applies result objects supplied by the calling harness.
@@ -245,27 +247,27 @@ The CLI does not execute verification itself; it only applies result objects sup
 Generate a mergeable Hermes hook config snippet without modifying any existing config file:
 
 ```bash
-uv run agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
+agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
 ```
 
 The snippet command only prints YAML. It does not read, write, or merge `~/.hermes/config.yaml`.
 
-Install the same hook explicitly into a Hermes config file. For the shortest onboarding flow, prefer `uv run agent-memory hermes-bootstrap` and only drop to `hermes-install-hook` when you want to pin explicit paths or budgets. `hermes-bootstrap` uses the same installer with user-level defaults:
+Install the same hook explicitly into a Hermes config file. For the shortest onboarding flow, prefer `agent-memory bootstrap` and only drop to `hermes-install-hook` when you want to pin explicit paths or budgets. `hermes-bootstrap` uses the same installer with user-level defaults:
 
 ```bash
-uv run agent-memory hermes-bootstrap
+agent-memory bootstrap
 ```
 
 The lower-level explicit form remains available:
 
 ```bash
-uv run agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
+agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
 ```
 
 Recommended post-install verification for external users:
 
 ```bash
-uv run agent-memory hermes-doctor ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml
+agent-memory doctor ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml
 hermes hooks list
 hermes hooks doctor
 # approve the hook on first real use if Hermes reports it is not allowlisted yet
@@ -313,7 +315,7 @@ Use `agent-memory` directly from a Hermes `pre_llm_call` shell hook:
 ```yaml
 hooks:
   pre_llm_call:
-    - command: "uv run agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300"
+    - command: "agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300"
       timeout: 10
 ```
 

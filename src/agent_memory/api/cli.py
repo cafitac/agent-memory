@@ -9,7 +9,6 @@ from typing import Any
 from agent_memory.adapters import (
     HermesVerificationResult,
     apply_hermes_verification_results,
-    estimate_prompt_tokens,
     prepare_hermes_memory_context,
 )
 from agent_memory.integrations.hermes_hooks import (
@@ -76,66 +75,6 @@ def _render_memory_context_for_prompt(args: argparse.Namespace):
     )
 
 
-def _render_memory_snippet_lines(packet, *, top_k: int) -> list[str]:
-    facts_by_id = {fact.id: fact for fact in packet.semantic_facts}
-    procedures_by_id = {procedure.id: procedure for procedure in packet.procedural_guidance}
-    episodes_by_id = {episode.id: episode for episode in packet.episodic_context}
-
-    lines: list[str] = []
-    for trace in packet.retrieval_trace[: max(0, top_k)]:
-        if trace.memory_type == "fact":
-            fact = facts_by_id.get(trace.memory_id)
-            if fact is None:
-                continue
-            lines.append(
-                f"Retrieved fact #{fact.id}: {fact.subject_ref} | {fact.predicate} | {fact.object_ref_or_value}"
-            )
-            continue
-        if trace.memory_type == "procedure":
-            procedure = procedures_by_id.get(trace.memory_id)
-            if procedure is None:
-                continue
-            step_preview = "; ".join(procedure.steps[:2]) or procedure.trigger_context
-            lines.append(
-                f"Retrieved procedure #{procedure.id}: {procedure.name} | trigger={procedure.trigger_context} | steps={step_preview}"
-            )
-            continue
-        if trace.memory_type == "episode":
-            episode = episodes_by_id.get(trace.memory_id)
-            if episode is None:
-                continue
-            lines.append(f"Retrieved episode #{episode.id}: {episode.title} | {episode.summary}")
-    return lines
-
-
-def _apply_prompt_size_budgets(lines: list[str], args: argparse.Namespace) -> list[str]:
-    budgeted = lines
-    if args.max_prompt_lines is not None:
-        budgeted = budgeted[: max(0, args.max_prompt_lines)]
-
-    if args.max_prompt_chars is not None:
-        remaining = max(0, args.max_prompt_chars)
-        char_budgeted: list[str] = []
-        for line in budgeted:
-            line_cost = len(line) if not char_budgeted else len(line) + 1
-            if line_cost > remaining:
-                break
-            char_budgeted.append(line)
-            remaining -= line_cost
-        budgeted = char_budgeted
-
-    if args.max_prompt_tokens is not None:
-        token_budgeted: list[str] = []
-        for line in budgeted:
-            candidate_lines = [*token_budgeted, line]
-            if estimate_prompt_tokens("\n".join(candidate_lines)) > max(0, args.max_prompt_tokens):
-                break
-            token_budgeted.append(line)
-        budgeted = token_budgeted
-
-    return budgeted
-
-
 def _render_external_agent_prompt_text(args: argparse.Namespace) -> str:
     packet = _retrieve_packet_for_prompt(args)
     context = prepare_hermes_memory_context(
@@ -149,11 +88,7 @@ def _render_external_agent_prompt_text(args: argparse.Namespace) -> str:
         max_guidelines=args.max_guidelines,
         include_reason_codes=not args.no_reason_codes,
     )
-    lines = context.prompt_text.splitlines()
-    snippet_lines = _render_memory_snippet_lines(packet, top_k=args.top_k)
-    if snippet_lines:
-        lines.extend(snippet_lines)
-    return "\n".join(_apply_prompt_size_budgets(lines, args))
+    return context.prompt_text
 
 
 def _normalize_command_aliases(argv: list[str]) -> list[str]:
@@ -329,7 +264,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     hermes_hook_config_snippet_parser = subparsers.add_parser("hermes-hook-config-snippet")
     hermes_hook_config_snippet_parser.add_argument("db_path", type=Path)
-    hermes_hook_config_snippet_parser.add_argument("--python-executable", default=sys.executable)
+    hermes_hook_config_snippet_parser.add_argument("--python-executable")
     hermes_hook_config_snippet_parser.add_argument("--limit", type=int, default=5)
     hermes_hook_config_snippet_parser.add_argument("--preferred-scope")
     hermes_hook_config_snippet_parser.add_argument("--top-k", type=int, default=1)
@@ -345,7 +280,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_install_hook_parser = subparsers.add_parser("hermes-install-hook")
     hermes_install_hook_parser.add_argument("db_path", type=Path)
     hermes_install_hook_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
-    hermes_install_hook_parser.add_argument("--python-executable", default=sys.executable)
+    hermes_install_hook_parser.add_argument("--python-executable")
     hermes_install_hook_parser.add_argument("--limit", type=int, default=5)
     hermes_install_hook_parser.add_argument("--preferred-scope")
     hermes_install_hook_parser.add_argument("--top-k", type=int, default=1)
@@ -369,7 +304,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path.home() / ".agent-memory" / "memory.db",
     )
     hermes_bootstrap_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
-    hermes_bootstrap_parser.add_argument("--python-executable", default=sys.executable)
+    hermes_bootstrap_parser.add_argument("--python-executable")
     hermes_bootstrap_parser.add_argument("--limit", type=int, default=5)
     hermes_bootstrap_parser.add_argument("--preferred-scope")
     hermes_bootstrap_parser.add_argument("--top-k", type=int, default=3)
@@ -393,7 +328,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path.home() / ".agent-memory" / "memory.db",
     )
     hermes_doctor_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
-    hermes_doctor_parser.add_argument("--python-executable", default=sys.executable)
+    hermes_doctor_parser.add_argument("--python-executable")
     hermes_doctor_parser.add_argument("--limit", type=int, default=5)
     hermes_doctor_parser.add_argument("--preferred-scope")
     hermes_doctor_parser.add_argument("--top-k", type=int, default=3)

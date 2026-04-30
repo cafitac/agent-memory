@@ -17,19 +17,19 @@ then read this file first and answer from the "Ready-to-say answer" section belo
 
 ## Ready-to-say answer
 
-지금 바로 해야 할 건 `agent-memory`의 retrieval evaluation 결과를 사람이 빠르게 읽고 triage할 수 있게 만드는 거야.
+지금 바로 이어서 할 건 npm-first Hermes memory-layer hardening slice를 PR로 마무리하는 거야.
 
-Runtime adapters, retrieval fixture harness, npm/PyPI distribution, 그리고 main-merge 자동 릴리즈는 검증됐어. 다음 단계는 embeddings/reranking 같은 검색 복잡도를 더 넣기 전에, fixture 결과를 사람이 한눈에 보고 어떤 memory type / task type이 약한지 판단할 수 있는 report surface를 다듬는 거야.
+이번 slice의 목표는 npm 설치 후 사용자가 `uv run`이나 `python -m`을 치지 않고 `agent-memory [command]`로 설치/설정/진단/Hook 실행까지 자연스럽게 쓰게 만드는 것, 그리고 Hermes/Codex/Claude 같은 하네스가 실제 retrieved memory 내용을 prompt에서 볼 수 있게 만들어 주 memory layer로 dogfood 가능한 수준을 올리는 거야.
+
+이미 로컬에서 `agent-memory bootstrap`, `agent-memory doctor`, `hermes hooks doctor`, 실제 Hermes one-shot QA가 통과했고, Hermes가 memory에서 `DIRECT_CMD_MEMORY_LAYER_OK`를 읽어 답하는 것도 확인됐어. 다음 단계는 PR/CI/merge/release/published smoke까지 끝내는 거야.
 
 진행 순서는:
 1. `~/Project/agent-memory` 상태 확인
-2. retrieval eval report/CLI 현재 구조 확인
-3. TDD로 `--format text` 또는 동등한 human summary surface 테스트 추가
-4. JSON contract는 유지하면서 compact text report 구현
-5. README와 이 handoff를 검증 결과 기준으로 갱신
-6. PR/CI/merge 후 main auto-release가 새 patch를 배포하는지 확인
-
-이 작업부터 진행하면 돼.
+2. focused/full tests와 release readiness 재확인
+3. 변경 파일만 선별 stage/commit
+4. PR 생성, CI 확인, squash merge
+5. main auto-release로 새 patch가 GitHub/npm/PyPI에 배포되는지 확인
+6. 외부 temp cwd에서 published `agent-memory [command]` smoke 확인
 
 ## Current repo state
 
@@ -42,11 +42,11 @@ Current branch/release state at this handoff:
 - branch: `main` before the current report-summary branch
 - remote: `origin` -> `https://github.com/cafitac/agent-memory.git` in the local checkout after gh HTTPS push repair
 - git status at last check: tracked files clean on main; pre-existing untracked local agent/dev state remains intentionally preserved
-- latest commit before this branch: `67653e9 chore: release v0.1.11 [skip release]`
-- latest validated release: `v0.1.11`
-- npm: `@cafitac/agent-memory@0.1.11`
-- PyPI: `cafitac-agent-memory==0.1.11`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.11`
+- latest commit before this branch: `87a7fc1 chore: release v0.1.13 [skip release]`
+- latest validated release: `v0.1.13`
+- npm: `@cafitac/agent-memory@0.1.13`
+- PyPI: `cafitac-agent-memory==0.1.13`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.13`
 - main-merge auto-release is active: `auto-release.yml` bumps patch metadata, commits `[skip release]`, tags, and dispatches `publish.yml` because `GITHUB_TOKEN` tag pushes do not trigger downstream tag workflows reliably
 
 Important run IDs:
@@ -80,7 +80,7 @@ Note: registry metadata and delegated installer resolvers can briefly disagree a
 - npm is the shortest onboarding surface; PyPI is the canonical Python runtime.
 - npm thin launcher pins the delegated Python package to the npm package version.
 - GitHub Actions CI/publish flow is validated.
-- Actual published install smoke is validated through `v0.1.11`.
+- Actual published install smoke is validated through `v0.1.13`.
 
 ### Hermes integration
 
@@ -191,8 +191,8 @@ Current verified behavior:
 
 Recommended next work:
 
-1. if needed next, consider richer comparator families or matrix summaries beyond the current lexical/source × scope-aware/global coverage
-2. if needed later, extend symbolic selectors again beyond the current contains/tag support
+1. keep tightening npm-first installed CLI UX: after npm install, user-facing commands should be `agent-memory [command]`; `uv run` should appear only in maintainer/source-development verification notes
+2. continue local Hermes dogfooding with agent-memory installed/configured as the primary prompt-time memory layer
 3. once retrieval changes get bolder, consider thresholded hard-gate variants or per-slice gating beyond binary pass/fail
 4. if fixture reviews get denser, consider lightweight grouping or labels for rationale/notes without changing pass/fail semantics
 
@@ -203,17 +203,17 @@ cd ~/Project/agent-memory
 uv run pytest tests/test_retrieval_evaluation.py -q
 uv run pytest tests/test_cli.py -q
 uv run pytest tests/ -q
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
-uv run agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
-uv run agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
-uv run agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
+agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
+agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8
 python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --dry-run
 python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --dry-run
 ```
@@ -352,7 +352,7 @@ Suggested verification commands:
 ```bash
 uv run pytest tests/test_retrieval_evaluation.py -q
 uv run pytest -q
-uv run agent-memory eval retrieval --help
+agent-memory eval retrieval --help
 git status -sb
 gh run list --branch main --limit 3
 ```

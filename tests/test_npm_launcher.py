@@ -108,6 +108,7 @@ def test_npm_wrapper_pins_python_package_to_npm_version(tmp_path: Path) -> None:
         "HOME": str(tmp_path / "home"),
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
+    env.pop("AGENT_MEMORY_PYTHON_EXECUTABLE", None)
 
     result = subprocess.run(
         ["node", str(WRAPPER_PATH), "kb", "export", "--help"],
@@ -121,3 +122,15 @@ def test_npm_wrapper_pins_python_package_to_npm_version(tmp_path: Path) -> None:
     args = json.loads(recorded_args.read_text())
     assert args[:3] == ["--from", f"cafitac-agent-memory=={package_json['version']}", "agent-memory"]
     assert args[3:] == ["kb", "export", "--help"]
+
+
+def test_user_docs_show_installed_agent_memory_command_after_npm_install() -> None:
+    readme = (REPO_ROOT / "README.md").read_text()
+    install_smoke = (REPO_ROOT / "docs" / "install-smoke.md").read_text()
+
+    npm_section = readme.split("Alternative Python-first install paths:", maxsplit=1)[0]
+    assert "npm install -g @cafitac/agent-memory" in npm_section
+    assert "agent-memory bootstrap" in npm_section
+    assert "agent-memory doctor" in npm_section
+    assert "uv run agent-memory" not in readme
+    assert "agent-memory [command]" in install_smoke

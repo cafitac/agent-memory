@@ -80,4 +80,4 @@ Record:
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.8`.
+As of the latest validated public install smoke, the validated tag is `v0.1.13`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
