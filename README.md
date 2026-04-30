@@ -207,6 +207,8 @@ Supported baseline modes include:
 
 Reports include per-task retrieved IDs, expected hits, missing IDs, avoid hits, pass/fail state, aggregate summaries, soft-threshold advisories, and failure triage details such as snippets, lifecycle status, scopes, and policy signals. Every JSON result also includes an `advisory_report` with severity, affected task IDs, and recommended next actions. Text reports render the same advisory report as terminal-friendly guidance for maintainers reviewing failed retrieval tasks; JSON is the stable machine-readable surface.
 
+The evaluator calls the real retrieval path but suppresses retrieval bookkeeping side effects while it runs. Eval tasks do not increment `retrieval_count`, `reinforcement_count`, or `last_accessed_at`, so fixture order and repeated local/CI runs do not perturb later ranking results.
+
 ## Current maturity
 
 agent-memory is alpha software, but the public install path is validated.

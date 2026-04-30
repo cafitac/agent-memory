@@ -350,6 +350,31 @@ def test_evaluate_retrieval_fixture_directory_recurses_and_sorts_paths(tmp_path:
 
 
 
+def test_evaluate_retrieval_fixtures_does_not_mutate_retrieval_counters(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures
+    from agent_memory.storage.sqlite import connect
+
+    db_path = tmp_path / "retrieval-eval-readonly.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = _write_fixture_file(tmp_path, seeded_ids)
+
+    evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path)
+
+    with connect(db_path) as connection:
+        fact_row = connection.execute(
+            "SELECT retrieval_count, reinforcement_count, last_accessed_at FROM facts WHERE id = ?",
+            (seeded_ids["fact_id"],),
+        ).fetchone()
+        procedure_row = connection.execute(
+            "SELECT retrieval_count, reinforcement_count, last_accessed_at FROM procedures WHERE id = ?",
+            (seeded_ids["procedure_id"],),
+        ).fetchone()
+
+    assert dict(fact_row) == {"retrieval_count": 0, "reinforcement_count": 0.0, "last_accessed_at": None}
+    assert dict(procedure_row) == {"retrieval_count": 0, "reinforcement_count": 0.0, "last_accessed_at": None}
+
+
+
 def test_checked_in_retrieval_eval_examples_validate_as_fixture_models() -> None:
     from agent_memory.core.models import RetrievalEvalFixture
 
