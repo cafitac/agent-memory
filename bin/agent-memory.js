@@ -42,6 +42,13 @@ function pythonPackageSpec() {
   return PYTHON_PACKAGE_NAME;
 }
 
+function readStdinForChild() {
+  if (process.stdin.isTTY) {
+    return undefined;
+  }
+  return readFileSync(0, 'utf8');
+}
+
 function buildInvocation(args) {
   const forcedPython = process.env.AGENT_MEMORY_PYTHON_EXECUTABLE;
   if (forcedPython) {
@@ -86,6 +93,7 @@ function main() {
   }
 
   const child = spawnSync(invocation.command, invocation.args, {
+    input: readStdinForChild(),
     stdio: 'pipe',
     encoding: 'utf8',
     env: process.env,

@@ -33,8 +33,18 @@ def test_published_install_command_matrix_pins_exact_package_versions() -> None:
         "@cafitac/agent-memory@1.2.3",
         "agent-memory",
     ]
+    assert by_name["npm-exec-hook"][:6] == [
+        "npm",
+        "exec",
+        "--yes",
+        "--package",
+        "@cafitac/agent-memory@1.2.3",
+        "agent-memory",
+    ]
     assert by_name["uvx-bootstrap"][:3] == ["uvx", "--from", "cafitac-agent-memory==1.2.3"]
+    assert by_name["uvx-hook"][:3] == ["uvx", "--from", "cafitac-agent-memory==1.2.3"]
     assert by_name["pipx-bootstrap"][:6] == ["pipx", "run", "--python", "/usr/bin/python3.11", "--spec", "cafitac-agent-memory==1.2.3"]
+    assert by_name["pipx-hook"][:6] == ["pipx", "run", "--python", "/usr/bin/python3.11", "--spec", "cafitac-agent-memory==1.2.3"]
 
 
 def test_published_install_command_matrix_can_skip_pipx() -> None:
@@ -46,9 +56,11 @@ def test_published_install_command_matrix_can_skip_pipx() -> None:
         "npm-exec-help",
         "npm-exec-bootstrap",
         "npm-exec-doctor",
+        "npm-exec-hook",
         "uvx-help",
         "uvx-bootstrap",
         "uvx-doctor",
+        "uvx-hook",
     }
 
 
@@ -89,9 +101,23 @@ def test_published_install_script_appends_isolated_bootstrap_paths(tmp_path: Pat
 def test_stateful_smoke_commands_share_surface_directories() -> None:
     assert smoke_published_install._stateful_surface_name(SmokeCommand("npm-exec-bootstrap", [])) == "npm-exec"
     assert smoke_published_install._stateful_surface_name(SmokeCommand("npm-exec-doctor", [])) == "npm-exec"
+    assert smoke_published_install._stateful_surface_name(SmokeCommand("npm-exec-hook", [])) == "npm-exec"
     assert smoke_published_install._stateful_surface_name(SmokeCommand("uvx-bootstrap", [])) == "uvx"
     assert smoke_published_install._stateful_surface_name(SmokeCommand("uvx-doctor", [])) == "uvx"
+    assert smoke_published_install._stateful_surface_name(SmokeCommand("uvx-hook", [])) == "uvx"
     assert smoke_published_install._stateful_surface_name(SmokeCommand("npm-registry-version", [])) == "npm-registry-version"
+
+
+def test_published_install_script_appends_isolated_hook_paths(tmp_path: Path) -> None:
+    command = SmokeCommand("npm-exec-hook", ["npm", "exec", "--yes", "--package", "@cafitac/agent-memory@1.2.3", "agent-memory", "--", "hermes-pre-llm-hook"])
+
+    argv = smoke_published_install._command_with_paths(
+        command,
+        db_path=tmp_path / "memory.db",
+        config_path=tmp_path / "hermes.yaml",
+    )
+
+    assert argv[-1:] == [str(tmp_path / "memory.db")]
 
 
 def test_published_install_script_rejects_bad_doctor_payload() -> None:

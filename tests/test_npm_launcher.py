@@ -5,6 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from agent_memory.core.curation import approve_fact, create_candidate_fact
+from agent_memory.core.ingestion import ingest_source_text
+from agent_memory.storage.sqlite import initialize_database
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WRAPPER_PATH = REPO_ROOT / "bin" / "agent-memory.js"
@@ -88,6 +92,62 @@ def test_npm_wrapper_help_passthrough(tmp_path: Path) -> None:
     assert "usage: agent-memory" in result.stdout
     assert "hermes-bootstrap" in result.stdout
     assert "hermes-doctor" in result.stdout
+
+
+def test_npm_wrapper_forwards_stdin_to_hermes_hook(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    db_path = tmp_path / "wrapper-hermes-hook.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="NPM launcher stdin forwarding uses target NPM_STDIN_OK.",
+        metadata={"project": "npm-wrapper"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="NPM launcher stdin forwarding",
+        predicate="target",
+        object_ref_or_value="NPM_STDIN_OK",
+        evidence_ids=[source.id],
+        scope="project:npm-wrapper",
+        confidence=0.96,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    env = _wrapper_env(home)
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "tool_name": None,
+        "tool_input": None,
+        "session_id": "npm-wrapper-stdin-test",
+        "cwd": str(tmp_path),
+        "extra": {"user_message": "What target does NPM launcher stdin forwarding use?"},
+    }
+
+    result = subprocess.run(
+        [
+            "node",
+            str(WRAPPER_PATH),
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:npm-wrapper",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "NPM_STDIN_OK" in payload["context"]
 
 
 def test_npm_wrapper_pins_python_package_to_npm_version(tmp_path: Path) -> None:
