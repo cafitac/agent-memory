@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import re
 import sqlite3
 from datetime import datetime
 from importlib.resources import files
@@ -15,6 +17,7 @@ from agent_memory.core.models import (
     MemoryStatusTransition,
     Procedure,
     Relation,
+    RetrievalObservation,
     RetrievalTraceEntry,
     SourceRecord,
 )
@@ -107,6 +110,30 @@ def initialize_database(db_path: Path | str) -> None:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(status, scope, importance_score)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS retrieval_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                surface TEXT NOT NULL,
+                query_sha256 TEXT NOT NULL,
+                query_preview TEXT,
+                preferred_scope TEXT,
+                limit_value INTEGER NOT NULL,
+                statuses_json TEXT NOT NULL DEFAULT '["approved"]',
+                retrieved_memory_refs_json TEXT NOT NULL DEFAULT '[]',
+                top_memory_ref TEXT,
+                response_mode TEXT CHECK (response_mode IN ('direct', 'cautious', 'verify_first')),
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at)"
         )
 
 
@@ -767,6 +794,88 @@ def record_memory_retrieval(
         )
 
 
+_SECRET_ASSIGNMENT_PATTERN = re.compile(r"(?i)\b(password|passwd|pwd|token|api[_-]?key|secret|credential|connection[_-]?string)\s*[:=]\s*\S+")
+_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+\-/=]+")
+_LONG_TOKEN_PATTERN = re.compile(r"\b[A-Za-z0-9_\-]{24,}\b")
+
+
+def _redacted_query_preview(query: str, *, max_chars: int = 120) -> str:
+    preview = _SECRET_ASSIGNMENT_PATTERN.sub(lambda match: f"{match.group(1)}=[REDACTED]", query)
+    preview = _BEARER_PATTERN.sub("Bearer [REDACTED]", preview)
+    preview = _LONG_TOKEN_PATTERN.sub("[REDACTED]", preview)
+    preview = " ".join(preview.split())
+    if len(preview) > max_chars:
+        return f"{preview[: max_chars - 1]}…"
+    return preview
+
+
+def _memory_ref(memory_type: str, memory_id: int) -> str:
+    return f"{memory_type}:{memory_id}"
+
+
+def record_retrieval_observation(
+    db_path: Path | str,
+    *,
+    surface: str,
+    query: str,
+    preferred_scope: str | None,
+    limit: int,
+    statuses: tuple[MemoryStatus, ...],
+    retrieval_trace: list[RetrievalTraceEntry],
+    response_mode: str | None,
+    metadata: dict[str, Any] | None = None,
+) -> RetrievalObservation:
+    retrieved_memory_refs = [_memory_ref(trace.memory_type, trace.memory_id) for trace in retrieval_trace]
+    top_memory_ref = retrieved_memory_refs[0] if retrieved_memory_refs else None
+    query_sha256 = hashlib.sha256(query.encode("utf-8")).hexdigest()
+    with connect(db_path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                surface,
+                query_sha256,
+                query_preview,
+                preferred_scope,
+                limit_value,
+                statuses_json,
+                retrieved_memory_refs_json,
+                top_memory_ref,
+                response_mode,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                surface,
+                query_sha256,
+                _redacted_query_preview(query),
+                preferred_scope,
+                limit,
+                json.dumps(list(statuses)),
+                json.dumps(retrieved_memory_refs),
+                top_memory_ref,
+                response_mode,
+                json.dumps(metadata or {}, sort_keys=True),
+            ),
+        )
+        row = connection.execute("SELECT * FROM retrieval_observations WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return retrieval_observation_from_row(row)
+
+
+def list_retrieval_observations(db_path: Path | str, *, limit: int = 50) -> list[RetrievalObservation]:
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM retrieval_observations
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [retrieval_observation_from_row(row) for row in rows]
+
+
 def _search_model_rows_with_trace(
     db_path: Path | str,
     *,
@@ -1158,6 +1267,23 @@ def memory_status_transition_from_row(row: sqlite3.Row) -> MemoryStatusTransitio
         actor=row["actor"],
         evidence_ids=json.loads(row["evidence_ids_json"]),
         created_at=row["created_at"],
+    )
+
+
+def retrieval_observation_from_row(row: sqlite3.Row) -> RetrievalObservation:
+    return RetrievalObservation(
+        id=row["id"],
+        created_at=row["created_at"],
+        surface=row["surface"],
+        query_sha256=row["query_sha256"],
+        query_preview=row["query_preview"],
+        preferred_scope=row["preferred_scope"],
+        limit=row["limit_value"],
+        statuses=json.loads(row["statuses_json"]),
+        retrieved_memory_refs=json.loads(row["retrieved_memory_refs_json"]),
+        top_memory_ref=row["top_memory_ref"],
+        response_mode=row["response_mode"],
+        metadata=json.loads(row["metadata_json"]),
     )
 
 

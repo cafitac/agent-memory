@@ -15,6 +15,7 @@ from agent_memory.core.models import (
 from agent_memory.storage.sqlite import (
     get_source_records_by_ids,
     record_memory_retrieval,
+    record_retrieval_observation,
     search_ranked_approved_episodes,
     search_ranked_approved_facts,
     search_ranked_approved_procedures,
@@ -289,6 +290,8 @@ def retrieve_memory_packet(
     preferred_scope: str | None = None,
     statuses: tuple[MemoryStatus, ...] = ("approved",),
     record_retrievals: bool = True,
+    observation_surface: str | None = None,
+    observation_metadata: dict[str, object] | None = None,
 ) -> MemoryPacket:
     if statuses == ("approved",):
         ranked_facts = search_ranked_approved_facts(
@@ -431,6 +434,22 @@ def retrieve_memory_packet(
         for episode in episodic_context:
             if episode.status == "approved":
                 record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
+
+    if observation_surface:
+        try:
+            record_retrieval_observation(
+                db_path,
+                surface=observation_surface,
+                query=query,
+                preferred_scope=preferred_scope,
+                limit=limit,
+                statuses=statuses,
+                retrieval_trace=retrieval_trace,
+                response_mode=decision_summary.recommended_answer_mode if decision_summary is not None else None,
+                metadata=observation_metadata,
+            )
+        except Exception:
+            pass
 
     return MemoryPacket(
         query=query,

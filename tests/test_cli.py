@@ -97,6 +97,75 @@ def test_python_module_cli_init_creates_database(tmp_path: Path) -> None:
 
 
 
+def test_python_module_cli_retrieve_observe_records_secret_safe_local_observation(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieve-observation.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Observation smoke target phrase appears in curated memory records.",
+        metadata={"project": "observation-smoke"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Observation smoke",
+        predicate="target_phrase",
+        object_ref_or_value="OBSERVATION_OK",
+        evidence_ids=[source.id],
+        scope="project:observation-smoke",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    secret_query = "What is the target phrase? password=SUPERSECRET token=abc123"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            secret_query,
+            "--preferred-scope",
+            "project:observation-smoke",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    list_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "list",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert list_result.returncode == 0, list_result.stderr
+    payload = json.loads(list_result.stdout)
+    assert payload["kind"] == "retrieval_observations"
+    assert payload["observations"][0]["surface"] == "cli-test"
+    assert payload["observations"][0]["query_sha256"]
+    assert payload["observations"][0]["query_text"] is None
+    assert payload["observations"][0]["retrieved_memory_refs"] == [f"fact:{fact.id}"]
+    assert payload["observations"][0]["top_memory_ref"] == f"fact:{fact.id}"
+    assert "SUPERSECRET" not in list_result.stdout
+    assert "abc123" not in list_result.stdout
+
+
 def test_python_module_cli_retrieve_defaults_to_approved_and_hides_disputed_content(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieve-approved-only.db"
     initialize_database(db_path)
@@ -1018,6 +1087,27 @@ def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_
     assert "Top memory: fact" in hook_response["context"]
     assert "HH-###" not in hook_response["context"]  # compact target context, not raw fact dump
     assert "Reason codes:" not in hook_response["context"]
+
+    observations_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "list",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert observations_result.returncode == 0, observations_result.stderr
+    observations_payload = json.loads(observations_result.stdout)
+    observation = observations_payload["observations"][0]
+    assert observation["surface"] == "hermes-pre-llm-hook"
+    assert observation["retrieved_memory_refs"] == [f"fact:{fact.id}"]
+    assert observation["metadata"] == {"hook_event_name": "pre_llm_call"}
 
 
 

@@ -375,6 +375,8 @@ def build_pre_llm_hook_context(
             query=user_message,
             limit=options.limit,
             preferred_scope=effective_preferred_scope,
+            observation_surface="hermes-pre-llm-hook",
+            observation_metadata={"hook_event_name": payload.hook_event_name},
         )
         context = prepare_hermes_memory_context(
             packet,
