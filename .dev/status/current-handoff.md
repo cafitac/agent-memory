@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 11:06 KST
+Last updated: 2026-04-30 11:17 KST
 
 ## Trigger for the next session
 
@@ -19,18 +19,18 @@ read this file first. Do not ask the user to restate context. Answer from the "R
 
 ## Ready-to-say answer
 
-지금 다음으로 할 일은 agent-memory의 외부 사용자 신뢰 표면을 더 강화하는 마무리 slice야.
+지금 다음으로 할 일은 agent-memory의 외부 사용자 신뢰를 실제 사용자 피드백/품질 관측으로 이어가는 다음 slice야.
 
-현재 v0.1.16까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, retrieval-eval failure triage, published package smoke까지 완료됐어.
+현재 v0.1.17까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, retrieval-eval failure triage, OSS trust README/SECURITY/PRIVACY/CONTRIBUTING/community templates, published package smoke까지 완료됐어.
 
-현재 진행 중인 브랜치는 `docs/oss-trust-onboarding-polish`이고 목표는 외부 사용자가 README만 보고 설치/검증/삭제/보안 모델을 이해할 수 있게 만드는 거야.
+다음 1순위는 공개 이후 사용자가 바로 겪을 수 있는 friction을 줄이는 거야. 추천 slice는 `ci: automate published install smoke matrix` 또는 `feat: add conservative Hermes memory preset` 중 하나야.
 
 진행 순서:
-1. `~/Project/agent-memory/.worktrees/oss-trust-onboarding-polish`에서 상태를 확인한다.
-2. README, SECURITY.md, PRIVACY.md, CONTRIBUTING.md, issue/PR templates가 원하는 범위를 담는지 점검한다.
-3. focused/full tests와 release smoke를 다시 통과시킨다.
-4. PR/CI/merge 후 auto-release/publish를 확인한다.
-5. 외부 temp cwd에서 published smoke를 다시 수행한다.
+1. `/Users/reddit/Project/agent-memory`에서 main이 `v0.1.17`인지 확인한다.
+2. 열린 PR/실패한 Actions가 없는지 확인한다.
+3. 다음 slice를 하나 고른다: published install smoke 자동화 또는 Hermes 보수적 preset.
+4. 작은 PR로 구현하고 focused/full tests를 통과시킨다.
+5. PR/CI/merge 후 auto-release/publish와 published smoke를 확인한다.
 
 ## Current repo state
 
@@ -50,13 +50,12 @@ Expected GitHub identity:
 Current verified base:
 
 - branch: `main`
-- HEAD: `8337a16 chore: release v0.1.16 [skip release]`
-- tag: `v0.1.16`
-- PR #10 merged: `feat: add retrieval eval triage details`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.16`
-- npm: `@cafitac/agent-memory@0.1.16`
-- PyPI: `cafitac-agent-memory==0.1.16`
-- active docs/trust branch: `docs/oss-trust-onboarding-polish` in `.worktrees/oss-trust-onboarding-polish`
+- HEAD: `39477b8 chore: release v0.1.17 [skip release]`
+- tag: `v0.1.17`
+- PR #11 merged: `docs: improve OSS trust and onboarding`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.17`
+- npm: `@cafitac/agent-memory@0.1.17`
+- PyPI: `cafitac-agent-memory==0.1.17`
 
 Expected local untracked artifacts to preserve:
 
@@ -82,7 +81,7 @@ Do not delete or commit these unless the user explicitly asks.
   - `[skip release]` release commit
   - annotated tag
   - explicit publish workflow dispatch
-- Verified through `v0.1.15`:
+- Verified through `v0.1.17`:
   - GitHub Release
   - npm package
   - PyPI package
@@ -135,79 +134,46 @@ Do not delete or commit these unless the user explicitly asks.
 - Hook failure returns `{}` and exit 0 instead of breaking the user prompt flow.
 - This matters for always-on memory use.
 
-## Immediate next work: OSS trust and onboarding polish
+## Immediate next work: choose the next external-confidence slice
 
 Goal:
 
-Make the repository credible to external users before they read internals: clear README, install/rollback path, privacy/security posture, contribution path, and issue/PR templates.
+After v0.1.17, the repo has a credible external trust surface. The next work should convert that trust into repeated evidence from real install paths or safer always-on defaults.
 
-Active branch/worktree:
+Recommended next options:
 
-```bash
-cd /Users/reddit/Project/agent-memory/.worktrees/oss-trust-onboarding-polish
-```
+1. `test: automate published install smoke matrix`
+   - automate npm/npx/uvx/pipx smoke checks in a script or workflow
+   - verify exact published package versions outside the source checkout
+   - fail clearly on launcher/runtime resolver regressions
 
-Work completed in this slice so far:
+2. `feat: add Hermes conservative memory preset`
+   - provide a named low-risk preset for always-on memory injection
+   - keep prompt budgets small
+   - approved-only retrieval by default
+   - document how users can opt into wider context
 
-1. Rewrote the README top-level user journey:
-   - badges for CI/npm/PyPI/Python/license
-   - 30-second npm install
-   - first-memory example
-   - Hermes quickstart
-   - Codex/Claude prompt command examples
-   - data/privacy model
-   - uninstall/rollback
-   - retrieval-eval summary
-   - maturity and known limitations
+3. `ci: run retrieval eval advisory report on main`
+   - run checked-in retrieval fixtures on main as an advisory signal
+   - publish/report failures without prematurely blocking docs-only releases
+   - keep JSON/text reports available for triage
 
-2. Added external trust docs:
-   - `LICENSE`
-   - `SECURITY.md`
-   - `PRIVACY.md`
-   - `CONTRIBUTING.md`
-
-3. Added GitHub community templates:
-   - `.github/ISSUE_TEMPLATE/bug_report.yml`
-   - `.github/ISSUE_TEMPLATE/feature_request.yml`
-   - `.github/ISSUE_TEMPLATE/config.yml`
-   - `.github/pull_request_template.md`
-
-4. Added docs contract coverage:
-   - `tests/test_repository_trust_docs.py`
-   - keeps README linked to trust docs and install surfaces
-
-Verification already run locally in the worktree:
+Suggested first pick:
 
 ```bash
-uv run pytest tests/test_npm_launcher.py::test_user_docs_show_installed_agent_memory_command_after_npm_install tests/test_repository_trust_docs.py -q
-uv run pytest tests/ -q
-uv run python scripts/check_release_metadata.py
-uv run python scripts/smoke_release_readiness.py
-npm pack --dry-run
-git diff --check
+cd /Users/reddit/Project/agent-memory
+HOME=/Users/reddit gh auth switch --hostname github.com --user cafitac || true
+git checkout main
+HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git pull --ff-only
+git checkout -b test/published-install-smoke-matrix
 ```
 
-Latest observed result:
-- focused docs/npm tests: `3 passed`
-- full tests: `134 passed`
-- release metadata: OK, all versions `0.1.16`
-- release smoke: OK
-- npm pack dry-run: OK
-- diff check: OK
-
-Remaining steps:
-
-```bash
-git status -sb
-git add README.md SECURITY.md PRIVACY.md CONTRIBUTING.md LICENSE docs/install-smoke.md tests/test_repository_trust_docs.py .github/ISSUE_TEMPLATE .github/pull_request_template.md .dev/status/current-handoff.md
-git commit -m "docs: improve OSS trust and onboarding"
-HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git push -u origin HEAD
-HOME=/Users/reddit gh pr create --repo cafitac/agent-memory --title "docs: improve OSS trust and onboarding" --body-file /tmp/agent-memory-oss-trust-pr.md
-HOME=/Users/reddit gh pr checks <PR_NUMBER> --repo cafitac/agent-memory --watch
-HOME=/Users/reddit gh pr merge <PR_NUMBER> --repo cafitac/agent-memory --squash --delete-branch
-```
-
-After merge, verify auto-release/publish and external published smoke if a release is cut.
+Acceptance for the next slice:
+- local focused tests pass
+- full tests pass
+- CI passes on PR
+- release workflow still avoids recursive publish loops
+- published-install smoke remains verified after merge if a release is cut
 
 ## Sequential roadmap to final goal
 
