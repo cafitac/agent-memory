@@ -51,11 +51,12 @@ def _read_package_version(repo_root: Path) -> str:
     return version
 
 
-def _run(command: Sequence[str], *, cwd: Path, env: dict[str, str], timeout: int) -> PublishedSmokeStep:
+def _run(command: Sequence[str], *, cwd: Path, env: dict[str, str], timeout: int, stdin: str | None = None) -> PublishedSmokeStep:
     result = subprocess.run(
         list(command),
         cwd=cwd,
         env=env,
+        input=stdin,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -98,6 +99,12 @@ def _assert_doctor_ok(step: PublishedSmokeStep) -> None:
             raise RuntimeError(f"doctor field {key} was not true for {step.name}: {step.stdout}")
 
 
+def _assert_hook_ok(step: PublishedSmokeStep) -> None:
+    payload = _parse_json(step)
+    if not isinstance(payload.get("context"), str):
+        raise RuntimeError(f"hook did not emit a context string for {step.name}: {step.stdout}")
+
+
 def _assert_registry_version(step: PublishedSmokeStep, version: str) -> None:
     if step.returncode != 0:
         raise RuntimeError(f"registry version lookup failed: {step.name}\n{step.stderr}")
@@ -115,9 +122,11 @@ def build_command_matrix(version: str, *, include_pipx: bool = True, python_exec
         SmokeCommand("npm-exec-help", ["npm", "exec", "--yes", "--package", npm_spec, "agent-memory", "--", "--help"]),
         SmokeCommand("npm-exec-bootstrap", ["npm", "exec", "--yes", "--package", npm_spec, "agent-memory", "--", "bootstrap"]),
         SmokeCommand("npm-exec-doctor", ["npm", "exec", "--yes", "--package", npm_spec, "agent-memory", "--", "doctor"]),
+        SmokeCommand("npm-exec-hook", ["npm", "exec", "--yes", "--package", npm_spec, "agent-memory", "--", "hermes-pre-llm-hook"]),
         SmokeCommand("uvx-help", ["uvx", "--from", python_spec, "agent-memory", "--help"]),
         SmokeCommand("uvx-bootstrap", ["uvx", "--from", python_spec, "agent-memory", "bootstrap"]),
         SmokeCommand("uvx-doctor", ["uvx", "--from", python_spec, "agent-memory", "doctor"]),
+        SmokeCommand("uvx-hook", ["uvx", "--from", python_spec, "agent-memory", "hermes-pre-llm-hook"]),
     ]
     if include_pipx:
         commands.extend(
@@ -125,6 +134,7 @@ def build_command_matrix(version: str, *, include_pipx: bool = True, python_exec
                 SmokeCommand("pipx-help", ["pipx", "run", "--python", pipx_python, "--spec", python_spec, "agent-memory", "--help"]),
                 SmokeCommand("pipx-bootstrap", ["pipx", "run", "--python", pipx_python, "--spec", python_spec, "agent-memory", "bootstrap"]),
                 SmokeCommand("pipx-doctor", ["pipx", "run", "--python", pipx_python, "--spec", python_spec, "agent-memory", "doctor"]),
+                SmokeCommand("pipx-hook", ["pipx", "run", "--python", pipx_python, "--spec", python_spec, "agent-memory", "hermes-pre-llm-hook"]),
             ]
         )
     return commands
@@ -143,7 +153,24 @@ def _stateful_surface_name(command: SmokeCommand) -> str:
 def _command_with_paths(command: SmokeCommand, *, db_path: Path, config_path: Path) -> list[str]:
     if command.name.endswith("bootstrap") or command.name.endswith("doctor"):
         return [*command.command, str(db_path), "--config-path", str(config_path)]
+    if command.name.endswith("hook"):
+        return [*command.command, str(db_path)]
     return command.command
+
+
+def _stdin_for_command(command: SmokeCommand) -> str | None:
+    if not command.name.endswith("hook"):
+        return None
+    return json.dumps(
+        {
+            "hook_event_name": "pre_llm_call",
+            "tool_name": None,
+            "tool_input": None,
+            "session_id": "published-install-smoke",
+            "cwd": "/tmp",
+            "extra": {"user_message": "published install smoke hook stdin forwarding check"},
+        }
+    )
 
 
 def _tool_is_available(command: SmokeCommand) -> bool:
@@ -178,6 +205,7 @@ def _run_once(version: str, *, timeout: int, include_pipx: bool) -> dict[str, ob
                 cwd=root,
                 env=env,
                 timeout=timeout,
+                stdin=_stdin_for_command(command),
             )
             steps.append(step)
 
@@ -191,6 +219,8 @@ def _run_once(version: str, *, timeout: int, include_pipx: bool) -> dict[str, ob
                     raise RuntimeError(f"bootstrap did not initialize db for {command.name}: {step.stdout}")
             elif command.name.endswith("doctor"):
                 _assert_doctor_ok(step)
+            elif command.name.endswith("hook"):
+                _assert_hook_ok(step)
 
             command_results[command.name] = {
                 "returncode": step.returncode,
