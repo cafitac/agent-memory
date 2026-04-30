@@ -10,6 +10,7 @@ from agent_memory.core.models import (
     RetrievalEvalDeltaSummary,
     RetrievalEvalExpected,
     RetrievalEvalFixture,
+    RetrievalEvalMemoryDetail,
     RetrievalEvalMemorySelector,
     RetrievalEvalMemoryTypeDeltaSummary,
     RetrievalEvalMemoryTypeSummary,
@@ -201,6 +202,88 @@ def _retrieved_ids_for_task_result(packet) -> dict[str, list[int]]:
     }
 
 
+def _details_by_type(db_path: Path, ids_by_type: dict[str, list[int]]) -> dict[str, list[RetrievalEvalMemoryDetail]]:
+    facts_by_id = {fact.id: fact for fact in list_approved_facts(db_path)}
+    procedures_by_id = {procedure.id: procedure for procedure in list_approved_procedures(db_path)}
+    episodes_by_id = {episode.id: episode for episode in list_approved_episodes(db_path)}
+    return {
+        "facts": [_detail_for_fact(facts_by_id[memory_id]) for memory_id in ids_by_type.get("facts", []) if memory_id in facts_by_id],
+        "procedures": [
+            _detail_for_procedure(procedures_by_id[memory_id])
+            for memory_id in ids_by_type.get("procedures", [])
+            if memory_id in procedures_by_id
+        ],
+        "episodes": [
+            _detail_for_episode(episodes_by_id[memory_id])
+            for memory_id in ids_by_type.get("episodes", [])
+            if memory_id in episodes_by_id
+        ],
+    }
+
+
+def _detail_for_fact(fact) -> RetrievalEvalMemoryDetail:
+    return RetrievalEvalMemoryDetail(
+        id=fact.id,
+        label=fact.subject_ref,
+        scope=fact.scope,
+        status=fact.status,
+        snippet=f"{fact.subject_ref} {fact.predicate} {fact.object_ref_or_value}",
+    )
+
+
+def _detail_for_procedure(procedure) -> RetrievalEvalMemoryDetail:
+    return RetrievalEvalMemoryDetail(
+        id=procedure.id,
+        label=procedure.name,
+        scope=procedure.scope,
+        status=procedure.status,
+        snippet=f"{procedure.name}: {procedure.trigger_context}; steps: {'; '.join(procedure.steps[:2])}",
+    )
+
+
+def _detail_for_episode(episode) -> RetrievalEvalMemoryDetail:
+    return RetrievalEvalMemoryDetail(
+        id=episode.id,
+        label=episode.title,
+        scope=episode.scope,
+        status=episode.status,
+        snippet=f"{episode.title}: {episode.summary}",
+    )
+
+
+def _policy_signals_by_retrieved_id(packet) -> dict[tuple[str, int], list[str]]:
+    signals: dict[tuple[str, int], list[str]] = {}
+    trust_by_key = {(trust.memory_type, trust.memory_id): trust for trust in packet.trust_summaries}
+    decision = packet.decision_summary
+    if decision is None:
+        return signals
+    key = (decision.target_memory_type, decision.target_memory_id)
+    trust = trust_by_key.get(key)
+    hidden = "yes" if decision.has_hidden_alternatives else "no"
+    item_signals = [
+        f"mode={decision.recommended_answer_mode}",
+        f"trust={trust.trust_band if trust is not None else decision.trust_band}",
+        f"hidden_alternatives={hidden}",
+        f"reasons={','.join(decision.reason_codes)}",
+    ]
+    signals[key] = item_signals
+    return signals
+
+
+def _with_policy_signals(
+    details: dict[str, list[RetrievalEvalMemoryDetail]],
+    policy_signals_by_id: dict[tuple[str, int], list[str]],
+) -> dict[str, list[RetrievalEvalMemoryDetail]]:
+    singular = {"facts": "fact", "procedures": "procedure", "episodes": "episode"}
+    return {
+        memory_type: [
+            detail.model_copy(update={"policy_signals": policy_signals_by_id.get((singular[memory_type], detail.id), [])})
+            for detail in details[memory_type]
+        ]
+        for memory_type in _MEMORY_TYPES
+    }
+
+
 def _tokenize_query(query: str) -> list[str]:
     return [token.lower() for token in query.replace("?", " ").replace(".", " ").split() if token.strip()]
 
@@ -382,6 +465,12 @@ def _evaluate_task(
         task=task,
         retrieved_ids=_retrieved_ids_for_task_result(packet),
     )
+    retrieved_details = _with_policy_signals(
+        _details_by_type(db_path, primary_metrics.retrieved_ids),
+        _policy_signals_by_retrieved_id(packet),
+    )
+    expected_details = _details_by_type(db_path, _expected_to_dict(task.expected))
+    avoid_hit_details = _details_by_type(db_path, primary_metrics.avoid_hits)
 
     baseline = None
     delta = None
@@ -415,6 +504,9 @@ def _evaluate_task(
         missing_expected=primary_metrics.missing_expected,
         avoid_hits=primary_metrics.avoid_hits,
         retrieved_ids=primary_metrics.retrieved_ids,
+        retrieved_details=retrieved_details,
+        expected_details=expected_details,
+        avoid_hit_details=avoid_hit_details,
         pass_=primary_metrics.pass_,
         baseline=baseline,
         delta=delta,
@@ -515,12 +607,34 @@ def _format_pass_label(passed: bool) -> str:
     return "pass" if passed else "fail"
 
 
+def _append_detail_section(
+    lines: list[str],
+    title: str,
+    details_by_type: dict[str, list[RetrievalEvalMemoryDetail]],
+) -> None:
+    details = [detail for memory_type in _MEMORY_TYPES for detail in details_by_type.get(memory_type, [])]
+    if not details:
+        return
+    singular = {"facts": "fact", "procedures": "procedure", "episodes": "episode"}
+    lines.append(f"    {title}:")
+    for memory_type in _MEMORY_TYPES:
+        for detail in details_by_type.get(memory_type, []):
+            lines.append(
+                f"      {singular[memory_type]} #{detail.id} [scope={detail.scope} status={detail.status}] {detail.snippet}"
+            )
+            if detail.policy_signals:
+                lines.append(f"        policy: {' '.join(detail.policy_signals)}")
+
+
 def _append_task_detail(lines: list[str], task: RetrievalEvalTaskResult, *, include_current: bool) -> None:
     lines.append(f"  - {task.task_id}")
     lines.append(f"    query: {task.query}")
     if include_current:
         lines.append(f"    missing: {_format_id_map(task.missing_expected)}")
         lines.append(f"    avoid: {_format_id_map(task.avoid_hits)}")
+        _append_detail_section(lines, "retrieved details", task.retrieved_details)
+        _append_detail_section(lines, "expected details", task.expected_details)
+        _append_detail_section(lines, "avoid-hit details", task.avoid_hit_details)
     if task.baseline is not None:
         lines.append(f"    baseline: {_format_pass_label(task.baseline.pass_)}")
         lines.append(f"    baseline missing: {_format_id_map(task.baseline.missing_expected)}")

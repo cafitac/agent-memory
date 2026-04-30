@@ -617,6 +617,13 @@ def test_render_retrieval_eval_text_report_shows_failed_task_details(tmp_path: P
     assert "    avoid: facts=[1]" in report
     assert "    baseline: fail" in report
     assert "    query: What command does Project M1 use for KB export?" in report
+    assert "    retrieved details:" in report
+    assert "      fact #1 [scope=project:m1 status=approved] Project M1 kb_export_command agent-memory kb export" in report
+    assert "        policy: mode=direct trust=high hidden_alternatives=no reasons=top_ranked_memory,no_hidden_alternatives_detected" in report
+    assert "    expected details:" in report
+    assert "      fact #2 [scope=project:drift status=approved] Project Drift branch_pattern ZZ-999" in report
+    assert "    avoid-hit details:" in report
+    assert "      fact #1 [scope=project:m1 status=approved] Project M1 kb_export_command agent-memory kb export" in report
 
 
 def test_render_retrieval_eval_text_report_shows_baseline_weak_spots(tmp_path: Path) -> None:
@@ -634,6 +641,34 @@ def test_render_retrieval_eval_text_report_shows_baseline_weak_spots(tmp_path: P
     assert "    baseline missing: none" in report
     assert "    baseline avoid: facts=[" in report
     assert "current regressions vs baseline: none" in report
+
+
+def test_evaluate_retrieval_fixtures_emits_triage_detail_contract(tmp_path: Path) -> None:
+    from agent_memory.core.retrieval_eval import evaluate_retrieval_fixtures
+
+    db_path = tmp_path / "retrieval-eval-triage-contract.db"
+    seeded_ids = _seed_retrieval_eval_db(db_path)
+    fixture_path = tmp_path / "retrieval-eval-triage-contract.json"
+    payload = _fixture_payload(seeded_ids)
+    payload["tasks"] = [payload["tasks"][0]]
+    payload["tasks"][0]["expected"]["facts"] = [seeded_ids["drift_fact_id"]]
+    payload["tasks"][0]["avoid"]["facts"] = [seeded_ids["fact_id"]]
+    fixture_path.write_text(json.dumps(payload, indent=2))
+
+    result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path)
+    task = result.results[0]
+
+    assert task.retrieved_details["facts"][0].id == seeded_ids["fact_id"]
+    assert task.retrieved_details["facts"][0].snippet == "Project M1 kb_export_command agent-memory kb export"
+    assert task.retrieved_details["facts"][0].policy_signals == [
+        "mode=direct",
+        "trust=high",
+        "hidden_alternatives=no",
+        "reasons=top_ranked_memory,no_hidden_alternatives_detected",
+    ]
+    assert task.expected_details["facts"][0].id == seeded_ids["drift_fact_id"]
+    assert task.expected_details["facts"][0].snippet == "Project Drift branch_pattern ZZ-999"
+    assert task.avoid_hit_details["facts"][0].id == seeded_ids["fact_id"]
 
 
 def test_cli_eval_retrieval_text_format_outputs_human_summary(tmp_path: Path) -> None:

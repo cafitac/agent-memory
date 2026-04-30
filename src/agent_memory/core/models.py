@@ -247,6 +247,15 @@ class RetrievalEvalFixture(BaseModel):
     tasks: list[RetrievalEvalTask] = Field(default_factory=list)
 
 
+class RetrievalEvalMemoryDetail(BaseModel):
+    id: int
+    label: str
+    scope: str | None = None
+    status: MemoryStatus
+    snippet: str
+    policy_signals: list[str] = Field(default_factory=list)
+
+
 class RetrievalEvalRunMetrics(BaseModel):
     mode: str
     expected_hits: dict[str, list[int]] = Field(default_factory=dict)
@@ -291,6 +300,9 @@ class RetrievalEvalTaskResult(BaseModel):
     missing_expected: dict[str, list[int]] = Field(default_factory=dict)
     avoid_hits: dict[str, list[int]] = Field(default_factory=dict)
     retrieved_ids: dict[str, list[int]] = Field(default_factory=dict)
+    retrieved_details: dict[str, list[RetrievalEvalMemoryDetail]] = Field(default_factory=dict)
+    expected_details: dict[str, list[RetrievalEvalMemoryDetail]] = Field(default_factory=dict)
+    avoid_hit_details: dict[str, list[RetrievalEvalMemoryDetail]] = Field(default_factory=dict)
     pass_: bool = Field(default=False, serialization_alias="pass")
     baseline: RetrievalEvalRunMetrics | None = None
     delta: RetrievalEvalDelta | None = None
