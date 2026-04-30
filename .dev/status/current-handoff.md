@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 21:49 KST
+Last updated: 2026-04-30 22:21 KST
 
 ## Trigger for the next session
 
@@ -16,9 +16,9 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-지금 agent-memory는 OSS 기본 메모리 레이어 신뢰도 작업 Priority 1~4의 주요 truth lifecycle 조각과 retrieval-eval read-only hardening을 v0.1.31까지 완료했고, 현재 slice는 protected `main` 때문에 반복되던 release metadata sync 수동 절차를 자동 fallback PR 흐름으로 줄이는 작업이야.
+지금 agent-memory는 OSS 기본 메모리 레이어 신뢰도 작업 Priority 1~4의 주요 truth lifecycle 조각, retrieval-eval read-only hardening, protected-main release fallback 자동화를 v0.1.32까지 완료했고, 현재 slice는 release fallback rerun idempotency 보강이야.
 
-최신 검증 완료 릴리스는 v0.1.31이야. v0.1.27에서 status transition history, v0.1.28에서 npm wrapper stdin forwarding과 published Hermes hook smoke, v0.1.29에서 fact supersession/replacement relation, v0.1.30에서 `agent-memory review explain fact ...` decision explanation UX, v0.1.31에서 retrieval eval read-only behavior가 들어갔어. 로컬 Hermes hook도 v0.1.31 runtime으로 업데이트되어 doctor/hook smoke가 통과한 상태야.
+최신 검증 완료 릴리스는 v0.1.32야. v0.1.27에서 status transition history, v0.1.28에서 npm wrapper stdin forwarding과 published Hermes hook smoke, v0.1.29에서 fact supersession/replacement relation, v0.1.30에서 `agent-memory review explain fact ...` decision explanation UX, v0.1.31에서 retrieval eval read-only behavior, v0.1.32에서 protected-main release-sync PR/tag/publish automation이 들어갔어. 로컬 Hermes hook도 v0.1.32 runtime으로 업데이트되어 doctor/hook smoke가 통과한 상태야.
 
 ## Current repo state
 
@@ -35,17 +35,18 @@ Expected GitHub identity:
 Verified base before this slice:
 
 - branch: `main`
-- HEAD: `6d955bb chore: release v0.1.31 [skip release] (#30)`
-- tag/release: `v0.1.31`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.31`
-- npm: `@cafitac/agent-memory@0.1.31`
-- PyPI: `cafitac-agent-memory==0.1.31`
-- v0.1.31 published smoke artifact: passed after a propagation retry; includes npm/uvx/pipx Hermes hook commands.
+- HEAD: `654c5d8 chore: release v0.1.32 [skip release] (#32)`
+- tag/release: `v0.1.32`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.32`
+- npm: `@cafitac/agent-memory@0.1.32`
+- PyPI: `cafitac-agent-memory==0.1.32`
+- v0.1.32 published smoke artifact: passed; includes npm/uvx/pipx Hermes hook commands.
+- repo Actions workflow setting: `can_approve_pull_request_reviews=true`, needed so `GITHUB_TOKEN` can create release-sync PRs.
 
 Active slice/worktree:
 
-- branch: `ci/auto-release-sync-pr`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/auto-release-sync-pr`
+- branch: `ci/release-fallback-idempotency`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/release-fallback-idempotency`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -57,7 +58,7 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## What is complete through v0.1.31
+## What is complete through v0.1.32
 
 ### Distribution and release automation
 
@@ -66,12 +67,12 @@ Do not delete or commit these unless the user explicitly asks.
 - Publish workflow gates GitHub Release creation on `published-install-smoke` after npm/PyPI publish.
 - Published smoke uploads `published-install-smoke-result` JSON artifact with success/failure diagnostics.
 - v0.1.28+ smoke covers npm/npx/npm-exec/uvx/pipx and Hermes hook stdin payload handling.
-- Known repeated pain point before this slice: protected `main` blocked auto-release metadata write-back, requiring manual release-sync PR + manual tag push.
+- Protected `main` fallback is automated: auto-release creates `release-sync/vX.Y.Z` PR when direct metadata write-back is rejected; after merge, auto-release tags and dispatches publish.
 
 ### Runtime adapter readiness
 
 - Hermes bootstrap/doctor/install flow exists and defaults to the conservative preset.
-- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.31/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.32/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 - Hermes hook fails closed: unavailable DB/schema returns `{}` and exit 0 instead of breaking prompt flow.
 - Conservative preset remains default: small prompt budgets, one top memory, no alternative-memory detail, no reason-code noise.
 - `--preset balanced` is explicit opt-in for more context/noise.
@@ -89,25 +90,28 @@ Do not delete or commit these unless the user explicitly asks.
 - `agent-memory review explain fact ...` explains status, default retrieval visibility, same claim-slot alternatives, replacement chain, and review follow-up commands.
 - Retrieval eval calls the real retrieval path but suppresses retrieval bookkeeping writes (`retrieval_count`, `reinforcement_count`, `last_accessed_at`).
 
-## Current slice: protected-main release fallback automation
+## Current slice: release fallback rerun idempotency
+
+Why this slice exists:
+
+- During the first v0.1.32 live fallback run, GitHub Actions created `release-sync/v0.1.32` but failed to create the PR because the repository Actions setting initially disallowed GitHub Actions from creating PRs.
+- After enabling that setting, rerunning the failed job hit a non-fast-forward branch push because the release-sync branch already existed.
+- The fallback should be safe to rerun after this kind of partial success.
 
 Planned behavior:
 
-- Main merge auto-release still tries the direct metadata write-back first.
-- If `git push origin HEAD:main` is rejected by GitHub rules/protected `main`, auto-release should not fail the whole release path immediately.
-- It should create a `release-sync/vX.Y.Z` branch from the already-bumped commit and open a PR titled `chore: release vX.Y.Z [skip release]`.
-- The direct publish dispatch should run only when direct main push/tag push succeeds.
-- After the release-sync PR is merged, a separate auto-release job should recognize the `[skip release]` release-sync commit, create/push the missing annotated tag, and dispatch `publish.yml`.
-- If the tag already exists, the release-sync follow-up job should no-op rather than republishing.
+- When protected-main fallback starts, check whether `release-sync/vX.Y.Z` already exists on origin.
+- If the branch exists, reuse it instead of pushing and failing with non-fast-forward.
+- Check whether an open PR already exists for the release-sync branch.
+- If the PR exists, log the URL and exit successfully instead of opening a duplicate PR.
+- If neither exists, keep the existing branch push + `gh pr create` behavior.
 
 Implementation direction:
 
-- Update `.github/workflows/auto-release.yml` permissions to include `pull-requests: write`.
-- Add `id: push_release` and a protected-main rejection branch around the direct push step.
-- Add a `gh pr create` fallback step guarded by `steps.push_release.outputs.release_sync_required == 'true'`.
-- Add a `tag-and-publish-release-sync` job for merged `chore: release v... [skip release]` commits.
-- Keep `[skip release]` as the anti-recursion marker.
-- Keep publish creation inside `publish.yml`; auto-release should only dispatch it.
+- Update `.github/workflows/auto-release.yml` fallback step with `git ls-remote --heads` branch detection.
+- Add `gh pr list --head ... --state open --json url --jq '.[0].url // empty'` before `gh pr create`.
+- Keep the direct path and release-sync tag/publish follow-up unchanged.
+- Add/keep tests in `tests/test_release_workflows.py` proving idempotency markers exist in the workflow.
 
 ## Verification checklist for this slice
 
@@ -128,16 +132,17 @@ Before PR, run a static diff secret scan and confirm finding_count 0.
 
 ## PR/release notes
 
-This slice changes only release automation/docs/tests, but it affects the release path and should be treated as a patch release candidate, likely v0.1.32 after PR merge.
+This slice changes only release automation/docs/tests, but it affects the release path and should be treated as a patch release candidate, likely v0.1.33 after PR merge.
 
 Expected live verification after merge:
 
-1. The auto-release run for the PR merge should bump metadata to v0.1.32.
-2. If protected `main` still rejects direct write-back, the run should open `release-sync/v0.1.32` PR automatically.
-3. Merge that PR.
-4. Confirm the release-sync follow-up job creates tag `v0.1.32`, dispatches publish, and published smoke passes.
-5. Verify GitHub Release/npm/PyPI/published-install-smoke artifact.
-6. Update local Hermes runtime to v0.1.32 only after package release is verified.
+1. PR merge should trigger auto-release and bump metadata to v0.1.33.
+2. Protected `main` should trigger fallback.
+3. Fallback should create `release-sync/v0.1.33` PR or reuse it if a partial rerun already created it.
+4. Merge the release-sync PR.
+5. Confirm release-sync follow-up creates tag `v0.1.33`, dispatches publish, and published smoke passes.
+6. Verify GitHub Release/npm/PyPI/published-install-smoke artifact.
+7. Update local Hermes runtime to v0.1.33 only after package release is verified.
 
 ## Next likely slices after this
 

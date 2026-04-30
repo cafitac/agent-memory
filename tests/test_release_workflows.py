@@ -34,6 +34,18 @@ def test_auto_release_workflow_falls_back_to_release_sync_pr_when_main_is_protec
     assert "Publish workflow will run after the release sync PR is merged and the tag is pushed." in workflow
 
 
+def test_auto_release_fallback_is_idempotent_when_release_sync_branch_or_pr_exists() -> None:
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "auto-release.yml").read_text()
+
+    assert "git ls-remote --exit-code --heads origin \"${RELEASE_SYNC_BRANCH}\"" in workflow
+    assert "Release sync branch ${RELEASE_SYNC_BRANCH} already exists" in workflow
+    assert "git push origin \"HEAD:${RELEASE_SYNC_BRANCH}\"" in workflow
+    assert "gh pr list" in workflow
+    assert "existing_pr_url" in workflow
+    assert "Release sync PR already exists" in workflow
+    assert "gh pr create" in workflow
+
+
 def test_publish_workflow_remains_tag_driven_only() -> None:
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "publish.yml").read_text()
 

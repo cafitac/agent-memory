@@ -248,7 +248,7 @@ npm pack --dry-run
 
 After a release publishes, the `published-install-smoke` workflow verifies the exact npm/PyPI version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx`. Maintainers can also run it manually with `gh workflow run published-install-smoke.yml -f version=<version>`.
 
-Release automation expects protected `main`: if the auto-release workflow cannot push its bumped metadata commit directly, it opens a `release-sync/vX.Y.Z` PR instead. After that PR is merged, the same workflow tags the synced version and dispatches `publish.yml`, keeping the release path automated without requiring a permanent branch-protection bypass.
+Release automation expects protected `main`: if the auto-release workflow cannot push its bumped metadata commit directly, it opens a `release-sync/vX.Y.Z` PR instead. After that PR is merged, the same workflow tags the synced version and dispatches `publish.yml`, keeping the release path automated without requiring a permanent branch-protection bypass. The fallback is safe to rerun: if the `release-sync/vX.Y.Z` branch or PR already exists, the workflow reuses it instead of failing on a non-fast-forward push or opening a duplicate PR.
 
 Useful source-checkout commands:
 
