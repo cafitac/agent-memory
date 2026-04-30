@@ -10,7 +10,7 @@ from agent_memory.core.curation import (
 )
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.retrieval import retrieve_memory_packet
-from agent_memory.storage.sqlite import initialize_database
+from agent_memory.storage.sqlite import initialize_database, list_memory_status_history
 
 
 def test_common_review_transitions_work_for_fact_procedure_and_episode(tmp_path: Path) -> None:
@@ -57,6 +57,51 @@ def test_common_review_transitions_work_for_fact_procedure_and_episode(tmp_path:
     assert disputed_procedure.status == "disputed"
     assert deprecated_episode.status == "deprecated"
 
+def test_status_transition_history_records_review_reason_actor_and_evidence(tmp_path: Path) -> None:
+    db_path = tmp_path / "agent-memory.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project X now uses PX branches instead of EP branches.",
+        metadata={"project": "project-x"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="PX-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+    )
+
+    approved_fact = approve_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=fact.id,
+        reason="Verified from current project note.",
+        actor="maintainer",
+        evidence_ids=[source.id],
+    )
+    deprecated_fact = deprecate_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=fact.id,
+        reason="Replaced by the next branch naming policy.",
+        actor="maintainer",
+        evidence_ids=[source.id],
+    )
+
+    assert approved_fact.status == "approved"
+    assert deprecated_fact.status == "deprecated"
+    history = list_memory_status_history(db_path=db_path, memory_type="fact", memory_id=fact.id)
+    assert [entry.from_status for entry in history] == ["candidate", "approved"]
+    assert [entry.to_status for entry in history] == ["approved", "deprecated"]
+    assert history[0].reason == "Verified from current project note."
+    assert history[0].actor == "maintainer"
+    assert history[0].evidence_ids == [source.id]
+    assert history[1].reason == "Replaced by the next branch naming policy."
+    assert history[1].created_at
 
 def test_scope_aware_ranking_prefers_matching_scope(tmp_path: Path) -> None:
     db_path = tmp_path / "agent-memory.db"

@@ -45,6 +45,7 @@ from agent_memory.storage.sqlite import (
     list_candidate_facts,
     list_candidate_procedures,
     list_facts_by_claim_slot,
+    list_memory_status_history,
 )
 
 
@@ -231,6 +232,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action_parser.add_argument("memory_type", choices=["fact", "procedure", "episode"])
         action_parser.add_argument("db_path", type=Path)
         action_parser.add_argument("memory_id", type=int)
+        action_parser.add_argument("--reason")
+        action_parser.add_argument("--actor")
+        action_parser.add_argument("--evidence-ids-json", default="[]")
+
+    review_history_parser = review_subparsers.add_parser(
+        "history",
+        help="Show status transition history for one memory item.",
+    )
+    review_history_parser.add_argument("memory_type", choices=["fact", "procedure", "episode"])
+    review_history_parser.add_argument("db_path", type=Path)
+    review_history_parser.add_argument("memory_id", type=int)
 
     review_conflicts_parser = review_subparsers.add_parser(
         "conflicts",
@@ -510,12 +522,38 @@ def main() -> None:
         raise ValueError(f"Unsupported kb action: {args.kb_action}")
 
     if args.command == "review":
-        if args.review_action == "approve":
-            memory = approve_memory(db_path=args.db_path, memory_type=args.memory_type, memory_id=args.memory_id)
-        elif args.review_action == "dispute":
-            memory = dispute_memory(db_path=args.db_path, memory_type=args.memory_type, memory_id=args.memory_id)
-        elif args.review_action == "deprecate":
-            memory = deprecate_memory(db_path=args.db_path, memory_type=args.memory_type, memory_id=args.memory_id)
+        if args.review_action in {"approve", "dispute", "deprecate"}:
+            review_kwargs = {
+                "db_path": args.db_path,
+                "memory_type": args.memory_type,
+                "memory_id": args.memory_id,
+                "reason": args.reason,
+                "actor": args.actor,
+                "evidence_ids": json.loads(args.evidence_ids_json),
+            }
+            if args.review_action == "approve":
+                memory = approve_memory(**review_kwargs)
+            elif args.review_action == "dispute":
+                memory = dispute_memory(**review_kwargs)
+            else:
+                memory = deprecate_memory(**review_kwargs)
+        elif args.review_action == "history":
+            history = list_memory_status_history(
+                args.db_path,
+                memory_type=args.memory_type,
+                memory_id=args.memory_id,
+            )
+            print(
+                json.dumps(
+                    {
+                        "memory_type": args.memory_type,
+                        "memory_id": args.memory_id,
+                        "history": [entry.model_dump(mode="json") for entry in history],
+                    },
+                    indent=2,
+                )
+            )
+            return
         elif args.review_action == "conflicts":
             facts = list_facts_by_claim_slot(
                 args.db_path,

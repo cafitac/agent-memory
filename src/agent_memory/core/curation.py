@@ -121,13 +121,61 @@ def approve_procedure(db_path: Path | str, *, procedure_id: int) -> Procedure:
     return approve_memory(db_path=db_path, memory_type="procedure", memory_id=procedure_id)
 
 
-def approve_memory(db_path: Path | str, *, memory_type: MemoryType, memory_id: int) -> Fact | Procedure | Episode:
-    return update_memory_status(db_path, memory_type=memory_type, memory_id=memory_id, status="approved")
+def approve_memory(
+    db_path: Path | str,
+    *,
+    memory_type: MemoryType,
+    memory_id: int,
+    reason: str | None = None,
+    actor: str | None = None,
+    evidence_ids: list[int] | None = None,
+) -> Fact | Procedure | Episode:
+    return update_memory_status(
+        db_path,
+        memory_type=memory_type,
+        memory_id=memory_id,
+        status="approved",
+        reason=reason,
+        actor=actor,
+        evidence_ids=evidence_ids,
+    )
 
 
-def dispute_memory(db_path: Path | str, *, memory_type: MemoryType, memory_id: int) -> Fact | Procedure | Episode:
-    return update_memory_status(db_path, memory_type=memory_type, memory_id=memory_id, status="disputed")
+def dispute_memory(
+    db_path: Path | str,
+    *,
+    memory_type: MemoryType,
+    memory_id: int,
+    reason: str | None = None,
+    actor: str | None = None,
+    evidence_ids: list[int] | None = None,
+) -> Fact | Procedure | Episode:
+    return update_memory_status(
+        db_path,
+        memory_type=memory_type,
+        memory_id=memory_id,
+        status="disputed",
+        reason=reason,
+        actor=actor,
+        evidence_ids=evidence_ids,
+    )
 
 
-def deprecate_memory(db_path: Path | str, *, memory_type: MemoryType, memory_id: int) -> Fact | Procedure | Episode:
-    return update_memory_status(db_path, memory_type=memory_type, memory_id=memory_id, status="deprecated")
+def deprecate_memory(
+    db_path: Path | str,
+    *,
+    memory_type: MemoryType,
+    memory_id: int,
+    reason: str | None = None,
+    actor: str | None = None,
+    evidence_ids: list[int] | None = None,
+) -> Fact | Procedure | Episode:
+    return update_memory_status(
+        db_path,
+        memory_type=memory_type,
+        memory_id=memory_id,
+        status="deprecated",
+        reason=reason,
+        actor=actor,
+        evidence_ids=evidence_ids,
+    )

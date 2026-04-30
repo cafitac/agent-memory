@@ -79,6 +79,14 @@ Normal retrieval is approved-only by default. Candidate, disputed, and deprecate
 
 ```bash
 agent-memory retrieve "$DB" "What obsolete install notes exist?" --status all
+agent-memory review conflicts fact "$DB" "agent-memory" "primary-install-path"
+```
+
+Review transitions can carry operator context and remain inspectable later:
+
+```bash
+agent-memory review approve fact "$DB" 1 --reason "Verified from current setup guide." --actor maintainer --evidence-ids-json '[1]'
+agent-memory review history fact "$DB" 1
 ```
 
 ## Hermes quickstart
