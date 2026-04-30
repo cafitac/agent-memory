@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an improvement for agent-memory
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - install / onboarding
+        - Hermes integration
+        - Codex / Claude prompt wrappers
+        - memory model
+        - retrieval
+        - retrieval evaluation
+        - review / curation
+        - release / packaging
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context

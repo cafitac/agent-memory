@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible problem with agent-memory
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include secrets, private memory contents, or exploit details for security issues. Use SECURITY.md for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `agent-memory --version` if available, or npm/PyPI version installed.
+      placeholder: "0.1.16"
+    validations:
+      required: true
+  - type: dropdown
+    id: install_surface
+    attributes:
+      label: Install surface
+      options:
+        - npm global
+        - npx / npm exec
+        - pipx
+        - uv tool / uvx
+        - source checkout
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands and redacted output.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, Python, Node/npm, Hermes/Codex/Claude version if relevant.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      render: shell

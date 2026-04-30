@@ -75,7 +75,7 @@ Before treating a release as ready for external users, validate these surfaces f
 | Surface | Required checks | Expected safety property |
 | --- | --- | --- |
 | npm | `npm exec --yes --package @cafitac/agent-memory@<version> agent-memory -- --help`; seed one approved memory; run `hermes-context` | direct `agent-memory [command]` UX works and prompt text includes only approved memory content |
-| npx | `npx --yes @cafitac/agent-memory@<version> agent-memory --help` | no source checkout or local PATH dependency |
+| npx | `npx --yes @cafitac/agent-memory@<version> --help` | no source checkout or local PATH dependency |
 | uvx | `uvx --refresh cafitac-agent-memory==<version> agent-memory --help` | PyPI package resolves independently of npm wrapper |
 | Hermes | `agent-memory bootstrap`; `agent-memory doctor`; `hermes hooks doctor`; one QA prompt with hooks accepted | hook install is merge-safe, bounded by conservative prompt budgets, and fails closed if memory DB is unavailable |
 | Codex/Claude prompts | `agent-memory codex-prompt ...`; `agent-memory claude-prompt ...` after seeding approved memory | prompt wrappers include actual approved snippets and exclude disputed/deprecated content by default |
@@ -94,4 +94,4 @@ Record:
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.14`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+As of the latest validated public install smoke, the validated tag is `v0.1.16`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.

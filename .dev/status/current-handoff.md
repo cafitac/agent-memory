@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 10:29 KST
+Last updated: 2026-04-30 11:06 KST
 
 ## Trigger for the next session
 
@@ -19,20 +19,18 @@ read this file first. Do not ask the user to restate context. Answer from the "R
 
 ## Ready-to-say answer
 
-지금 다음으로 할 일은 agent-memory를 외부 사용자가 Hermes/Codex/Claude의 주 memory layer로 믿고 켤 수 있게 만드는 품질 강화의 다음 slice야.
+지금 다음으로 할 일은 agent-memory의 외부 사용자 신뢰 표면을 더 강화하는 마무리 slice야.
 
-현재 v0.1.15까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, published package smoke까지 완료됐어.
+현재 v0.1.16까지는 npm-first CLI, Hermes/Codex/Claude prompt memory injection, approved-only 기본 retrieval, disputed/deprecated forensic 조회, conflict review, Hermes hook fail-closed, retrieval-eval failure triage, published package smoke까지 완료됐어.
 
-다음 1순위는 retrieval quality를 실제 사용 패턴으로 더 체계적으로 측정하는 거야. 구체적으로는 retrieval eval fixture corpus를 확장하고, noisy/irrelevant/stale/conflict 케이스를 더 많이 넣고, text report가 실패 원인을 바로 triage할 수 있게 만드는 PR을 만들면 돼.
+현재 진행 중인 브랜치는 `docs/oss-trust-onboarding-polish`이고 목표는 외부 사용자가 README만 보고 설치/검증/삭제/보안 모델을 이해할 수 있게 만드는 거야.
 
 진행 순서:
-1. `~/Project/agent-memory`에서 main이 `v0.1.15`인지 확인한다.
-2. 새 브랜치 `feat/retrieval-quality-corpus-and-triage`를 만든다.
-3. retrieval eval fixture corpus를 실제 사용 패턴 중심으로 확장한다.
-4. failure detail에 retrieved snippet / expected snippet / avoid snippet / policy signal을 더 명확히 보여준다.
-5. focused/full tests를 통과시킨다.
-6. PR/CI/merge 후 auto-release/publish를 확인한다.
-7. 외부 temp cwd에서 published smoke를 다시 수행한다.
+1. `~/Project/agent-memory/.worktrees/oss-trust-onboarding-polish`에서 상태를 확인한다.
+2. README, SECURITY.md, PRIVACY.md, CONTRIBUTING.md, issue/PR templates가 원하는 범위를 담는지 점검한다.
+3. focused/full tests와 release smoke를 다시 통과시킨다.
+4. PR/CI/merge 후 auto-release/publish를 확인한다.
+5. 외부 temp cwd에서 published smoke를 다시 수행한다.
 
 ## Current repo state
 
@@ -52,12 +50,13 @@ Expected GitHub identity:
 Current verified base:
 
 - branch: `main`
-- HEAD: `47c6f2e chore: release v0.1.15 [skip release]`
-- tag: `v0.1.15`
-- PR #9 merged: `feat: add status-aware memory review surfaces`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.15`
-- npm: `@cafitac/agent-memory@0.1.15`
-- PyPI: `cafitac-agent-memory==0.1.15`
+- HEAD: `8337a16 chore: release v0.1.16 [skip release]`
+- tag: `v0.1.16`
+- PR #10 merged: `feat: add retrieval eval triage details`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.16`
+- npm: `@cafitac/agent-memory@0.1.16`
+- PyPI: `cafitac-agent-memory==0.1.16`
+- active docs/trust branch: `docs/oss-trust-onboarding-polish` in `.worktrees/oss-trust-onboarding-polish`
 
 Expected local untracked artifacts to preserve:
 
@@ -136,76 +135,79 @@ Do not delete or commit these unless the user explicitly asks.
 - Hook failure returns `{}` and exit 0 instead of breaking the user prompt flow.
 - This matters for always-on memory use.
 
-## Immediate next work: retrieval quality corpus and triage surface
+## Immediate next work: OSS trust and onboarding polish
 
 Goal:
 
-Make retrieval quality measurable enough that external users can trust agent-memory as a default memory layer, not just a demo.
+Make the repository credible to external users before they read internals: clear README, install/rollback path, privacy/security posture, contribution path, and issue/PR templates.
 
-Recommended branch:
+Active branch/worktree:
 
 ```bash
-cd /Users/reddit/Project/agent-memory
-HOME=/Users/reddit gh auth switch --hostname github.com --user cafitac || true
-git checkout main
-HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git pull --ff-only
-git checkout -b feat/retrieval-quality-corpus-and-triage
+cd /Users/reddit/Project/agent-memory/.worktrees/oss-trust-onboarding-polish
 ```
 
-Work items:
+Work completed in this slice so far:
 
-1. Expand retrieval eval fixtures around real OSS-agent memory risks:
-   - noisy irrelevant memories
-   - stale but semantically close memories
-   - disputed/deprecated conflict alternatives
-   - cross-scope leakage
-   - procedure-vs-fact confusion
-   - episode recency/scope tie-breakers
-   - prompt-budget pressure where only top-k snippets fit
+1. Rewrote the README top-level user journey:
+   - badges for CI/npm/PyPI/Python/license
+   - 30-second npm install
+   - first-memory example
+   - Hermes quickstart
+   - Codex/Claude prompt command examples
+   - data/privacy model
+   - uninstall/rollback
+   - retrieval-eval summary
+   - maturity and known limitations
 
-2. Improve text triage output:
-   - done in this slice: failed-task text report now shows retrieved snippets, expected snippets, avoid-hit snippets, and top-memory policy signals
-   - JSON per-task results now include `retrieved_details`, `expected_details`, and `avoid_hit_details`
-   - next refinements can add richer conflict/lifecycle selector descriptions and more fixture families
-   - make it obvious whether the failure is ranking, filtering, scope, lifecycle, or fixture-data quality
+2. Added external trust docs:
+   - `LICENSE`
+   - `SECURITY.md`
+   - `PRIVACY.md`
+   - `CONTRIBUTING.md`
 
-3. Add tests first:
-   - RED tests in `tests/test_retrieval_evaluation.py`
-   - fixture files under `tests/fixtures/retrieval_eval/`
-   - tests should assert JSON contract and text report snippets
+3. Added GitHub community templates:
+   - `.github/ISSUE_TEMPLATE/bug_report.yml`
+   - `.github/ISSUE_TEMPLATE/feature_request.yml`
+   - `.github/ISSUE_TEMPLATE/config.yml`
+   - `.github/pull_request_template.md`
 
-4. Keep machine contract stable:
-   - do not break existing JSON fields
-   - add fields only if needed
-   - preserve `pass` external serialization
-   - preserve JSON as default output
+4. Added docs contract coverage:
+   - `tests/test_repository_trust_docs.py`
+   - keeps README linked to trust docs and install surfaces
 
-5. Verify:
+Verification already run locally in the worktree:
 
 ```bash
-unset AGENT_MEMORY_PYTHON_EXECUTABLE
-TMPDIR=/Users/reddit/Project/agent-memory/.tmp-test uv run pytest tests/test_retrieval_evaluation.py -q
-TMPDIR=/Users/reddit/Project/agent-memory/.tmp-test uv run pytest tests/test_cli.py tests/test_hermes_adapter.py tests/test_prompt_wrapper_scripts.py -q
-TMPDIR=/Users/reddit/Project/agent-memory/.tmp-test uv run pytest tests/ -q
+uv run pytest tests/test_npm_launcher.py::test_user_docs_show_installed_agent_memory_command_after_npm_install tests/test_repository_trust_docs.py -q
+uv run pytest tests/ -q
 uv run python scripts/check_release_metadata.py
 uv run python scripts/smoke_release_readiness.py
+npm pack --dry-run
 git diff --check
 ```
 
-6. PR/release:
+Latest observed result:
+- focused docs/npm tests: `3 passed`
+- full tests: `134 passed`
+- release metadata: OK, all versions `0.1.16`
+- release smoke: OK
+- npm pack dry-run: OK
+- diff check: OK
+
+Remaining steps:
 
 ```bash
-git add <changed files>
-git commit -m "feat: expand retrieval quality fixtures and triage"
+git status -sb
+git add README.md SECURITY.md PRIVACY.md CONTRIBUTING.md LICENSE docs/install-smoke.md tests/test_repository_trust_docs.py .github/ISSUE_TEMPLATE .github/pull_request_template.md .dev/status/current-handoff.md
+git commit -m "docs: improve OSS trust and onboarding"
 HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git push -u origin HEAD
-HOME=/Users/reddit gh pr create --repo cafitac/agent-memory --title "feat: expand retrieval quality fixtures and triage" --body-file /tmp/agent-memory-retrieval-quality-pr.md
-HOME=/Users/reddit gh pr checks <PR_NUMBER> --watch
+HOME=/Users/reddit gh pr create --repo cafitac/agent-memory --title "docs: improve OSS trust and onboarding" --body-file /tmp/agent-memory-oss-trust-pr.md
+HOME=/Users/reddit gh pr checks <PR_NUMBER> --repo cafitac/agent-memory --watch
 HOME=/Users/reddit gh pr merge <PR_NUMBER> --repo cafitac/agent-memory --squash --delete-branch
-HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git checkout main
-HOME=/Users/reddit GIT_TERMINAL_PROMPT=0 git pull --ff-only
 ```
 
-7. After merge, verify auto-release/publish and external published smoke.
+After merge, verify auto-release/publish and external published smoke if a release is cut.
 
 ## Sequential roadmap to final goal
 
