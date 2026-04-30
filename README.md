@@ -94,6 +94,15 @@ agent-memory review explain fact "$DB" 1
 
 `review explain` combines the current status, default retrieval visibility, transition history, same claim-slot alternatives, and replacement chain into one decision context so a reviewer can see why a stale or conflicting fact is hidden.
 
+For read-only relation graph inspection, use `graph inspect`. This is an operator/debug view over stored `Relation` edges; it does not change retrieval behavior or mutate memory state:
+
+```bash
+agent-memory graph inspect "$DB" fact:1 --depth 1
+agent-memory graph inspect "$DB" fact:1 --depth 2 --limit 50
+```
+
+The JSON output includes the start ref, visited node refs, relation edges, traversal depth per edge, and a `read_only: true` marker. It is intended as a safe graph-foundation slice before enabling any broader graph traversal in default retrieval.
+
 ## Hermes quickstart
 
 For most Hermes users:
@@ -246,9 +255,9 @@ uv run pytest tests/test_published_install_smoke.py -q
 npm pack --dry-run
 ```
 
-After a release publishes, the `published-install-smoke` workflow verifies the exact npm/PyPI version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx`. Maintainers can also run it manually with `gh workflow run published-install-smoke.yml -f version=<version>`.
+After a release publishes, the `published-install-smoke` workflow verifies the exact npm/PyPI version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx`. Maintainers can also run it manually with `gh workflow run published-install-smoke.yml -f version=<version>`. The smoke script treats early resolver/package-index misses as propagation-like failures and applies a longer exponential backoff before failing; failure artifacts include npm/PyPI registry probe diagnostics so maintainers can tell whether metadata is visible while installers are still stale.
 
-Release automation expects protected `main`: if the auto-release workflow cannot push its bumped metadata commit directly, it opens a `release-sync/vX.Y.Z` PR instead. After that PR is merged, the same workflow tags the synced version and dispatches `publish.yml`, keeping the release path automated without requiring a permanent branch-protection bypass. The fallback is safe to rerun: if the `release-sync/vX.Y.Z` branch or PR already exists, the workflow reuses it instead of failing on a non-fast-forward push or opening a duplicate PR.
+Release automation expects protected `main`: if the auto-release workflow cannot push its bumped metadata commit directly, it opens a `release-sync/vX.Y.Z` PR instead. After that PR is merged, the same workflow tags the synced version and dispatches `publish.yml`, keeping the release path automated without requiring a permanent branch-protection bypass. The fallback is safe to rerun: if the `release-sync/vX.Y.Z` branch or PR already exists, the workflow reuses it instead of failing on a non-fast-forward push or opening a duplicate PR. When it creates a new release-sync PR, it also dispatches `ci.yml` on that bot-created branch and comments with the validation handoff because GitHub can suppress automatic PR checks for bot-created refs.
 
 Useful source-checkout commands:
 

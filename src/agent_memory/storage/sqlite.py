@@ -346,6 +346,20 @@ def get_fact(db_path: Path | str, *, fact_id: int) -> Fact:
     return fact_from_row(row)
 
 
+def list_relations_for_node(db_path: Path | str, *, node_ref: str) -> list[Relation]:
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM relations
+            WHERE from_ref = ? OR to_ref = ?
+            ORDER BY id ASC
+            """,
+            (node_ref, node_ref),
+        ).fetchall()
+    return [relation_from_row(row) for row in rows]
+
+
 def list_fact_replacement_relations(db_path: Path | str, *, fact_id: int) -> list[Relation]:
     fact_ref = f"fact:{fact_id}"
     with connect(db_path) as connection:

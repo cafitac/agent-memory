@@ -149,8 +149,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           uv run python scripts/smoke_published_install.py \
             --version "$VERSION" \
-            --attempts 36 \
+            --attempts 12 \
             --delay-seconds 10 \
+            --propagation-attempts 36 \
+            --propagation-delay-seconds 20 \
             --output-json .artifacts/published-install-smoke.json
 
       - name: Upload published install smoke result

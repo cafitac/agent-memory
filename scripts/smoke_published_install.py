@@ -3,11 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
@@ -110,6 +114,88 @@ def _assert_registry_version(step: PublishedSmokeStep, version: str) -> None:
         raise RuntimeError(f"registry version lookup failed: {step.name}\n{step.stderr}")
     if step.stdout.strip() != version:
         raise RuntimeError(f"registry returned {step.stdout.strip()!r}, expected {version!r}")
+
+
+def _fetch_text(url: str, *, timeout: int) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": "agent-memory-published-smoke"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def _fetch_json(url: str, *, timeout: int) -> dict[str, object]:
+    payload = json.loads(_fetch_text(url, timeout=timeout))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"registry endpoint returned non-object JSON: {url}")
+    return payload
+
+
+def probe_registry_propagation(version: str, *, timeout: int) -> dict[str, object]:
+    npm_url = f"https://registry.npmjs.org/{urllib.parse.quote(NPM_PACKAGE, safe='')}"
+    pypi_json_url = f"https://pypi.org/pypi/{PYTHON_PACKAGE}/json"
+    pypi_simple_url = f"https://pypi.org/simple/{PYTHON_PACKAGE}/"
+    probe: dict[str, object] = {
+        "version": version,
+        "npm_package": NPM_PACKAGE,
+        "python_package": PYTHON_PACKAGE,
+        "npm_version_present": False,
+        "npm_latest_version": None,
+        "pypi_json_version_present": False,
+        "pypi_simple_mentions_version": False,
+        "errors": [],
+    }
+    errors: list[str] = []
+    try:
+        npm_payload = _fetch_json(npm_url, timeout=timeout)
+        versions = npm_payload.get("versions")
+        dist_tags = npm_payload.get("dist-tags")
+        if isinstance(versions, dict):
+            probe["npm_version_present"] = version in versions
+        if isinstance(dist_tags, dict):
+            latest = dist_tags.get("latest")
+            if isinstance(latest, str):
+                probe["npm_latest_version"] = latest
+    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        errors.append(f"npm registry probe failed: {exc}")
+
+    try:
+        pypi_payload = _fetch_json(pypi_json_url, timeout=timeout)
+        releases = pypi_payload.get("releases")
+        if isinstance(releases, dict):
+            probe["pypi_json_version_present"] = version in releases
+    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        errors.append(f"PyPI JSON probe failed: {exc}")
+
+    try:
+        simple_text = _fetch_text(pypi_simple_url, timeout=timeout)
+        probe["pypi_simple_mentions_version"] = version in simple_text
+    except (OSError, urllib.error.URLError, TimeoutError) as exc:
+        errors.append(f"PyPI simple probe failed: {exc}")
+
+    probe["errors"] = errors
+    return probe
+
+
+def _looks_like_propagation_failure(exc: Exception) -> bool:
+    text = str(exc).lower()
+    patterns = [
+        "no solution found",
+        "no matching distribution found",
+        "could not find a version",
+        "not found in the package registry",
+        "npm error code e404",
+        "404 not found",
+        "notarget",
+        "no matching version found",
+    ]
+    if any(pattern in text for pattern in patterns):
+        return True
+    return bool(re.search(r"cafitac-agent-memory==\d+\.\d+\.\d+", text))
+
+
+def _retry_delay(attempt: int, *, base_delay_seconds: int, propagation_retry: bool) -> int:
+    if not propagation_retry:
+        return base_delay_seconds
+    return base_delay_seconds * (2 ** max(0, attempt - 1))
 
 
 def build_command_matrix(version: str, *, include_pipx: bool = True, python_executable: str | None = None) -> list[SmokeCommand]:
@@ -236,19 +322,44 @@ def _run_once(version: str, *, timeout: int, include_pipx: bool) -> dict[str, ob
         }
 
 
-def run_with_retries(version: str, *, attempts: int, delay_seconds: int, timeout: int, include_pipx: bool) -> dict[str, object]:
+def run_with_retries(
+    version: str,
+    *,
+    attempts: int,
+    delay_seconds: int,
+    timeout: int,
+    include_pipx: bool,
+    propagation_attempts: int | None = None,
+    propagation_delay_seconds: int | None = None,
+) -> dict[str, object]:
+    max_attempts = max(attempts, propagation_attempts or attempts)
+    normal_attempts_remaining = attempts
+    propagation_retry_used = False
     failures: list[str] = []
-    for attempt in range(1, attempts + 1):
+    for attempt in range(1, max_attempts + 1):
         try:
             summary = _run_once(version, timeout=timeout, include_pipx=include_pipx)
             summary["attempt"] = attempt
-            summary["attempts"] = attempts
+            summary["attempts"] = max_attempts if propagation_retry_used else attempts
+            summary["propagation_retry_used"] = propagation_retry_used
             return summary
         except Exception as exc:  # noqa: BLE001 - CLI should preserve the full smoke failure.
-            failures.append(f"attempt {attempt}: {exc}")
-            if attempt == attempts:
+            propagation_failure = _looks_like_propagation_failure(exc)
+            if propagation_failure and propagation_attempts is not None:
+                propagation_retry_used = True
+            elif normal_attempts_remaining <= 1:
+                failures.append(f"attempt {attempt}: {exc}")
                 break
-            time.sleep(delay_seconds)
+            normal_attempts_remaining -= 1
+            failures.append(f"attempt {attempt}: {exc}")
+            if attempt == max_attempts:
+                break
+            delay = _retry_delay(
+                attempt,
+                base_delay_seconds=propagation_delay_seconds or delay_seconds,
+                propagation_retry=propagation_retry_used and propagation_failure,
+            )
+            time.sleep(delay)
     raise PublishedSmokeFailure(failures)
 
 
@@ -262,6 +373,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--version", default=None, help="Package version to verify. Defaults to package.json version.")
     parser.add_argument("--attempts", type=int, default=3, help="Retry attempts for registry propagation.")
     parser.add_argument("--delay-seconds", type=int, default=10, help="Delay between retry attempts.")
+    parser.add_argument(
+        "--propagation-attempts",
+        type=int,
+        default=None,
+        help="Longer retry budget used only for package registry propagation-like resolver failures.",
+    )
+    parser.add_argument(
+        "--propagation-delay-seconds",
+        type=int,
+        default=30,
+        help="Base exponential backoff delay for propagation-like resolver failures.",
+    )
     parser.add_argument("--timeout", type=int, default=180, help="Timeout per command in seconds.")
     parser.add_argument("--skip-pipx", action="store_true", help="Skip pipx smoke commands when the runner cannot provide pipx.")
     parser.add_argument("--output-json", type=Path, help="Write a success or failure summary artifact to this path.")
@@ -276,13 +399,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             delay_seconds=args.delay_seconds,
             timeout=args.timeout,
             include_pipx=not args.skip_pipx,
+            propagation_attempts=args.propagation_attempts,
+            propagation_delay_seconds=args.propagation_delay_seconds,
         )
     except PublishedSmokeFailure as exc:
+        registry_probe = probe_registry_propagation(version, timeout=min(args.timeout, 30))
         failure_summary: dict[str, object] = {
             "status": "failed",
             "version": version,
-            "attempts": args.attempts,
+            "attempts": args.propagation_attempts or args.attempts,
             "failures": exc.failures,
+            "registry_probe": registry_probe,
         }
         if args.output_json is not None:
             _write_json_artifact(args.output_json, failure_summary)

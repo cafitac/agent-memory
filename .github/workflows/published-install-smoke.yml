@@ -12,10 +12,15 @@ on:
         required: false
         default: '18'
         type: string
-      delay_seconds:
-        description: 'Delay between retry attempts'
+      propagation_attempts:
+        description: 'Longer retry budget for propagation-like resolver failures'
         required: false
-        default: '10'
+        default: '36'
+        type: string
+      propagation_delay_seconds:
+        description: 'Base exponential backoff delay for propagation-like resolver failures'
+        required: false
+        default: '20'
         type: string
 
 jobs:
@@ -50,7 +55,9 @@ jobs:
           uv run python scripts/smoke_published_install.py \
             --version "${{ inputs.version }}" \
             --attempts "${{ inputs.attempts }}" \
-            --delay-seconds "${{ inputs.delay_seconds }}" \
+            --delay-seconds 10 \
+            --propagation-attempts "${{ inputs.propagation_attempts }}" \
+            --propagation-delay-seconds "${{ inputs.propagation_delay_seconds }}" \
             --output-json .artifacts/published-install-smoke.json
 
       - name: Upload published install smoke result

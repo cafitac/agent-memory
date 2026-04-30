@@ -8,7 +8,66 @@ from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.integrations.hermes_hooks import scope_from_cwd
-from agent_memory.storage.sqlite import initialize_database
+from agent_memory.storage.sqlite import initialize_database, insert_relation
+
+
+def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-inspect.db"
+    initialize_database(db_path)
+    first = insert_relation(
+        db_path,
+        from_ref="fact:1",
+        relation_type="superseded_by",
+        to_ref="fact:2",
+        evidence_ids=[11],
+        confidence=0.9,
+    )
+    second = insert_relation(
+        db_path,
+        from_ref="fact:2",
+        relation_type="supports",
+        to_ref="procedure:7",
+        evidence_ids=[12],
+        confidence=0.8,
+    )
+    insert_relation(
+        db_path,
+        from_ref="episode:3",
+        relation_type="mentions",
+        to_ref="fact:99",
+        evidence_ids=[],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "graph",
+            "inspect",
+            str(db_path),
+            "fact:1",
+            "--depth",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "relation_graph_inspection"
+    assert payload["start_ref"] == "fact:1"
+    assert payload["depth"] == 2
+    assert payload["read_only"] is True
+    assert payload["nodes"] == ["fact:1", "fact:2", "procedure:7"]
+    assert [edge["id"] for edge in payload["edges"]] == [first.id, second.id]
+    assert payload["edges"][0]["direction_from_start"] == "outbound"
+    assert payload["edges"][1]["direction_from_start"] == "outbound"
+    assert payload["truncated"] is False
 
 
 def test_cli_init_creates_database(tmp_path: Path, monkeypatch) -> None:
