@@ -359,12 +359,13 @@ def search_approved_facts(
     ]
 
 
-def search_ranked_approved_facts(
+def search_ranked_facts(
     db_path: Path | str,
     *,
     query: str,
     limit: int = 5,
     preferred_scope: str | None = None,
+    statuses: tuple[MemoryStatus, ...] = ("approved",),
 ) -> list[tuple[Fact, RetrievalTraceEntry]]:
     return _search_model_rows_with_trace(
         db_path=db_path,
@@ -374,6 +375,23 @@ def search_ranked_approved_facts(
         limit=limit,
         row_parser=fact_from_row,
         preferred_scope=preferred_scope,
+        statuses=statuses,
+    )
+
+
+def search_ranked_approved_facts(
+    db_path: Path | str,
+    *,
+    query: str,
+    limit: int = 5,
+    preferred_scope: str | None = None,
+) -> list[tuple[Fact, RetrievalTraceEntry]]:
+    return search_ranked_facts(
+        db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        statuses=("approved",),
     )
 
 
@@ -395,12 +413,13 @@ def search_approved_procedures(
     ]
 
 
-def search_ranked_approved_procedures(
+def search_ranked_procedures(
     db_path: Path | str,
     *,
     query: str,
     limit: int = 5,
     preferred_scope: str | None = None,
+    statuses: tuple[MemoryStatus, ...] = ("approved",),
 ) -> list[tuple[Procedure, RetrievalTraceEntry]]:
     return _search_model_rows_with_trace(
         db_path=db_path,
@@ -410,6 +429,23 @@ def search_ranked_approved_procedures(
         limit=limit,
         row_parser=procedure_from_row,
         preferred_scope=preferred_scope,
+        statuses=statuses,
+    )
+
+
+def search_ranked_approved_procedures(
+    db_path: Path | str,
+    *,
+    query: str,
+    limit: int = 5,
+    preferred_scope: str | None = None,
+) -> list[tuple[Procedure, RetrievalTraceEntry]]:
+    return search_ranked_procedures(
+        db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        statuses=("approved",),
     )
 
 
@@ -431,12 +467,13 @@ def search_approved_episodes(
     ]
 
 
-def search_ranked_approved_episodes(
+def search_ranked_episodes(
     db_path: Path | str,
     *,
     query: str,
     limit: int = 5,
     preferred_scope: str | None = None,
+    statuses: tuple[MemoryStatus, ...] = ("approved",),
 ) -> list[tuple[Episode, RetrievalTraceEntry]]:
     return _search_model_rows_with_trace(
         db_path=db_path,
@@ -446,6 +483,23 @@ def search_ranked_approved_episodes(
         limit=limit,
         row_parser=episode_from_row,
         preferred_scope=preferred_scope,
+        statuses=statuses,
+    )
+
+
+def search_ranked_approved_episodes(
+    db_path: Path | str,
+    *,
+    query: str,
+    limit: int = 5,
+    preferred_scope: str | None = None,
+) -> list[tuple[Episode, RetrievalTraceEntry]]:
+    return search_ranked_episodes(
+        db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        statuses=("approved",),
     )
 
 
@@ -504,6 +558,38 @@ def list_candidate_procedures(db_path: Path | str, limit: int = 50) -> list[Proc
 
 def list_candidate_episodes(db_path: Path | str, limit: int = 50) -> list[Episode]:
     return _list_by_status(db_path, table_name="episodes", status="candidate", limit=limit, row_parser=episode_from_row)
+
+
+def list_facts_by_claim_slot(
+    db_path: Path | str,
+    *,
+    subject_ref: str,
+    predicate: str,
+    scope: str | None = None,
+) -> list[Fact]:
+    params: list[Any] = [subject_ref, predicate]
+    scope_clause = ""
+    if scope is not None:
+        scope_clause = " AND scope = ?"
+        params.append(scope)
+    sql = f"""
+        SELECT *
+        FROM facts
+        WHERE subject_ref = ? AND predicate = ?{scope_clause}
+        ORDER BY
+            CASE status
+                WHEN 'approved' THEN 0
+                WHEN 'candidate' THEN 1
+                WHEN 'disputed' THEN 2
+                WHEN 'deprecated' THEN 3
+                ELSE 4
+            END,
+            confidence DESC,
+            id ASC
+    """
+    with connect(db_path) as connection:
+        rows = connection.execute(sql, params).fetchall()
+    return [fact_from_row(row) for row in rows]
 
 
 def list_approved_facts(db_path: Path | str, scope: str | None = None) -> list[Fact]:
@@ -588,12 +674,19 @@ def _search_model_rows_with_trace(
     limit: int,
     row_parser: Callable[[sqlite3.Row], T],
     preferred_scope: str | None,
+    statuses: tuple[MemoryStatus, ...] = ("approved",),
 ) -> list[tuple[T, RetrievalTraceEntry]]:
     tokens = _tokenize_query(query)
     query_relations = search_relations_matching_query(db_path, query=query, limit=max(limit * 3, 10))
 
+    if not statuses:
+        return []
+    status_placeholders = ", ".join("?" for _ in statuses)
     with connect(db_path) as connection:
-        rows = connection.execute(f"SELECT * FROM {table_name} WHERE status = 'approved'").fetchall()
+        rows = connection.execute(
+            f"SELECT * FROM {table_name} WHERE status IN ({status_placeholders})",
+            statuses,
+        ).fetchall()
         non_approved_rows = (
             connection.execute(f"SELECT * FROM {table_name} WHERE status IN ('disputed', 'deprecated')").fetchall()
             if table_name == "facts"
@@ -603,8 +696,9 @@ def _search_model_rows_with_trace(
     recency_values = [_row_recency_value(row) for row in rows]
     recency_min = min(recency_values) if recency_values else None
     recency_max = max(recency_values) if recency_values else None
-    approved_conflicts = _approved_fact_conflict_map(rows) if table_name == "facts" else {}
-    hidden_alternatives = _hidden_fact_alternative_map(rows, non_approved_rows) if table_name == "facts" else {}
+    approved_rows = [row for row in rows if row["status"] == "approved"]
+    approved_conflicts = _approved_fact_conflict_map(approved_rows) if table_name == "facts" else {}
+    hidden_alternatives = _hidden_fact_alternative_map(approved_rows, non_approved_rows) if table_name == "facts" else {}
 
     scored_rows: list[tuple[tuple[Any, ...], T, RetrievalTraceEntry]] = []
     for row in rows:
@@ -681,7 +775,7 @@ def _search_model_rows_with_trace(
 
     scored_rows.sort(key=lambda item: item[0])
 
-    if table_name == "facts":
+    if table_name == "facts" and statuses == ("approved",):
         if preferred_scope and any(trace.scope_priority == 0 for _score, _model, trace in scored_rows):
             scored_rows = [item for item in scored_rows if item[2].scope_priority == 0]
 

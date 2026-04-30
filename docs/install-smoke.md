@@ -18,14 +18,14 @@ Use this as the primary end-user onboarding path for Hermes-oriented CLI users.
 npm install -g @cafitac/agent-memory
 agent-memory bootstrap
 agent-memory doctor
-hermes hooks list
+hermes hooks doctor
 ```
 
 Expected outcomes:
 - `agent-memory bootstrap` initializes `~/.agent-memory/memory.db` if missing
 - Hermes config is created or merged at `~/.hermes/config.yaml`
 - `agent-memory doctor` reports healthy setup status
-- `hermes hooks list` shows the installed hook entry
+- `hermes hooks doctor` reports that shell hooks are healthy
 
 Optional cleanup:
 
@@ -41,7 +41,7 @@ Use this when the operator prefers Python-native installation while still avoidi
 pipx install cafitac-agent-memory
 agent-memory bootstrap
 agent-memory doctor
-hermes hooks list
+hermes hooks doctor
 ```
 
 Optional cleanup:
@@ -58,7 +58,7 @@ Use this for users already standardizing on uv-managed CLI tools.
 uv tool install cafitac-agent-memory
 agent-memory bootstrap
 agent-memory doctor
-hermes hooks list
+hermes hooks doctor
 ```
 
 Optional cleanup:
@@ -66,6 +66,20 @@ Optional cleanup:
 ```bash
 uv tool uninstall cafitac-agent-memory
 ```
+
+
+## Fresh-user trust matrix
+
+Before treating a release as ready for external users, validate these surfaces from an external temp directory, not from the source checkout:
+
+| Surface | Required checks | Expected safety property |
+| --- | --- | --- |
+| npm | `npm exec --yes --package @cafitac/agent-memory@<version> agent-memory -- --help`; seed one approved memory; run `hermes-context` | direct `agent-memory [command]` UX works and prompt text includes only approved memory content |
+| npx | `npx --yes @cafitac/agent-memory@<version> agent-memory --help` | no source checkout or local PATH dependency |
+| uvx | `uvx --refresh cafitac-agent-memory==<version> agent-memory --help` | PyPI package resolves independently of npm wrapper |
+| Hermes | `agent-memory bootstrap`; `agent-memory doctor`; `hermes hooks doctor`; one QA prompt with hooks accepted | hook install is merge-safe, bounded by conservative prompt budgets, and fails closed if memory DB is unavailable |
+| Codex/Claude prompts | `agent-memory codex-prompt ...`; `agent-memory claude-prompt ...` after seeding approved memory | prompt wrappers include actual approved snippets and exclude disputed/deprecated content by default |
+| Forensic review | `agent-memory retrieve ... --status all`; `agent-memory review conflicts fact ...` | obsolete/conflicting memory can be inspected intentionally without entering normal prompts |
 
 ## What to capture if smoke fails
 
@@ -76,8 +90,8 @@ Record:
 - whether `~/.agent-memory/memory.db` was created
 - whether `~/.hermes/config.yaml` was created or merged
 - output of `agent-memory doctor`
-- output of `hermes hooks list`
+- output of `hermes hooks doctor`
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.13`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+As of the latest validated public install smoke, the validated tag is `v0.1.14`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.

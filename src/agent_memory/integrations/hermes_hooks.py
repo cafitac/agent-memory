@@ -368,23 +368,26 @@ def build_pre_llm_hook_context(
         return {}
 
     effective_preferred_scope = resolve_effective_preferred_scope(payload, options)
-    packet = retrieve_memory_packet(
-        db_path=options.db_path,
-        query=user_message,
-        limit=options.limit,
-        preferred_scope=effective_preferred_scope,
-    )
-    context = prepare_hermes_memory_context(
-        packet,
-        top_k=options.top_k,
-        max_prompt_lines=options.max_prompt_lines,
-        max_prompt_chars=options.max_prompt_chars,
-        max_prompt_tokens=options.max_prompt_tokens,
-        max_verification_steps=options.max_verification_steps,
-        max_alternatives=options.max_alternatives,
-        max_guidelines=options.max_guidelines,
-        include_reason_codes=options.include_reason_codes,
-    )
+    try:
+        packet = retrieve_memory_packet(
+            db_path=options.db_path,
+            query=user_message,
+            limit=options.limit,
+            preferred_scope=effective_preferred_scope,
+        )
+        context = prepare_hermes_memory_context(
+            packet,
+            top_k=options.top_k,
+            max_prompt_lines=options.max_prompt_lines,
+            max_prompt_chars=options.max_prompt_chars,
+            max_prompt_tokens=options.max_prompt_tokens,
+            max_verification_steps=options.max_verification_steps,
+            max_alternatives=options.max_alternatives,
+            max_guidelines=options.max_guidelines,
+            include_reason_codes=options.include_reason_codes,
+        )
+    except Exception:
+        return {}
 
     if not context.prompt_text.strip():
         return {}

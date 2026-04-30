@@ -36,7 +36,7 @@ agent-memory takes a different approach:
 1. Event ingestion from external harnesses
 2. Memory normalization and storage
 3. Retrieval API for prompt-time context
-4. Curation lifecycle: raw -> candidate -> approved -> deprecated
+4. Curation lifecycle: raw -> candidate -> approved -> disputed/deprecated
 5. Graph links between entities, episodes, concepts, tasks, and rules
 6. Thin adapters for Hermes and other harnesses
 
@@ -131,11 +131,21 @@ Scope model:
 - `cwd:<hash>` is used by the Hermes hook when no explicit `--preferred-scope` is provided. It is derived from the runtime `cwd`, but stores a hash instead of the raw folder path so local usernames and repository names do not leak into prompts or examples.
 - `project:*` / `workspace:*` scopes are still supported for explicit narrowing, but they are not the primary storage boundary.
 
-Retrieve the raw `MemoryPacket` for a query:
+Retrieve the raw `MemoryPacket` for a query. The default runtime policy is approved-only, so candidate, disputed, and deprecated memories do not enter normal prompt context:
 
 ```bash
 agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
 ```
+
+For forensic/debug review, intentionally widen the status filter instead of changing the always-on prompt policy:
+
+```bash
+agent-memory retrieve ~/.agent-memory/memory.db "What did we think Project X used?" --status all
+agent-memory retrieve ~/.agent-memory/memory.db "What disputed memories mention Project X?" --status disputed
+agent-memory review conflicts fact ~/.agent-memory/memory.db "Project X" "runtime" --scope user:default
+```
+
+`review conflicts fact` shows all lifecycle states for a single fact claim slot (`subject_ref` + `predicate` + optional `scope`) while documenting that normal retrieval remains approved-only. This gives maintainers a safe way to inspect obsolete or contradicted memory without letting it silently contaminate Hermes/Codex/Claude prompts.
 
 Evaluate retrieval fixtures against the current retrieval path:
 
