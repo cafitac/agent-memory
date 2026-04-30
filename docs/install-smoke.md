@@ -68,6 +68,26 @@ uv tool uninstall cafitac-agent-memory
 ```
 
 
+## Automated published smoke
+
+The release workflow now runs the published install smoke matrix after npm and PyPI publish succeed. Maintainers can rerun it manually without cutting a new release:
+
+```bash
+gh workflow run published-install-smoke.yml \
+  --repo cafitac/agent-memory \
+  -f version=<version> \
+  -f attempts=6 \
+  -f delay_seconds=10
+```
+
+The workflow executes `scripts/smoke_published_install.py`, which validates the exact published version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx` from isolated temporary homes.
+
+Local maintainer smoke for the current `package.json` version:
+
+```bash
+uv run python scripts/smoke_published_install.py --attempts 3 --delay-seconds 10
+```
+
 ## Fresh-user trust matrix
 
 Before treating a release as ready for external users, validate these surfaces from an external temp directory, not from the source checkout:
@@ -94,4 +114,4 @@ Record:
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.16`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+As of the latest validated public install smoke, the validated tag is `v0.1.18`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.

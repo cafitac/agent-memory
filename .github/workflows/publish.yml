@@ -110,11 +110,52 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  published-install-smoke:
+    needs:
+      - publish-pypi
+      - publish-npm
+    runs-on: ubuntu-latest
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.publish-pypi.result == 'success' &&
+      needs.publish-npm.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pipx for published package smoke
+        run: |
+          python -m pip install --user pipx
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run published install smoke matrix
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          uv run python scripts/smoke_published_install.py \
+            --version "$VERSION" \
+            --attempts 12 \
+            --delay-seconds 10
+
   create-github-release:
     needs:
       - verify
       - publish-pypi
       - publish-npm
+      - published-install-smoke
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
