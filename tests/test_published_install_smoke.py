@@ -59,7 +59,7 @@ def test_published_install_script_uses_package_json_version_by_default() -> None
     assert version == package_json["version"]
 
 
-def test_published_install_workflows_use_python_module_pipx_wrapper() -> None:
+def test_published_install_workflows_install_pipx_into_uv_venv() -> None:
     workflow_paths = [
         REPO_ROOT / ".github" / "workflows" / "published-install-smoke.yml",
         REPO_ROOT / ".github" / "workflows" / "publish.yml",
@@ -67,10 +67,11 @@ def test_published_install_workflows_use_python_module_pipx_wrapper() -> None:
 
     for workflow_path in workflow_paths:
         content = workflow_path.read_text()
-        assert "python -m pip install pipx" in content
-        assert "from pipx.main import cli; raise SystemExit(cli())" in content
-        assert "printf '%s\\n' '#!/usr/bin/env bash'" in content
+        assert "uv venv" in content
+        assert "uv pip install pipx" in content
+        assert 'echo "$PWD/.venv/bin" >> "$GITHUB_PATH"' in content
         assert "pip install --user pipx" not in content
+        assert "pipx.main" not in content
 
 
 def test_published_install_script_appends_isolated_bootstrap_paths(tmp_path: Path) -> None:
@@ -126,8 +127,7 @@ def test_standalone_published_install_workflow_is_manual() -> None:
     assert "version:" in workflow
     assert "scripts/smoke_published_install.py" in workflow
     assert "default: '18'" in workflow
-    assert "python -m pip install pipx" in workflow
-    assert "from pipx.main import cli; raise SystemExit(cli())" in workflow
+    assert "uv pip install pipx" in workflow
 
 
 def test_published_install_script_does_not_mask_missing_required_tool(monkeypatch: pytest.MonkeyPatch) -> None:
