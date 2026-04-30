@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 10:16 KST
+Last updated: 2026-04-30 10:29 KST
 
 ## Trigger for the next session
 
@@ -164,10 +164,9 @@ Work items:
    - prompt-budget pressure where only top-k snippets fit
 
 2. Improve text triage output:
-   - show top retrieved snippets for failed tasks
-   - show expected selector snippets or selector descriptions
-   - show avoid-hit snippets
-   - show status/conflict/policy signals when relevant
+   - done in this slice: failed-task text report now shows retrieved snippets, expected snippets, avoid-hit snippets, and top-memory policy signals
+   - JSON per-task results now include `retrieved_details`, `expected_details`, and `avoid_hit_details`
+   - next refinements can add richer conflict/lifecycle selector descriptions and more fixture families
    - make it obvious whether the failure is ranking, filtering, scope, lifecycle, or fixture-data quality
 
 3. Add tests first:
