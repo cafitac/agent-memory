@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 22:21 KST
+Last updated: 2026-04-30 23:00 KST
 
 ## Trigger for the next session
 
@@ -16,9 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-지금 agent-memory는 OSS 기본 메모리 레이어 신뢰도 작업 Priority 1~4의 주요 truth lifecycle 조각, retrieval-eval read-only hardening, protected-main release fallback 자동화를 v0.1.32까지 완료했고, 현재 slice는 release fallback rerun idempotency 보강이야.
-
-최신 검증 완료 릴리스는 v0.1.32야. v0.1.27에서 status transition history, v0.1.28에서 npm wrapper stdin forwarding과 published Hermes hook smoke, v0.1.29에서 fact supersession/replacement relation, v0.1.30에서 `agent-memory review explain fact ...` decision explanation UX, v0.1.31에서 retrieval eval read-only behavior, v0.1.32에서 protected-main release-sync PR/tag/publish automation이 들어갔어. 로컬 Hermes hook도 v0.1.32 runtime으로 업데이트되어 doctor/hook smoke가 통과한 상태야.
+지금 agent-memory는 v0.1.33까지 release fallback rerun idempotency와 Hermes v0.1.33 QA까지 끝났고, 현재 진행 중인 통합 slice는 v0.1.34 후보야. 세 가지를 한 PR로 묶어 진행 중이야: published smoke propagation/backoff hardening, release-sync PR CI validation dispatch, read-only relation graph inspect CLI.
 
 ## Current repo state
 
@@ -35,18 +33,15 @@ Expected GitHub identity:
 Verified base before this slice:
 
 - branch: `main`
-- HEAD: `654c5d8 chore: release v0.1.32 [skip release] (#32)`
-- tag/release: `v0.1.32`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.32`
-- npm: `@cafitac/agent-memory@0.1.32`
-- PyPI: `cafitac-agent-memory==0.1.32`
-- v0.1.32 published smoke artifact: passed; includes npm/uvx/pipx Hermes hook commands.
-- repo Actions workflow setting: `can_approve_pull_request_reviews=true`, needed so `GITHUB_TOKEN` can create release-sync PRs.
+- latest completed release: `v0.1.33`
+- v0.1.33 included release-sync fallback rerun idempotency.
+- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.33/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 
 Active slice/worktree:
 
-- branch: `ci/release-fallback-idempotency`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/release-fallback-idempotency`
+- branch: `feat/release-graph-hardening`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/release-graph-hardening`
+- intended release after merge: likely `v0.1.34`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -58,7 +53,7 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## What is complete through v0.1.32
+## What is complete through v0.1.33
 
 ### Distribution and release automation
 
@@ -68,11 +63,12 @@ Do not delete or commit these unless the user explicitly asks.
 - Published smoke uploads `published-install-smoke-result` JSON artifact with success/failure diagnostics.
 - v0.1.28+ smoke covers npm/npx/npm-exec/uvx/pipx and Hermes hook stdin payload handling.
 - Protected `main` fallback is automated: auto-release creates `release-sync/vX.Y.Z` PR when direct metadata write-back is rejected; after merge, auto-release tags and dispatches publish.
+- v0.1.33 made that fallback safe to rerun when the branch or PR already exists.
 
 ### Runtime adapter readiness
 
 - Hermes bootstrap/doctor/install flow exists and defaults to the conservative preset.
-- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.32/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.33/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 - Hermes hook fails closed: unavailable DB/schema returns `{}` and exit 0 instead of breaking prompt flow.
 - Conservative preset remains default: small prompt budgets, one top memory, no alternative-memory detail, no reason-code noise.
 - `--preset balanced` is explicit opt-in for more context/noise.
@@ -90,36 +86,98 @@ Do not delete or commit these unless the user explicitly asks.
 - `agent-memory review explain fact ...` explains status, default retrieval visibility, same claim-slot alternatives, replacement chain, and review follow-up commands.
 - Retrieval eval calls the real retrieval path but suppresses retrieval bookkeeping writes (`retrieval_count`, `reinforcement_count`, `last_accessed_at`).
 
-## Current slice: release fallback rerun idempotency
+## Current slice: release/package/graph hardening
 
-Why this slice exists:
+User asked to do all three next recommended tasks:
 
-- During the first v0.1.32 live fallback run, GitHub Actions created `release-sync/v0.1.32` but failed to create the PR because the repository Actions setting initially disallowed GitHub Actions from creating PRs.
-- After enabling that setting, rerunning the failed job hit a non-fast-forward branch push because the release-sync branch already existed.
-- The fallback should be safe to rerun after this kind of partial success.
+1. Published smoke propagation/backoff improvement.
+2. release-sync PR CI dispatch/status automation.
+3. Graph foundation first safe slice: read-only relation graph inspect CLI.
 
-Planned behavior:
+Current implementation direction:
 
-- When protected-main fallback starts, check whether `release-sync/vX.Y.Z` already exists on origin.
-- If the branch exists, reuse it instead of pushing and failing with non-fast-forward.
-- Check whether an open PR already exists for the release-sync branch.
-- If the PR exists, log the URL and exit successfully instead of opening a duplicate PR.
-- If neither exists, keep the existing branch push + `gh pr create` behavior.
+### Published smoke propagation/backoff
 
-Implementation direction:
+Files:
 
-- Update `.github/workflows/auto-release.yml` fallback step with `git ls-remote --heads` branch detection.
-- Add `gh pr list --head ... --state open --json url --jq '.[0].url // empty'` before `gh pr create`.
-- Keep the direct path and release-sync tag/publish follow-up unchanged.
-- Add/keep tests in `tests/test_release_workflows.py` proving idempotency markers exist in the workflow.
+- `scripts/smoke_published_install.py`
+- `tests/test_published_install_smoke.py`
+- `.github/workflows/publish.yml`
+- `.github/workflows/published-install-smoke.yml`
+
+Behavior:
+
+- Detect resolver/package-index propagation-like failures such as `No solution found`, `No matching distribution found`, npm 404/ETARGET/NOTARGET, and exact `cafitac-agent-memory==X.Y.Z` misses.
+- Apply a separate longer retry budget only for propagation-like failures:
+  - normal attempts remain bounded
+  - propagation attempts can extend with exponential backoff
+- Failure artifacts include registry probe diagnostics:
+  - npm version present/latest
+  - PyPI JSON release present
+  - PyPI simple index mentions version
+  - probe errors
+- `publish.yml` uses `--attempts 12`, `--propagation-attempts 36`, `--propagation-delay-seconds 20`.
+- Manual `published-install-smoke.yml` exposes propagation attempt/delay inputs.
+
+### release-sync PR CI validation dispatch
+
+Files:
+
+- `.github/workflows/auto-release.yml`
+- `tests/test_release_workflows.py`
+
+Behavior:
+
+- When fallback creates a new `release-sync/vX.Y.Z` PR, capture the PR URL.
+- Dispatch `ci.yml` explicitly on `release-sync/vX.Y.Z` with `gh workflow run ci.yml --ref "${RELEASE_SYNC_BRANCH}"`.
+- Comment on the PR explaining that bot-created refs may suppress automatic PR checks and that maintainers should wait for the dispatched `ci.yml` run before merging.
+
+### read-only relation graph inspect CLI
+
+Files:
+
+- `src/agent_memory/api/cli.py`
+- `src/agent_memory/storage/sqlite.py`
+- `tests/test_cli.py`
+- `README.md`
+
+New command:
+
+```bash
+agent-memory graph inspect <db_path> <start_ref> --depth 1 --limit 100
+```
+
+Example:
+
+```bash
+agent-memory graph inspect ~/.agent-memory/memory.db fact:1 --depth 2 --limit 50
+```
+
+Behavior:
+
+- Traverses stored `Relation` edges only.
+- JSON output includes:
+  - `kind: relation_graph_inspection`
+  - `start_ref`
+  - `depth`
+  - `limit`
+  - `read_only: true`
+  - `nodes`
+  - `edges`
+  - `truncated`
+- Does not change retrieval behavior.
+- Does not mutate memory state.
+- Intended as the first safe graph-foundation slice before default retrieval graph traversal.
 
 ## Verification checklist for this slice
 
 Run from the active worktree:
 
 ```bash
-uv run pytest tests/test_release_workflows.py -q
 uv run pytest tests/test_published_install_smoke.py -q
+uv run pytest tests/test_release_workflows.py -q
+uv run pytest tests/test_cli.py::test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood -q
+uv run pytest tests/test_published_install_smoke.py tests/test_release_workflows.py tests/test_cli.py -q
 uv run pytest tests/ -q
 uv run python scripts/check_release_metadata.py
 uv run python scripts/smoke_release_readiness.py
@@ -132,21 +190,22 @@ Before PR, run a static diff secret scan and confirm finding_count 0.
 
 ## PR/release notes
 
-This slice changes only release automation/docs/tests, but it affects the release path and should be treated as a patch release candidate, likely v0.1.33 after PR merge.
+This slice affects release automation, published install smoke, and a new read-only CLI command. Treat it as a patch release candidate, likely v0.1.34 after PR merge.
 
 Expected live verification after merge:
 
-1. PR merge should trigger auto-release and bump metadata to v0.1.33.
+1. PR merge should trigger auto-release and bump metadata to v0.1.34.
 2. Protected `main` should trigger fallback.
-3. Fallback should create `release-sync/v0.1.33` PR or reuse it if a partial rerun already created it.
-4. Merge the release-sync PR.
-5. Confirm release-sync follow-up creates tag `v0.1.33`, dispatches publish, and published smoke passes.
-6. Verify GitHub Release/npm/PyPI/published-install-smoke artifact.
-7. Update local Hermes runtime to v0.1.33 only after package release is verified.
+3. Fallback should create `release-sync/v0.1.34` PR and dispatch `ci.yml` on that branch.
+4. Wait for the dispatched CI run before merging release-sync PR.
+5. Merge the release-sync PR.
+6. Confirm release-sync follow-up creates tag `v0.1.34`, dispatches publish, and published smoke passes.
+7. Verify GitHub Release/npm/PyPI/published-install-smoke artifact.
+8. Update local Hermes runtime to v0.1.34 only after package release is verified.
 
 ## Next likely slices after this
 
-1. Published smoke propagation handling improvement: make first-run simple-index lag less noisy.
-2. Actual Hermes dogfood observations and noise/latency notes.
-3. Graph foundation read-only slice: graph inspection CLI or bounded relation traversal eval fixtures.
+1. Actual Hermes dogfood observations and noise/latency notes.
+2. Expand graph inspection with node metadata/status summaries, still read-only.
+3. Later graph retrieval eval fixtures before any default graph expansion.
 4. PyPI Trusted Publisher later; user deferred it.

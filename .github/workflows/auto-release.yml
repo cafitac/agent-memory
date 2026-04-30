@@ -126,12 +126,17 @@ jobs:
           ## Next automation
           Publish workflow will run after the release sync PR is merged and the tag is pushed.
           EOF
-          gh pr create \
+          release_sync_pr_url=$(gh pr create \
             --repo "${{ github.repository }}" \
             --base main \
             --head "${RELEASE_SYNC_BRANCH}" \
             --title "chore: release ${{ steps.bump.outputs.tag }} [skip release]" \
-            --body-file /tmp/release-sync-pr.md
+            --body-file /tmp/release-sync-pr.md)
+          echo "Release sync PR created: ${release_sync_pr_url}"
+          gh workflow run ci.yml --ref "${RELEASE_SYNC_BRANCH}"
+          gh pr comment "${release_sync_pr_url}" \
+            --repo "${{ github.repository }}" \
+            --body "Release sync validation CI was dispatched for ${RELEASE_SYNC_BRANCH}. Because this PR is created by GitHub Actions, automatic PR checks may be suppressed; wait for the dispatched `ci.yml` run before merging."
 
       - name: Dispatch publish workflow for bot-created tag
         if: steps.push_release.outputs.release_sync_required == 'false'

@@ -49,6 +49,7 @@ from agent_memory.storage.sqlite import (
     list_fact_replacement_relations,
     list_facts_by_claim_slot,
     list_memory_status_history,
+    list_relations_for_node,
 )
 
 
@@ -119,6 +120,60 @@ def _status_counts_for_facts(facts) -> dict[str, int]:
     for fact in facts:
         counts[fact.status] += 1
     return counts
+
+
+def _inspect_relation_graph(db_path: Path, *, start_ref: str, depth: int, limit: int) -> dict[str, Any]:
+    if depth < 0:
+        raise ValueError("graph inspect depth must be >= 0")
+    if limit < 1:
+        raise ValueError("graph inspect limit must be >= 1")
+    nodes: list[str] = [start_ref]
+    seen_nodes = {start_ref}
+    seen_edge_ids: set[int] = set()
+    edges: list[dict[str, Any]] = []
+    frontier = [start_ref]
+    truncated = False
+    for current_depth in range(1, depth + 1):
+        next_frontier: list[str] = []
+        for node_ref in frontier:
+            for relation in list_relations_for_node(db_path, node_ref=node_ref):
+                if relation.id in seen_edge_ids:
+                    continue
+                if len(edges) >= limit:
+                    truncated = True
+                    break
+                seen_edge_ids.add(relation.id)
+                if relation.from_ref == node_ref:
+                    neighbor_ref = relation.to_ref
+                    direction = "outbound"
+                else:
+                    neighbor_ref = relation.from_ref
+                    direction = "inbound"
+                if neighbor_ref not in seen_nodes:
+                    seen_nodes.add(neighbor_ref)
+                    nodes.append(neighbor_ref)
+                    next_frontier.append(neighbor_ref)
+                edge_payload = relation.model_dump(mode="json")
+                edge_payload["depth"] = current_depth
+                edge_payload["via_ref"] = node_ref
+                edge_payload["neighbor_ref"] = neighbor_ref
+                edge_payload["direction_from_start"] = direction
+                edges.append(edge_payload)
+            if truncated:
+                break
+        if truncated or not next_frontier:
+            break
+        frontier = next_frontier
+    return {
+        "kind": "relation_graph_inspection",
+        "start_ref": start_ref,
+        "depth": depth,
+        "limit": limit,
+        "read_only": True,
+        "nodes": nodes,
+        "edges": edges,
+        "truncated": truncated,
+    }
 
 
 def _retrieve_packet_for_prompt(args: argparse.Namespace):
@@ -361,6 +416,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default="approved",
         help="Memory status to retrieve. Defaults to approved; use all for forensic/debug review.",
     )
+
+    graph_parser = subparsers.add_parser("graph")
+    graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
+    graph_inspect_parser = graph_subparsers.add_parser("inspect")
+    graph_inspect_parser.add_argument("db_path", type=Path)
+    graph_inspect_parser.add_argument("start_ref")
+    graph_inspect_parser.add_argument("--depth", type=int, default=1)
+    graph_inspect_parser.add_argument("--limit", type=int, default=100)
 
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_action", required=True)
@@ -755,6 +818,17 @@ def main() -> None:
         )
         print(packet.model_dump_json(indent=2))
         return
+
+    if args.command == "graph":
+        if args.graph_action == "inspect":
+            print(
+                json.dumps(
+                    _inspect_relation_graph(args.db_path, start_ref=args.start_ref, depth=args.depth, limit=args.limit),
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported graph action: {args.graph_action}")
 
     if args.command == "eval":
         if args.eval_action == "retrieval":
