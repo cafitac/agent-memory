@@ -184,6 +184,15 @@ def _audit_retrieval_observations(
             }
         )
 
+    empty_retrieval_ratio = empty_retrieval_count / len(observations) if observations else 0.0
+    quality_warnings = []
+    if not observations:
+        quality_warnings.append("no_observations")
+    if 0 < len(observations) < 10:
+        quality_warnings.append("low_observation_count")
+    if empty_retrieval_ratio >= 0.5 and observations:
+        quality_warnings.append("high_empty_retrieval_ratio")
+
     return {
         "kind": "retrieval_observation_audit",
         "read_only": True,
@@ -194,6 +203,8 @@ def _audit_retrieval_observations(
         "surface_counts": dict(sorted(surface_counts.items())),
         "preferred_scope_counts": dict(sorted(preferred_scope_counts.items())),
         "empty_retrieval_count": empty_retrieval_count,
+        "empty_retrieval_ratio": round(empty_retrieval_ratio, 4),
+        "quality_warnings": quality_warnings,
         "top_memory_refs": top_memory_refs,
     }
 

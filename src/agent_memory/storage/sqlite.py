@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import sqlite3
 from datetime import datetime
 from importlib.resources import files
@@ -111,7 +110,29 @@ def initialize_database(db_path: Path | str) -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(status, scope, importance_score)"
         )
+        _ensure_memory_status_transitions_schema(connection)
         _ensure_retrieval_observations_schema(connection)
+
+
+def _ensure_memory_status_transitions_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS memory_status_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            memory_type TEXT NOT NULL CHECK (memory_type IN ('fact', 'procedure', 'episode')),
+            memory_id INTEGER NOT NULL,
+            from_status TEXT NOT NULL CHECK (from_status IN ('candidate', 'approved', 'disputed', 'deprecated')),
+            to_status TEXT NOT NULL CHECK (to_status IN ('candidate', 'approved', 'disputed', 'deprecated')),
+            reason TEXT,
+            actor TEXT,
+            evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_status_transitions_memory ON memory_status_transitions(memory_type, memory_id, id)"
+    )
 
 
 def _ensure_retrieval_observations_schema(connection: sqlite3.Connection) -> None:
@@ -448,6 +469,7 @@ def list_memory_status_history(
     memory_id: int,
 ) -> list[MemoryStatusTransition]:
     with connect(db_path) as connection:
+        _ensure_memory_status_transitions_schema(connection)
         rows = connection.execute(
             """
             SELECT *
@@ -747,6 +769,7 @@ def _update_status(
     evidence_ids: list[int],
 ) -> T:
     with connect(db_path) as connection:
+        _ensure_memory_status_transitions_schema(connection)
         current_row = connection.execute(f"SELECT * FROM {table_name} WHERE id = ?", (object_id,)).fetchone()
         if current_row is None:
             raise ValueError(f"No {memory_type} memory found with id {object_id}")
@@ -807,21 +830,6 @@ def record_memory_retrieval(
         )
 
 
-_SECRET_ASSIGNMENT_PATTERN = re.compile(r"(?i)\b(password|passwd|pwd|token|api[_-]?key|secret|credential|connection[_-]?string)\s*[:=]\s*\S+")
-_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+\-/=]+")
-_LONG_TOKEN_PATTERN = re.compile(r"\b[A-Za-z0-9_\-]{24,}\b")
-
-
-def _redacted_query_preview(query: str, *, max_chars: int = 120) -> str:
-    preview = _SECRET_ASSIGNMENT_PATTERN.sub(lambda match: f"{match.group(1)}=[REDACTED]", query)
-    preview = _BEARER_PATTERN.sub("Bearer [REDACTED]", preview)
-    preview = _LONG_TOKEN_PATTERN.sub("[REDACTED]", preview)
-    preview = " ".join(preview.split())
-    if len(preview) > max_chars:
-        return f"{preview[: max_chars - 1]}…"
-    return preview
-
-
 def _memory_ref(memory_type: str, memory_id: int) -> str:
     return f"{memory_type}:{memory_id}"
 
@@ -862,7 +870,7 @@ def record_retrieval_observation(
             (
                 surface,
                 query_sha256,
-                _redacted_query_preview(query),
+                None,
                 preferred_scope,
                 limit,
                 json.dumps(list(statuses)),
@@ -1291,7 +1299,7 @@ def retrieval_observation_from_row(row: sqlite3.Row) -> RetrievalObservation:
         created_at=row["created_at"],
         surface=row["surface"],
         query_sha256=row["query_sha256"],
-        query_preview=row["query_preview"],
+        query_preview=None,
         preferred_scope=row["preferred_scope"],
         limit=row["limit_value"],
         statuses=json.loads(row["statuses_json"]),
