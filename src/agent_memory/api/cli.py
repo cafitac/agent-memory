@@ -41,6 +41,7 @@ from agent_memory.core.retrieval_eval import (
     render_retrieval_eval_text_report,
 )
 from agent_memory.storage.sqlite import (
+    get_fact,
     initialize_database,
     list_candidate_episodes,
     list_candidate_facts,
@@ -79,6 +80,45 @@ def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
         "relation_type": relation.relation_type,
         "evidence_ids": relation.evidence_ids,
     }
+
+
+def _fact_replacement_chain_payload(relations, *, fact_id: int) -> dict[str, list[dict[str, Any]]]:
+    chain = {"superseded_by": [], "replaces": []}
+    for relation in relations:
+        payload = _fact_replacement_relation_payload(relation)
+        if payload["superseded_fact_id"] == fact_id:
+            chain["superseded_by"].append(payload)
+        elif payload["replacement_fact_id"] == fact_id:
+            chain["replaces"].append(payload)
+    return chain
+
+
+def _fact_decision_summary(*, status: str, replacement_chain: dict[str, list[dict[str, Any]]]) -> str:
+    superseded_by = replacement_chain["superseded_by"]
+    if status == "approved":
+        base = "approved: visible in default retrieval"
+    elif status == "candidate":
+        base = "candidate: hidden from default retrieval until approved"
+    elif status == "disputed":
+        base = "disputed: hidden from default retrieval pending review"
+    elif status == "deprecated":
+        base = "deprecated: hidden from default retrieval"
+    else:
+        base = f"{status}: hidden from default retrieval"
+    if superseded_by:
+        replacement_ids = ", ".join(
+            f"fact #{item['replacement_fact_id']}" for item in superseded_by if item["replacement_fact_id"] is not None
+        )
+        if replacement_ids:
+            base = f"{base}; superseded by {replacement_ids}"
+    return base
+
+
+def _status_counts_for_facts(facts) -> dict[str, int]:
+    counts = {"approved": 0, "candidate": 0, "disputed": 0, "deprecated": 0}
+    for fact in facts:
+        counts[fact.status] += 1
+    return counts
 
 
 def _retrieve_packet_for_prompt(args: argparse.Namespace):
@@ -291,6 +331,14 @@ def _build_parser() -> argparse.ArgumentParser:
     review_history_parser.add_argument("memory_type", choices=["fact", "procedure", "episode"])
     review_history_parser.add_argument("db_path", type=Path)
     review_history_parser.add_argument("memory_id", type=int)
+
+    review_explain_parser = review_subparsers.add_parser(
+        "explain",
+        help="Explain why one memory is or is not visible in default retrieval.",
+    )
+    review_explain_parser.add_argument("memory_type", choices=["fact"])
+    review_explain_parser.add_argument("db_path", type=Path)
+    review_explain_parser.add_argument("memory_id", type=int)
 
     review_conflicts_parser = review_subparsers.add_parser(
         "conflicts",
@@ -626,6 +674,43 @@ def main() -> None:
                 )
             )
             return
+        elif args.review_action == "explain":
+            fact = get_fact(args.db_path, fact_id=args.memory_id)
+            claim_facts = list_facts_by_claim_slot(
+                args.db_path,
+                subject_ref=fact.subject_ref,
+                predicate=fact.predicate,
+                scope=fact.scope,
+            )
+            history = list_memory_status_history(args.db_path, memory_type="fact", memory_id=fact.id)
+            replacement_relations = list_fact_replacement_relations(args.db_path, fact_id=fact.id)
+            replacement_chain = _fact_replacement_chain_payload(replacement_relations, fact_id=fact.id)
+            print(
+                json.dumps(
+                    {
+                        "memory_type": "fact",
+                        "memory_id": fact.id,
+                        "fact": fact.model_dump(mode="json"),
+                        "decision": {
+                            "current_status": fact.status,
+                            "visible_in_default_retrieval": fact.status == "approved",
+                            "summary": _fact_decision_summary(status=fact.status, replacement_chain=replacement_chain),
+                        },
+                        "claim_slot": {
+                            "subject_ref": fact.subject_ref,
+                            "predicate": fact.predicate,
+                            "scope": fact.scope,
+                            "counts": _status_counts_for_facts(claim_facts),
+                            "facts": [item.model_dump(mode="json") for item in claim_facts],
+                        },
+                        "history": [entry.model_dump(mode="json") for entry in history],
+                        "replacement_chain": replacement_chain,
+                        "default_retrieval_policy": "approved_only",
+                    },
+                    indent=2,
+                )
+            )
+            return
         elif args.review_action == "conflicts":
             facts = list_facts_by_claim_slot(
                 args.db_path,
@@ -633,9 +718,7 @@ def main() -> None:
                 predicate=args.predicate,
                 scope=args.scope,
             )
-            counts = {"approved": 0, "candidate": 0, "disputed": 0, "deprecated": 0}
-            for fact in facts:
-                counts[fact.status] += 1
+            counts = _status_counts_for_facts(facts)
             print(
                 json.dumps(
                     {

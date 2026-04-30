@@ -89,7 +89,10 @@ agent-memory review approve fact "$DB" 1 --reason "Verified from current setup g
 agent-memory review history fact "$DB" 1
 agent-memory review supersede fact "$DB" 1 2 --reason "Newer source replaces the old install path." --actor maintainer --evidence-ids-json '[2]'
 agent-memory review replacements fact "$DB" 1
+agent-memory review explain fact "$DB" 1
 ```
+
+`review explain` combines the current status, default retrieval visibility, transition history, same claim-slot alternatives, and replacement chain into one decision context so a reviewer can see why a stale or conflicting fact is hidden.
 
 ## Hermes quickstart
 

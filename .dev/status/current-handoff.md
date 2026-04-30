@@ -1,18 +1,15 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-04-30 15:55 KST
+Last updated: 2026-04-30 16:30 KST
 
 ## Trigger for the next session
 
 If the user starts a fresh session with a vague prompt such as:
 
 > 지금 해야하는거 알려줘
-
 > 다음으로 진행할거 해줘
-
 > 다음 거 진행해줘
-
 > agent-memory 이어서 해줘
 
 read this file first. Do not ask the user to restate context. Verify repo state, then answer from the current roadmap position below.
@@ -21,7 +18,9 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 지금 agent-memory는 OSS 기본 메모리 레이어 신뢰도 작업 Priority 1~3을 대부분 마쳤고, Priority 4 `Conflict, obsolete, and truth lifecycle`를 진행 중이야.
 
-완료된 최신 공개 릴리스는 v0.1.28이야. v0.1.27에서 status transition history가 들어갔고, v0.1.28에서 npm wrapper stdin forwarding과 published smoke의 Hermes hook QA 경로가 보강됐어. 현재 slice는 `feat: add supersedes/replaces relation for facts`야. 목적은 새 fact가 옛 fact를 대체했음을 구조적으로 남겨서 deprecated memory가 왜 폐기됐고 무엇으로 대체됐는지 설명할 수 있게 하는 것. graph/hybrid retrieval 전에 stale memory가 graph를 타고 퍼지지 않게 하는 truth lifecycle 기반이야.
+완료된 최신 공개 릴리스는 v0.1.29야. v0.1.27에서 status transition history가 들어갔고, v0.1.28에서 npm wrapper stdin forwarding과 published smoke의 Hermes hook QA 경로가 보강됐고, v0.1.29에서 fact supersession/replacement relation이 들어갔어.
+
+현재 slice는 `feat: explain conflict review decisions`야. 목적은 reviewer가 특정 fact가 default retrieval에 보이는지/숨겨지는지, 왜 disputed/deprecated 되었는지, 어떤 같은 claim-slot 대안과 replacement chain이 있는지를 한 번에 설명받도록 `agent-memory review explain fact ...` forensic UX를 추가하는 것.
 
 ## Current repo state
 
@@ -35,20 +34,20 @@ Expected GitHub identity:
 - Use `HOME=/Users/reddit` for gh commands.
 - Remote: `origin` -> `https://github.com/cafitac/agent-memory.git`
 
-Current verified base before this slice:
+Verified base before this slice:
 
 - branch: `main`
-- HEAD: `1467d24 chore: release v0.1.28 [skip release]`
-- tag/release: `v0.1.28`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.28`
-- npm: `@cafitac/agent-memory@0.1.28`
-- PyPI: `cafitac-agent-memory==0.1.28`
-- v0.1.28 published smoke artifact: passed; includes npm/uvx/pipx Hermes hook commands.
+- HEAD: `e102865 chore: release v0.1.29 [skip release]`
+- tag/release: `v0.1.29`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.29`
+- npm: `@cafitac/agent-memory@0.1.29`
+- PyPI: `cafitac-agent-memory==0.1.29`
+- v0.1.29 published smoke artifact: passed; includes npm/uvx/pipx Hermes hook commands.
 
 Active slice/worktree:
 
-- branch: `feat/fact-supersedes-replaces`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/fact-supersedes-replaces`
+- branch: `feat/conflict-decision-explanations`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/conflict-decision-explanations`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -60,7 +59,7 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## What is complete through v0.1.28
+## What is complete through v0.1.29
 
 ### Distribution and release automation
 
@@ -69,69 +68,52 @@ Do not delete or commit these unless the user explicitly asks.
 - main merge auto-release is active but protected `main` can block release metadata write-back; if that happens, use release-sync PR + tag push.
 - Publish workflow gates GitHub Release creation on `published-install-smoke` after npm/PyPI publish.
 - Published smoke uploads `published-install-smoke-result` JSON artifact with success/failure diagnostics.
-- v0.1.28 smoke covers npm/npx/npm-exec/uvx/pipx and Hermes hook stdin payload handling.
+- v0.1.28+ smoke covers npm/npx/npm-exec/uvx/pipx and Hermes hook stdin payload handling.
 
 ### Runtime adapter readiness
 
 - Hermes bootstrap/doctor/install flow exists and defaults to the conservative preset.
-- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.28/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.29/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 - Hermes hook fails closed: unavailable DB/schema returns `{}` and exit 0 instead of breaking prompt flow.
 - Conservative preset remains default: small prompt budgets, one top memory, no alternative-memory detail, no reason-code noise.
 - `--preset balanced` is explicit opt-in for more context/noise.
 
-### Retrieval eval and quality visibility
+### Truth lifecycle readiness
 
-- `agent-memory eval retrieval` exists with JSON/text reporting, baseline comparators, regression gates, failure triage, and structured `advisory_report`.
-- On regression gate failure, CLI stderr prints a human-readable advisory report when available.
+- Normal retrieval is approved-only by default.
+- Candidate/disputed/deprecated facts remain available only behind explicit forensic/review surfaces.
+- `memory_status_transitions` records status changes with from/to status, reason, actor, evidence IDs, and timestamp.
+- `agent-memory review history fact|procedure|episode ...` exposes transition history.
+- `agent-memory review supersede fact <db> <old> <new>` records fact replacement as a relation edge.
+- Replacement relation direction: `fact:<old> --superseded_by--> fact:<new>`.
+- Superseding a fact deprecates the old fact and approves the replacement fact, preserving reason/actor/evidence in transition history.
+- `agent-memory review replacements fact ...` exposes replacement chains.
 
-### Memory lifecycle and conflict handling
+## Current slice: explain conflict review decisions
 
-- Memory statuses: `candidate`, `approved`, `disputed`, `deprecated`.
-- Default retrieval remains approved-only.
-- `retrieve --status approved|candidate|disputed|deprecated|all` supports intentional forensic retrieval.
-- `review conflicts fact ...` shows same-slot fact lifecycle across statuses.
-- `review history ...` shows status transition history with reason/actor/evidence/timestamp.
-- Current slice adds fact replacement chains: old fact `superseded_by` new fact, old fact deprecated, replacement fact approved.
-
-## Immediate next work: finish fact supersedes/replaces PR
-
-Goal:
-
-Land the second Priority 4 truth-lifecycle slice: record when one fact supersedes/replaces another, preserve status-transition history, and expose replacement chains through CLI review surfaces while keeping normal retrieval approved-only.
-
-Active branch/worktree:
+Planned behavior:
 
 ```bash
-cd /Users/reddit/Project/agent-memory/.worktrees/fact-supersedes-replaces
+agent-memory review explain fact "$DB" <fact_id>
 ```
 
-Implemented in this slice so far:
+Expected JSON payload:
 
-1. Tests
-   - storage/curation test for `supersede_fact(...)` recording `superseded_by` relation, deprecating old fact, approving replacement fact, and preserving transition history.
-   - CLI test for `agent-memory review supersede fact ...` and `agent-memory review replacements fact ...`.
+- `fact`: the selected fact.
+- `decision`: current status, whether it is visible in default retrieval, and a short summary.
+- `claim_slot`: same subject/predicate/scope alternatives plus status counts.
+- `history`: transition history with reason/actor/evidence.
+- `replacement_chain`: superseded-by and replaces relation edges.
+- `default_retrieval_policy`: `approved_only`.
 
-2. Storage/curation/CLI
-   - `get_fact(...)`
-   - `list_fact_replacement_relations(...)`
-   - `supersede_fact(...)`
-   - `review supersede fact` command
-   - `review replacements fact` command
+This is a small UX layer on top of v0.1.27 transition history and v0.1.29 supersession relation. It should not change retrieval behavior.
 
-3. Docs
-   - README forensic review examples mention replacement chains.
-   - `docs/install-smoke.md` forensic review surface mentions `review replacements`.
+## Verification checklist for this slice
 
-Focused tests passed:
+Run from the active worktree:
 
 ```bash
-uv run pytest tests/test_review_and_scope_ranking.py::test_supersede_fact_records_replacement_relation_and_status_history tests/test_cli.py::test_python_module_cli_review_supersede_fact_shows_replacement_chain -q
-# 2 passed
-```
-
-Remaining verification:
-
-```bash
+uv run pytest tests/test_cli.py::test_python_module_cli_review_explain_fact_shows_decision_context -q
 uv run pytest tests/test_review_and_scope_ranking.py tests/test_cli.py -q
 uv run pytest tests/ -q
 uv run python scripts/check_release_metadata.py
@@ -140,44 +122,33 @@ npm pack --dry-run
 git diff --check
 ```
 
-Then commit, push, open PR, watch CI, merge when green, verify auto-release/publish, and verify npm/PyPI/GitHub Release/published-smoke artifact. If auto-release cannot push protected `main`, use release-sync PR + tag push.
+Before commit, scan the diff for secrets/tokens/credentials and preserve local-only untracked files.
 
-## Roadmap position
+## Recommended next work after this slice
 
-Final goal:
+1. Retrieval eval determinism/flake hardening.
+   - v0.1.25/v0.1.26 had historical one-off retrieval eval verify failures that passed on rerun.
+   - Tighten ordering, fixtures, and failure diagnostics before deeper graph traversal.
+2. Release workflow protected-main improvement.
+   - Auto-release direct push still fails under current rules.
+   - Either codify release-sync PR fallback or adjust permissions/rulesets safely.
+3. Graph-centered foundation.
+   - Entity/Concept canonicalization.
+   - relation edge traversal.
+   - graph inspection CLI.
+   - graph retrieval eval fixtures.
+   - depth/drift controls.
+4. Long-run Hermes dogfood/noise monitoring.
+   - The v0.1.29 hook is live locally, so collect latency/noise/quality observations before raising prompt-context budgets.
 
-agent-memory should be credible as an OSS default memory layer for Hermes, Codex, and Claude Code: safe to install, safe to leave on, measurable, debuggable, conservative by default, and able to explain why memories are trusted or obsolete.
+## Known operational issues
 
-### Priority 1 — Retrieval quality measurement and triage
-
-Status: core complete; broader corpus/flake hardening remain.
-
-### Priority 2 — Always-on hook safety and conservative defaults
-
-Status: mostly complete; real dogfood observations can continue.
-
-### Priority 3 — Fresh-user onboarding matrix automation
-
-Status: mostly complete; published smoke gate is active and now includes Hermes hook stdin QA.
-
-### Priority 4 — Conflict, obsolete, and truth lifecycle
-
-Status: in progress.
-
-Completed:
-
-- v0.1.27: memory transition history.
-
-Current:
-
-- fact supersedes/replaces relation.
-
-Likely next candidates:
-
-1. conflict review decision explanation UX.
-2. retrieval eval determinism/flake hardening.
-3. graph-centered foundation only after lifecycle chains are strong enough.
-
-### Priority 5 — Long-run dogfood and noise monitoring
-
-Status: not started beyond docs/checklists.
+- Protected `main` blocks auto-release write-back. Established workaround:
+  1. create `release-sync/vX.Y.Z` branch from `origin/main`,
+  2. run `scripts/bump_release_version.py --patch`,
+  3. run `uv lock`, tests/readiness/npm dry-run/diff checks,
+  4. open/merge `chore: release vX.Y.Z [skip release]` PR,
+  5. push annotated tag `vX.Y.Z`,
+  6. verify publish workflow, registries, GitHub Release, and smoke artifact.
+- PyPI Trusted Publisher is deferred by user preference.
+- Do not expose secrets/tokens/API keys. If encountered, redact as `[REDACTED]`.

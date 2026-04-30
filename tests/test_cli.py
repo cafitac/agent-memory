@@ -231,6 +231,99 @@ def test_python_module_cli_review_conflicts_shows_claim_lifecycle_across_statuse
     assert payload["default_retrieval_policy"] == "approved_only"
 
 
+def test_python_module_cli_review_explain_fact_shows_decision_context(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-explain-fact.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Review explain source text.",
+        metadata={"project": "status-qa"},
+    )
+    approved = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="APPROVED_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.95,
+    )
+    disputed = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="DISPUTED_BAD",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.91,
+    )
+    replacement = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Status QA",
+        predicate="target_phrase",
+        object_ref_or_value="REPLACEMENT_OK",
+        evidence_ids=[source.id],
+        scope="project:status-qa",
+        confidence=0.99,
+    )
+    approve_fact(db_path=db_path, fact_id=approved.id)
+    from agent_memory.core.curation import dispute_memory, supersede_fact
+
+    dispute_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=disputed.id,
+        reason="Contradicted by source #1",
+        actor="reviewer:test",
+        evidence_ids=[source.id],
+    )
+    supersede_fact(
+        db_path=db_path,
+        superseded_fact_id=disputed.id,
+        replacement_fact_id=replacement.id,
+        reason="Replacement has newer evidence",
+        actor="reviewer:test",
+        evidence_ids=[source.id],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "explain",
+            "fact",
+            str(db_path),
+            str(disputed.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["memory_type"] == "fact"
+    assert payload["fact"]["id"] == disputed.id
+    assert payload["decision"]["current_status"] == "deprecated"
+    assert payload["decision"]["visible_in_default_retrieval"] is False
+    assert payload["decision"]["summary"] == "deprecated: hidden from default retrieval; superseded by fact #3"
+    assert payload["claim_slot"]["counts"] == {"approved": 2, "candidate": 0, "disputed": 0, "deprecated": 1}
+    assert [item["object_ref_or_value"] for item in payload["claim_slot"]["facts"]] == [
+        "REPLACEMENT_OK",
+        "APPROVED_OK",
+        "DISPUTED_BAD",
+    ]
+    assert [entry["to_status"] for entry in payload["history"]] == ["disputed", "deprecated"]
+    assert payload["history"][-1]["reason"] == "Replacement has newer evidence"
+    assert payload["replacement_chain"]["superseded_by"][0]["replacement_fact_id"] == replacement.id
+    assert payload["default_retrieval_policy"] == "approved_only"
+
+
 def test_python_module_cli_review_history_shows_transition_reasons(tmp_path: Path) -> None:
     db_path = tmp_path / "review-history.db"
     initialize_database(db_path)
