@@ -1,57 +1,34 @@
 # agent-memory
 
-A universal memory and knowledge runtime for AI agents.
+[![CI](https://github.com/cafitac/agent-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/cafitac/agent-memory/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@cafitac/agent-memory.svg)](https://www.npmjs.com/package/@cafitac/agent-memory)
+[![PyPI](https://img.shields.io/pypi/v/cafitac-agent-memory.svg)](https://pypi.org/project/cafitac-agent-memory/)
+[![Python](https://img.shields.io/pypi/pyversions/cafitac-agent-memory.svg)](https://pypi.org/project/cafitac-agent-memory/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-agent-memory is an open-source memory layer for multi-agent and multi-harness systems.
-It is designed to work with Hermes, Codex-like runtimes, Claude-style runtimes, and any
-other agent harness that can emit events and call a retrieval API.
+Local-first memory for AI agents.
 
-Important repository convention:
-- `.dev/` contains AI-authored draft documents, design spikes, research notes, and unapproved plans.
-- `docs/` is reserved for human-reviewed, promoted, approved documentation.
+agent-memory gives Hermes, Codex-style CLIs, Claude-style CLIs, and custom agent harnesses a shared SQLite memory runtime with curation, provenance, retrieval, prompt rendering, and regression evaluation.
 
-## Product thesis
+It is intentionally small and local-first: your memory database lives on your machine unless you choose to sync or copy it elsewhere.
 
-Most agent systems are still weak at memory because they treat memory as one of these:
-- raw session logs
-- a flat key-value note store
-- one-shot RAG over loosely related documents
+## Why use it?
 
-agent-memory takes a different approach:
-- separate memory into working, episodic, semantic, and procedural layers
-- preserve provenance and confidence for every memory item
-- connect memories into a graph instead of only storing chunks
-- combine lexical search, graph traversal, metadata filters, and optional embedding recall
-- curate durable knowledge instead of stuffing every transcript into prompt context
+Most agent memory systems end up as raw logs, ad-hoc notes, or one-shot RAG. agent-memory separates durable knowledge into semantic facts, procedures, episodes, source records, scopes, and lifecycle states so an agent can remember useful context without blindly stuffing every transcript into future prompts.
 
-## Non-goals
+Use it when you want:
 
-- replacing the host agent runtime
-- owning the user's entire wiki lifecycle
-- forcing one storage engine or one embedding vendor
-- pretending every transcript line is durable knowledge
+- one user-level memory store shared across multiple agent harnesses
+- local SQLite storage instead of a hosted memory service
+- approved-only prompt context by default
+- candidate/disputed/deprecated memory review flows
+- source/provenance metadata for every curated memory
+- bounded prompt rendering for Hermes/Codex/Claude wrappers
+- retrieval regression fixtures with lexical/source baselines and failure triage
 
-## Initial scope
+## 30-second install
 
-1. Event ingestion from external harnesses
-2. Memory normalization and storage
-3. Retrieval API for prompt-time context
-4. Curation lifecycle: raw -> candidate -> approved -> disputed/deprecated
-5. Graph links between entities, episodes, concepts, tasks, and rules
-6. Thin adapters for Hermes and other harnesses
-
-## CLI quick start
-
-Current release posture:
-- npm is the shortest onboarding path for Hermes / Claude Code / Codex style CLI users
-- PyPI is the canonical Python runtime package for direct installs, CI, and power users
-
-Chosen distribution names:
-- npm package: `@cafitac/agent-memory`
-- PyPI package: `cafitac-agent-memory`
-- installed CLI command on both surfaces: `agent-memory`
-
-Shortest onboarding path:
+Recommended path for CLI agent users:
 
 ```bash
 npm install -g @cafitac/agent-memory
@@ -59,20 +36,15 @@ agent-memory bootstrap
 agent-memory doctor
 ```
 
-Fastest Hermes-oriented path:
-- install via npm
-- run `agent-memory bootstrap`
-- verify with `agent-memory doctor`
-- inspect installed hooks with `hermes hooks list`
+What this does:
 
-The npm launcher is intentionally thin:
-- `bootstrap` maps to the Python CLI command `hermes-bootstrap`
-- `doctor` maps to the Python CLI command `hermes-doctor`
-- runtime resolution prefers `AGENT_MEMORY_PYTHON_EXECUTABLE`, then `uvx`, then `pipx`
+- installs the `agent-memory` command
+- initializes `~/.agent-memory/memory.db` when missing
+- creates or merges the Hermes hook config at `~/.hermes/config.yaml`
+- preserves existing Hermes hooks and appends the agent-memory pre-LLM hook
+- lets you verify setup with `agent-memory doctor`
 
-Published install smoke recipes live in `docs/install-smoke.md`.
-
-Alternative Python-first install paths:
+Python-first alternatives:
 
 ```bash
 pipx install cafitac-agent-memory
@@ -86,278 +58,186 @@ agent-memory bootstrap
 agent-memory doctor
 ```
 
-Installed CLI usage:
-
-After npm install, use `agent-memory [command]` directly from the shell. For local source development, maintainers may still prefix commands with `uv run`, but end-user docs should show the installed command.
-
-Initialize a SQLite memory database. For real use, prefer one global user-level database and let scopes/provenance separate projects:
+## First memory in 60 seconds
 
 ```bash
-agent-memory init ~/.agent-memory/memory.db
+DB=~/.agent-memory/memory.db
+
+agent-memory init "$DB"
+agent-memory create-fact "$DB" "agent-memory" "primary-install-path" "npm install -g @cafitac/agent-memory" "user:default"
+agent-memory approve-fact "$DB" 1
+agent-memory retrieve "$DB" "How should I install agent-memory?" --preferred-scope user:default
 ```
 
-If you want the shortest real Hermes onboarding path, `hermes-bootstrap` is the primary one-line command. It initializes the database if missing, writes or merges the Hermes hook config, and keeps existing Hermes hooks intact.
-
-Fresh-install and upgrade notes:
-- brand-new Hermes users can run `agent-memory bootstrap` first; if `~/.hermes/config.yaml` does not exist yet, the command creates it with the agent-memory hook installed.
-- existing Hermes users with their own `pre_llm_call` / `on_session_end` hooks can also use `hermes-bootstrap`; the installer preserves the existing hook list and appends the agent-memory hook without rewriting the whole config.
-- after bootstrap, run `agent-memory doctor` and `hermes hooks doctor` once to confirm the config path, hook install, and runtime allowlist state.
-- the first real Hermes run may still require `--accept-hooks` (or an interactive approval prompt) because Hermes itself will not fire unapproved shell hooks at runtime.
+Normal retrieval is approved-only by default. Candidate, disputed, and deprecated memories stay out of prompt context unless you intentionally ask for a forensic view:
 
 ```bash
-agent-memory bootstrap
+agent-memory retrieve "$DB" "What obsolete install notes exist?" --status all
 ```
 
-If you want a one-line health check for that setup:
+## Hermes quickstart
 
-```bash
-agent-memory doctor
-```
-
-If you want the same flow with explicit paths and budgets, `hermes-install-hook` remains available:
-
-```bash
-agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --timeout 12
-```
-
-For throwaway experiments, a temp database is fine:
-
-```bash
-agent-memory init /tmp/agent-memory.db
-```
-
-Scope model:
-- `user:default` is the recommended durable default for memories that should travel with the user across projects and harnesses.
-- `cwd:<hash>` is used by the Hermes hook when no explicit `--preferred-scope` is provided. It is derived from the runtime `cwd`, but stores a hash instead of the raw folder path so local usernames and repository names do not leak into prompts or examples.
-- `project:*` / `workspace:*` scopes are still supported for explicit narrowing, but they are not the primary storage boundary.
-
-Retrieve the raw `MemoryPacket` for a query. The default runtime policy is approved-only, so candidate, disputed, and deprecated memories do not enter normal prompt context:
-
-```bash
-agent-memory retrieve ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default
-```
-
-For forensic/debug review, intentionally widen the status filter instead of changing the always-on prompt policy:
-
-```bash
-agent-memory retrieve ~/.agent-memory/memory.db "What did we think Project X used?" --status all
-agent-memory retrieve ~/.agent-memory/memory.db "What disputed memories mention Project X?" --status disputed
-agent-memory review conflicts fact ~/.agent-memory/memory.db "Project X" "runtime" --scope user:default
-```
-
-`review conflicts fact` shows all lifecycle states for a single fact claim slot (`subject_ref` + `predicate` + optional `scope`) while documenting that normal retrieval remains approved-only. This gives maintainers a safe way to inspect obsolete or contradicted memory without letting it silently contaminate Hermes/Codex/Claude prompts.
-
-Evaluate retrieval fixtures against the current retrieval path:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
-```
-
-Or include a simple lexical baseline for side-by-side comparison:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
-```
-
-For a compact terminal-oriented summary instead of the full JSON payload, use text format:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
-```
-
-Or fail the command when any current task regresses:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
-```
-
-Or fail the command only when the current retrieval path is worse than the lexical baseline:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression
-```
-
-Or compare against a source-linked lexical baseline that scores approved memories by the lexical overlap of their linked source content within the same preferred scope:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-lexical
-```
-
-Or compare against a source-linked lexical baseline that ignores preferred scope and lets cross-scope source evidence compete in the baseline ranking:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode source-global
-```
-
-Or compare against a lexical baseline that ignores preferred scope and lets cross-scope drift compete in the baseline ranking (this can make the baseline strictly worse than current retrieval, which is useful for drift-sensitive diagnostics but will not trip baseline-regression gates on its own):
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical-global
-```
-
-Or fail the command only when the current retrieval path is worse than the lexical baseline for selected primary task types:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --fail-on-baseline-regression-memory-type facts
-```
-
-Or emit non-fatal soft-gate advisories when current regressions exceed a threshold:
-
-```bash
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --warn-on-regression-threshold 0
-agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --warn-on-baseline-regression-threshold 0
-```
-
-The retrieval evaluator accepts either one JSON fixture file or a fixture directory. Directory input is recursive, so fixture families can live under nested folders such as `scope/`, `procedure/`, `drift/`, `staleness/`, and `episode/`. Fixtures may use direct numeric IDs or top-level symbolic `references` that resolve against approved memories in the target database, which makes checked-in fixture families directly runnable from the CLI. Symbolic selectors now also support richer matching such as `searchable_text_contains`, `step_contains`, and `tags_include` when exact field equality is too brittle for checked-in fixtures. Each task may also carry optional human-authored `rationale` text and `notes` arrays; these are preserved verbatim in the JSON report so fixture reviews can explain why a hit matters without introducing LLM judging. The evaluator runs `retrieve_memory_packet` for each task and prints JSON by default with fixture paths, per-task rationale/notes, retrieved IDs, retrieved snippets/policy signals for triage, expected snippets, avoid-hit snippets, expected hits, missing expected IDs, avoid/drift hits, a derived per-task `pass` flag, any non-fatal soft-gate `advisories`, and an aggregate summary. Use `--format text` when you want a short human-readable terminal report with pass counts, current/baseline/delta totals, primary-task-type rollups, failed task details including retrieved/expected/avoid snippets and top-memory policy signals, baseline weak spots, current regressions versus the selected baseline, and advisory messages. Summary objects now also include top-level task counts (`total_tasks`, `passed_tasks`, `failed_tasks`), `by_memory_type` rollups for facts/procedures/episodes, and `by_primary_task_type` rollups keyed by each task's main target surface so regressions can be reviewed both by memory-slice participation and by per-task intent; the per-type summaries expose the same task counts plus hit/miss/avoid totals. With `--baseline-mode lexical`, the same output also includes per-task baseline metrics, per-task delta fields (`expected_hit_delta`, `missing_expected_delta`, `avoid_hit_delta`, `pass_changed`), plus baseline and delta summaries using a simpler lexical-only retrieval path scoped to the same preferred scope; `--baseline-mode source-lexical` keeps that preferred-scope restriction but scores approved memories by lexical overlap in their linked source content instead of normalized memory text; `--baseline-mode source-global` uses the same source-linked lexical scoring while ignoring preferred scope; and `--baseline-mode lexical-global` keeps normalized-text lexical scoring but ignores preferred scope. Soft-gate thresholds never change the per-task `pass` semantics or process exit code on their own; they only populate `advisories` when the observed current or baseline-relative regression count exceeds the requested threshold.
-
-Export approved memories as a human-readable KB draft:
-
-```bash
-agent-memory kb export ~/.agent-memory/memory.db ./kb-draft --scope user:default
-```
-
-The KB export writes markdown files for approved facts, procedures, and episodes. Candidate, disputed, and deprecated memories are intentionally excluded. Each exported memory includes its referenced source IDs; when source records exist, the markdown also includes source type, created timestamp, adapter/external reference, metadata, and a short source excerpt for human review. The CLI prints JSON with generated files, per-type counts, total exported items, and referenced source IDs. The SQLite database remains the source of truth; exported markdown is a reviewable artifact for humans and downstream wiki sync workflows.
-
-Render a Hermes-consumable adapter context:
-
-```bash
-agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
-```
-
-The `hermes-context` output is JSON with:
-- `context`: `HermesMemoryContext`, including `prompt_text`, answer flags, blocking steps, and full adapter payload
-- `outcome`: `null` unless verification results are supplied
-
-For Codex- or Claude-style CLI wrappers that just want a plain prompt string instead of the full JSON payload, use:
-
-```bash
-agent-memory codex-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
-agent-memory claude-prompt ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
-```
-
-Both commands print only the rendered prompt text, including the normal response/verification guidance plus short snippets from the top retrieved facts, procedures, or episodes, so a wrapper can prepend it to the live user question before calling Codex or Claude Code.
-
-If you want a reusable wrapper script instead of assembling the prompt yourself, use:
-
-```bash
-python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --codex-model gpt-5.4-mini
-python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What does Project X use?" --preferred-scope user:default --max-turns 1
-```
-
-Both wrapper scripts call `agent-memory codex-prompt` / `agent-memory claude-prompt` internally, append the live user request, and then invoke the target CLI. Use `--dry-run` to inspect the final prompt and command without executing Codex or Claude Code. In this repository's current verified state, both wrappers have now been smoke-tested against the real target CLIs in this environment.
-
-Apply harness-supplied verification results and print a `HermesVerificationOutcome`:
-
-```bash
-agent-memory hermes-context ~/.agent-memory/memory.db "What does Project X use?" --verification-results-json '[{"step_action":"cross_check_hidden_alternatives","status":"passed","evidence_summary":"No approved alternative contradicted the primary memory.","target_memory_type":"fact","target_memory_id":1}]'
-```
-
-The CLI does not execute verification itself; it only applies result objects supplied by the calling harness.
-
-Generate a mergeable Hermes hook config snippet without modifying any existing config file:
-
-```bash
-agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
-```
-
-The snippet command only prints YAML. It does not read, write, or merge `~/.hermes/config.yaml`.
-
-Install the same hook explicitly into a Hermes config file. For the shortest onboarding flow, prefer `agent-memory bootstrap` and only drop to `hermes-install-hook` when you want to pin explicit paths or budgets. `hermes-bootstrap` uses the same installer with user-level defaults:
-
-```bash
-agent-memory bootstrap
-```
-
-The lower-level explicit form remains available:
-
-```bash
-agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --no-reason-codes
-```
-
-Recommended post-install verification for external users:
-
-```bash
-agent-memory doctor ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml
-hermes hooks list
-hermes hooks doctor
-# approve the hook on first real use if Hermes reports it is not allowlisted yet
-hermes --accept-hooks chat -q 'Reply with OK only.' --quiet
-hermes hooks test pre_llm_call
-```
-
-The bootstrap/install path has been smoke-tested both for a fresh `config.yaml` creation flow and for configs that already contain other Hermes shell hooks. If `hermes hooks doctor` still reports failures after bootstrap, they are usually pre-existing hook path/auth problems elsewhere in the user's Hermes setup rather than an agent-memory install failure.
-
-## Release and distribution notes
-
-Current release surfaces in the repository:
-- Python package metadata in `pyproject.toml`
-- runtime module version in `src/agent_memory/__init__.py`
-- npm launcher metadata in `package.json`
-- release metadata checker in `scripts/check_release_metadata.py`
-- release-readiness smoke in `scripts/smoke_release_readiness.py`
-- GitHub Actions workflows in `.github/workflows/ci.yml` and `.github/workflows/publish.yml`
-- release checklist draft in `.dev/release/release-checklist-v0.md`
-
-Release rule: keep the Python package version, npm package version, and module `__version__` identical. CI and publish workflows validate that sync before building artifacts. The Python distribution name and npm distribution name differ intentionally (`cafitac-agent-memory` vs `@cafitac/agent-memory`), but both must point at the same runtime version. The publish workflow now also creates a GitHub Release on tag-driven runs after the package publishes finish. The explicit gate for switching the README to true npm-first quickstart is now documented in `.dev/release/release-checklist-v0.md`.
-
-First publish checklist summary:
-- confirm GitHub Actions has `NPM_TOKEN`
-- confirm PyPI trusted publishing is enabled for this repository, or set `PYPI_API_TOKEN` in GitHub Actions secrets as the fallback path
-- run `uv run python scripts/check_release_metadata.py`
-- run `uv run pytest tests/ -q`
-- run `uv run python scripts/smoke_release_readiness.py`
-- run `uvx --from build python -m build`
-- run `npm pack --dry-run`
-- push a `vX.Y.Z` tag or trigger `publish.yml` manually
-
-Recommended post-publish smoke on a clean machine/session:
+For most Hermes users:
 
 ```bash
 npm install -g @cafitac/agent-memory
 agent-memory bootstrap
 agent-memory doctor
+hermes hooks doctor
 ```
 
-`hermes-install-hook` is intentionally conservative. It creates a missing config, initializes a missing database, backs up changed existing config files to `*.agent-memory.bak`, and no-ops if the hook command is already installed. `hermes-bootstrap` is just the one-line convenience wrapper over the same behavior with recommended defaults. `hermes-doctor` is the matching read-only validator: it checks whether the DB exists, whether the Hermes config exists, whether the hook command is present, and prints the exact one-line bootstrap command to run when setup is incomplete. If a top-level `hooks:` block already exists, the installer performs a simple structured merge: it preserves existing hook events, appends the agent-memory command to an existing `pre_llm_call:` list, or creates `pre_llm_call:` under `hooks:` when missing. After installing, validate with `hermes hooks list`, then run Hermes with hook consent enabled (for example `hermes --accept-hooks ...`) or approve the hook through Hermes's normal shell-hook consent flow. The merge is text-based and intended for ordinary Hermes YAML config; for unusual YAML anchors or multiline hook definitions, inspect the backup and generated snippet before relying on it.
+On first real Hermes use, Hermes may ask you to approve the shell hook or require `--accept-hooks` depending on your local Hermes policy.
 
-Use `agent-memory` directly from a Hermes `pre_llm_call` shell hook:
+The installed hook calls:
 
-```yaml
-hooks:
-  pre_llm_call:
-    - command: "agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300"
-      timeout: 10
+```bash
+agent-memory hermes-pre-llm-hook ~/.agent-memory/memory.db --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2
 ```
 
-Hermes passes a JSON hook payload on stdin. `hermes-pre-llm-hook` reads `extra.user_message`, retrieves memory, and prints either:
+The hook receives the Hermes event JSON on stdin, retrieves relevant approved memories, and returns bounded ephemeral context for the current prompt. It does not write back to Hermes session storage.
 
-```json
-{"context":"<agent_memory_context>...rendered memory context...</agent_memory_context>"}
+If you only want to inspect the YAML snippet and not modify config:
+
+```bash
+agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db
 ```
 
-or `{}` for unsupported/non-`pre_llm_call` payloads. Hermes injects the returned `context` into the current user message as ephemeral context; it is not written back to Hermes session storage.
+If you want explicit paths and budgets:
 
-When `--preferred-scope` is omitted in a Hermes hook, agent-memory derives a privacy-preserving `cwd:<hash>` preferred scope from the hook payload's `cwd`. This makes one global user database behave differently per folder/project without embedding raw local paths in prompt context.
+```bash
+agent-memory hermes-install-hook ~/.agent-memory/memory.db --config-path ~/.hermes/config.yaml --top-k 3 --max-prompt-lines 8 --max-prompt-chars 1200 --max-prompt-tokens 300 --max-alternatives 2 --timeout 12
+```
 
-Prompt budgets are renderer-level and do not mutate the full adapter payload. `--max-prompt-tokens` is an approximate local estimate (`ceil(rendered_chars / 4)`) that preserves whole rendered lines; combine it with `--max-prompt-chars` when you want both model-ish and hard character caps.
+## Codex and Claude prompt wrappers
 
-## Draft design documents
+For harnesses that want a plain prompt prefix rather than a Hermes hook response:
 
-- `.dev/product/thesis-and-scope.md`
-- `.dev/architecture/architecture-v0.md`
-- `.dev/architecture/graph-vs-hybrid-retrieval.md`
-- `.dev/roadmap/roadmap-v0.md`
-- `.dev/research/brain-and-llm-memory-notes.md`
+```bash
+agent-memory codex-prompt ~/.agent-memory/memory.db "What should I remember about this project?" --preferred-scope user:default
+agent-memory claude-prompt ~/.agent-memory/memory.db "What should I remember about this project?" --preferred-scope user:default
+```
 
-## Core idea
+The command prints prompt text only, so wrappers can prepend it to the live user request before invoking Codex, Claude Code, or another CLI.
 
-RAG is part of the story, but not the whole story.
+This repository also includes source-checkout helper scripts for maintainers:
 
-The long-term goal is not just "retrieve similar text chunks".
-The long-term goal is memory that behaves more like a connected system:
-- an event can become an episode
-- an episode can produce facts
-- facts can update entities and concepts
-- entities can be linked by relations
-- repeated successful behaviors can become procedural memory
-- retrieval can walk these links and rank by relevance, recency, confidence, and task fit
+```bash
+python scripts/run_codex_with_memory.py ~/.agent-memory/memory.db "What should I do next?" --dry-run
+python scripts/run_claude_with_memory.py ~/.agent-memory/memory.db "What should I do next?" --dry-run
+```
+
+End users should prefer the installed `agent-memory` command unless they are developing this repository.
+
+## Data and privacy model
+
+- Default database: `~/.agent-memory/memory.db`
+- Default Hermes config path: `~/.hermes/config.yaml`
+- Storage: local SQLite
+- Network behavior: the core CLI does not upload your memory database to an agent-memory cloud service
+- Prompt policy: approved memories are retrieved by default; candidate/disputed/deprecated memories are excluded unless requested
+- Scope policy: `user:default` is the recommended durable cross-project scope; Hermes can also derive privacy-preserving `cwd:<hash>` scopes without exposing raw local paths in prompt context
+
+See `PRIVACY.md` and `SECURITY.md` for the external-user trust model, sensitive-data guidance, and vulnerability reporting instructions.
+
+## Uninstall and rollback
+
+Uninstall the CLI:
+
+```bash
+npm uninstall -g @cafitac/agent-memory
+# or
+pipx uninstall cafitac-agent-memory
+# or
+uv tool uninstall cafitac-agent-memory
+```
+
+Remove the Hermes hook by editing `~/.hermes/config.yaml` and deleting the `agent-memory hermes-pre-llm-hook ...` command from `hooks.pre_llm_call`.
+
+Keep or remove local data explicitly:
+
+```bash
+# inspect first
+ls -lh ~/.agent-memory/memory.db
+
+# destructive: removes the local memory database
+rm ~/.agent-memory/memory.db
+```
+
+`agent-memory bootstrap` backs up changed Hermes config files to `*.agent-memory.bak` when it modifies an existing config.
+
+## Retrieval evaluation and regression gates
+
+agent-memory includes a fixture-based retrieval evaluator so retrieval behavior can be tested like application code:
+
+```bash
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --baseline-mode lexical --format text
+agent-memory eval retrieval ~/.agent-memory/memory.db tests/fixtures/retrieval_eval --fail-on-regression
+```
+
+Supported baseline modes include:
+
+- `lexical`: preferred-scope lexical comparator
+- `lexical-global`: lexical comparator that ignores preferred scope
+- `source-lexical`: lexical comparator over linked source content within preferred scope
+- `source-global`: source-linked comparator that ignores preferred scope
+
+Reports include per-task retrieved IDs, expected hits, missing IDs, avoid hits, pass/fail state, aggregate summaries, advisories, and failure triage details such as snippets, lifecycle status, scopes, and policy signals. Text reports are meant for maintainers reviewing failed retrieval tasks in a terminal; JSON is the stable machine-readable surface.
+
+## Current maturity
+
+agent-memory is alpha software, but the public install path is validated.
+
+What is ready:
+
+- npm and PyPI releases from the same versioned source
+- GitHub Release artifacts
+- CI and release metadata checks
+- published-install smoke checks
+- local SQLite storage
+- Hermes bootstrap/doctor flow
+- Codex/Claude prompt rendering commands
+- approved-only retrieval policy by default
+- retrieval regression fixtures and diagnostic reports
+
+Known limitations:
+
+- no hosted sync service
+- no built-in encryption-at-rest wrapper around the SQLite file
+- no automatic secret detection/redaction before users create memories
+- no stable 1.0 API guarantee yet
+- advanced graph/semantic retrieval behavior is still evolving
+- multi-machine sharing is currently a user-managed file/sync concern
+
+## Development
+
+```bash
+git clone https://github.com/cafitac/agent-memory.git
+cd agent-memory
+uv run pytest tests/ -q
+uv run python scripts/check_release_metadata.py
+uv run python scripts/smoke_release_readiness.py
+npm pack --dry-run
+```
+
+Useful source-checkout commands:
+
+```bash
+uv run python -m agent_memory.api.cli --help
+uv run python -m agent_memory.api.cli hermes-bootstrap /tmp/agent-memory.db --config-path /tmp/hermes-config.yaml
+uv run python -m agent_memory.api.cli hermes-doctor /tmp/agent-memory.db --config-path /tmp/hermes-config.yaml
+```
+
+## Repository docs
+
+- `docs/install-smoke.md`: published install smoke recipes
+- `SECURITY.md`: vulnerability reporting and local security model
+- `PRIVACY.md`: local data, prompt, and hook privacy model
+- `CONTRIBUTING.md`: contribution workflow
+- `.dev/`: AI-authored drafts, design spikes, research notes, and unapproved plans
+- `docs/`: human-reviewed promoted documentation
+
+## License
+
+MIT. See `LICENSE`.
