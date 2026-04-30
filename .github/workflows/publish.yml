@@ -145,11 +145,21 @@ jobs:
 
       - name: Run published install smoke matrix
         run: |
+          mkdir -p .artifacts
           VERSION="${GITHUB_REF_NAME#v}"
           uv run python scripts/smoke_published_install.py \
             --version "$VERSION" \
             --attempts 36 \
-            --delay-seconds 10
+            --delay-seconds 10 \
+            --output-json .artifacts/published-install-smoke.json
+
+      - name: Upload published install smoke result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: published-install-smoke-result
+          path: .artifacts/published-install-smoke.json
+          if-no-files-found: ignore
 
   create-github-release:
     needs:

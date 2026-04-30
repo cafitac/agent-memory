@@ -34,10 +34,11 @@ _MEMORY_TYPES = ("facts", "procedures", "episodes")
 
 
 class RetrievalEvalRegressionError(RuntimeError):
-    def __init__(self, failed_task_ids: list[str]):
+    def __init__(self, failed_task_ids: list[str], result_set: RetrievalEvalResultSet | None = None):
         self.failed_task_ids = failed_task_ids
+        self.result_set = result_set
         joined_ids = ", ".join(failed_task_ids)
-        super().__init__(f"retrieval regression detected for tasks: {joined_ids}")
+        super().__init__(f"regression detected for task(s): {joined_ids}")
 
 
 def _normalize_path(path: Path | str) -> Path:
@@ -907,8 +908,8 @@ def evaluate_retrieval_fixtures(
         if baseline_mode is None:
             raise ValueError("fail_on_baseline_regression requires baseline_mode")
         if baseline_regression_task_ids:
-            raise RetrievalEvalRegressionError(baseline_regression_task_ids)
+            raise RetrievalEvalRegressionError(baseline_regression_task_ids, result_set=result_set)
     if fail_on_regression:
         if current_regression_task_ids:
-            raise RetrievalEvalRegressionError(current_regression_task_ids)
+            raise RetrievalEvalRegressionError(current_regression_task_ids, result_set=result_set)
     return result_set

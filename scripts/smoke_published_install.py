@@ -33,6 +33,12 @@ class SmokeCommand:
     command: list[str]
 
 
+class PublishedSmokeFailure(RuntimeError):
+    def __init__(self, failures: list[str]):
+        self.failures = failures
+        super().__init__("published install smoke failed\n" + "\n".join(failures))
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -213,7 +219,12 @@ def run_with_retries(version: str, *, attempts: int, delay_seconds: int, timeout
             if attempt == attempts:
                 break
             time.sleep(delay_seconds)
-    raise RuntimeError("published install smoke failed\n" + "\n".join(failures))
+    raise PublishedSmokeFailure(failures)
+
+
+def _write_json_artifact(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -223,17 +234,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--delay-seconds", type=int, default=10, help="Delay between retry attempts.")
     parser.add_argument("--timeout", type=int, default=180, help="Timeout per command in seconds.")
     parser.add_argument("--skip-pipx", action="store_true", help="Skip pipx smoke commands when the runner cannot provide pipx.")
+    parser.add_argument("--output-json", type=Path, help="Write a success or failure summary artifact to this path.")
     args = parser.parse_args(argv)
 
     repo_root = _repo_root()
     version = args.version or _read_package_version(repo_root)
-    summary = run_with_retries(
-        version,
-        attempts=args.attempts,
-        delay_seconds=args.delay_seconds,
-        timeout=args.timeout,
-        include_pipx=not args.skip_pipx,
-    )
+    try:
+        summary = run_with_retries(
+            version,
+            attempts=args.attempts,
+            delay_seconds=args.delay_seconds,
+            timeout=args.timeout,
+            include_pipx=not args.skip_pipx,
+        )
+    except PublishedSmokeFailure as exc:
+        failure_summary: dict[str, object] = {
+            "status": "failed",
+            "version": version,
+            "attempts": args.attempts,
+            "failures": exc.failures,
+        }
+        if args.output_json is not None:
+            _write_json_artifact(args.output_json, failure_summary)
+        print(str(exc), file=sys.stderr)
+        return 1
+    summary["status"] = "ok"
+    if args.output_json is not None:
+        _write_json_artifact(args.output_json, summary)
     print(json.dumps(summary, indent=2))
     return 0
 
