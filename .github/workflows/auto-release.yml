@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 
 concurrency:
   group: auto-release-main
@@ -76,16 +77,117 @@ jobs:
           git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
 
       - name: Push release commit and tag
+        id: push_release
         run: |
           set -euo pipefail
-          git push origin HEAD:main
           TAG="${{ steps.bump.outputs.tag }}"
-          git push origin "$TAG"
+          PUSH_LOG="$(mktemp)"
+          if git push origin HEAD:main 2>"$PUSH_LOG"; then
+            git push origin "$TAG"
+            echo "release_sync_required=false" >> "$GITHUB_OUTPUT"
+          elif grep -q "GH013\|Changes must be made through a pull request" "$PUSH_LOG"; then
+            cat "$PUSH_LOG" >&2
+            echo "Protected main rejected the release metadata write-back; opening a release-sync PR instead." >&2
+            echo "release_sync_required=true" >> "$GITHUB_OUTPUT"
+          else
+            cat "$PUSH_LOG" >&2
+            exit 1
+          fi
+
+      - name: Create release sync pull request after protected main rejection
+        if: steps.push_release.outputs.release_sync_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASE_SYNC_BRANCH="release-sync/${{ steps.bump.outputs.tag }}"
+          git push origin "HEAD:${RELEASE_SYNC_BRANCH}"
+          cat > /tmp/release-sync-pr.md <<'EOF'
+          ## Summary
+          - sync release metadata after protected main rejected the auto-release write-back
+          - keep the release commit marked with `[skip release]` so it cannot recursively bump another patch version
+
+          ## Next automation
+          Publish workflow will run after the release sync PR is merged and the tag is pushed.
+          EOF
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "${RELEASE_SYNC_BRANCH}" \
+            --title "chore: release ${{ steps.bump.outputs.tag }} [skip release]" \
+            --body-file /tmp/release-sync-pr.md
 
       - name: Dispatch publish workflow for bot-created tag
+        if: steps.push_release.outputs.release_sync_required == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="${{ steps.bump.outputs.tag }}"
+          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true
+
+  tag-and-publish-release-sync:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[skip release]') &&
+      startsWith(github.event.head_commit.message, 'chore: release v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main with full history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Configure release bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve release sync version
+        id: release_sync
+        run: |
+          set -euo pipefail
+          uv run python scripts/check_release_metadata.py
+          VERSION=$(uv run python - <<'PY'
+          from agent_memory.release_metadata import validate_release_metadata
+          print(validate_release_metadata().python_package_version)
+          PY
+          )
+          TAG="v${VERSION}"
+          if ! grep -q "${TAG}" <<<"${{ github.event.head_commit.message }}"; then
+            echo "Release sync commit message does not match metadata tag ${TAG}" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists; nothing to publish."
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Push release sync tag
+        if: steps.release_sync.outputs.tag_exists == 'false'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_sync.outputs.tag }}"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Dispatch publish workflow for release sync tag
+        if: steps.release_sync.outputs.tag_exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_sync.outputs.tag }}"
           gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true
