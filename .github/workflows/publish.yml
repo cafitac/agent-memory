@@ -150,7 +150,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           uv run python scripts/smoke_published_install.py \
             --version "$VERSION" \
-            --attempts 12 \
+            --attempts 36 \
             --delay-seconds 10
 
   create-github-release:
