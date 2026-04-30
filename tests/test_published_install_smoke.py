@@ -68,7 +68,8 @@ def test_published_install_workflows_use_python_module_pipx_wrapper() -> None:
     for workflow_path in workflow_paths:
         content = workflow_path.read_text()
         assert "python -m pip install pipx" in content
-        assert 'exec python -c \'from pipx.main import cli; raise SystemExit(cli())\' "$@"' in content
+        assert "from pipx.main import cli; raise SystemExit(cli())" in content
+        assert "printf '%s\\n' '#!/usr/bin/env bash'" in content
         assert "pip install --user pipx" not in content
 
 
@@ -124,7 +125,7 @@ def test_standalone_published_install_workflow_is_manual() -> None:
     assert "version:" in workflow
     assert "scripts/smoke_published_install.py" in workflow
     assert "python -m pip install pipx" in workflow
-    assert 'exec python -c \'from pipx.main import cli; raise SystemExit(cli())\' "$@"' in workflow
+    assert "from pipx.main import cli; raise SystemExit(cli())" in workflow
 
 
 def test_published_install_script_does_not_mask_missing_required_tool(monkeypatch: pytest.MonkeyPatch) -> None:
