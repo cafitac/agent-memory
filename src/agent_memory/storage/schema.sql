@@ -104,6 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(stat
 CREATE INDEX IF NOT EXISTS idx_episodes_title ON episodes(title);
 CREATE INDEX IF NOT EXISTS idx_relations_from_to ON relations(from_ref, to_ref);
 CREATE INDEX IF NOT EXISTS idx_relations_to_ref ON relations(to_ref);
+CREATE INDEX IF NOT EXISTS idx_relations_type_refs ON relations(relation_type, from_ref, to_ref);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     searchable_text,

@@ -30,6 +30,7 @@ from agent_memory.core.curation import (
     create_episode,
     deprecate_memory,
     dispute_memory,
+    supersede_fact,
 )
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.kb_export import export_kb_markdown
@@ -44,6 +45,7 @@ from agent_memory.storage.sqlite import (
     list_candidate_episodes,
     list_candidate_facts,
     list_candidate_procedures,
+    list_fact_replacement_relations,
     list_facts_by_claim_slot,
     list_memory_status_history,
 )
@@ -51,6 +53,32 @@ from agent_memory.storage.sqlite import (
 
 def _dump_models(models: list[Any]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models], indent=2)
+
+
+def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
+    def parse_fact_ref(value: str) -> int | None:
+        prefix = "fact:"
+        if not value.startswith(prefix):
+            return None
+        return int(value[len(prefix) :])
+
+    if relation.relation_type == "superseded_by":
+        superseded_fact_id = parse_fact_ref(relation.from_ref)
+        replacement_fact_id = parse_fact_ref(relation.to_ref)
+    elif relation.relation_type == "replaces":
+        superseded_fact_id = parse_fact_ref(relation.to_ref)
+        replacement_fact_id = parse_fact_ref(relation.from_ref)
+    else:
+        superseded_fact_id = None
+        replacement_fact_id = None
+
+    return {
+        "relation_id": relation.id,
+        "superseded_fact_id": superseded_fact_id,
+        "replacement_fact_id": replacement_fact_id,
+        "relation_type": relation.relation_type,
+        "evidence_ids": relation.evidence_ids,
+    }
 
 
 def _retrieve_packet_for_prompt(args: argparse.Namespace):
@@ -235,6 +263,26 @@ def _build_parser() -> argparse.ArgumentParser:
         action_parser.add_argument("--reason")
         action_parser.add_argument("--actor")
         action_parser.add_argument("--evidence-ids-json", default="[]")
+
+    review_supersede_parser = review_subparsers.add_parser(
+        "supersede",
+        help="Mark one fact as superseded by another fact and record a replacement relation.",
+    )
+    review_supersede_parser.add_argument("memory_type", choices=["fact"])
+    review_supersede_parser.add_argument("db_path", type=Path)
+    review_supersede_parser.add_argument("superseded_memory_id", type=int)
+    review_supersede_parser.add_argument("replacement_memory_id", type=int)
+    review_supersede_parser.add_argument("--reason")
+    review_supersede_parser.add_argument("--actor")
+    review_supersede_parser.add_argument("--evidence-ids-json", default="[]")
+
+    review_replacements_parser = review_subparsers.add_parser(
+        "replacements",
+        help="Show supersedes/replaces relations for one fact.",
+    )
+    review_replacements_parser.add_argument("memory_type", choices=["fact"])
+    review_replacements_parser.add_argument("db_path", type=Path)
+    review_replacements_parser.add_argument("memory_id", type=int)
 
     review_history_parser = review_subparsers.add_parser(
         "history",
@@ -537,6 +585,30 @@ def main() -> None:
                 memory = dispute_memory(**review_kwargs)
             else:
                 memory = deprecate_memory(**review_kwargs)
+        elif args.review_action == "supersede":
+            relation = supersede_fact(
+                db_path=args.db_path,
+                superseded_fact_id=args.superseded_memory_id,
+                replacement_fact_id=args.replacement_memory_id,
+                reason=args.reason,
+                actor=args.actor,
+                evidence_ids=json.loads(args.evidence_ids_json),
+            )
+            print(relation.model_dump_json(indent=2))
+            return
+        elif args.review_action == "replacements":
+            relations = list_fact_replacement_relations(args.db_path, fact_id=args.memory_id)
+            print(
+                json.dumps(
+                    {
+                        "memory_type": args.memory_type,
+                        "memory_id": args.memory_id,
+                        "replacements": [_fact_replacement_relation_payload(relation) for relation in relations],
+                    },
+                    indent=2,
+                )
+            )
+            return
         elif args.review_action == "history":
             history = list_memory_status_history(
                 args.db_path,

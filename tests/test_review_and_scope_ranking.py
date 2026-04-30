@@ -7,10 +7,16 @@ from agent_memory.core.curation import (
     create_episode,
     deprecate_memory,
     dispute_memory,
+    supersede_fact,
 )
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.retrieval import retrieve_memory_packet
-from agent_memory.storage.sqlite import initialize_database, list_memory_status_history
+from agent_memory.storage.sqlite import (
+    get_fact,
+    initialize_database,
+    list_fact_replacement_relations,
+    list_memory_status_history,
+)
 
 
 def test_common_review_transitions_work_for_fact_procedure_and_episode(tmp_path: Path) -> None:
@@ -102,6 +108,75 @@ def test_status_transition_history_records_review_reason_actor_and_evidence(tmp_
     assert history[0].evidence_ids == [source.id]
     assert history[1].reason == "Replaced by the next branch naming policy."
     assert history[1].created_at
+
+def test_supersede_fact_records_replacement_relation_and_status_history(tmp_path: Path) -> None:
+    db_path = tmp_path / "agent-memory.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project X moved from EP branches to PX branches.",
+        metadata={"project": "project-x"},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="EP-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+    )
+    replacement_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="PX-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+    )
+    approve_memory(db_path=db_path, memory_type="fact", memory_id=old_fact.id)
+
+    relation = supersede_fact(
+        db_path=db_path,
+        superseded_fact_id=old_fact.id,
+        replacement_fact_id=replacement_fact.id,
+        reason="New project policy replaced the previous branch pattern.",
+        actor="maintainer",
+        evidence_ids=[source.id],
+    )
+
+    assert relation.from_ref == f"fact:{old_fact.id}"
+    assert relation.relation_type == "superseded_by"
+    assert relation.to_ref == f"fact:{replacement_fact.id}"
+    assert relation.evidence_ids == [source.id]
+    assert get_fact(db_path=db_path, fact_id=old_fact.id).status == "deprecated"
+    assert get_fact(db_path=db_path, fact_id=replacement_fact.id).status == "approved"
+
+    old_history = list_memory_status_history(db_path=db_path, memory_type="fact", memory_id=old_fact.id)
+    replacement_history = list_memory_status_history(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=replacement_fact.id,
+    )
+    assert old_history[-1].from_status == "approved"
+    assert old_history[-1].to_status == "deprecated"
+    assert old_history[-1].reason == "New project policy replaced the previous branch pattern."
+    assert old_history[-1].actor == "maintainer"
+    assert replacement_history[-1].from_status == "candidate"
+    assert replacement_history[-1].to_status == "approved"
+
+    old_relations = list_fact_replacement_relations(db_path=db_path, fact_id=old_fact.id)
+    replacement_relations = list_fact_replacement_relations(db_path=db_path, fact_id=replacement_fact.id)
+    assert [item.id for item in old_relations] == [relation.id]
+    assert [item.id for item in replacement_relations] == [relation.id]
+
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query="What branch pattern does Project X use?",
+        preferred_scope="project:project-x",
+    )
+    assert [fact.object_ref_or_value for fact in packet.semantic_facts] == ["PX-###"]
+
 
 def test_scope_aware_ranking_prefers_matching_scope(tmp_path: Path) -> None:
     db_path = tmp_path / "agent-memory.db"
