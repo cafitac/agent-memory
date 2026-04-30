@@ -461,6 +461,7 @@ def _evaluate_task(
         query=task.query,
         limit=task.limit,
         preferred_scope=task.preferred_scope,
+        record_retrievals=False,
     )
     primary_metrics = _evaluate_retrieved_ids(
         mode="current",

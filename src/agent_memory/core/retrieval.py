@@ -288,6 +288,7 @@ def retrieve_memory_packet(
     limit: int = 5,
     preferred_scope: str | None = None,
     statuses: tuple[MemoryStatus, ...] = ("approved",),
+    record_retrievals: bool = True,
 ) -> MemoryPacket:
     if statuses == ("approved",):
         ranked_facts = search_ranked_approved_facts(
@@ -420,15 +421,16 @@ def retrieve_memory_packet(
             ],
         )
 
-    for fact in semantic_facts:
-        if fact.status == "approved":
-            record_memory_retrieval(db_path, memory_type="fact", memory_id=fact.id)
-    for procedure in procedural_guidance:
-        if procedure.status == "approved":
-            record_memory_retrieval(db_path, memory_type="procedure", memory_id=procedure.id)
-    for episode in episodic_context:
-        if episode.status == "approved":
-            record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
+    if record_retrievals:
+        for fact in semantic_facts:
+            if fact.status == "approved":
+                record_memory_retrieval(db_path, memory_type="fact", memory_id=fact.id)
+        for procedure in procedural_guidance:
+            if procedure.status == "approved":
+                record_memory_retrieval(db_path, memory_type="procedure", memory_id=procedure.id)
+        for episode in episodic_context:
+            if episode.status == "approved":
+                record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
 
     return MemoryPacket(
         query=query,
