@@ -85,7 +85,7 @@ def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path
             "--top-k",
             "2",
             "--max-prompt-lines",
-            "5",
+            "8",
             "--max-alternatives",
             "1",
             "--no-reason-codes",
@@ -102,8 +102,10 @@ def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path
     assert payload["context"]["should_verify_first"] is False
     assert payload["context"]["payload"]["response_mode"] == "direct"
     assert len(payload["context"]["payload"]["alternative_memories"]) == 1
-    assert len(payload["context"]["prompt_text"].splitlines()) == 5
+    prompt_lines = payload["context"]["prompt_text"].splitlines()
+    assert len(prompt_lines) == 8
     assert "Reason codes:" not in payload["context"]["prompt_text"]
+    assert "Retrieved fact #1: Hermes Context | branch_pattern | HC-###" in payload["context"]["prompt_text"]
     assert payload["outcome"] is None
 
 
@@ -142,7 +144,7 @@ def test_python_module_cli_codex_prompt_outputs_plain_prompt_text(tmp_path: Path
             "--top-k",
             "1",
             "--max-prompt-lines",
-            "4",
+            "8",
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
@@ -154,6 +156,7 @@ def test_python_module_cli_codex_prompt_outputs_plain_prompt_text(tmp_path: Path
     assert "Memory response mode:" in result.stdout
     assert "Top memory:" in result.stdout
     assert "Codex Prompt" in result.stdout
+    assert "Retrieved fact #1: Codex Prompt | branch_pattern | CP-###" in result.stdout
     assert result.stdout.strip()
 
 
@@ -601,7 +604,8 @@ def test_python_module_cli_hermes_hook_config_snippet_outputs_mergeable_yaml_wit
     assert snippet.startswith("hooks:\n")
     assert "pre_llm_call:" in snippet
     assert "command:" in snippet
-    assert "hermes-pre-llm-hook" in snippet
+    assert "agent-memory hermes-pre-llm-hook" in snippet
+    assert "agent_memory.api.cli" not in snippet
     assert str(db_path) in snippet
     assert "--preferred-scope project:snippet" in snippet
     assert "--top-k 3" in snippet
@@ -741,7 +745,8 @@ def test_python_module_cli_hermes_doctor_reports_missing_setup_and_fix_command(t
     assert payload["config_exists"] is False
     assert payload["hook_installed"] is False
     assert any(check["name"] == "database_exists" and check["ok"] is False for check in payload["checks"])
-    assert "uv run agent-memory hermes-bootstrap" in payload["recommended_command"]
+    assert "agent-memory bootstrap" in payload["recommended_command"]
+    assert "uv run" not in payload["recommended_command"]
 
 
 
@@ -900,9 +905,57 @@ def test_python_module_cli_hermes_install_hook_preserves_two_space_hook_list_sty
     assert "/existing/session-hook.py" in config_text
     assert "hermes-pre-llm-hook" in config_text
     assert "--preferred-scope project:two-space" in config_text
-    assert "timeout: 15\n  - command: \"/" in config_text
+    assert "timeout: 15\n  - command: \"agent-memory" in config_text
     assert "timeout: 15\n    - command:" not in config_text
     assert config_text.index("/existing/context-hook.py") < config_text.index("hermes-pre-llm-hook") < config_text.index("on_session_end:")
+
+
+def test_python_module_cli_hermes_install_hook_upgrades_legacy_python_module_hook_command(tmp_path: Path) -> None:
+    db_path = tmp_path / "install-upgrade-memory.db"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "model:\n"
+        "  provider: openai-codex\n"
+        "hooks:\n"
+        "  pre_llm_call:\n"
+        "    - command: \"/legacy/python -m agent_memory.api.cli hermes-pre-llm-hook "
+        f"{db_path} --top-k 1\"\n"
+        "      timeout: 10\n"
+        "    - command: \"/existing/context-hook.py\"\n"
+        "      timeout: 15\n"
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-install-hook",
+            str(db_path),
+            "--config-path",
+            str(config_path),
+            "--top-k",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["changed"] is True
+    assert payload["reason"] == "updated_existing_hook"
+    assert payload["backup_path"] is not None
+    config_text = config_path.read_text()
+    assert "/existing/context-hook.py" in config_text
+    assert "/legacy/python" not in config_text
+    assert "agent_memory.api.cli" not in config_text
+    assert config_text.count("agent-memory hermes-pre-llm-hook") == 1
+    assert "--top-k 3" in config_text
+
 
 
 def test_python_module_cli_hermes_install_hook_is_idempotent_for_existing_command(tmp_path: Path) -> None:
@@ -946,7 +999,7 @@ def test_python_module_cli_hermes_install_hook_is_idempotent_for_existing_comman
 
 
 
-def test_python_module_cli_hermes_hook_config_snippet_defaults_to_current_python_module_command(
+def test_python_module_cli_hermes_hook_config_snippet_defaults_to_installed_agent_memory_command(
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "snippet-default.db"
@@ -968,8 +1021,9 @@ def test_python_module_cli_hermes_hook_config_snippet_defaults_to_current_python
 
     assert result.returncode == 0, result.stderr
     snippet = result.stdout
-    assert sys.executable in snippet
-    assert " -m agent_memory.api.cli hermes-pre-llm-hook " in snippet
+    assert "agent-memory hermes-pre-llm-hook" in snippet
+    assert sys.executable not in snippet
+    assert "agent_memory.api.cli" not in snippet
     assert "timeout: 10" in snippet
 
 

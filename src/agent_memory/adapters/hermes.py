@@ -297,6 +297,34 @@ def render_hermes_prompt_text(
     )
 
 
+def _render_memory_snippet_lines(packet: MemoryPacket, *, top_k: int) -> list[str]:
+    facts_by_id = {fact.id: fact for fact in packet.semantic_facts}
+    procedures_by_id = {procedure.id: procedure for procedure in packet.procedural_guidance}
+    episodes_by_id = {episode.id: episode for episode in packet.episodic_context}
+
+    lines: list[str] = []
+    for trace in packet.retrieval_trace[: max(0, top_k)]:
+        if trace.memory_type == "fact":
+            fact = facts_by_id.get(trace.memory_id)
+            if fact is not None:
+                lines.append(
+                    f"Retrieved fact #{fact.id}: {fact.subject_ref} | {fact.predicate} | {fact.object_ref_or_value}"
+                )
+            continue
+        if trace.memory_type == "procedure":
+            procedure = procedures_by_id.get(trace.memory_id)
+            if procedure is not None:
+                step_preview = "; ".join(procedure.steps[:2]) or procedure.trigger_context
+                lines.append(
+                    f"Retrieved procedure #{procedure.id}: {procedure.name} | trigger={procedure.trigger_context} | steps={step_preview}"
+                )
+            continue
+        if trace.memory_type == "episode":
+            episode = episodes_by_id.get(trace.memory_id)
+            if episode is not None:
+                lines.append(f"Retrieved episode #{episode.id}: {episode.title} | {episode.summary}")
+    return lines
+
 def _build_ranked_memories(packet: MemoryPacket, top_k: int) -> list[HermesTopMemory]:
     trust_by_key = {
         (trust.memory_type, trust.memory_id): trust
@@ -410,18 +438,29 @@ def prepare_hermes_memory_context(
     payload = build_hermes_adapter_payload(packet, top_k=top_k)
     blocking_steps = [step for step in payload.verification_plan.steps if step.blocking]
     should_verify_first = payload.response_mode == "verify_first" or bool(blocking_steps)
-    return HermesMemoryContext(
-        payload=payload,
-        prompt_text=render_hermes_prompt_text(
-            payload,
-            max_prompt_lines=max_prompt_lines,
+    prompt_lines = render_hermes_prompt_lines(
+        payload,
+        max_prompt_lines=max_prompt_lines,
+        max_prompt_chars=None,
+        max_prompt_tokens=None,
+        max_verification_steps=max_verification_steps,
+        max_alternatives=max_alternatives,
+        max_guidelines=max_guidelines,
+        include_reason_codes=include_reason_codes,
+    )
+    for snippet_line in _render_memory_snippet_lines(packet, top_k=max(1, top_k)):
+        if not _append_with_line_budget(prompt_lines, snippet_line, max_prompt_lines):
+            break
+    prompt_text = "\n".join(
+        _apply_size_budgets_to_lines(
+            prompt_lines,
             max_prompt_chars=max_prompt_chars,
             max_prompt_tokens=max_prompt_tokens,
-            max_verification_steps=max_verification_steps,
-            max_alternatives=max_alternatives,
-            max_guidelines=max_guidelines,
-            include_reason_codes=include_reason_codes,
-        ),
+        )
+    )
+    return HermesMemoryContext(
+        payload=payload,
+        prompt_text=prompt_text,
         should_answer_now=not should_verify_first,
         should_verify_first=should_verify_first,
         blocking_steps=blocking_steps,

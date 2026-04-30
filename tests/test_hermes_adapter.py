@@ -71,6 +71,37 @@ def test_build_hermes_adapter_payload_direct_mode_for_high_trust_memory(tmp_path
     ]
 
 
+def test_prepare_hermes_memory_context_includes_actual_retrieved_fact_content(tmp_path: Path) -> None:
+    db_path = tmp_path / "prompt-content.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="The Hermes memory smoke target phrase is DIRECT_CMD_MEMORY_LAYER_OK.",
+        metadata={"project": "agent-memory"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Hermes memory smoke",
+        predicate="target_phrase",
+        object_ref_or_value="DIRECT_CMD_MEMORY_LAYER_OK",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.95,
+    )
+    approve_memory(db_path=db_path, memory_type="fact", memory_id=fact.id)
+
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query="What is the Hermes memory smoke target phrase?",
+        preferred_scope="project:agent-memory",
+    )
+    context = prepare_hermes_memory_context(packet, top_k=1, max_prompt_lines=8)
+
+    assert "Retrieved fact #1: Hermes memory smoke | target_phrase | DIRECT_CMD_MEMORY_LAYER_OK" in context.prompt_text
+    assert "DIRECT_CMD_MEMORY_LAYER_OK" in context.prompt_text
+
+
 def test_build_hermes_adapter_payload_cautious_mode_for_medium_trust_memory(tmp_path: Path) -> None:
     db_path = tmp_path / "cautious.db"
     initialize_database(db_path)

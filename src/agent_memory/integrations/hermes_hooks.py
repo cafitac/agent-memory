@@ -60,7 +60,7 @@ class HermesPreLlmHookOptions(BaseModel):
 
 class HermesHookConfigSnippetOptions(BaseModel):
     db_path: Path
-    python_executable: str = Field(default_factory=lambda: sys.executable)
+    python_executable: str | None = None
     limit: int = 5
     preferred_scope: str | None = None
     top_k: int = 1
@@ -104,12 +104,18 @@ class HermesDoctorResult(BaseModel):
 def build_hermes_hook_config_snippet(options: HermesHookConfigSnippetOptions) -> str:
     db_path = options.db_path.expanduser().resolve(strict=False)
     argv = [
-        options.python_executable,
-        "-m",
-        "agent_memory.api.cli",
+        "agent-memory",
         "hermes-pre-llm-hook",
         str(db_path),
     ]
+    if options.python_executable:
+        argv = [
+            options.python_executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+        ]
     if options.limit != 5:
         argv.extend(["--limit", str(options.limit)])
     if options.preferred_scope:
@@ -215,6 +221,33 @@ def _merge_hook_snippet_into_config(current: str, snippet: str) -> str:
     return "\n".join([*merged_lines, ""])
 
 
+def _replace_existing_hook_snippet_in_config(current: str, snippet: str, command_marker: str) -> str | None:
+    lines = current.splitlines()
+    hooks_index = _find_top_level_hooks_line(lines)
+    if hooks_index is None:
+        return None
+    event_index = _find_hooks_event_line(lines, hooks_index, "pre_llm_call")
+    if event_index is None:
+        return None
+    event_end = _find_next_hooks_event_or_top_level_line(lines, event_index)
+    for index in range(event_index + 1, event_end):
+        line = lines[index]
+        if command_marker not in line:
+            continue
+        stripped = line.lstrip()
+        item_indent = line[: len(line) - len(stripped)] if stripped.startswith("- ") else _detect_event_item_indent(lines, event_index)
+        item_end = event_end
+        for next_index in range(index + 1, event_end):
+            next_line = lines[next_index]
+            if next_line.startswith(f"{item_indent}- "):
+                item_end = next_index
+                break
+        hook_item_lines = _hook_item_lines(snippet, indent=item_indent)
+        merged_lines = [*lines[:index], *hook_item_lines, *lines[item_end:]]
+        return "\n".join([*merged_lines, ""])
+    return None
+
+
 def install_hermes_hook_config(options: HermesHookInstallOptions) -> HermesHookInstallResult:
     config_path = options.config_path.expanduser().resolve(strict=False)
     snippet = build_hermes_hook_config_snippet(options.snippet_options)
@@ -229,11 +262,24 @@ def install_hermes_hook_config(options: HermesHookInstallOptions) -> HermesHookI
     if config_path.exists():
         current = config_path.read_text()
         if command_marker in current:
+            next_text = _replace_existing_hook_snippet_in_config(current, snippet, command_marker)
+            if next_text is None or next_text == current or next_text == f"{current.rstrip()}\n":
+                return HermesHookInstallResult(
+                    config_path=str(config_path),
+                    changed=False,
+                    reason="already_installed",
+                    backup_path=None,
+                    snippet=snippet,
+                    db_initialized=db_initialized,
+                )
+            backup_path = config_path.with_suffix(config_path.suffix + ".agent-memory.bak")
+            shutil.copy2(config_path, backup_path)
+            config_path.write_text(next_text)
             return HermesHookInstallResult(
                 config_path=str(config_path),
-                changed=False,
-                reason="already_installed",
-                backup_path=None,
+                changed=True,
+                reason="updated_existing_hook",
+                backup_path=str(backup_path),
                 snippet=snippet,
                 db_initialized=db_initialized,
             )
@@ -290,9 +336,7 @@ def diagnose_hermes_hook_setup(options: HermesHookInstallOptions) -> HermesDocto
         },
     ]
     status = "ok" if all(check["ok"] for check in checks) else "needs_setup"
-    recommended_command = (
-        f"uv run agent-memory hermes-bootstrap {shlex.quote(str(db_path))} --config-path {shlex.quote(str(config_path))}"
-    )
+    recommended_command = f"agent-memory bootstrap {shlex.quote(str(db_path))} --config-path {shlex.quote(str(config_path))}"
     return HermesDoctorResult(
         db_path=str(db_path),
         config_path=str(config_path),
