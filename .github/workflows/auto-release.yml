@@ -101,7 +101,23 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_SYNC_BRANCH="release-sync/${{ steps.bump.outputs.tag }}"
-          git push origin "HEAD:${RELEASE_SYNC_BRANCH}"
+          if git ls-remote --exit-code --heads origin "${RELEASE_SYNC_BRANCH}" >/dev/null 2>&1; then
+            echo "Release sync branch ${RELEASE_SYNC_BRANCH} already exists; reusing it."
+          else
+            git push origin "HEAD:${RELEASE_SYNC_BRANCH}"
+          fi
+
+          existing_pr_url=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${RELEASE_SYNC_BRANCH}" \
+            --state open \
+            --json url \
+            --jq '.[0].url // empty')
+          if [ -n "$existing_pr_url" ]; then
+            echo "Release sync PR already exists: ${existing_pr_url}"
+            exit 0
+          fi
+
           cat > /tmp/release-sync-pr.md <<'EOF'
           ## Summary
           - sync release metadata after protected main rejected the auto-release write-back
