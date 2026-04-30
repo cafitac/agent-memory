@@ -108,9 +108,10 @@ For local dogfood and noise monitoring, retrievals can leave a secret-safe obser
 ```bash
 agent-memory retrieve "$DB" "How should I install agent-memory?" --preferred-scope user:default --observe cli
 agent-memory observations list "$DB" --limit 20
+agent-memory observations audit "$DB" --limit 200 --top 10 --frequent-threshold 3
 ```
 
-Use the observation log to spot frequently injected or surprising memories before changing retrieval behavior. Treat it as local operator telemetry, not a synced analytics stream.
+Use the observation log and audit report to spot frequently injected or surprising memories before changing retrieval behavior. The audit output is read-only JSON with surface/scope counts, empty-retrieval count, top injected memory refs, current status for known refs, and simple signals such as `frequently_injected` and `current_status_not_approved`. Treat it as local operator telemetry, not a synced analytics stream.
 
 ## Hermes quickstart
 

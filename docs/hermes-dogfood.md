@@ -37,6 +37,7 @@ Capture these observations for each dogfood run:
 - whether unrelated scopes stay out of the prompt
 - whether failure paths fail closed with no broken prompt text
 - whether `agent-memory observations list ~/.agent-memory/memory.db --limit 20` shows the expected memory refs without raw query text or secrets
+- whether `agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10` highlights frequently injected or no-longer-approved refs before any retrieval tuning
 
 A good conservative smoke has low latency, at most one surfaced memory, no noisy reason codes, no workflow-blocking error if the memory DB is missing, and a local observation entry that explains what memory was injected.
 
@@ -46,9 +47,10 @@ Hermes pre-LLM hook retrievals write a secret-safe local observation row to the 
 
 ```bash
 agent-memory observations list ~/.agent-memory/memory.db --limit 20
+agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 ```
 
-Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, and whether the top memory is surprising. Keep this data local unless you intentionally export it.
+Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, whether retrieval is often empty, and whether any frequently injected refs are now deprecated/disputed/missing. The audit command is read-only and summarizes local observation rows without emitting raw query text. Keep this data local unless you intentionally export it.
 
 ## Fallback and rollback
 

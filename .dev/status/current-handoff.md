@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 00:20 KST
+Last updated: 2026-05-01 01:10 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.34까지 배포/Hermes QA가 완료됐고, 지금은 Priority 5 dogfood/noise monitoring 첫 slice인 v0.1.35 후보 작업 중이야. 현재 브랜치는 `feat/retrieval-observation-log`이고, 목표는 Hermes/CLI retrieval이 어떤 memory를 주입했는지 secret-safe local observation log로 남겨 이후 noisy memory audit의 기반을 만드는 거야.
+agent-memory는 v0.1.36까지 배포/Hermes QA가 완료됐고, 지금은 Priority 5 dogfood/noise monitoring의 다음 slice인 read-only observation audit 작업 중이야. 현재 브랜치는 `feat/observations-audit`, worktree는 `/Users/reddit/Project/agent-memory/.worktrees/observations-audit`이고, 목표는 기존 retrieval observation log를 바탕으로 자주 주입되는 memory ref, surface/scope 분포, 빈 retrieval, deprecated/disputed/missing ref 신호를 raw query 없이 요약하는 `agent-memory observations audit` CLI를 추가하는 거야.
 
 ## Current repo state
 
@@ -32,15 +32,15 @@ Expected GitHub identity:
 
 Verified base before this slice:
 
-- latest completed release: `v0.1.34`
-- v0.1.34 included published smoke propagation retry/backoff, release-sync PR CI dispatch, and read-only relation graph inspect CLI.
-- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.34/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+- latest completed release: `v0.1.36`
+- v0.1.36 included secret-safe local retrieval observation logging and lazy migration for existing DBs without `retrieval_observations`.
+- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.36/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
 
 Active slice/worktree:
 
-- branch: `feat/retrieval-observation-log`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/retrieval-observation-log`
-- intended release after merge: likely `v0.1.35`
+- branch: `feat/observations-audit`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/observations-audit`
+- intended release after merge: likely `v0.1.37`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -52,107 +52,68 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## What is complete through v0.1.34
-
-### Distribution and release automation
-
-- npm package and PyPI package are published from the same versioned source.
-- npm-first user install path is documented and verified.
-- Publish workflow gates GitHub Release creation on `published-install-smoke` after npm/PyPI publish.
-- Published smoke uploads JSON diagnostics artifacts.
-- v0.1.34 distinguishes normal retry budget from propagation/transient resolver failure budget and adds registry probe diagnostics.
-- Protected `main` fallback is automated and rerun-idempotent.
-- release-sync fallback now dispatches `ci.yml` on the bot-created release-sync branch and comments/step-summarizes that handoff.
-
-### Runtime adapter readiness
-
-- Hermes bootstrap/doctor/install flow exists and defaults to the conservative preset.
-- This local Hermes setup has agent-memory enabled via `/Users/reddit/.agent-memory/runtime/v0.1.34/.venv/bin/agent-memory`.
-- Hermes hook fails closed: unavailable DB/schema returns `{}` and exit 0 instead of breaking prompt flow.
-- Conservative preset remains default: small prompt budgets, one top memory, no alternative-memory detail, no reason-code noise.
-- `--preset balanced` is explicit opt-in for more context/noise.
-
-### Truth lifecycle, eval, and graph foundation
-
-- Normal retrieval is approved-only by default.
-- Candidate/disputed/deprecated facts remain available only behind explicit forensic/review surfaces.
-- `memory_status_transitions` records status changes.
-- `review history`, `review supersede`, `review replacements`, and `review explain` exist.
-- Retrieval eval calls the real retrieval path but suppresses retrieval bookkeeping writes.
-- `agent-memory graph inspect <db_path> <start_ref> --depth N --limit N` traverses stored `Relation` edges read-only and does not mutate memory state.
-
-## Current slice: local retrieval observation log
+## Current slice: read-only retrieval observation audit
 
 Goal:
 
-- Build a local-only, secret-safe observation log that records what retrieval injected during real dogfood use.
-- This is the first Priority 5 dogfood/noise monitoring slice and should feed later noisy-memory audit commands.
+- Add a local-only, secret-safe, read-only audit report over `retrieval_observations`.
+- Summarize dogfood/noise signals before changing ranking, graph traversal, or mutating memory cleanup.
 
-Implemented so far:
+Implemented so far in the active worktree:
 
-- New SQLite table `retrieval_observations`.
-- New model `RetrievalObservation`.
-- New storage APIs:
-  - `record_retrieval_observation(...)`
-  - `list_retrieval_observations(...)`
-- `retrieve_memory_packet(...)` accepts:
-  - `observation_surface`
-  - `observation_metadata`
-- `agent-memory retrieve ... --observe <surface>` records an opt-in observation.
-- Hermes pre-LLM hook records an observation automatically with surface `hermes-pre-llm-hook`.
 - New CLI:
-  - `agent-memory observations list <db_path> --limit 50`
+  - `agent-memory observations audit <db_path> --limit 200 --top 10 --frequent-threshold 3`
+- JSON output includes:
+  - `kind: retrieval_observation_audit`
+  - `read_only: true`
+  - `observation_count`
+  - `surface_counts`
+  - `preferred_scope_counts`
+  - `empty_retrieval_count`
+  - `top_memory_refs[]` with `memory_ref`, `injection_count`, `current_status`, `signals`, and sample observation ids
+- Current signals:
+  - `frequently_injected`
+  - `current_status_not_approved`
+- Storage helper added:
+  - `get_memory_status(db_path, memory_type=..., memory_id=...)`
+- Docs updated:
+  - `README.md`
+  - `docs/hermes-dogfood.md`
 
 Secret-safety contract:
 
-- raw query text is not stored.
-- stores `query_sha256` and a short redacted preview.
-- redacts secret-like assignments such as password/token/api_key/secret/credential/connection_string.
-- stores selected memory refs, top memory ref, response mode, statuses, preferred scope, and small metadata.
+- audit uses existing observation rows and does not read or emit raw query text.
+- output contains counts, memory refs, statuses, and observation ids only.
+- keep this data local unless intentionally exported.
 
-Files changed:
+Verification so far:
 
-- `src/agent_memory/core/models.py`
-- `src/agent_memory/storage/schema.sql`
-- `src/agent_memory/storage/sqlite.py`
-- `src/agent_memory/core/retrieval.py`
-- `src/agent_memory/integrations/hermes_hooks.py`
-- `src/agent_memory/api/cli.py`
-- `tests/test_cli.py`
-- `README.md`
-- `docs/hermes-dogfood.md`
-- `.dev/status/current-handoff.md`
+- RED confirmed before implementation:
+  - `agent-memory observations audit` failed with argparse invalid choice.
+- GREEN focused:
+  - `uv run pytest tests/test_cli.py::test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_without_raw_queries -q`
+  - `1 passed`
+- Focused regression group:
+  - `uv run pytest tests/test_cli.py::test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_without_raw_queries tests/test_cli.py::test_python_module_cli_retrieve_observe_records_secret_safe_local_observation tests/test_cli.py::test_python_module_cli_observations_list_migrates_existing_database_without_observation_table -q`
+  - `3 passed`
+- CLI help smoke:
+  - `uv run python -m agent_memory.api.cli observations audit --help`
+  - `uv run python -m agent_memory.api.cli observations list --help`
+  - both exit 0.
 
-Current focused verification already passed:
+Remaining before PR:
 
-```bash
-uv run pytest tests/test_cli.py::test_python_module_cli_retrieve_observe_records_secret_safe_local_observation tests/test_cli.py::test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_hook_payload -q
-# 2 passed
+1. Run full local verification:
+   - `uv run pytest tests/ -q`
+   - `uv run python scripts/check_release_metadata.py`
+   - `uv run python scripts/smoke_release_readiness.py`
+   - `npm pack --dry-run`
+   - `git diff --check`
+   - `node --check bin/agent-memory.js`
+2. Run real smoke for `observations audit` on a temp DB and confirm no raw secret-like query text appears.
+3. Run static diff secret scan.
+4. Create PR, watch CI, merge, follow release-sync/publish/published smoke/Hermes QA.
 
-uv run pytest tests/test_cli.py tests/test_retrieval_evaluation.py -q
-# 83 passed
-```
+## Next natural slice after this one
 
-## Remaining work for this slice
-
-1. Run real smoke for observation CLI and Hermes hook from the worktree.
-2. Run full verification:
-   ```bash
-   uv run pytest tests/ -q
-   uv run python scripts/check_release_metadata.py
-   uv run python scripts/smoke_release_readiness.py
-   npm pack --dry-run
-   git diff --check
-   node --check bin/agent-memory.js
-   ```
-3. Run static diff secret scan and confirm finding_count 0.
-4. Commit branch and open PR.
-5. Watch PR CI, merge when green.
-6. Verify auto-release/release-sync/publish for likely v0.1.35.
-7. Verify GitHub Release/npm/PyPI/published smoke artifact.
-8. Install pinned Hermes runtime v0.1.35 and run Hermes QA.
-9. Cleanup worktree/branch and update durable memory.
-
-## Next likely slice after this
-
-After observation logging is released and dogfooded, build a read-only noisy memory audit command over `retrieval_observations`, for example frequently injected memory refs, surprising scopes, high hidden-alternative counts, and stale/deprecated-nearby risks.
+After this audit slice is released and Hermes QA passes, the next likely Priority 5 step is dogfood cadence refinement: use the audit report over real Hermes observations to decide whether ranking/scope filters need adjustment. Avoid mutating cleanup or broad graph retrieval until the read-only signals have been observed in real use.
