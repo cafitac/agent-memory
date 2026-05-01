@@ -74,18 +74,29 @@ agent-memory consolidation promotions report <db> --limit 50
 
 ## PR E3: Add consolidation relation edges
 
+### Status
+
+- In progress on branch `feat/consolidation-graph-lineage`.
+- Scope is deliberately limited to manual semantic fact promotion lineage: candidate fingerprint -> promoted fact -> generated provenance source. Procedure/preference promotion, conflict preflight, automatic promotion, and retrieval ranking changes remain future PRs.
+
 ### Objective
 
 Represent consolidation as graph lineage.
 
 ### Candidate relation types
 
+Implemented in this E3 slice:
+
+- `promoted_to`: from the stable consolidation candidate fingerprint to the promoted durable memory ref.
+- `has_promotion_provenance`: from the promoted durable memory ref to the generated `source_record:<id>` provenance source.
+
+Future candidate relation types:
+
 - `reinforces`
-- `consolidated_into`
 - `derived_from_trace_cluster`
 - `decays_into_summary`
 
-Exact names can change, but graph inspection must explain lineage.
+Exact future names can change, but graph inspection must explain lineage.
 
 ### Acceptance
 

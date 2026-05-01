@@ -50,6 +50,7 @@ from agent_memory.storage.sqlite import (
     get_memory_status,
     initialize_database,
     insert_experience_trace,
+    insert_relation,
     list_candidate_episodes,
     list_candidate_facts,
     list_candidate_procedures,
@@ -906,6 +907,62 @@ def _promotion_history_payload(db_path: Path, *, memory_type: str, memory_id: in
     ]
 
 
+def _consolidation_promotion_lineage_payload(
+    *,
+    candidate_id: str,
+    fact_id: int,
+    provenance_source_id: int,
+) -> dict[str, Any]:
+    fact_ref = f"fact:{fact_id}"
+    source_ref = f"source_record:{provenance_source_id}"
+    evidence_ids = [provenance_source_id]
+    return {
+        "candidate_ref": candidate_id,
+        "promoted_memory_ref": fact_ref,
+        "provenance_source_ref": source_ref,
+        "relations": [
+            {
+                "from_ref": candidate_id,
+                "relation_type": "promoted_to",
+                "to_ref": fact_ref,
+                "evidence_ids": evidence_ids,
+            },
+            {
+                "from_ref": fact_ref,
+                "relation_type": "has_promotion_provenance",
+                "to_ref": source_ref,
+                "evidence_ids": evidence_ids,
+            },
+        ],
+    }
+
+
+def _record_consolidation_promotion_lineage(
+    db_path: Path,
+    *,
+    candidate_id: str,
+    fact_id: int,
+    provenance_source_id: int,
+    confidence: float,
+) -> dict[str, Any]:
+    lineage = _consolidation_promotion_lineage_payload(
+        candidate_id=candidate_id,
+        fact_id=fact_id,
+        provenance_source_id=provenance_source_id,
+    )
+    for relation in lineage["relations"]:
+        insert_relation(
+            db_path,
+            from_ref=relation["from_ref"],
+            relation_type=relation["relation_type"],
+            to_ref=relation["to_ref"],
+            evidence_ids=relation["evidence_ids"],
+            weight=1.0,
+            confidence=confidence,
+        )
+    return lineage
+
+
 def _consolidation_promotions_report(db_path: Path, *, limit: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("consolidation promotions report limit must be >= 1")
@@ -975,6 +1032,11 @@ def _consolidation_promotions_report(db_path: Path, *, limit: int) -> dict[str, 
                     "safe_summaries": source_content.get("safe_summaries", []),
                     "created_at": row["source_created_at"],
                 },
+                "lineage": _consolidation_promotion_lineage_payload(
+                    candidate_id=row["external_ref"],
+                    fact_id=row["fact_id"],
+                    provenance_source_id=row["source_id"],
+                ),
                 "approval_history": _promotion_history_payload(db_path, memory_type="fact", memory_id=row["fact_id"]),
             }
         )
@@ -1062,6 +1124,14 @@ def _promote_consolidation_candidate_fact(
             evidence_ids=[provenance_source.id],
         )
 
+    lineage = _record_consolidation_promotion_lineage(
+        db_path,
+        candidate_id=candidate_id,
+        fact_id=fact.id,
+        provenance_source_id=provenance_source.id,
+        confidence=confidence,
+    )
+
     return {
         "kind": "memory_consolidation_promotion",
         "candidate_id": candidate_id,
@@ -1078,6 +1148,7 @@ def _promote_consolidation_candidate_fact(
             "safe_summaries": evidence["safe_summaries"],
             "candidate_fingerprint": explanation["candidate"]["fingerprint"],
         },
+        "lineage": lineage,
         "retrieval_policy": "default_retrieval_remains_approved_only",
     }
 

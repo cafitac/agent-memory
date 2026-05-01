@@ -16,6 +16,7 @@ from agent_memory.storage.sqlite import (
     insert_relation,
     list_memory_activations,
     list_memory_status_history,
+    list_relations_for_node,
     record_retrieval_observation,
 )
 
@@ -1334,3 +1335,201 @@ def test_cli_consolidation_promotions_report_empty_database_is_read_only(tmp_pat
     with connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 0
+
+
+def test_cli_consolidation_promote_fact_creates_graph_lineage_edges(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promotion-lineage.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory consolidation lineage",
+            "--predicate",
+            "records",
+            "--object-ref-or-value",
+            "candidate-to-memory graph lineage",
+            "--scope",
+            "project:consolidation-lineage",
+            "--confidence",
+            "0.87",
+            "--approve",
+            "--actor",
+            "tester",
+            "--reason",
+            "human reviewed lineage promotion evidence",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    fact_ref = f"fact:{payload['fact']['id']}"
+    source_ref = f"source_record:{payload['provenance_source_id']}"
+    assert payload["lineage"] == {
+        "candidate_ref": candidate_id,
+        "promoted_memory_ref": fact_ref,
+        "provenance_source_ref": source_ref,
+        "relations": [
+            {
+                "from_ref": candidate_id,
+                "relation_type": "promoted_to",
+                "to_ref": fact_ref,
+                "evidence_ids": [payload["provenance_source_id"]],
+            },
+            {
+                "from_ref": fact_ref,
+                "relation_type": "has_promotion_provenance",
+                "to_ref": source_ref,
+                "evidence_ids": [payload["provenance_source_id"]],
+            },
+        ],
+    }
+
+    candidate_relations = list_relations_for_node(db_path, node_ref=candidate_id)
+    fact_relations = list_relations_for_node(db_path, node_ref=fact_ref)
+    assert [(relation.from_ref, relation.relation_type, relation.to_ref) for relation in candidate_relations] == [
+        (candidate_id, "promoted_to", fact_ref),
+    ]
+    assert sorted((relation.from_ref, relation.relation_type, relation.to_ref) for relation in fact_relations) == [
+        (candidate_id, "promoted_to", fact_ref),
+        (fact_ref, "has_promotion_provenance", source_ref),
+    ]
+    assert all(relation.evidence_ids == [payload["provenance_source_id"]] for relation in fact_relations)
+
+    inspect_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "graph",
+            "inspect",
+            str(db_path),
+            candidate_id,
+            "--depth",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert inspect_result.returncode == 0, inspect_result.stderr
+    graph_payload = json.loads(inspect_result.stdout)
+    assert graph_payload["read_only"] is True
+    assert graph_payload["nodes"] == [candidate_id, fact_ref, source_ref]
+    assert [(edge["from_ref"], edge["relation_type"], edge["to_ref"]) for edge in graph_payload["edges"]] == [
+        (candidate_id, "promoted_to", fact_ref),
+        (fact_ref, "has_promotion_provenance", source_ref),
+    ]
+    assert "RAW_PROMOTION_SECRET" not in result.stdout
+    assert "PROMOTION_QUERY_PREVIEW" not in inspect_result.stdout
+    assert "query_preview" not in inspect_result.stdout
+
+
+def test_cli_consolidation_promotions_report_includes_lineage_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promotions-lineage-report.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    promote_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory consolidation lineage",
+            "--predicate",
+            "records",
+            "--object-ref-or-value",
+            "auditable graph lineage",
+            "--scope",
+            "project:consolidation-lineage",
+            "--actor",
+            "tester",
+            "--reason",
+            "reviewed candidate lineage evidence",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert promote_result.returncode == 0, promote_result.stderr
+    promote_payload = json.loads(promote_result.stdout)
+
+    with connect(db_path) as connection:
+        facts_before = connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        sources_before = connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0]
+        relations_before = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+        transitions_before = connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0]
+
+    report_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promotions",
+            "report",
+            str(db_path),
+            "--limit",
+            "10",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert report_result.returncode == 0, report_result.stderr
+    report_payload = json.loads(report_result.stdout)
+    promotion = report_payload["promotions"][0]
+    fact_ref = f"fact:{promote_payload['fact']['id']}"
+    source_ref = f"source_record:{promote_payload['provenance_source_id']}"
+    assert promotion["lineage"] == {
+        "candidate_ref": candidate_id,
+        "promoted_memory_ref": fact_ref,
+        "provenance_source_ref": source_ref,
+        "relations": [
+            {
+                "from_ref": candidate_id,
+                "relation_type": "promoted_to",
+                "to_ref": fact_ref,
+                "evidence_ids": [promote_payload["provenance_source_id"]],
+            },
+            {
+                "from_ref": fact_ref,
+                "relation_type": "has_promotion_provenance",
+                "to_ref": source_ref,
+                "evidence_ids": [promote_payload["provenance_source_id"]],
+            },
+        ],
+    }
+    assert report_payload["read_only"] is True
+    assert "RAW_PROMOTION_SECRET" not in report_result.stdout
+    assert "PROMOTION_QUERY_PREVIEW" not in report_result.stdout
+    assert "query_preview" not in report_result.stdout
+    with connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == facts_before
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == sources_before
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == relations_before
+        assert connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0] == transitions_before
