@@ -52,8 +52,8 @@ Prefer candidate status by default unless the user explicitly chooses approval.
 
 ### Status
 
-- In progress on branch `feat/consolidation-promotion-report` as of 2026-05-02 00:25 KST.
-- Scope is deliberately read-only: audit/report the manual semantic fact promotions created by E1 before adding new promotion memory types or graph mutations.
+- Completed in v0.1.55 via PR #78.
+- Scope was deliberately read-only: audit/report the manual semantic fact promotions created by E1 before adding new promotion memory types or graph mutations.
 
 ### Objective
 
