@@ -19,7 +19,7 @@ This is where the product starts to feel like memory consolidation, but it must 
 
 ### Status
 
-- In progress on branch `feat/consolidation-candidates`.
+- Done in v0.1.52 with read-only `agent-memory consolidation candidates`.
 - PR C4 completed in v0.1.51 with read-only `activations decay-risk-report`.
 
 ### Objective
@@ -39,6 +39,10 @@ Group related traces into candidate clusters using deterministic lexical/metadat
 - Empty or weak clusters are not promoted.
 
 ## PR D2: Add `consolidation candidates` read-only CLI
+
+### Status
+
+- Done in v0.1.52 with D1 because the PR remained small.
 
 ### Objective
 
@@ -67,6 +71,11 @@ agent-memory consolidation candidates <db> --limit 50 --output-json
 - Candidate JSON is stable for later explanation/promotion commands.
 
 ## PR D3: Add candidate explanation details
+
+### Status
+
+- In progress on branch `feat/consolidation-explain`.
+- Still read-only: no approval, promotion, rejection, snooze state, ranking change, or memory status mutation.
 
 ### Objective
 

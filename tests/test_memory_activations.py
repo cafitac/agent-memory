@@ -798,3 +798,162 @@ def test_cli_consolidation_candidates_lazily_migrates_legacy_database(tmp_path: 
     assert payload["trace_count"] == 0
     assert payload["candidate_count"] == 0
     assert payload["quality_warnings"] == ["no_traces"]
+
+
+def test_cli_consolidation_explain_details_candidate_without_raw_trace_payload(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-explain.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Consolidation explanation source text.",
+        metadata={"project": "consolidation-explain"},
+    )
+    approved_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Consolidation explanation",
+        predicate="prefers",
+        object_ref_or_value="safe review gates",
+        evidence_ids=[source.id],
+        scope="project:consolidation-explain",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved_fact.id)
+    for idx in range(3):
+        observation = record_retrieval_observation(
+            db_path,
+            surface="hermes",
+            query="RAW_SECRET consolidation explain query must not leak",
+            preferred_scope="project:consolidation-explain",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(approved_fact.id, label="approved consolidation explanation target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "SHOULD_NOT_APPEAR", "session_id": f"session-explain-{idx}"},
+        )
+        insert_experience_trace(
+            db_path,
+            surface="hermes",
+            event_kind="tool_success",
+            content_sha256=f"hash-consolidation-explain-{idx}",
+            summary="User prefers explicit review gates before memory consolidation promotion.",
+            scope="project:consolidation-explain",
+            session_ref=f"session-explain-{idx}",
+            salience=0.7,
+            user_emphasis=0.5,
+            related_memory_refs=[f"fact:{approved_fact.id}"],
+            related_observation_ids=[observation.id],
+            retention_policy="review",
+            metadata={"raw_prompt": "RAW_SECRET", "query_preview": "SHOULD_NOT_APPEAR"},
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    candidates_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--min-evidence",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert candidates_result.returncode == 0, candidates_result.stderr
+    candidate = json.loads(candidates_result.stdout)["candidates"][0]
+
+    explain_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "explain",
+            str(db_path),
+            candidate["candidate_id"],
+            "--limit",
+            "20",
+            "--min-evidence",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert explain_result.returncode == 0, explain_result.stderr
+    payload = json.loads(explain_result.stdout)
+    assert payload["kind"] == "memory_consolidation_candidate_explanation"
+    assert payload["read_only"] is True
+    assert payload["candidate_id"] == candidate["candidate_id"]
+    assert payload["candidate"]["fingerprint"] == candidate["fingerprint"]
+    assert payload["why_grouped"] == {
+        "cluster_key": "scope:project:consolidation-explain|memory:fact:1",
+        "reason": "shared_related_memory_ref",
+        "shared_scope": "project:consolidation-explain",
+        "shared_memory_ref": f"fact:{approved_fact.id}",
+    }
+    assert payload["evidence"]["trace_ids"] == candidate["evidence_trace_ids"]
+    assert payload["evidence"]["safe_summaries"] == [
+        "User prefers explicit review gates before memory consolidation promotion."
+    ]
+    assert payload["supporting_signals"]["activation_count"] == 3
+    assert payload["supporting_signals"]["current_statuses"] == {f"fact:{approved_fact.id}": "approved"}
+    assert payload["memory_type_guess"] == {
+        "value": "preference",
+        "reason": "safe summaries contain preference-like language",
+    }
+    assert payload["review_state"] == {
+        "promotion_allowed": False,
+        "requires_human_approval": True,
+        "mutation_commands_available": False,
+    }
+    assert payload["suggested_next_steps"] == [
+        "Use this explanation for human review only; it does not create or approve memory.",
+        "Compare related memory refs and risk flags before considering any future promotion command.",
+        "Reject/snooze workflows are intentionally unavailable until candidate quality is trusted.",
+    ]
+    assert "RAW_SECRET" not in explain_result.stdout
+    assert "SHOULD_NOT_APPEAR" not in explain_result.stdout
+
+
+def test_cli_consolidation_explain_unknown_candidate_is_read_only_error(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-explain-missing.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "explain",
+            str(db_path),
+            "candidate:missing",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "kind": "memory_consolidation_candidate_explanation",
+        "read_only": True,
+        "candidate_id": "candidate:missing",
+        "found": False,
+        "error": "candidate_not_found",
+    }
