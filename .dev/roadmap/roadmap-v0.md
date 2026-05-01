@@ -77,8 +77,8 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: `--record-trace` flag for hook/snippet/install/bootstrap, non-blocking write path, synthetic doctor/test skip behavior, docs.
   - Acceptance: hook failures never block Hermes; doctor/test payloads do not pollute traces; local E2E confirms enabled traces are recorded and disabled mode is unchanged.
 
-- [ ] PR B4: Add trace retention and local-only safety guardrails
-  - Status: in progress on branch `feat/trace-retention-report`.
+- [x] PR B4: Add trace retention and local-only safety guardrails
+  - Status: completed in v0.1.47 via PR #61.
   - Goal: prevent trace accumulation from becoming an unbounded transcript archive.
   - Scope: read-only retention report first: policy counts, expired trace refs, expirable traces missing `expires_at`, volume warning, privacy docs. Mutating cleanup is deferred.
   - Acceptance: expired traces can be identified read-only first; default behavior remains conservative; no raw transcript retention is introduced.
@@ -86,9 +86,10 @@ If a later session changes direction, update both this checklist and the relevan
 ### Stage C: activation and reinforcement signals
 
 - [ ] PR C1: Introduce activation events for retrieval use
+  - Status: in progress on branch `feat/activation-events`.
   - Goal: distinguish "trace happened" from "memory was retrieved/used".
-  - Scope: model/storage for activation events linked to memory refs, observations, traces, surface, scope, timestamp, and result metadata.
-  - Acceptance: existing retrieval observations can be interpreted or bridged into activation-like reports without breaking v0.1.41 output contracts.
+  - Scope: `memory_activations` model/table/storage APIs plus a retrieval-observation bridge that records selected refs and empty retrievals as local-only activation evidence.
+  - Acceptance: existing observation commands keep their output contract; activation rows store no raw queries/prompts/query previews; retrieval ranking and long-term memory status remain unchanged.
 
 - [ ] PR C2: Add read-only activation summary CLI
   - Goal: show which memories are repeatedly activated, stale, empty, or scope-mismatched.
