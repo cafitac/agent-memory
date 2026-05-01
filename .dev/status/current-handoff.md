@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-02 05:33 KST
+Last updated: 2026-05-02 05:49 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.56까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재 Stage E / PR E4 conflict/supersession preflight 작업이 `feat/consolidation-conflict-preflight` worktree에서 진행 중이다. E4는 semantic fact promotion 전에 같은 claim slot의 기존 fact와 충돌하는지 read-only preflight로 확인하고, 충돌 시 mutation 없이 safe failure를 반환하는 범위다.
+agent-memory는 v0.1.57까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.57에는 Stage E / PR E4 consolidation promotion conflict preflight가 포함됐다. 다음 제품 slice는 E5 explicit human-reviewed supersession/conflict relation command 또는 더 작은 read-only/preflight 후속 점검이다.
 
 ## Current repo state
 
@@ -27,8 +27,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main` after docs/handoff cleanup PR is merged.
-- `origin/main` includes v0.1.56 release-sync PR #82.
-- Feature worktree currently active: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-conflict-preflight` on branch `feat/consolidation-conflict-preflight`.
+- `origin/main` includes v0.1.57 release-sync PR #85.
+- No Stage E feature worktree is expected to remain active after E4 cleanup.
 
 Expected GitHub identity:
 
@@ -39,12 +39,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.56`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.56`
-- npm package: `@cafitac/agent-memory@0.1.56`
-- PyPI package: `cafitac-agent-memory==0.1.56`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.56.
+- `v0.1.57`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.57`
+- npm package: `@cafitac/agent-memory@0.1.57`
+- PyPI package: `cafitac-agent-memory==0.1.57`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.57.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -78,7 +78,7 @@ Behavior:
 - Default output is `candidate` status and hidden from default retrieval.
 - `--approve --actor ... --reason ...` explicitly approves and logs status history.
 - Unknown candidate ids fail without creating facts or provenance sources.
-- No automatic promotion, approval queue, procedure/preference promotion, conflict preflight, or retrieval ranking change.
+- No automatic promotion, approval queue, procedure/preference promotion, or retrieval ranking change.
 
 ## Completed Stage E / PR E2 slice
 
@@ -98,7 +98,7 @@ PR #81 `feat: add consolidation promotion lineage` merged and released in v0.1.5
 
 Behavior:
 
-- `agent-memory consolidation promote fact ...` now records graph lineage relations when a manual semantic fact promotion succeeds.
+- `agent-memory consolidation promote fact ...` records graph lineage relations when a manual semantic fact promotion succeeds.
 - Relation path:
   - `<candidate-id> --promoted_to--> fact:<id>`
   - `fact:<id> --has_promotion_provenance--> source_record:<id>`
@@ -106,53 +106,74 @@ Behavior:
 - `consolidation promotions report` includes the same safe lineage refs while remaining read-only.
 - `graph inspect <db> <candidate-id> --depth 2` can explain candidate -> durable fact -> provenance source lineage.
 - Unknown candidate ids remain safe failures with no facts, sources, or lineage relations created.
-- No procedure/preference promotion, automatic promotion, conflict preflight, cleanup/decay mutation, or retrieval ranking change.
+- No procedure/preference promotion, automatic promotion, cleanup/decay mutation, or retrieval ranking change.
 
-Verification completed for E3/v0.1.56:
+## Completed Stage E / PR E4 slice
+
+PR #84 `feat: add consolidation promotion conflict preflight` merged and released in v0.1.57.
+
+Behavior:
+
+- `agent-memory consolidation promote fact ...` now runs read-only conflict preflight before any promotion mutation.
+- Claim slot is `subject_ref` + `predicate` + `scope`.
+- Existing approved/candidate/disputed/deprecated same-slot facts with a different `object_ref_or_value` block promotion.
+- Blocked output returns non-zero with:
+  - `promoted: false`
+  - `read_only: true`
+  - `error: conflict_preflight_required`
+  - status counts for the claim slot
+  - safe conflicting fact summaries
+  - suggested `review explain`, `review replacements`, and `graph inspect` commands
+- `--allow-conflict` is required to intentionally keep coexisting conflicting claims.
+- Successful promotions preserve E1/E3 behavior: default status is `candidate`, explicit `--approve --actor --reason` still logs approval, lineage edges are created only after successful promotion, and default retrieval remains approved-only.
+- Unknown candidate ids remain safe failures with no facts, sources, or lineage relations created.
+- No automatic deprecation, supersession, cleanup/decay mutation, approval queue, or retrieval ranking change.
+
+Verification completed for E4/v0.1.57:
 
 ```bash
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py -q
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_review_and_scope_ranking.py tests/test_experience_traces.py -q
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_review_and_scope_ranking.py tests/test_experience_traces.py tests/test_cli.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
 git diff --check
 npm pack --dry-run
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
 node --check bin/agent-memory.js
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli consolidation promote fact --help
 ```
 
 External release QA completed:
 
 ```bash
 npm view @cafitac/agent-memory version
-# 0.1.56
+# 0.1.57
 python3 - <<'PY'
 import json, urllib.request
 print(json.load(urllib.request.urlopen('https://pypi.org/pypi/cafitac-agent-memory/json'))['info']['version'])
 PY
-# 0.1.56
+# 0.1.57
 ```
 
 Published install smoke completed:
 
-- PyPI fresh venv install: `cafitac-agent-memory==0.1.56`, `consolidation promote fact --help`, and `graph inspect --help` succeeded.
-- npm clean `npm exec --package=@cafitac/agent-memory@0.1.56` smoke succeeded for `consolidation promote fact --help` and `graph inspect --help`.
+- PyPI fresh venv install: `cafitac-agent-memory==0.1.57`, `consolidation promote fact --help` including `--allow-conflict`, and `graph inspect --help` succeeded.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.57` smoke succeeded for `consolidation promote fact --help` including `--allow-conflict`, and `graph inspect --help`.
 
 Hermes QA completed:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/agent-memory hermes-doctor \
+/Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/agent-memory hermes-doctor \
   /Users/reddit/.agent-memory/memory.db \
   --config-path /Users/reddit/.hermes/config.yaml \
-  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/python \
+  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/python \
   --timeout 15
 hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool
 hermes hooks doctor
 hermes hooks test pre_llm_call
 ```
 
-`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.56 agent-memory pre-LLM hook.
+`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.57 agent-memory pre-LLM hook.
 
 ## Canonical roadmap position
 
@@ -176,23 +197,27 @@ Roadmap sequence:
    - E1 semantic fact promotion done in v0.1.54
    - E2 promotion audit report done in v0.1.55
    - E3 consolidation graph lineage relation edges done in v0.1.56
-   - E4 conflict/supersession preflight is in progress on `feat/consolidation-conflict-preflight`
+   - E4 conflict/supersession preflight done in v0.1.57
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Active PR-sized slice: Stage E / PR E4
+## Next recommended PR-sized slice: Stage E / PR E5
 
 Goal:
 
-- Prevent manual semantic fact promotion from silently creating contradictory durable memory.
+- Add an explicit human-reviewed supersession/conflict relation command after E4 has made contradictions visible.
 
-Current implemented shape:
+Suggested first shape:
 
-- `consolidation promote fact` runs read-only conflict preflight before promotion mutation.
-- Same claim-slot facts (`subject_ref`, `predicate`, `scope`) with different `object_ref_or_value` block promotion unless `--allow-conflict` is provided.
-- Blocked output includes `read_only: true`, `error: conflict_preflight_required`, status counts, safe conflicting fact summaries, and suggested `review explain`, `review replacements`, and `graph inspect` commands.
-- Successful promotions keep default retrieval approved-only and E3 lineage behavior.
+- Keep mutation explicit and review-gated.
+- Add a command that records a supersession/conflict relation only when the operator provides source fact, target fact, actor, and reason.
+- Do not auto-deprecate the old fact in the same slice unless the command name and flags make that lifecycle transition explicit.
+- Do not change retrieval ranking/default behavior.
+
+Alternative smaller slice:
+
+- Add a read-only `consolidation conflicts report` or broaden E4 preflight diagnostics before introducing new mutation.
 
 Out of scope unless deliberately re-scoped:
 
@@ -209,5 +234,5 @@ cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git fetch origin --prune --tags
 git log --oneline -5
-sed -n '1,240p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
+sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
 ```
