@@ -5,6 +5,8 @@ Status: AI-authored draft. Not yet human-approved.
 ## 1. Goal
 
 Build an open-source memory runtime that makes agents feel like they actually remember.
+The north-star is a graph-based memory consolidation system, not a store of only pre-selected "important" notes:
+experiences leave lightweight traces, repeated or salient traces strengthen, weak traces decay, and consolidated patterns become explainable long-term memory.
 Not just by searching old text, but by:
 - retaining important episodes
 - extracting durable facts
@@ -22,6 +24,7 @@ Not just by searching old text, but by:
 2. Graph-over-chunks, not chunks-only
    - chunk similarity is useful but insufficient
    - explicit memory objects and explicit relations should be first-class
+   - graph edges should also represent reinforcement, decay, consolidation, supersession, and temporal context over time
 
 3. Provenance-first
    - durable memory should point back to evidence
@@ -29,6 +32,7 @@ Not just by searching old text, but by:
 
 4. Layered memory
    - different memory types should have different retention and retrieval policies
+   - working/short-term traces can be cheap and temporary; long-term memories should emerge through consolidation rather than immediate permanence
 
 5. Harness-agnostic core
    - Hermes, Codex-like, Claude-style, and future runtimes should share the same core

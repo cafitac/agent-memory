@@ -1,0 +1,141 @@
+# Stage B: Trace Layer Without Automatic Memory Creation
+
+Status: AI-authored draft. Not yet human-approved.
+
+## Goal
+
+Create the low-cost evidence layer for brain-like memory without making anything durable automatically. Stage B is about safe traces, not long-term memory.
+
+A trace is a sanitized, bounded, local event record. It may later support activation, reinforcement, and consolidation, but by itself it must not be injected into prompts as approved memory.
+
+## Stage exit criteria
+
+- `experience_traces` or equivalent storage exists with lazy migration.
+- Developers can record/list sanitized traces manually.
+- Hermes can record traces only when explicitly enabled.
+- Retention guardrails prevent the trace layer from becoming an unbounded transcript archive.
+
+## Shared model constraints
+
+A trace should support these concepts, but exact names can change during implementation:
+
+- id
+- created_at
+- surface, e.g. `cli`, `hermes`, `hermes-pre-llm-hook`
+- scope/project/session identifiers where safe
+- event_kind, e.g. `turn`, `tool_result_summary`, `user_correction`, `remember_intent`
+- query/content hash or fingerprint, not raw prompt
+- sanitized summary or signal payload when explicitly supplied
+- salience/user_emphasis signals
+- related memory refs or observation ids
+- retention/TTL fields
+- metadata JSON for non-sensitive adapter data
+
+## PR B1: Add a lightweight `experience_traces` schema behind an explicit write path
+
+### Objective
+
+Introduce the storage substrate while keeping retrieval and Hermes behavior unchanged.
+
+### Likely files
+
+- `src/agent_memory/core/models.py`
+- `src/agent_memory/storage/sqlite.py`
+- `tests/test_storage.py` or a new focused storage test file
+- possibly `src/agent_memory/storage/schema.sql` if this repo uses static schema text for new tables
+
+### Test ideas
+
+- New DB creates the trace table lazily.
+- Existing DB without the table migrates lazily.
+- A trace can be written with only hashes/sanitized metadata.
+- Listing traces never returns raw prompt fields.
+- Retrieval output is unchanged after adding the schema.
+
+### Acceptance
+
+- No CLI command is required yet.
+- No Hermes hook writes traces yet.
+- No default memory retrieval/ranking change.
+- The table design explicitly supports retention and provenance.
+
+## PR B2: Add `traces record` and `traces list` read-safe CLI
+
+### Objective
+
+Expose trace creation/listing for synthetic and manually sanitized events so the storage shape can be dogfooded before adapters write into it.
+
+### Candidate CLI
+
+```bash
+agent-memory traces record <db> --surface cli --event-kind user_correction --summary "sanitized summary" --scope project:agent-memory
+agent-memory traces list <db> --limit 50 --surface cli --output-json
+```
+
+Exact argument names may change, but the CLI must make it obvious that raw transcript input is not the default path.
+
+### Test ideas
+
+- CLI records a trace with sanitized summary.
+- CLI list supports surface/scope/event filters.
+- CLI list output contains trace ids, timestamps, signals, and metadata but not raw prompt text.
+- CLI handles empty DBs.
+
+### Acceptance
+
+- Manual trace workflow works without Hermes.
+- JSON output is stable enough for Stage C reports.
+- Docs explain the command is experimental/local-only.
+
+## PR B3: Connect Hermes hook to trace recording as conservative opt-in
+
+### Objective
+
+Let real Hermes turns create lightweight traces only when explicitly enabled, while preserving the principle that hook failures must not block the user.
+
+### Design choices to settle in the PR
+
+- Config/env flag name for opt-in.
+- Which Hermes payload fields are safe as metadata.
+- How to identify synthetic doctor/test payloads and skip them.
+- Whether the trace stores a sanitized adapter-generated summary or only hashes/signals at first.
+
+### Test ideas
+
+- Default Hermes hook path does not record traces.
+- Opt-in path records a trace for a representative safe payload.
+- Synthetic doctor/test payloads are skipped.
+- Trace write failure is swallowed/logged and does not fail the hook.
+
+### Acceptance
+
+- Disabled by default.
+- Non-blocking failures.
+- No raw prompts in trace rows or CLI output.
+- Local Hermes E2E still returns the QA marker.
+
+## PR B4: Add trace retention and local-only safety guardrails
+
+### Objective
+
+Add guardrails before trace volume grows.
+
+### Candidate behavior
+
+- Default TTL or retention class for traces.
+- Max trace count or budget advisory.
+- Read-only expiry report first.
+- Optional explicit cleanup command only if scoped and safe; if uncertain, defer mutation to a later PR.
+
+### Test ideas
+
+- Expired traces are identified deterministically.
+- Retention report is read-only by default.
+- High-volume traces produce a warning without breaking retrieval.
+- Approved long-term memories are not deleted by trace retention.
+
+### Acceptance
+
+- Trace layer cannot silently become an infinite local transcript archive.
+- Docs explain what is retained, for how long, and how to inspect it.
+- The next stage can build activation events on top of bounded trace data.
