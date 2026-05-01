@@ -60,12 +60,13 @@ If a later session changes direction, update both this checklist and the relevan
 
 ### Stage B: trace layer without automatic memory creation
 
-- [ ] PR B1: Add a lightweight `experience_traces` schema behind an explicit write path
+- [x] PR B1: Add a lightweight `experience_traces` schema behind an explicit write path
   - Goal: create the short-term trace substrate without changing retrieval or saving raw transcripts.
   - Scope: SQLite migration/model/storage APIs for trace id, surface, scope, event kind, timestamp, redaction/hash metadata, summary/signals, TTL/retention fields, and source/provenance refs.
   - Acceptance: tests prove raw prompt text is not required or emitted; existing DBs migrate lazily; normal retrieval is unchanged.
 
 - [ ] PR B2: Add `traces record` and `traces list` read-safe CLI
+  - Status: in progress on branch `feat/traces-cli`.
   - Goal: let developers create and inspect sanitized traces manually before adapters write them.
   - Scope: CLI commands for recording synthetic/sanitized events and listing grouped traces with JSON output.
   - Acceptance: list output redacts or omits raw content, supports scope/surface filters, and has stable JSON suitable for later reports.
