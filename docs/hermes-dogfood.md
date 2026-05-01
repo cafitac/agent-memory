@@ -50,6 +50,7 @@ agent-memory observations list ~/.agent-memory/memory.db --limit 20
 agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 agent-memory observations empty-diagnostics ~/.agent-memory/memory.db --limit 200 --top 10 --high-empty-threshold 0.5
 agent-memory observations review-candidates ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
+agent-memory activations summary ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
@@ -64,7 +65,9 @@ Stage B trace work includes a manual CLI for explicit local dogfood plus a Herme
 
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 
-When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs. It does not emit raw query text, query previews, or prompt content.
+`activations summary` is the read-only Stage C dogfood report for this substrate. It summarizes activation counts, activation windows, surfaces/scopes, status counts for top refs, empty-retrieval evidence, and top refs with advisory signals such as `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, or `deprecated_activation`. Use it before reinforcement/decay scoring; it does not mutate memory status and does not affect ranking.
+
+When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 
 `observations review-candidates` is the next read-only step after audit. It keeps the same secret-safe observation summary, then expands each top ref into a forensic candidate:
 

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 16:57 KST
+Last updated: 2026-05-01 17:54 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.47까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C1 `memory_activations` activation-event substrate를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`는 완료됐다. C1은 retrieval observation을 activation evidence로 bridge하되, raw query/prompt 저장, retrieval ranking 변경, long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.48까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C2 `activations summary` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations` substrate는 완료됐다. C2는 activation evidence를 요약해서 반복 활성화 ref, empty retrieval negative evidence, surface/scope/status 분포를 보여주되 raw query/prompt 저장, retrieval ranking 변경, memory status mutation, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -29,31 +29,26 @@ Expected GitHub identity:
 - GitHub account: `cafitac`
 - Use `HOME=/Users/reddit` for gh commands.
 - Remote: `origin` -> `https://github.com/cafitac/agent-memory.git`
+- Commit author for this repo should remain `Minwoo Kang <31237832+cafitac@users.noreply.github.com>` unless the user says otherwise.
 
 Latest completed release:
 
-- `v0.1.47`
-- v0.1.47 added read-only trace retention-report guardrails.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.47/.venv/bin/agent-memory`.
+- `v0.1.48`
+- v0.1.48 added secret-safe `memory_activations` rows bridged from retrieval observations.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.48/.venv/bin/agent-memory`.
 
-Current local PR C1 modifications:
+Current local PR C2 modifications:
 
-- Branch: `feat/activation-events`
-- `src/agent_memory/core/models.py`
-  - Adds `MemoryActivation` model.
-- `src/agent_memory/storage/schema.sql`
-  - Adds `memory_activations` table and indexes.
-- `src/agent_memory/storage/sqlite.py`
-  - Adds lazy `_ensure_memory_activations_schema(...)`.
-  - Adds `list_memory_activations(...)` and `memory_activation_from_row(...)`.
-  - `record_retrieval_observation(...)` now records activation evidence:
-    - `retrieved` rows for selected memory refs.
-    - `empty_retrieval` row when retrieval is empty.
-  - Activation metadata is sanitized; raw prompt/query/query_preview/user_message/transcript keys are omitted.
+- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/activation-summary` on `feat/activation-summary`
+- `src/agent_memory/api/cli.py`
+  - Adds `agent-memory activations summary <db> --limit 200 --top 20 --frequent-threshold 3`.
+  - Emits read-only JSON with `kind: memory_activation_summary`.
+  - Includes activation count/window, activation kind counts, surfaces/scopes, status summary, empty-retrieval evidence, top refs, and advisory signals.
+  - Signals include `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, `deprecated_activation`, `disputed_activation`, and `missing_memory_ref`.
 - `tests/test_memory_activations.py`
-  - Covers schema creation, secret-safe activation recording, empty retrieval negative evidence, and lazy migration.
-- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/roadmap-v0.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
-  - Document C1 in progress.
+  - Adds CLI tests for activation summary output, negative evidence, deprecated ref flagging, privacy, and lazy migration from DBs missing `memory_activations`.
+- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
+  - Document C2 in progress and the read-only dogfood command.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -61,7 +56,7 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.claude/`
 - `.dev/kb/retrieval-eval-m1-implementation-plan.md`
 - `.omc/`
-- `.worktrees/` if any scoped worktrees are active
+- `.worktrees/` if scoped worktrees are active
 
 Do not delete or commit these unless the user explicitly asks.
 
@@ -88,8 +83,8 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR B3: Hermes trace recording opt-in (done in v0.1.46)
    - PR B4: trace retention/safety guardrails (done in v0.1.47)
 3. Stage C: activation and reinforcement signals
-   - PR C1: activation events (current)
-   - PR C2: activation summary CLI
+   - PR C1: activation events (done in v0.1.48)
+   - PR C2: activation summary CLI (current)
    - PR C3: reinforcement score report
    - PR C4: decay risk score report
 4. Stage D: consolidation candidates before mutation
@@ -112,25 +107,27 @@ Hard guardrails:
 
 ## Next best slice
 
-Finish PR C1: activation event substrate.
+Finish PR C2: activation summary CLI.
 
-C1 is intentionally a substrate/bridge first:
+C2 is intentionally read-only:
 
-- create local-only `memory_activations` rows from retrieval observations
-- link activation rows to observation ids and memory refs
-- represent empty retrievals as negative evidence
-- keep existing observation command outputs compatible
-- avoid raw query/prompt/query_preview/transcript storage in activation rows
-- avoid retrieval ranking changes and long-term memory promotion
+- summarize local `memory_activations` rows
+- show repeated `retrieved` refs as likely reinforcement candidates when approved/frequent
+- show `empty_retrieval` rows as negative evidence, not a cleanup instruction
+- flag deprecated/disputed/missing refs as forensic signals
+- avoid raw query/prompt/query_preview/transcript output
+- avoid retrieval ranking changes and memory status mutation
 
 ## Suggested verification before PR
 
 ```bash
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_memory_activations.py -q
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_memory_activations.py tests/test_cli.py tests/test_experience_traces.py -q
-HOME=/Users/reddit .venv/bin/python -m pytest -q
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py -q
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_cli.py tests/test_experience_traces.py -q
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest -q
 git diff --check
 npm pack --dry-run
 ```
+
+Also run a temp DB CLI smoke for `agent-memory activations summary` and verify the output contains no raw query/secret strings.
 
 If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/direct hook/Hermes E2E QA.

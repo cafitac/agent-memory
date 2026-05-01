@@ -55,6 +55,7 @@ from agent_memory.storage.sqlite import (
     list_candidate_procedures,
     list_experience_traces,
     list_fact_replacement_relations,
+    list_memory_activations,
     list_facts_by_claim_slot,
     list_memory_status_history,
     list_relations_for_node,
@@ -310,6 +311,123 @@ def _observation_window(observations) -> dict[str, Any] | None:
         "first_observed_at": first.created_at,
         "latest_observation_id": latest.id,
         "latest_observed_at": latest.created_at,
+    }
+
+
+def _activation_window(activations) -> dict[str, Any] | None:
+    if not activations:
+        return None
+    first = min(activations, key=lambda activation: activation.id)
+    latest = max(activations, key=lambda activation: activation.id)
+    return {
+        "first_activation_id": first.id,
+        "first_activated_at": first.created_at,
+        "latest_activation_id": latest.id,
+        "latest_activated_at": latest.created_at,
+    }
+
+
+def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("activations summary limit must be >= 1")
+    if top < 1:
+        raise ValueError("activations summary top must be >= 1")
+    if frequent_threshold < 1:
+        raise ValueError("activations summary frequent threshold must be >= 1")
+
+    activations = list_memory_activations(db_path, limit=limit)
+    surface_counts = Counter(activation.surface for activation in activations)
+    kind_counts = Counter(activation.activation_kind for activation in activations)
+    scope_counts = Counter(activation.scope for activation in activations if activation.scope is not None)
+    empty_retrieval_activations = [activation for activation in activations if activation.activation_kind == "empty_retrieval"]
+
+    activations_by_ref: dict[str, list[Any]] = defaultdict(list)
+    for activation in activations:
+        if activation.memory_ref is not None:
+            activations_by_ref[activation.memory_ref].append(activation)
+
+    status_summary: Counter[str] = Counter()
+    top_memory_refs = []
+    for memory_ref, ref_activations in sorted(
+        activations_by_ref.items(),
+        key=lambda item: (-len(item[1]), item[0]),
+    )[:top]:
+        current_status = _current_status_for_memory_ref(db_path, memory_ref)
+        if current_status is not None:
+            status_summary[current_status] += 1
+        activation_count = len(ref_activations)
+        signals = []
+        if activation_count >= frequent_threshold:
+            signals.append("frequently_activated")
+        if current_status is not None and current_status != "approved":
+            signals.append("current_status_not_approved")
+        if current_status == "deprecated":
+            signals.append("deprecated_activation")
+        elif current_status == "disputed":
+            signals.append("disputed_activation")
+        elif current_status == "missing":
+            signals.append("missing_memory_ref")
+        elif current_status == "approved" and activation_count >= frequent_threshold:
+            signals.append("likely_reinforcement_candidate")
+
+        observation_ids = []
+        for activation in ref_activations:
+            if activation.observation_id is not None and activation.observation_id not in observation_ids:
+                observation_ids.append(activation.observation_id)
+            if len(observation_ids) >= 5:
+                break
+
+        top_memory_refs.append(
+            {
+                "memory_ref": memory_ref,
+                "activation_count": activation_count,
+                "total_strength": round(sum(activation.strength for activation in ref_activations), 4),
+                "current_status": current_status,
+                "signals": signals,
+                "sample_activation_ids": [activation.id for activation in ref_activations[:5]],
+                "sample_observation_ids": observation_ids,
+                "activation_window": _activation_window(ref_activations),
+            }
+        )
+
+    empty_ratio = len(empty_retrieval_activations) / len(activations) if activations else 0.0
+    quality_warnings = []
+    if not activations:
+        quality_warnings.append("no_activations")
+    if 0 < len(activations) < 10:
+        quality_warnings.append("low_activation_count")
+    if empty_ratio >= 0.5 and activations:
+        quality_warnings.append("high_empty_retrieval_activation_ratio")
+
+    return {
+        "kind": "memory_activation_summary",
+        "read_only": True,
+        "activation_count": len(activations),
+        "limit": limit,
+        "top": top,
+        "frequent_threshold": frequent_threshold,
+        "activation_window": _activation_window(activations),
+        "activation_kind_counts": dict(sorted(kind_counts.items())),
+        "surface_counts": dict(sorted(surface_counts.items())),
+        "scope_counts": dict(sorted(scope_counts.items())),
+        "status_summary": dict(sorted(status_summary.items())),
+        "empty_retrieval": {
+            "count": len(empty_retrieval_activations),
+            "ratio": round(empty_ratio, 4),
+            "sample_activation_ids": [activation.id for activation in empty_retrieval_activations[:5]],
+            "sample_observation_ids": [
+                activation.observation_id
+                for activation in empty_retrieval_activations[:5]
+                if activation.observation_id is not None
+            ],
+        },
+        "quality_warnings": quality_warnings,
+        "top_memory_refs": top_memory_refs,
+        "suggested_next_steps": [
+            "Run observations audit to compare activation refs with retrieval observation behavior.",
+            "Run observations empty-diagnostics if empty_retrieval is high for a surface or scope.",
+            "Use future reinforcement/decay reports before changing retrieval ranking or memory status.",
+        ],
     }
 
 
@@ -951,6 +1069,20 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_review_candidates_parser.add_argument("--top", type=int, default=10)
     observations_review_candidates_parser.add_argument("--frequent-threshold", type=int, default=3)
 
+    activations_parser = subparsers.add_parser(
+        "activations",
+        help="Read-only activation reports over retrieval-use evidence.",
+    )
+    activations_subparsers = activations_parser.add_subparsers(dest="activations_action", required=True)
+    activations_summary_parser = activations_subparsers.add_parser(
+        "summary",
+        help="Summarize memory activation evidence without changing retrieval ranking or memory state.",
+    )
+    activations_summary_parser.add_argument("db_path", type=Path)
+    activations_summary_parser.add_argument("--limit", type=int, default=200)
+    activations_summary_parser.add_argument("--top", type=int, default=20)
+    activations_summary_parser.add_argument("--frequent-threshold", type=int, default=3)
+
     traces_parser = subparsers.add_parser(
         "traces",
         help="Record and list sanitized local experience traces. Experimental; does not create long-term memories.",
@@ -1466,6 +1598,22 @@ def main() -> None:
             )
             return
         raise ValueError(f"Unsupported observations action: {args.observations_action}")
+
+    if args.command == "activations":
+        if args.activations_action == "summary":
+            print(
+                json.dumps(
+                    _activation_summary(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported activations action: {args.activations_action}")
 
     if args.command == "traces":
         if args.traces_action == "record":

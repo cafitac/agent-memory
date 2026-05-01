@@ -25,9 +25,9 @@ Turn traces and retrieval observations into measurable signals. This stage still
 
 ### Status
 
-- In progress on branch `feat/activation-events`.
+- Done in v0.1.48.
 - PR B4 completed in v0.1.47 with read-only trace retention guardrails.
-- C1 adds a `memory_activations` substrate and bridges retrieval observations into activation rows.
+- C1 added a `memory_activations` substrate and bridges retrieval observations into activation rows.
 
 ### Objective
 
@@ -59,6 +59,12 @@ Prefer the simplest path that keeps v0.1.41 observation output compatible.
 
 ## PR C2: Add read-only activation summary CLI
 
+### Status
+
+- In progress on branch `feat/activation-summary`.
+- PR C1 completed in v0.1.48 with secret-safe `memory_activations` rows bridged from retrieval observations.
+- C2 adds the first read-only report over those activation rows.
+
 ### Objective
 
 Show which memory refs are repeatedly activated and where activation is sparse or noisy.
@@ -66,7 +72,7 @@ Show which memory refs are repeatedly activated and where activation is sparse o
 ### Candidate CLI
 
 ```bash
-agent-memory activations summary <db> --limit 200 --top 20 --output-json
+agent-memory activations summary <db> --limit 200 --top 20 --frequent-threshold 3
 ```
 
 or, if reusing observation namespace is cleaner:
