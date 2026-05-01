@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 21:44 KST
+Last updated: 2026-05-01 22:18 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.50까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C4 `activations decay-risk-report` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations`, C2 `activations summary`, C3 `activations reinforcement-report`는 완료됐다. C4는 activation evidence를 기반으로 low repetition, weak strength, stale activity, low connectivity, lifecycle status risk를 설명 가능한 score로 보여주되 approved/frequent/connected refs는 naive age-only decay에서 보호하고, raw query/prompt 저장, retrieval ranking 변경, memory status mutation, trace cleanup/delete, long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.51까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage D / PR D1 `consolidation candidates` read-only trace clustering CLI를 구현하는 단계야. Stage A baseline, Stage B trace substrate/CLI/Hermes opt-in/retention report, Stage C activation summary/reinforcement/decay-risk reports는 완료됐다. D1은 sanitized `experience_traces`를 deterministic scope/memory/summary key로 묶고 candidate fingerprint, evidence window, surfaces/scopes, safe summaries, related refs, activation/status reinforcement context, guessed memory type, risk flags를 보여주되 raw query/prompt/transcript 출력, retrieval ranking 변경, memory status mutation, reject/snooze mutation, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -33,23 +33,25 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.50`
-- v0.1.50 added read-only `agent-memory activations reinforcement-report`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.50/.venv/bin/agent-memory`.
+- `v0.1.51`
+- v0.1.51 added read-only `agent-memory activations decay-risk-report`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.51/.venv/bin/agent-memory`.
 
-Current local PR C4 modifications:
+Current local PR D1 modifications:
 
-- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/decay-risk-report` on `feat/decay-risk-report`
+- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-candidates` on `feat/consolidation-candidates`
 - `src/agent_memory/api/cli.py`
-  - Adds `agent-memory activations decay-risk-report <db> --limit 200 --top 20 --frequent-threshold 3`.
-  - Emits read-only JSON with `kind: memory_decay_risk_report`.
-  - Includes bounded scoring contract, factor breakdowns, negative evidence, protection signals, sample activation/observation ids, and activation windows.
-  - Factor weights: low_repetition 0.3, weak_strength 0.2, stale_activity 0.2, low_connectivity 0.15, status_risk 0.15.
-  - Protections: approved_frequent_connected_max_score 0.25, approved_frequent_max_score 0.4.
+  - Adds `agent-memory consolidation candidates <db> --limit 200 --top 20 --min-evidence 2`.
+  - Emits read-only JSON with `kind: memory_consolidation_candidates`.
+  - Groups sanitized `experience_traces` by deterministic cluster keys:
+    - `scope:<scope>|memory:<first-related-memory-ref>` when related refs exist
+    - otherwise `scope:<scope>|summary:<safe-summary-token-key>`
+  - Includes candidate id/fingerprint, evidence trace ids/window, surfaces/scopes, event kind counts, retention policy counts, safe summaries, related memory/observation refs, salience/user-emphasis totals, activation counts/current statuses, guessed memory type, risk flags, and suggested explanation command.
+  - Does not mutate memory state, create long-term memories, reject/snooze candidates, or change retrieval ranking.
 - `tests/test_memory_activations.py`
-  - Adds CLI tests for decay risk score output, deterministic factor breakdowns, protection from age-only decay, privacy, and lazy migration from DBs missing `memory_activations`.
-- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
-  - Document C4 in progress and the read-only dogfood command.
+  - Adds CLI tests for consolidation candidate clustering, deterministic safe output, privacy, activation/status context, and lazy migration from DBs missing `experience_traces`/`memory_activations`.
+- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-d-consolidation-candidates.md`, `.dev/status/current-handoff.md`
+  - Document D1 in progress and the read-only dogfood command.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -87,8 +89,10 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR C1: activation events (done in v0.1.48)
    - PR C2: activation summary CLI (done in v0.1.49)
    - PR C3: reinforcement score report (done in v0.1.50)
-   - PR C4: decay risk score report (current)
+   - PR C4: decay risk score report (done in v0.1.51)
 4. Stage D: consolidation candidates before mutation
+   - PR D1: trace clustering for consolidation candidates (current)
+   - PR D2: candidate CLI surface may be folded into D1 if PR remains small; otherwise next slice should refine candidates/explain.
 5. Stage E: reviewed promotion into long-term memory
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
@@ -104,20 +108,20 @@ Hard guardrails:
 2. No automatic long-term approval before secret/redaction checks, provenance, conflict/supersession checks, and audit logs exist.
 3. No default retrieval ranking change before opt-in eval and live Hermes E2E pass.
 4. No mutating cleanup/decay before read-only decay reports are understandable and trusted.
-5. Every release that touches Hermes runtime behavior must be installed from the published artifact and verified with a real Hermes E2E turn.
+5. No promotion/reject/snooze mutation before read-only candidate grouping and explanation are trusted.
+6. Every release that touches Hermes runtime behavior must be installed from the published artifact and verified with a real Hermes E2E turn.
 
 ## Next best slice
 
-Finish PR C4: decay risk score report CLI.
+Finish PR D1: consolidation candidate trace clustering CLI.
 
-C4 is intentionally read-only:
+D1 is intentionally read-only:
 
-- summarize local `memory_activations` rows into explainable decay-risk candidates
-- show weak/low-use/isolated/stale refs as review candidates, not auto-actions
-- protect approved/frequent/connected refs from naive age-only decay recommendations
-- show `empty_retrieval` rows as negative evidence, not a cleanup instruction
+- summarize local sanitized `experience_traces` into candidate clusters
+- preserve evidence trace ids and candidate fingerprints for future explanation/reject/snooze workflows
+- include activation/status context but do not auto-promote or alter status
 - avoid raw query/prompt/query_preview/transcript output
-- avoid retrieval ranking changes, memory status mutation, trace cleanup/delete, and long-term memory creation
+- avoid retrieval ranking changes, memory status mutation, trace cleanup/delete, reject/snooze writes, and long-term memory creation
 
 ## Suggested verification before PR
 
@@ -129,6 +133,6 @@ git diff --check
 npm pack --dry-run
 ```
 
-Also run a temp DB CLI smoke for `agent-memory activations decay-risk-report` and verify the output contains no raw query/secret strings.
+Also run a temp DB CLI smoke for `agent-memory consolidation candidates` and verify the output contains no raw query/secret strings.
 
-If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/activation summary/reinforcement report/decay risk/direct hook/Hermes E2E QA.
+If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/activation summary/reinforcement report/decay risk/consolidation candidates/direct hook/Hermes E2E QA.
