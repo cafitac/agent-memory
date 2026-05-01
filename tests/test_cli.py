@@ -501,6 +501,135 @@ def test_python_module_cli_observations_empty_diagnostics_groups_empty_segments_
 
 
 
+def test_python_module_cli_dogfood_baseline_summarizes_observations_without_raw_queries(tmp_path: Path) -> None:
+    db_path = tmp_path / "dogfood-baseline.db"
+    config_path = tmp_path / "missing-hermes-config.yaml"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Dogfood baseline target phrase is BASELINE_OK.",
+        metadata={"project": "dogfood-baseline"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Dogfood baseline",
+        predicate="target_phrase",
+        object_ref_or_value="BASELINE_OK",
+        evidence_ids=[source.id],
+        scope="project:dogfood-baseline",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for secret_query in (
+        "What is the dogfood baseline target phrase? password=SUPERSECRET",
+        "Unrelated durable missing token=abc123",
+    ):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                secret_query,
+                "--preferred-scope",
+                "project:dogfood-baseline",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    baseline_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "baseline",
+            str(db_path),
+            "--output-json",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--config-path",
+            str(config_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert baseline_result.returncode == 0, baseline_result.stderr
+    payload = json.loads(baseline_result.stdout)
+    assert payload["kind"] == "dogfood_baseline"
+    assert payload["read_only"] is True
+    assert payload["agent_memory_version"]
+    assert payload["database"]["path_exists"] is True
+    assert payload["database"]["schema_user_version"] == 0
+    assert payload["memory_counts"]["facts"]["approved"] == 1
+    assert payload["observation_summary"]["observation_count"] == 2
+    assert payload["observation_summary"]["empty_retrieval_count"] == 1
+    assert payload["empty_diagnostics"]["kind"] == "retrieval_empty_diagnostics"
+    assert payload["review_candidates"]["candidate_count"] == 0
+    assert payload["hermes"]["status"] == "needs_setup"
+    assert payload["hermes"]["config_exists"] is False
+    assert "recommended_command" not in payload["hermes"]
+    assert payload["local_e2e_marker"]["target_phrase"] == "not_executed"
+    assert payload["suggested_next_steps"]
+    assert "SUPERSECRET" not in baseline_result.stdout
+    assert "abc123" not in baseline_result.stdout
+    assert "query_text" not in baseline_result.stdout
+    assert "query_preview" not in baseline_result.stdout
+
+
+
+def test_python_module_cli_dogfood_baseline_handles_empty_database_without_observations(tmp_path: Path) -> None:
+    db_path = tmp_path / "dogfood-empty-baseline.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    baseline_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "baseline",
+            str(db_path),
+            "--output-json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert baseline_result.returncode == 0, baseline_result.stderr
+    payload = json.loads(baseline_result.stdout)
+    assert payload["kind"] == "dogfood_baseline"
+    assert payload["read_only"] is True
+    assert payload["memory_counts"] == {
+        "facts": {},
+        "procedures": {},
+        "episodes": {},
+    }
+    assert payload["observation_summary"]["observation_count"] == 0
+    assert payload["observation_summary"]["quality_warnings"] == ["no_observations"]
+    assert payload["empty_diagnostics"]["quality_warnings"] == ["no_observations"]
+    assert payload["review_candidates"]["candidate_count"] == 0
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 12:36 KST
+Last updated: 2026-05-01 13:20 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.41까지 배포/Hermes QA가 완료됐고, 현재는 최종 목표인 graph-based memory consolidation runtime을 향해 PR 단위 도장깨기 로드맵을 고정하는 단계야. `.dev/roadmap/roadmap-v0.md`에 PR A1~H4 순서의 implementation ladder가 들어가 있고, 상세 실행 문서는 `.dev/roadmap/memory-consolidation/` 아래 stage별로 나뉘어 있다. 다음 자연스러운 작업은 PR A1로 이 planning checkpoint를 PR로 올리고 merge하는 것이다. 그 다음은 PR A2 dogfood baseline snapshot, 이후 B1 lightweight `experience_traces` schema부터 순서대로 진행한다.
+agent-memory는 v0.1.42까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 PR A2 dogfood baseline snapshot/report를 구현하는 단계야. PR A1 planning checkpoint는 이미 로드맵/아키텍처/제품/상태 문서로 고정됐고, 이번 A2는 `agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json` 형태의 read-only baseline을 추가한다. A2가 merge/release되면 다음 자연스러운 작업은 Stage B의 PR B1 lightweight `experience_traces` schema다.
 
 ## Current repo state
 
@@ -32,25 +32,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.41`
-- v0.1.41 added read-only `observations empty-diagnostics`, completed published smoke, installed runtime QA, `hermes hooks doctor`, and real Hermes E2E with `DIRECT_CMD_MEMORY_LAYER_OK`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.41/.venv/bin/agent-memory`.
+- `v0.1.42`
+- v0.1.42 is the docs-only memory consolidation roadmap checkpoint release.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.42/.venv/bin/agent-memory`.
 
-Current local docs-only modifications:
+Current local PR A2 modifications:
 
-- `.dev/roadmap/roadmap-v0.md`
-  - Added north-star memory model.
-  - Added PR-by-PR implementation ladder from PR A1 through PR H4.
-  - Links to detailed stage docs under `.dev/roadmap/memory-consolidation/`.
-- `.dev/roadmap/memory-consolidation/`
-  - Added a README and stage A-H execution docs so compacted/fresh sessions can resume without changing direction.
-- `.dev/architecture/architecture-v0.md`
-  - Added graph-based memory consolidation north-star in Goal.
-  - Added graph edge semantics for reinforcement/decay/consolidation/supersession/temporal context.
-  - Added layered-memory note that long-term memory should emerge through consolidation.
-- `.dev/product/thesis-and-scope.md`
-  - Added memory consolidation thesis.
-  - Updated principle to “Memory is curated through consolidation, not pre-filtered at birth”.
+- `src/agent_memory/api/cli.py`
+  - Adds `agent-memory dogfood baseline <db> --output-json`.
+  - The report is read-only and composes observation audit, empty diagnostics, signal-bearing review candidates, DB/schema metadata, memory status counts, sanitized Hermes doctor metadata, and a non-executed local E2E marker.
+- `tests/test_cli.py`
+  - Adds regression coverage for populated observations and empty/no-observation DBs.
+  - Asserts no raw query/query preview fields or test secrets are emitted.
+- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`, `.dev/status/current-handoff.md`
+  - Document the baseline command and A2 implementation status.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -129,14 +124,14 @@ Hard guardrails:
 
 ## Next best slice
 
-PR A1: Persist the consolidation roadmap as the canonical planning checkpoint.
+PR A2: Add the dogfood baseline snapshot/report command.
 
 Before acting, read:
 
 1. `.dev/status/current-handoff.md`
-2. `.dev/roadmap/roadmap-v0.md`
-3. `.dev/roadmap/memory-consolidation/README.md`
-4. `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
+2. `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
+3. `src/agent_memory/api/cli.py`
+4. `tests/test_cli.py`
 
 Suggested first commands next session:
 
@@ -144,21 +139,9 @@ Suggested first commands next session:
 cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git diff --check
-git diff -- .dev/roadmap/roadmap-v0.md .dev/roadmap/memory-consolidation .dev/architecture/architecture-v0.md .dev/product/thesis-and-scope.md .dev/status/current-handoff.md | sed -n '1,420p'
-python - <<'PY'
-from pathlib import Path
-for path in [
-    Path('.dev/roadmap/roadmap-v0.md'),
-    Path('.dev/architecture/architecture-v0.md'),
-    Path('.dev/product/thesis-and-scope.md'),
-    Path('.dev/status/current-handoff.md'),
-    *Path('.dev/roadmap/memory-consolidation').glob('*.md'),
-]:
-    text = path.read_text()
-    if '\n7|' in text or '\n8|' in text:
-        raise SystemExit(f'accidental line-number artifact in {path}')
-print('docs ok')
-PY
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py -q -k dogfood_baseline
+HOME=/Users/reddit .venv/bin/python -m pytest -q
+HOME=/Users/reddit .venv/bin/python -m agent_memory.api.cli dogfood baseline /Users/reddit/.agent-memory/memory.db --output-json >/tmp/agent-memory-dogfood-baseline.json
 ```
 
-If the user asks to proceed after that, create a docs-only PR from a clean branch/worktree or by selective staging only these docs files. Do not include local-only untracked directories. After PR A1 merges, the next implementation slice is PR A2 in `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`.
+If the user asks to proceed after that, finish A2 verification, create the PR, merge/release after CI, and run published-artifact smoke plus the local baseline command. After A2 merges, the next implementation slice is PR B1 in `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`.
