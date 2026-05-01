@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 15:23 KST
+Last updated: 2026-05-01 16:00 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.45까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B3 `hermes-pre-llm-hook --record-trace` opt-in trace recording을 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces` storage substrate, Stage B / PR B2 `traces record/list` read-safe CLI는 완료됐다. 이번 B3는 Hermes real turn trace recording을 명시 opt-in으로만 추가하고, raw prompt 저장/default retrieval 변화/long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.46까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B4 `traces retention-report` read-only trace retention guardrail을 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces` storage substrate, B2 `traces record/list`, B3 Hermes `--record-trace` opt-in trace recording은 완료됐다. 이번 B4는 trace volume/expiry를 read-only로 점검하고, raw transcript 저장/default retrieval 변화/long-term memory 자동 생성/trace deletion은 하지 않는다.
 
 ## Current repo state
 
@@ -32,23 +32,26 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.45`
-- v0.1.45 added manual sanitized `traces record/list` CLI.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.45/.venv/bin/agent-memory`.
+- `v0.1.46`
+- v0.1.46 added opt-in Hermes hook trace recording via `--record-trace`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.46/.venv/bin/agent-memory`.
 
-Current local PR B3 modifications:
+Current local PR B4 modifications:
 
-- `src/agent_memory/integrations/hermes_hooks.py`
-  - Adds `record_trace` option for `HermesPreLlmHookOptions` and `HermesHookConfigSnippetOptions`.
-  - Records one `experience_traces` row only when `--record-trace` is explicitly enabled.
-  - Stores hash-only turn fingerprints, hashed session refs, safe metadata, and related retrieved memory refs.
-  - Skips synthetic Hermes doctor/test payloads and swallows trace write failures.
+- Branch: `feat/trace-retention-report`
+- `src/agent_memory/storage/sqlite.py`
+  - Adds `build_trace_retention_report(...)` as a read-only trace retention report.
+  - Report includes trace count, retention-policy counts, expired trace refs, expirable traces missing `expires_at`, volume warnings, and suggested next steps.
+  - Report intentionally omits trace summary/metadata/raw content and does not delete traces.
 - `src/agent_memory/api/cli.py`
-  - Adds `--record-trace` to `hermes-pre-llm-hook`, `hermes-hook-config-snippet`, `hermes-install-hook`, and `hermes-bootstrap`.
+  - Adds `agent-memory traces retention-report <db>`.
+  - Options: `--now`, `--max-trace-count`, `--expired-limit`, `--missing-expiry-limit`.
+- `tests/test_experience_traces.py`
+  - Adds storage-level retention report coverage for expired traces, missing expiry, volume warnings, secret-safe output, and read-only behavior.
 - `tests/test_cli.py`
-  - Adds coverage for default no-trace behavior, opt-in trace recording, synthetic skip, and non-blocking trace write failure.
+  - Adds module CLI coverage for `traces retention-report` secret-safe/read-only behavior.
 - `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/roadmap-v0.md`, `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`, `.dev/status/current-handoff.md`
-  - Document B2 complete and B3 as conservative opt-in only.
+  - Document B3 complete and B4 in progress as read-only retention reporting first.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -78,40 +81,20 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR A1: planning checkpoint
    - PR A2: dogfood baseline snapshot/report
 2. Stage B: trace layer without automatic memory creation
-   - PR B1: `experience_traces` schema
-   - PR B2: `traces record/list` CLI
-   - PR B3: Hermes trace recording opt-in
-   - PR B4: trace retention/safety guardrails
+   - PR B1: `experience_traces` schema (done in v0.1.44)
+   - PR B2: `traces record/list` CLI (done in v0.1.45)
+   - PR B3: Hermes trace recording opt-in (done in v0.1.46)
+   - PR B4: trace retention/safety guardrails (current)
 3. Stage C: activation and reinforcement signals
    - PR C1: activation events
    - PR C2: activation summary CLI
    - PR C3: reinforcement score report
    - PR C4: decay risk score report
 4. Stage D: consolidation candidates before mutation
-   - PR D1: trace clustering
-   - PR D2: `consolidation candidates` read-only CLI
-   - PR D3: candidate explanation details
-   - PR D4: candidate rejection/snooze state
 5. Stage E: reviewed promotion into long-term memory
-   - PR E1: manual semantic fact promotion
-   - PR E2: manual procedure/preference promotion
-   - PR E3: consolidation relation edges
-   - PR E4: conflict/supersession checks during promotion
 6. Stage F: retrieval uses consolidation signals conservatively
-   - PR F1: activation/reinforcement metadata in retrieval explanations
-   - PR F2: reinforcement as opt-in ranking feature
-   - PR F3: decay risk as opt-in noise penalty
-   - PR F4: bounded graph neighborhood reinforcement
 7. Stage G: cautious automation
-   - PR G1: explicit `remember this` auto-candidate path
-   - PR G2: opt-in auto-approval for narrow low-risk memories
-   - PR G3: background consolidation dry-run job
-   - PR G4: background consolidation apply mode behind explicit flag
 8. Stage H: product hardening and public readiness
-   - PR H1: consolidation eval fixtures/metrics
-   - PR H2: graph/trace visualization export
-   - PR H3: backup/import/export for trace/consolidation state
-   - PR H4: promote reviewed docs into public docs
 
 ## Sequence guardrails
 
@@ -127,25 +110,23 @@ Hard guardrails:
 
 ## Next best slice
 
-PR B3: Connect Hermes hook to trace recording as conservative opt-in.
+PR B4: Add trace retention and local-only safety guardrails.
 
-Before acting, read:
+B4 is intentionally read-only first:
 
-1. `.dev/status/current-handoff.md`
-2. `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
-3. `src/agent_memory/integrations/hermes_hooks.py`
-4. `src/agent_memory/api/cli.py`
-5. `tests/test_cli.py`
+- identify expired traces deterministically
+- flag expirable trace policies without `expires_at`
+- warn when total trace count exceeds an operator budget
+- avoid mutation/deletion until a later explicitly scoped PR
+- avoid raw prompt/transcript/query_preview/metadata/summary output in the retention report
 
-Suggested first commands next session:
+## Suggested verification before PR
 
 ```bash
-cd /Users/reddit/Project/agent-memory
-git status --short --branch
-git diff --check
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py -q -k 'hermes_pre_llm_hook and trace'
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_experience_traces.py::test_trace_retention_report_identifies_expired_missing_expiry_and_volume tests/test_cli.py::test_python_module_cli_traces_retention_report_is_read_only_and_secret_safe -q
 HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q
 HOME=/Users/reddit .venv/bin/python -m pytest -q
+npm pack --dry-run
 ```
 
-If the user asks to proceed after that, finish B3 verification, create the PR, merge/release after CI, and run published-artifact smoke. Because B3 touches Hermes runtime behavior, install the new release runtime with `/usr/local/bin/python3.11`, update `/Users/reddit/.hermes/config.yaml`, verify default hook behavior, run an explicit `--record-trace` direct smoke on a temp DB, run real Hermes E2E expecting `DIRECT_CMD_MEMORY_LAYER_OK`, and run `HOME=/Users/reddit hermes hooks doctor`.
+If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/direct hook/Hermes E2E QA.

@@ -4,6 +4,7 @@ from agent_memory.core.curation import approve_fact, create_candidate_fact
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.retrieval import retrieve_memory_packet
 from agent_memory.storage.sqlite import (
+    build_trace_retention_report,
     connect,
     initialize_database,
     insert_experience_trace,
@@ -149,3 +150,58 @@ def test_experience_trace_schema_does_not_change_retrieval_output(tmp_path: Path
 
     assert [item.id for item in after.semantic_facts] == [item.id for item in before.semantic_facts]
     assert after.retrieval_trace == before.retrieval_trace
+
+
+def test_trace_retention_report_identifies_expired_missing_expiry_and_volume(tmp_path: Path) -> None:
+    db_path = tmp_path / "agent-memory.db"
+    initialize_database(db_path)
+    expired = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        retention_policy="ephemeral",
+        expires_at="2026-01-01T00:00:00Z",
+        metadata={"raw_prompt": "do not emit this"},
+    )
+    active = insert_experience_trace(
+        db_path,
+        surface="cli",
+        event_kind="user_correction",
+        content_sha256="e" * 64,
+        retention_policy="short",
+        expires_at="2026-12-01T00:00:00Z",
+        metadata={"adapter": "manual"},
+    )
+    missing_expiry = insert_experience_trace(
+        db_path,
+        surface="cli",
+        event_kind="manual_note",
+        content_sha256="f" * 64,
+        retention_policy="ephemeral",
+        metadata={"secret": "do not emit this"},
+    )
+
+    report = build_trace_retention_report(
+        db_path,
+        now="2026-06-01T00:00:00Z",
+        max_trace_count=2,
+        expired_limit=10,
+        missing_expiry_limit=10,
+    )
+
+    assert report["kind"] == "trace_retention_report"
+    assert report["read_only"] is True
+    assert report["trace_count"] == 3
+    assert report["max_trace_count"] == 2
+    assert report["policy_counts"] == {"ephemeral": 2, "short": 1, "review": 0, "archive": 0}
+    assert report["expired"]["count"] == 1
+    assert report["expired"]["traces"][0]["id"] == expired.id
+    assert report["missing_expiry"]["count"] == 1
+    assert report["missing_expiry"]["traces"][0]["id"] == missing_expiry.id
+    assert report["warnings"] == ["trace_count_exceeds_budget", "expirable_trace_without_expires_at"]
+    assert active.id not in {item["id"] for item in report["expired"]["traces"]}
+    report_text = str(report)
+    assert "raw_prompt" not in report_text
+    assert "secret" not in report_text
+    assert len(list_experience_traces(db_path, limit=10)) == 3

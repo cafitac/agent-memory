@@ -44,6 +44,7 @@ from agent_memory.core.retrieval_eval import (
     render_retrieval_eval_text_report,
 )
 from agent_memory.storage.sqlite import (
+    build_trace_retention_report,
     connect,
     get_fact,
     get_memory_status,
@@ -986,6 +987,15 @@ def _build_parser() -> argparse.ArgumentParser:
     traces_list_parser.add_argument("--surface")
     traces_list_parser.add_argument("--event-kind")
     traces_list_parser.add_argument("--scope")
+    traces_retention_parser = traces_subparsers.add_parser(
+        "retention-report",
+        help="Build a read-only trace retention guardrail report without deleting or promoting traces.",
+    )
+    traces_retention_parser.add_argument("db_path", type=Path)
+    traces_retention_parser.add_argument("--now")
+    traces_retention_parser.add_argument("--max-trace-count", type=int, default=10000)
+    traces_retention_parser.add_argument("--expired-limit", type=int, default=50)
+    traces_retention_parser.add_argument("--missing-expiry-limit", type=int, default=50)
 
     dogfood_parser = subparsers.add_parser("dogfood")
     dogfood_subparsers = dogfood_parser.add_subparsers(dest="dogfood_action", required=True)
@@ -1517,6 +1527,26 @@ def main() -> None:
                         ),
                         "traces": [trace.model_dump(mode="json") for trace in traces],
                     },
+                    indent=2,
+                )
+            )
+            return
+        if args.traces_action == "retention-report":
+            if args.max_trace_count < 0:
+                raise ValueError("traces retention-report max trace count must be >= 0")
+            if args.expired_limit < 1:
+                raise ValueError("traces retention-report expired limit must be >= 1")
+            if args.missing_expiry_limit < 1:
+                raise ValueError("traces retention-report missing expiry limit must be >= 1")
+            print(
+                json.dumps(
+                    build_trace_retention_report(
+                        args.db_path,
+                        now=args.now,
+                        max_trace_count=args.max_trace_count,
+                        expired_limit=args.expired_limit,
+                        missing_expiry_limit=args.missing_expiry_limit,
+                    ),
                     indent=2,
                 )
             )
