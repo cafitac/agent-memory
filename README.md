@@ -116,6 +116,11 @@ agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequ
 agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
+agent-memory consolidation promote fact "$DB" <candidate-id> \
+  --subject-ref "agent-memory" \
+  --predicate "prefers" \
+  --object-ref-or-value "explicit human-reviewed promotion" \
+  --scope project:agent-memory
 agent-memory dogfood baseline "$DB" --output-json
 agent-memory traces record "$DB" --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list "$DB" --surface cli --limit 20
@@ -136,7 +141,9 @@ Stage C starts with `memory_activations`, a local-only internal substrate that d
 
 `agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2` starts Stage D as a read-only trace clustering diagnostic. It groups sanitized `experience_traces` with deterministic scope/memory/summary keys, emits stable candidate fingerprints, evidence windows, surfaces/scopes, safe summaries, related memory/observation refs, current status and activation reinforcement context, guessed memory type, and risk flags. It does not create, approve, reject, snooze, or mutate memories, and it never prints raw prompts, queries, transcripts, or query previews.
 
-`agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2` expands one candidate into an auditable read-only review packet. The explanation repeats the stable candidate payload, shows why the traces were grouped, exposes safe trace ids/windows/summaries, supporting activation/status signals, guessed memory type rationale, risk flags, and explicit review-state guardrails. Unknown candidate ids return JSON with `found: false` and a non-zero exit. The command is still advisory only: no approval, promotion, rejection, snooze state, trace deletion, memory status mutation, ranking change, raw prompt/query/transcript output, or `query_preview` output.
+`agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2` expands one candidate into an auditable read-only review packet. The explanation repeats the stable candidate payload, shows why the traces were grouped, exposes safe trace ids/windows/summaries, supporting activation/status signals, guessed memory type rationale, risk flags, and explicit review-state guardrails. Unknown candidate ids return JSON with `found: false` and a non-zero exit. The command is still advisory-only: it does not promote, approve, reject, snooze, or mutate memories, and it never prints raw trace payloads, prompts, transcripts, or `query_preview` values.
+
+`agent-memory consolidation promote fact "$DB" <candidate-id> --subject-ref ... --predicate ... --object-ref-or-value ... --scope ...` starts Stage E with an explicit human-reviewed promotion action for semantic facts. The reviewer must supply the final fact fields; the command uses the candidate only as safe provenance, creating a local `consolidation_candidate` source from candidate id, trace ids, related observation ids, and safe summaries. By default it creates a `candidate` fact, so default retrieval remains approved-only; pass `--approve --actor ... --reason ...` only after explicit review to approve the new fact and log the status transition. Unknown candidate ids return JSON with `promoted: false` and do not create sources or facts. Procedure/preference promotion, graph lineage edges, and conflict preflight remain future Stage E slices.
 
 `agent-memory dogfood baseline "$DB" --output-json` composes the same read-only observation reports with package version, database path/schema metadata, memory status counts, sanitized Hermes hook doctor metadata, a non-executed local E2E marker, and suggested next steps. The baseline intentionally omits raw queries, query previews, prompt text, full Hermes config, and the bootstrap command so outputs can be pasted side by side during later trace/consolidation PRs. Treat all of these reports as local operator telemetry, not a synced analytics feature or an automatic cleanup workflow.
 

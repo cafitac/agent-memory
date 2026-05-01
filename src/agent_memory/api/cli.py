@@ -893,6 +893,99 @@ def _consolidation_candidate_explanation(
     }
 
 
+def _promote_consolidation_candidate_fact(
+    db_path: Path,
+    *,
+    candidate_id: str,
+    subject_ref: str,
+    predicate: str,
+    object_ref_or_value: str,
+    scope: str,
+    confidence: float,
+    approve: bool,
+    actor: str | None,
+    reason: str | None,
+    limit: int,
+    min_evidence: int,
+) -> dict[str, Any]:
+    explanation = _consolidation_candidate_explanation(
+        db_path,
+        candidate_id=candidate_id,
+        limit=limit,
+        min_evidence=min_evidence,
+    )
+    if not explanation.get("found", False):
+        return {
+            "kind": "memory_consolidation_promotion",
+            "candidate_id": candidate_id,
+            "memory_type": "fact",
+            "promoted": False,
+            "error": "candidate_not_found",
+        }
+
+    evidence = explanation["evidence"]
+    provenance_source = ingest_source_text(
+        db_path=db_path,
+        source_type="consolidation_candidate",
+        content=json.dumps(
+            {
+                "candidate_id": candidate_id,
+                "safe_summaries": evidence["safe_summaries"],
+                "scope": scope,
+                "subject_ref": subject_ref,
+                "predicate": predicate,
+                "object_ref_or_value": object_ref_or_value,
+            },
+            sort_keys=True,
+        ),
+        metadata={
+            "candidate_id": candidate_id,
+            "trace_ids": evidence["trace_ids"],
+            "related_observation_ids": evidence["related_observation_ids"],
+            "promotion_kind": "manual_reviewed_fact",
+        },
+        adapter="agent-memory",
+        external_ref=candidate_id,
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref=subject_ref,
+        predicate=predicate,
+        object_ref_or_value=object_ref_or_value,
+        evidence_ids=[provenance_source.id],
+        scope=scope,
+        confidence=confidence,
+    )
+    if approve:
+        fact = approve_memory(
+            db_path=db_path,
+            memory_type="fact",
+            memory_id=fact.id,
+            reason=reason,
+            actor=actor,
+            evidence_ids=[provenance_source.id],
+        )
+
+    return {
+        "kind": "memory_consolidation_promotion",
+        "candidate_id": candidate_id,
+        "memory_type": "fact",
+        "promoted": True,
+        "approved": approve,
+        "status": fact.status,
+        "fact": fact.model_dump(mode="json"),
+        "provenance_source_id": provenance_source.id,
+        "provenance": {
+            "source_type": provenance_source.source_type,
+            "trace_ids": evidence["trace_ids"],
+            "related_observation_ids": evidence["related_observation_ids"],
+            "safe_summaries": evidence["safe_summaries"],
+            "candidate_fingerprint": explanation["candidate"]["fingerprint"],
+        },
+        "retrieval_policy": "default_retrieval_remains_approved_only",
+    }
+
+
 def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min_evidence: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("consolidation candidates limit must be >= 1")
@@ -1736,6 +1829,30 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_explain_parser.add_argument("candidate_id")
     consolidation_explain_parser.add_argument("--limit", type=int, default=200)
     consolidation_explain_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_promote_parser = consolidation_subparsers.add_parser(
+        "promote",
+        help="Promote a reviewed consolidation candidate into candidate or approved memory.",
+    )
+    consolidation_promote_subparsers = consolidation_promote_parser.add_subparsers(
+        dest="promotion_memory_type",
+        required=True,
+    )
+    consolidation_promote_fact_parser = consolidation_promote_subparsers.add_parser(
+        "fact",
+        help="Promote a reviewed consolidation candidate into a semantic fact.",
+    )
+    consolidation_promote_fact_parser.add_argument("db_path", type=Path)
+    consolidation_promote_fact_parser.add_argument("candidate_id")
+    consolidation_promote_fact_parser.add_argument("--subject-ref", required=True)
+    consolidation_promote_fact_parser.add_argument("--predicate", required=True)
+    consolidation_promote_fact_parser.add_argument("--object-ref-or-value", required=True)
+    consolidation_promote_fact_parser.add_argument("--scope", required=True)
+    consolidation_promote_fact_parser.add_argument("--confidence", type=float, default=0.75)
+    consolidation_promote_fact_parser.add_argument("--approve", action="store_true")
+    consolidation_promote_fact_parser.add_argument("--actor")
+    consolidation_promote_fact_parser.add_argument("--reason")
+    consolidation_promote_fact_parser.add_argument("--limit", type=int, default=200)
+    consolidation_promote_fact_parser.add_argument("--min-evidence", type=int, default=2)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -2318,6 +2435,27 @@ def main() -> None:
             )
             print(json.dumps(payload, indent=2))
             if not payload.get("found", False):
+                sys.exit(1)
+            return
+        if args.consolidation_action == "promote":
+            if args.promotion_memory_type != "fact":
+                raise ValueError(f"Unsupported consolidation promotion type: {args.promotion_memory_type}")
+            payload = _promote_consolidation_candidate_fact(
+                args.db_path,
+                candidate_id=args.candidate_id,
+                subject_ref=args.subject_ref,
+                predicate=args.predicate,
+                object_ref_or_value=args.object_ref_or_value,
+                scope=args.scope,
+                confidence=args.confidence,
+                approve=args.approve,
+                actor=args.actor,
+                reason=args.reason,
+                limit=args.limit,
+                min_evidence=args.min_evidence,
+            )
+            print(json.dumps(payload, indent=2))
+            if not payload.get("promoted", False):
                 sys.exit(1)
             return
         raise ValueError(f"Unsupported consolidation action: {args.consolidation_action}")
