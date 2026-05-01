@@ -1195,3 +1195,142 @@ def test_cli_consolidation_promote_fact_unknown_candidate_is_safe_error(tmp_path
         ).fetchone()[0]
         if source_tables:
             assert connection.execute("SELECT COUNT(*) FROM sources").fetchone()[0] == 0
+
+
+def test_cli_consolidation_promotions_report_lists_manual_promotions_without_mutation_or_raw_payload(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "consolidation-promotions-report.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for object_value, approval_args in (
+        ("auditable candidate promotion reports", []),
+        (
+            "auditable approved promotion reports",
+            ["--approve", "--actor", "tester", "--reason", "human reviewed candidate evidence"],
+        ),
+    ):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "consolidation",
+                "promote",
+                "fact",
+                str(db_path),
+                candidate_id,
+                "--subject-ref",
+                "Agent Memory consolidation promotion",
+                "--predicate",
+                "requires",
+                "--object-ref-or-value",
+                object_value,
+                "--scope",
+                "project:consolidation-promote",
+                *approval_args,
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    with connect(db_path) as connection:
+        facts_before = connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        sources_before = connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0]
+        transitions_before = connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0]
+
+    report_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promotions",
+            "report",
+            str(db_path),
+            "--limit",
+            "20",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert report_result.returncode == 0, report_result.stderr
+    payload = json.loads(report_result.stdout)
+    assert payload["kind"] == "memory_consolidation_promotions_report"
+    assert payload["read_only"] is True
+    assert payload["total_promotions"] == 2
+    assert payload["status_counts"] == {"approved": 1, "candidate": 1}
+    assert payload["retrieval_policy"] == "default_retrieval_remains_approved_only"
+    assert [item["candidate_id"] for item in payload["promotions"]] == [candidate_id, candidate_id]
+    assert {item["fact"]["status"] for item in payload["promotions"]} == {"candidate", "approved"}
+    approved_item = next(item for item in payload["promotions"] if item["fact"]["status"] == "approved")
+    assert approved_item["approval_history"] == [
+        {
+            "from_status": "candidate",
+            "to_status": "approved",
+            "actor": "tester",
+            "reason": "human reviewed candidate evidence",
+            "evidence_ids": approved_item["fact"]["evidence_ids"],
+        }
+    ]
+    for item in payload["promotions"]:
+        assert item["memory_type"] == "fact"
+        assert item["promotion_kind"] == "manual_reviewed_fact"
+        assert item["provenance"]["safe_summaries"] == [
+            "Agent Memory consolidation promotion requires explicit human review."
+        ]
+        assert item["provenance"]["trace_ids"]
+        assert item["provenance"]["related_observation_ids"]
+
+    assert "RAW_PROMOTION_SECRET" not in report_result.stdout
+    assert "PROMOTION_QUERY_PREVIEW" not in report_result.stdout
+    assert "query_preview" not in report_result.stdout
+    with connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == facts_before
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == sources_before
+        assert connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0] == transitions_before
+
+
+def test_cli_consolidation_promotions_report_empty_database_is_read_only(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promotions-empty.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promotions",
+            "report",
+            str(db_path),
+            "--limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "kind": "memory_consolidation_promotions_report",
+        "read_only": True,
+        "total_promotions": 0,
+        "status_counts": {},
+        "promotions": [],
+        "retrieval_policy": "default_retrieval_remains_approved_only",
+    }
+    with connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 0

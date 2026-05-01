@@ -17,8 +17,8 @@ Turn trusted consolidation candidates into durable memory only through explicit 
 
 ### Status
 
-- In progress on branch `feat/consolidation-promote-fact` as of 2026-05-01 23:57 KST.
-- Scope is deliberately narrow: semantic fact promotion only. Procedure/preference promotion, graph lineage edges, and conflict preflight remain future PRs.
+- Completed in v0.1.54 via PR #76.
+- Scope was deliberately narrow: semantic fact promotion only. Procedure/preference promotion, graph lineage edges, and conflict preflight remain future PRs.
 
 ### Objective
 
@@ -48,18 +48,29 @@ Prefer candidate status by default unless the user explicitly chooses approval.
 - Default retrieval only injects approved facts.
 - Promotion is logged in status/history tables where appropriate.
 
-## PR E2: Add manual consolidation promotion for procedures/preferences
+## PR E2: Add read-only consolidation promotion audit report
+
+### Status
+
+- In progress on branch `feat/consolidation-promotion-report` as of 2026-05-02 00:25 KST.
+- Scope is deliberately read-only: audit/report the manual semantic fact promotions created by E1 before adding new promotion memory types or graph mutations.
 
 ### Objective
 
-Support procedural and preference memory, not only facts.
+List manual reviewed promotions with safe provenance and approval history so local dogfood can review what changed.
+
+### Candidate CLI
+
+```bash
+agent-memory consolidation promotions report <db> --limit 50
+```
 
 ### Acceptance
 
-- Procedures include trigger context, preconditions, and steps.
-- Preferences include scope and evidence.
-- Neither is injected unless approved.
-- Tests cover at least one procedure and one preference candidate.
+- Report includes promoted fact id/status, candidate fingerprint, provenance source id, safe summaries, trace ids, related observation ids, and approval history.
+- Report is visibly `read_only: true` and does not mutate facts, sources, traces, status transitions, queues, ranking, or graph edges.
+- Output omits raw prompts, transcripts, raw trace metadata, query previews, and secrets.
+- Default retrieval remains approved-only.
 
 ## PR E3: Add consolidation relation edges
 

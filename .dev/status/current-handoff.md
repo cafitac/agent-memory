@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 23:57 KST
+Last updated: 2026-05-02 00:25 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.53까지 배포/Hermes QA가 완료됐고, Stage D / PR D3 `consolidation explain` read-only candidate explanation CLI까지 완료됐다. GitHub Actions publish 비용 최적화 PR #75도 merge되어 docs/workflow-only auto-release는 skip되고 published install smoke는 opt-in/manual gate가 됐다. 현재 진행 중인 제품 slice는 Stage E / PR E1 manual reviewed semantic fact promotion이다.
+agent-memory는 v0.1.54까지 배포/npm/PyPI/Hermes QA가 완료됐고, Stage E / PR E1 `consolidation promote fact` manual reviewed semantic fact promotion까지 완료됐다. GitHub Actions publish 최적화도 완료되어 published install smoke는 opt-in/manual이고 docs/workflow-only auto-release는 skip된다. 현재 진행 중인 제품 slice는 Stage E / PR E2 read-only `consolidation promotions report` audit surface다.
 
 ## Current repo state
 
@@ -26,8 +26,8 @@ Canonical repo path:
 
 Current worktree:
 
-- `/Users/reddit/Project/agent-memory/.worktrees/consolidation-promote-fact`
-- Branch: `feat/consolidation-promote-fact`
+- `/Users/reddit/Project/agent-memory/.worktrees/consolidation-promotion-report`
+- Branch: `feat/consolidation-promotion-report`
 - Base: `origin/main`
 
 Expected GitHub identity:
@@ -39,9 +39,9 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.53`
-- v0.1.53 added read-only `agent-memory consolidation explain`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.53/.venv/bin/agent-memory`.
+- `v0.1.54`
+- v0.1.54 added manual `agent-memory consolidation promote fact`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.54/.venv/bin/agent-memory`.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -64,15 +64,27 @@ Result:
 - slow real-registry `published-install-smoke` is opt-in via `run_published_install_smoke`, default `false`.
 - standalone `published-install-smoke.yml` remains the manual external-install gate.
 
-## Active Stage E / PR E1 slice
+## Completed Stage E / PR E1 slice
+
+PR #76 `feat: add consolidation fact promotion` merged and released in v0.1.54.
+
+Behavior:
+
+- `agent-memory consolidation promote fact <db> <candidate-id> ...` creates semantic facts from explicitly reviewed candidates.
+- Reviewer supplies final fact fields; candidate contributes safe provenance only.
+- Default output is `candidate` status and hidden from default retrieval.
+- `--approve --actor ... --reason ...` explicitly approves and logs status history.
+- Unknown candidate ids fail without creating facts or provenance sources.
+- No automatic promotion, approval queue, graph relation edge, procedure/preference promotion, conflict preflight, or retrieval ranking change yet.
+
+## Active Stage E / PR E2 slice
 
 Goal:
 
-- Add explicit human-reviewed promotion from a consolidation candidate into a semantic Fact.
-- Default output is a `candidate` fact hidden from default retrieval.
-- `--approve --actor ... --reason ...` explicitly approves and logs status history.
-- Candidate contributes safe provenance only; reviewer supplies the final fact fields.
-- Unknown candidate ids fail safely without creating facts or provenance sources.
+- Add a read-only audit/report surface for manual consolidation promotions created by E1.
+- Command shape: `agent-memory consolidation promotions report <db> --limit 50`.
+- Report promoted semantic facts, candidate fingerprints, provenance source ids, safe summaries, trace ids, related observation ids, status counts, and approval history.
+- Keep the command read-only and secret-safe: no raw prompts, transcripts, query previews, raw trace metadata, queue mutation, graph edges, cleanup, or retrieval ranking changes.
 
 Current modified files in the worktree:
 
@@ -83,32 +95,14 @@ Current modified files in the worktree:
 - `.dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md`
 - `.dev/status/current-handoff.md`
 
-Implemented command shape:
-
-```bash
-agent-memory consolidation promote fact <db> <candidate-id> \
-  --subject-ref "agent-memory" \
-  --predicate "prefers" \
-  --object-ref-or-value "explicit human-reviewed promotion" \
-  --scope project:agent-memory
-
-agent-memory consolidation promote fact <db> <candidate-id> \
-  --subject-ref "agent-memory" \
-  --predicate "prefers" \
-  --object-ref-or-value "explicit human-reviewed promotion" \
-  --scope project:agent-memory \
-  --approve --actor maintainer --reason "reviewed candidate evidence"
-```
-
 Focused tests already pass:
 
 ```bash
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest \
-  tests/test_memory_activations.py::test_cli_consolidation_promote_fact_defaults_to_candidate_with_safe_provenance \
-  tests/test_memory_activations.py::test_cli_consolidation_promote_fact_can_explicitly_approve_and_log_history \
-  tests/test_memory_activations.py::test_cli_consolidation_promote_fact_unknown_candidate_is_safe_error \
+  tests/test_memory_activations.py::test_cli_consolidation_promotions_report_lists_manual_promotions_without_mutation_or_raw_payload \
+  tests/test_memory_activations.py::test_cli_consolidation_promotions_report_empty_database_is_read_only \
   -q
-# 3 passed
+# 2 passed
 ```
 
 Remaining verification before PR:
@@ -126,10 +120,10 @@ node --check bin/agent-memory.js
 
 After PR merge:
 
-- Because this is a product feature, expect release-sync and publish to run for v0.1.54.
-- Publish should be faster because PR #75 removed duplicate full pytest and made published install smoke opt-in.
-- Still run manual external install smoke if confidence is needed before Hermes runtime update.
-- Install `/Users/reddit/.agent-memory/runtime/v0.1.54/.venv/bin/agent-memory`, update Hermes config, and QA Hermes hook/runtime as in prior releases.
+- Because this is a product feature, expect release-sync and publish to run for v0.1.55.
+- Publish should stay fast because PR #75 removed duplicate full pytest and made published install smoke opt-in.
+- Still run manual external install smoke for npm/PyPI before Hermes runtime update.
+- Install `/Users/reddit/.agent-memory/runtime/v0.1.55/.venv/bin/agent-memory`, update Hermes config, and QA Hermes hook/runtime as in prior releases.
 
 ## Canonical roadmap position
 
@@ -150,21 +144,22 @@ Roadmap sequence:
    - D1/D2 candidates report done in v0.1.52
    - D3 candidate explanation details done in v0.1.53
 5. Stage E: reviewed promotion into long-term memory
-   - E1 semantic fact promotion in progress
+   - E1 semantic fact promotion done in v0.1.54
+   - E2 promotion audit report in progress
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## E1 boundaries
+## E2 boundaries
 
 In scope:
 
-- semantic fact only
-- explicit command invocation only
-- reviewer-supplied final fact fields
-- safe provenance source from candidate id, trace ids, related observation ids, and safe summaries
-- candidate status by default
-- explicit approval path with history logging
+- read-only report over E1 manual semantic fact promotions
+- promoted fact id/status/claim fields
+- candidate fingerprint and generated provenance source id
+- safe provenance summaries, trace ids, related observation ids
+- approval history using existing memory status transitions
+- status counts and retrieval policy reminder
 
 Out of scope:
 
@@ -174,4 +169,5 @@ Out of scope:
 - graph lineage relation edges
 - conflict/supersession preflight
 - retrieval ranking changes
+- cleanup/delete/decay mutations
 - raw prompt/user message/transcript/query_preview storage or output
