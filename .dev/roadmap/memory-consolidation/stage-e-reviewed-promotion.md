@@ -76,8 +76,8 @@ agent-memory consolidation promotions report <db> --limit 50
 
 ### Status
 
-- In progress on branch `feat/consolidation-graph-lineage`.
-- Scope is deliberately limited to manual semantic fact promotion lineage: candidate fingerprint -> promoted fact -> generated provenance source. Procedure/preference promotion, conflict preflight, automatic promotion, and retrieval ranking changes remain future PRs.
+- Completed in v0.1.56 via PR #81.
+- Scope was deliberately limited to manual semantic fact promotion lineage: candidate fingerprint -> promoted fact -> generated provenance source. Procedure/preference promotion, conflict preflight, automatic promotion, and retrieval ranking changes remain future PRs.
 
 ### Objective
 

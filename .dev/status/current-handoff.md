@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-02 00:59 KST
+Last updated: 2026-05-02 01:14 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.55까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재 Stage E / PR E3 consolidation graph lineage relation edges를 `feat/consolidation-graph-lineage` worktree에서 진행 중이다. E3 범위는 manual semantic fact promotion이 candidate fingerprint -> promoted fact -> generated provenance source lineage edges를 만들고, `graph inspect`/promotion report에서 이를 설명하게 하는 것이다.
+agent-memory는 v0.1.56까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.56에는 Stage E / PR E3 consolidation graph lineage relation edges가 포함됐다. 다음 제품 slice는 Stage E / PR E4 conflict/supersession preflight 또는 그보다 작은 read-only promotion conflict preview다.
 
 ## Current repo state
 
@@ -26,9 +26,9 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should be on `main`.
-- Active E3 worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-graph-lineage` on branch `feat/consolidation-graph-lineage`.
-- `origin/main` includes v0.1.55 release commit `794ecb3`.
+- Root checkout should be on `main` after docs/handoff cleanup PR is merged.
+- `origin/main` includes v0.1.56 release-sync PR #82.
+- No Stage E feature worktree is expected to remain active after E3.
 
 Expected GitHub identity:
 
@@ -39,12 +39,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.55`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.55`
-- npm package: `@cafitac/agent-memory@0.1.55`
-- PyPI package: `cafitac-agent-memory==0.1.55`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.55/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.55.
+- `v0.1.56`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.56`
+- npm package: `@cafitac/agent-memory@0.1.56`
+- PyPI package: `cafitac-agent-memory==0.1.56`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.56.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -78,7 +78,7 @@ Behavior:
 - Default output is `candidate` status and hidden from default retrieval.
 - `--approve --actor ... --reason ...` explicitly approves and logs status history.
 - Unknown candidate ids fail without creating facts or provenance sources.
-- No automatic promotion, approval queue, graph relation edge, procedure/preference promotion, conflict preflight, or retrieval ranking change yet.
+- No automatic promotion, approval queue, procedure/preference promotion, conflict preflight, or retrieval ranking change.
 
 ## Completed Stage E / PR E2 slice
 
@@ -89,15 +89,31 @@ Behavior:
 - `agent-memory consolidation promotions report <db> --limit 50` lists manual semantic fact promotions created by E1.
 - Report includes promoted fact id/status/claim fields, candidate fingerprint, generated provenance source id, safe summaries, trace ids, related observation ids, status counts, and approval history.
 - Output is visibly `read_only: true`.
-- The command is read-only: it does not mutate facts, sources, traces, status transitions, queues, ranking, or graph edges.
-- Output omits raw prompts, transcripts, raw trace metadata, query previews, and secrets.
+- The command is read-only and omits raw prompts, transcripts, raw trace metadata, query previews, and secrets.
 - Default retrieval remains approved-only.
 
-Verification completed for E2/v0.1.55:
+## Completed Stage E / PR E3 slice
+
+PR #81 `feat: add consolidation promotion lineage` merged and released in v0.1.56.
+
+Behavior:
+
+- `agent-memory consolidation promote fact ...` now records graph lineage relations when a manual semantic fact promotion succeeds.
+- Relation path:
+  - `<candidate-id> --promoted_to--> fact:<id>`
+  - `fact:<id> --has_promotion_provenance--> source_record:<id>`
+- `consolidation promote fact` output includes a `lineage` payload with candidate, promoted memory, provenance source, and relation refs.
+- `consolidation promotions report` includes the same safe lineage refs while remaining read-only.
+- `graph inspect <db> <candidate-id> --depth 2` can explain candidate -> durable fact -> provenance source lineage.
+- Unknown candidate ids remain safe failures with no facts, sources, or lineage relations created.
+- No procedure/preference promotion, automatic promotion, conflict preflight, cleanup/decay mutation, or retrieval ranking change.
+
+Verification completed for E3/v0.1.56:
 
 ```bash
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_review_and_scope_ranking.py tests/test_experience_traces.py -q
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
 git diff --check
 npm pack --dry-run
@@ -110,27 +126,33 @@ External release QA completed:
 
 ```bash
 npm view @cafitac/agent-memory version
-# 0.1.55
+# 0.1.56
 python3 - <<'PY'
 import json, urllib.request
 print(json.load(urllib.request.urlopen('https://pypi.org/pypi/cafitac-agent-memory/json'))['info']['version'])
 PY
-# 0.1.55
+# 0.1.56
 ```
+
+Published install smoke completed:
+
+- PyPI fresh venv install: `cafitac-agent-memory==0.1.56`, `consolidation promote fact --help`, and `graph inspect --help` succeeded.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.56` smoke succeeded for `consolidation promote fact --help` and `graph inspect --help`.
 
 Hermes QA completed:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.55/.venv/bin/agent-memory hermes-doctor \
+/Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/agent-memory hermes-doctor \
   /Users/reddit/.agent-memory/memory.db \
   --config-path /Users/reddit/.hermes/config.yaml \
-  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.55/.venv/bin/python \
+  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.56/.venv/bin/python \
   --timeout 15
 hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool
 hermes hooks doctor
+hermes hooks test pre_llm_call
 ```
 
-`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.55 agent-memory pre-LLM hook.
+`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.56 agent-memory pre-LLM hook.
 
 ## Canonical roadmap position
 
@@ -153,36 +175,31 @@ Roadmap sequence:
 5. Stage E: reviewed promotion into long-term memory
    - E1 semantic fact promotion done in v0.1.54
    - E2 promotion audit report done in v0.1.55
-   - E3 consolidation graph lineage relation edges is in progress on `feat/consolidation-graph-lineage`
+   - E3 consolidation graph lineage relation edges done in v0.1.56
+   - E4 conflict/supersession preflight is next recommended
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Next recommended PR-sized slice: Stage E / PR E3
+## Next recommended PR-sized slice: Stage E / PR E4
 
 Goal:
 
-- Represent consolidation as graph lineage so `graph inspect` can explain trace/candidate/durable-memory relationships.
+- Prevent manual semantic fact promotion from silently creating contradictory durable memory.
 
-Likely command/user surfaces:
+Suggested first, smaller shape:
 
-- Existing `consolidation promote fact` should create relation metadata/edges from candidate evidence to promoted fact.
-- Existing `consolidation promotions report` may include relation ids or graph lineage summaries after E3.
-- Existing `graph inspect` should show consolidation lineage in a safe, explainable form.
+- Add read-only conflict/supersession preflight output before any forced mutation behavior.
+- Compare candidate/promotion fields against existing same claim-slot approved/candidate/deprecated facts.
+- Return suggested review commands such as `review explain`, `review replacements`, and `graph inspect`.
+- Keep default behavior conservative: no automatic deprecation, no automatic supersession, no retrieval ranking change.
 
-Acceptance from roadmap:
-
-- `graph inspect` shows trace/candidate/durable memory lineage.
-- Relations include weights or metadata where useful.
-- Existing supersession relations remain compatible.
-
-Out of scope for E3 unless deliberately re-scoped:
+Out of scope unless deliberately re-scoped:
 
 - procedure/preference promotion
-- conflict/supersession preflight
 - automatic promotion
-- retrieval ranking changes
 - destructive cleanup/decay
+- retrieval ranking changes
 
 ## Recommended first commands for the next implementation session
 
@@ -191,12 +208,5 @@ cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git fetch origin --prune --tags
 git log --oneline -5
-sed -n '1,220p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
-```
-
-Then create a fresh worktree, for example:
-
-```bash
-mkdir -p .worktrees
-git worktree add .worktrees/consolidation-graph-lineage -b feat/consolidation-graph-lineage origin/main
+sed -n '1,240p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
 ```
