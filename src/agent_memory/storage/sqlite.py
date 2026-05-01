@@ -1044,6 +1044,102 @@ def list_experience_traces(
     return [experience_trace_from_row(row) for row in rows]
 
 
+def _trace_retention_item(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "surface": row["surface"],
+        "event_kind": row["event_kind"],
+        "scope": row["scope"],
+        "retention_policy": row["retention_policy"],
+        "expires_at": row["expires_at"],
+    }
+
+
+def build_trace_retention_report(
+    db_path: Path | str,
+    *,
+    now: str | None = None,
+    max_trace_count: int = 10000,
+    expired_limit: int = 50,
+    missing_expiry_limit: int = 50,
+) -> dict[str, Any]:
+    effective_now = now or datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    policies = ["ephemeral", "short", "review", "archive"]
+    with connect(db_path) as connection:
+        _ensure_experience_traces_schema(connection)
+        trace_count = connection.execute("SELECT COUNT(*) AS count FROM experience_traces").fetchone()["count"]
+        policy_counts = {policy: 0 for policy in policies}
+        for row in connection.execute(
+            "SELECT retention_policy, COUNT(*) AS count FROM experience_traces GROUP BY retention_policy"
+        ).fetchall():
+            policy_counts[row["retention_policy"]] = row["count"]
+        expired_count = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM experience_traces
+            WHERE expires_at IS NOT NULL AND expires_at <= ?
+            """,
+            (effective_now,),
+        ).fetchone()["count"]
+        expired_rows = connection.execute(
+            """
+            SELECT * FROM experience_traces
+            WHERE expires_at IS NOT NULL AND expires_at <= ?
+            ORDER BY expires_at ASC, id ASC
+            LIMIT ?
+            """,
+            (effective_now, expired_limit),
+        ).fetchall()
+        missing_expiry_count = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM experience_traces
+            WHERE retention_policy IN ('ephemeral', 'short') AND expires_at IS NULL
+            """
+        ).fetchone()["count"]
+        missing_expiry_rows = connection.execute(
+            """
+            SELECT * FROM experience_traces
+            WHERE retention_policy IN ('ephemeral', 'short') AND expires_at IS NULL
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (missing_expiry_limit,),
+        ).fetchall()
+
+    warnings = []
+    if trace_count > max_trace_count:
+        warnings.append("trace_count_exceeds_budget")
+    if missing_expiry_count:
+        warnings.append("expirable_trace_without_expires_at")
+
+    return {
+        "kind": "trace_retention_report",
+        "read_only": True,
+        "generated_at": effective_now,
+        "trace_count": trace_count,
+        "max_trace_count": max_trace_count,
+        "policy_counts": policy_counts,
+        "expired": {
+            "count": expired_count,
+            "limit": expired_limit,
+            "traces": [_trace_retention_item(row) for row in expired_rows],
+        },
+        "missing_expiry": {
+            "count": missing_expiry_count,
+            "limit": missing_expiry_limit,
+            "traces": [_trace_retention_item(row) for row in missing_expiry_rows],
+        },
+        "warnings": warnings,
+        "suggested_next_steps": [
+            "Review expired ephemeral/short traces before enabling any mutating cleanup.",
+            "Add expires_at for expirable trace policies during recording when possible.",
+            "Keep this report read-only until retention deletion semantics are explicitly approved.",
+        ],
+    }
+
+
 def _search_model_rows_with_trace(
     db_path: Path | str,
     *,

@@ -71,15 +71,16 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: CLI commands for recording synthetic/sanitized events and listing grouped traces with JSON output.
   - Acceptance: list output redacts or omits raw content, supports scope/surface filters, and has stable JSON suitable for later reports.
 
-- [ ] PR B3: Connect Hermes hook to trace recording as conservative opt-in
-  - Status: in progress on branch `feat/hermes-trace-opt-in`.
+- [x] PR B3: Connect Hermes hook to trace recording as conservative opt-in
+  - Status: completed in v0.1.46 via PR #59.
   - Goal: record lightweight Hermes turn traces only when explicitly enabled.
   - Scope: `--record-trace` flag for hook/snippet/install/bootstrap, non-blocking write path, synthetic doctor/test skip behavior, docs.
   - Acceptance: hook failures never block Hermes; doctor/test payloads do not pollute traces; local E2E confirms enabled traces are recorded and disabled mode is unchanged.
 
 - [ ] PR B4: Add trace retention and local-only safety guardrails
+  - Status: in progress on branch `feat/trace-retention-report`.
   - Goal: prevent trace accumulation from becoming an unbounded transcript archive.
-  - Scope: TTL defaults, max trace count/budget, deletion/expiry reporting, privacy docs, config docs.
+  - Scope: read-only retention report first: policy counts, expired trace refs, expirable traces missing `expires_at`, volume warning, privacy docs. Mutating cleanup is deferred.
   - Acceptance: expired traces can be identified read-only first; default behavior remains conservative; no raw transcript retention is introduced.
 
 ### Stage C: activation and reinforcement signals

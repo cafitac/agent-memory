@@ -127,7 +127,7 @@ Let real Hermes turns create lightweight traces only when explicitly enabled, wh
 
 ### Implementation status
 
-- In progress on branch `feat/hermes-trace-opt-in`.
+- Completed in v0.1.46 via PR #59.
 - Added `--record-trace` to `hermes-pre-llm-hook` and to hook snippet/install/bootstrap commands.
 - Default Hermes hook path still does not record traces.
 - Opt-in hook traces store hash-only turn fingerprints, hashed session refs, safe metadata (`hook_event_name`, `platform`, `model`, `trace_recording`), and related retrieved memory refs.
@@ -160,3 +160,11 @@ Add guardrails before trace volume grows.
 - Trace layer cannot silently become an infinite local transcript archive.
 - Docs explain what is retained, for how long, and how to inspect it.
 - The next stage can build activation events on top of bounded trace data.
+
+### Implementation status
+
+- In progress on branch `feat/trace-retention-report`.
+- Added `build_trace_retention_report(...)` as a read-only retention guardrail report.
+- Added `agent-memory traces retention-report <db>` with `--max-trace-count`, `--expired-limit`, `--missing-expiry-limit`, and test-only/operator `--now` override.
+- The report summarizes trace counts by retention policy, expired trace refs, expirable traces missing `expires_at`, volume warnings, and suggested next steps.
+- The report intentionally omits trace metadata and summary text; it does not delete traces, promote long-term memories, or alter retrieval/ranking.

@@ -214,6 +214,77 @@ def test_python_module_cli_traces_list_handles_empty_database(tmp_path: Path) ->
     assert payload["traces"] == []
 
 
+def test_python_module_cli_traces_retention_report_is_read_only_and_secret_safe(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-retention-cli.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "traces",
+            "record",
+            str(db_path),
+            "--surface",
+            "hermes-pre-llm-hook",
+            "--event-kind",
+            "turn",
+            "--content-sha256",
+            "1" * 64,
+            "--retention-policy",
+            "ephemeral",
+            "--expires-at",
+            "2026-01-01T00:00:00Z",
+            "--metadata-json",
+            json.dumps({"raw_prompt": "password=SUPERSECRET token=abc123"}),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "traces",
+            "retention-report",
+            str(db_path),
+            "--now",
+            "2026-06-01T00:00:00Z",
+            "--max-trace-count",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "trace_retention_report"
+    assert payload["read_only"] is True
+    assert payload["trace_count"] == 1
+    assert payload["expired"]["count"] == 1
+    assert payload["warnings"] == ["trace_count_exceeds_budget"]
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+
+    list_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "traces", "list", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(list_result.stdout)["trace_count"] == 1
+
 
 def test_python_module_cli_retrieve_observe_records_secret_safe_local_observation(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieve-observation.db"
