@@ -61,9 +61,9 @@ Prefer the simplest path that keeps v0.1.41 observation output compatible.
 
 ### Status
 
-- In progress on branch `feat/activation-summary`.
+- Done in v0.1.49.
 - PR C1 completed in v0.1.48 with secret-safe `memory_activations` rows bridged from retrieval observations.
-- C2 adds the first read-only report over those activation rows.
+- C2 added the first read-only report over those activation rows.
 
 ### Objective
 
@@ -101,9 +101,19 @@ agent-memory observations activation-summary <db> --limit 200 --top 20
 
 ## PR C3: Add reinforcement score calculation as read-only report
 
+### Status
+
+- In progress on branch `feat/reinforcement-report`.
+- PR C2 completed in v0.1.49 with read-only `activations summary`.
+- C3 adds a bounded, explainable reinforcement score report over activation refs.
+
 ### Objective
 
 Compute a transparent score that approximates "this memory or cluster is becoming stronger".
+
+```bash
+agent-memory activations reinforcement-report <db> --limit 200 --top 20 --frequent-threshold 3
+```
 
 ### Candidate factors
 

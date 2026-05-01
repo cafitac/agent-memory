@@ -11,6 +11,7 @@ from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.storage.sqlite import (
     connect,
     initialize_database,
+    insert_relation,
     list_memory_activations,
     record_retrieval_observation,
 )
@@ -288,6 +289,188 @@ def test_cli_activations_summary_lazily_migrates_legacy_database(tmp_path: Path)
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["kind"] == "memory_activation_summary"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 0
+    assert payload["quality_warnings"] == ["no_activations"]
+
+
+def test_cli_activations_reinforcement_report_scores_refs_with_factor_breakdowns(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "reinforcement-report.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Reinforcement report target phrase is REINFORCEMENT_REPORT_OK.",
+        metadata={"project": "reinforcement-report"},
+    )
+    approved_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Reinforcement report",
+        predicate="target_phrase",
+        object_ref_or_value="REINFORCEMENT_REPORT_OK",
+        evidence_ids=[source.id],
+        scope="project:reinforcement-report",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved_fact.id)
+    deprecated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Reinforcement report",
+        predicate="old_phrase",
+        object_ref_or_value="DEPRECATED_REINFORCEMENT_VALUE",
+        evidence_ids=[source.id],
+        scope="project:reinforcement-report",
+        confidence=0.5,
+    )
+    deprecate_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=deprecated_fact.id,
+        reason="old reinforcement value",
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{approved_fact.id}",
+        relation_type="mentions",
+        to_ref="concept:reinforcement-report",
+        evidence_ids=[source.id],
+        weight=0.8,
+        confidence=0.8,
+    )
+
+    for idx in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes" if idx < 2 else "cli",
+            query="SUPERSECRET reinforcement query must not leak",
+            preferred_scope="project:reinforcement-report",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(approved_fact.id, label="approved reinforcement target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "abc123", "session_id": f"session-reinforcement-{idx}"},
+        )
+    record_retrieval_observation(
+        db_path,
+        surface="cli",
+        query="SUPERSECRET deprecated reinforcement query",
+        preferred_scope="project:reinforcement-report",
+        limit=5,
+        statuses=("deprecated",),
+        retrieval_trace=[_trace(deprecated_fact.id, label="deprecated reinforcement target")],
+        response_mode="verify_first",
+        metadata={"raw_prompt": "SUPERSECRET"},
+    )
+    record_retrieval_observation(
+        db_path,
+        surface="hermes",
+        query="SUPERSECRET empty reinforcement query",
+        preferred_scope="project:missing",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[],
+        response_mode="verify_first",
+        metadata={"api_key": "***"},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "reinforcement-report",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_reinforcement_report"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 5
+    assert payload["scoring"] == {
+        "max_score": 1.0,
+        "weights": {
+            "connectivity": 0.15,
+            "repetition": 0.35,
+            "status_trust": 0.2,
+            "strength": 0.2,
+            "surface_scope_diversity": 0.1,
+        },
+        "penalties": {
+            "deprecated": 0.4,
+            "disputed": 0.3,
+            "missing": 0.2,
+            "supersession_or_replacement": 0.25,
+        },
+    }
+
+    candidates = {item["memory_ref"]: item for item in payload["reinforcement_candidates"]}
+    approved_payload = candidates[f"fact:{approved_fact.id}"]
+    assert approved_payload["score"] == 1.0
+    assert approved_payload["current_status"] == "approved"
+    assert approved_payload["factor_breakdown"]["repetition"]["score"] == 0.35
+    assert approved_payload["factor_breakdown"]["strength"]["score"] == 0.2
+    assert approved_payload["factor_breakdown"]["status_trust"]["value"] == "approved"
+    assert approved_payload["factor_breakdown"]["connectivity"]["relation_count"] == 1
+    assert approved_payload["signals"] == ["strong_reinforcement_candidate", "frequently_activated", "connected_memory"]
+    assert len(approved_payload["sample_activation_ids"]) == 3
+    assert len(approved_payload["sample_observation_ids"]) == 3
+
+    deprecated_payload = candidates[f"fact:{deprecated_fact.id}"]
+    assert deprecated_payload["current_status"] == "deprecated"
+    assert deprecated_payload["score"] < approved_payload["score"]
+    assert "status_penalty" in deprecated_payload["penalties"]
+    assert deprecated_payload["signals"] == ["not_reinforcement_ready", "deprecated_activation"]
+    assert payload["negative_evidence"] == {"empty_retrieval_count": 1, "empty_retrieval_ratio": 0.2}
+    assert payload["suggested_next_steps"] == [
+        "Inspect strong candidates with activations summary before any promotion workflow.",
+        "Use decay-risk reporting before mutating stale or weak memories.",
+        "Keep retrieval ranking unchanged until opt-in eval and live Hermes E2E pass.",
+    ]
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+
+
+def test_cli_activations_reinforcement_report_lazily_migrates_legacy_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "reinforcement-report-legacy.db"
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        connection.execute("DROP TABLE memory_activations")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "reinforcement-report",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_reinforcement_report"
     assert payload["read_only"] is True
     assert payload["activation_count"] == 0
     assert payload["quality_warnings"] == ["no_activations"]

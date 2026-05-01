@@ -327,6 +327,205 @@ def _activation_window(activations) -> dict[str, Any] | None:
     }
 
 
+def _unique_non_null(values: list[Any]) -> list[Any]:
+    return sorted({value for value in values if value is not None})
+
+
+def _sample_observation_ids(activations) -> list[int]:
+    observation_ids = []
+    for activation in activations:
+        if activation.observation_id is not None and activation.observation_id not in observation_ids:
+            observation_ids.append(activation.observation_id)
+        if len(observation_ids) >= 5:
+            break
+    return observation_ids
+
+
+def _reinforcement_scoring_contract() -> dict[str, Any]:
+    return {
+        "max_score": 1.0,
+        "weights": {
+            "connectivity": 0.15,
+            "repetition": 0.35,
+            "status_trust": 0.2,
+            "strength": 0.2,
+            "surface_scope_diversity": 0.1,
+        },
+        "penalties": {
+            "deprecated": 0.4,
+            "disputed": 0.3,
+            "missing": 0.2,
+            "supersession_or_replacement": 0.25,
+        },
+    }
+
+
+def _status_trust_value(current_status: str | None) -> float:
+    if current_status == "approved":
+        return 1.0
+    if current_status == "candidate":
+        return 0.5
+    return 0.0
+
+
+def _reinforcement_candidate_payload(
+    db_path: Path,
+    *,
+    memory_ref: str,
+    ref_activations,
+    frequent_threshold: int,
+) -> dict[str, Any]:
+    scoring = _reinforcement_scoring_contract()
+    weights = scoring["weights"]
+    configured_penalties = scoring["penalties"]
+
+    current_status = _current_status_for_memory_ref(db_path, memory_ref)
+    activation_count = len(ref_activations)
+    total_strength = sum(activation.strength for activation in ref_activations)
+    unique_surfaces = _unique_non_null([activation.surface for activation in ref_activations])
+    unique_scopes = _unique_non_null([activation.scope for activation in ref_activations])
+    relations = list_relations_for_node(db_path, node_ref=memory_ref)
+    replacement_relations = [relation for relation in relations if relation.relation_type in {"superseded_by", "replaces"}]
+
+    repetition_ratio = min(activation_count / frequent_threshold, 1.0)
+    strength_ratio = min(total_strength / frequent_threshold, 1.0)
+    diversity_ratio = min((len(unique_surfaces) + len(unique_scopes)) / 3, 1.0)
+    connectivity_ratio = min(len(relations), 1.0)
+    status_trust = _status_trust_value(current_status)
+
+    factor_breakdown = {
+        "repetition": {
+            "activation_count": activation_count,
+            "threshold": frequent_threshold,
+            "ratio": round(repetition_ratio, 4),
+            "score": round(weights["repetition"] * repetition_ratio, 4),
+        },
+        "strength": {
+            "total_strength": round(total_strength, 4),
+            "threshold": frequent_threshold,
+            "ratio": round(strength_ratio, 4),
+            "score": round(weights["strength"] * strength_ratio, 4),
+        },
+        "status_trust": {
+            "value": current_status,
+            "trust_ratio": status_trust,
+            "score": round(weights["status_trust"] * status_trust, 4),
+        },
+        "surface_scope_diversity": {
+            "surface_count": len(unique_surfaces),
+            "scope_count": len(unique_scopes),
+            "surfaces": unique_surfaces,
+            "scopes": unique_scopes,
+            "ratio": round(diversity_ratio, 4),
+            "score": round(weights["surface_scope_diversity"] * diversity_ratio, 4),
+        },
+        "connectivity": {
+            "relation_count": len(relations),
+            "ratio": round(connectivity_ratio, 4),
+            "score": round(weights["connectivity"] * connectivity_ratio, 4),
+        },
+    }
+
+    penalties = {}
+    if current_status in {"deprecated", "disputed", "missing"}:
+        penalties["status_penalty"] = configured_penalties[current_status]
+    if replacement_relations:
+        penalties["supersession_or_replacement"] = configured_penalties["supersession_or_replacement"]
+
+    raw_score = sum(factor["score"] for factor in factor_breakdown.values()) - sum(penalties.values())
+    score = round(max(0.0, min(scoring["max_score"], raw_score)), 4)
+
+    signals = []
+    if current_status == "approved" and score >= 0.75:
+        signals.append("strong_reinforcement_candidate")
+    elif current_status != "approved":
+        signals.append("not_reinforcement_ready")
+    if activation_count >= frequent_threshold:
+        signals.append("frequently_activated")
+    if relations:
+        signals.append("connected_memory")
+    if current_status == "deprecated":
+        signals.append("deprecated_activation")
+    elif current_status == "disputed":
+        signals.append("disputed_activation")
+    elif current_status == "missing":
+        signals.append("missing_memory_ref")
+    if replacement_relations:
+        signals.append("supersession_or_replacement_relation")
+
+    return {
+        "memory_ref": memory_ref,
+        "score": score,
+        "current_status": current_status,
+        "activation_count": activation_count,
+        "total_strength": round(total_strength, 4),
+        "factor_breakdown": factor_breakdown,
+        "penalties": penalties,
+        "signals": signals,
+        "sample_activation_ids": [activation.id for activation in ref_activations[:5]],
+        "sample_observation_ids": _sample_observation_ids(ref_activations),
+        "activation_window": _activation_window(ref_activations),
+    }
+
+
+def _activation_reinforcement_report(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("activations reinforcement-report limit must be >= 1")
+    if top < 1:
+        raise ValueError("activations reinforcement-report top must be >= 1")
+    if frequent_threshold < 1:
+        raise ValueError("activations reinforcement-report frequent threshold must be >= 1")
+
+    activations = list_memory_activations(db_path, limit=limit)
+    activations_by_ref: dict[str, list[Any]] = defaultdict(list)
+    empty_retrieval_count = 0
+    for activation in activations:
+        if activation.activation_kind == "empty_retrieval":
+            empty_retrieval_count += 1
+        if activation.memory_ref is not None:
+            activations_by_ref[activation.memory_ref].append(activation)
+
+    candidates = [
+        _reinforcement_candidate_payload(
+            db_path,
+            memory_ref=memory_ref,
+            ref_activations=ref_activations,
+            frequent_threshold=frequent_threshold,
+        )
+        for memory_ref, ref_activations in activations_by_ref.items()
+    ]
+    candidates.sort(key=lambda candidate: (-candidate["score"], -candidate["activation_count"], candidate["memory_ref"]))
+
+    quality_warnings = []
+    if not activations:
+        quality_warnings.append("no_activations")
+    if 0 < len(activations) < 10:
+        quality_warnings.append("low_activation_count")
+
+    empty_ratio = empty_retrieval_count / len(activations) if activations else 0.0
+    return {
+        "kind": "memory_reinforcement_report",
+        "read_only": True,
+        "activation_count": len(activations),
+        "limit": limit,
+        "top": top,
+        "frequent_threshold": frequent_threshold,
+        "activation_window": _activation_window(activations),
+        "scoring": _reinforcement_scoring_contract(),
+        "quality_warnings": quality_warnings,
+        "negative_evidence": {
+            "empty_retrieval_count": empty_retrieval_count,
+            "empty_retrieval_ratio": round(empty_ratio, 4),
+        },
+        "reinforcement_candidates": candidates[:top],
+        "suggested_next_steps": [
+            "Inspect strong candidates with activations summary before any promotion workflow.",
+            "Use decay-risk reporting before mutating stale or weak memories.",
+            "Keep retrieval ranking unchanged until opt-in eval and live Hermes E2E pass.",
+        ],
+    }
+
+
 def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("activations summary limit must be >= 1")
@@ -1082,6 +1281,14 @@ def _build_parser() -> argparse.ArgumentParser:
     activations_summary_parser.add_argument("--limit", type=int, default=200)
     activations_summary_parser.add_argument("--top", type=int, default=20)
     activations_summary_parser.add_argument("--frequent-threshold", type=int, default=3)
+    activations_reinforcement_parser = activations_subparsers.add_parser(
+        "reinforcement-report",
+        help="Score activation refs as read-only reinforcement candidates without mutating ranking or memory state.",
+    )
+    activations_reinforcement_parser.add_argument("db_path", type=Path)
+    activations_reinforcement_parser.add_argument("--limit", type=int, default=200)
+    activations_reinforcement_parser.add_argument("--top", type=int, default=20)
+    activations_reinforcement_parser.add_argument("--frequent-threshold", type=int, default=3)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -1604,6 +1811,19 @@ def main() -> None:
             print(
                 json.dumps(
                     _activation_summary(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.activations_action == "reinforcement-report":
+            print(
+                json.dumps(
+                    _activation_reinforcement_report(
                         args.db_path,
                         limit=args.limit,
                         top=args.top,
