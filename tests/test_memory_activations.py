@@ -1,5 +1,12 @@
 from pathlib import Path
 
+import json
+import os
+import subprocess
+import sys
+
+from agent_memory.core.curation import approve_fact, create_candidate_fact, deprecate_memory
+from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.storage.sqlite import (
     connect,
@@ -126,3 +133,161 @@ def test_activation_listing_lazily_migrates_legacy_database_without_table(tmp_pa
     with connect(db_path) as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(memory_activations)").fetchall()}
     assert "activation_kind" in columns
+
+
+def test_cli_activations_summary_reports_read_only_reinforcement_and_negative_evidence(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "activation-summary.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Activation summary target phrase is ACTIVATION_SUMMARY_OK.",
+        metadata={"project": "activation-summary"},
+    )
+    approved_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Activation summary",
+        predicate="target_phrase",
+        object_ref_or_value="ACTIVATION_SUMMARY_OK",
+        evidence_ids=[source.id],
+        scope="project:activation-summary",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved_fact.id)
+    deprecated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Activation summary",
+        predicate="old_phrase",
+        object_ref_or_value="DEPRECATED_ACTIVATION_VALUE",
+        evidence_ids=[source.id],
+        scope="project:activation-summary",
+        confidence=0.5,
+    )
+    deprecate_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=deprecated_fact.id,
+        reason="old activation summary value",
+    )
+
+    for _ in range(2):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes",
+            query="SUPERSECRET should be hashed only",
+            preferred_scope="project:activation-summary",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(approved_fact.id, label="approved target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "abc123", "session_id": "session-activation-summary"},
+        )
+    record_retrieval_observation(
+        db_path,
+        surface="cli",
+        query="SUPERSECRET deprecated forensic query",
+        preferred_scope="project:activation-summary",
+        limit=5,
+        statuses=("deprecated",),
+        retrieval_trace=[_trace(deprecated_fact.id, label="deprecated target")],
+        response_mode="verify_first",
+        metadata={"raw_prompt": "SUPERSECRET"},
+    )
+    record_retrieval_observation(
+        db_path,
+        surface="hermes",
+        query="SUPERSECRET empty query",
+        preferred_scope="project:missing",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[],
+        response_mode="verify_first",
+        metadata={"token": "abc123"},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "summary",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_activation_summary"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 4
+    assert payload["activation_kind_counts"] == {"empty_retrieval": 1, "retrieved": 3}
+    assert payload["surface_counts"] == {"cli": 1, "hermes": 3}
+    assert payload["scope_counts"] == {"project:activation-summary": 3, "project:missing": 1}
+    assert payload["empty_retrieval"]["count"] == 1
+    assert payload["empty_retrieval"]["ratio"] == 0.25
+    assert payload["status_summary"] == {"approved": 1, "deprecated": 1}
+    assert payload["activation_window"]["first_activation_id"] <= payload["activation_window"]["latest_activation_id"]
+
+    top_refs = {item["memory_ref"]: item for item in payload["top_memory_refs"]}
+    approved_payload = top_refs[f"fact:{approved_fact.id}"]
+    assert approved_payload["activation_count"] == 2
+    assert approved_payload["total_strength"] == 2.0
+    assert approved_payload["current_status"] == "approved"
+    assert approved_payload["signals"] == ["frequently_activated", "likely_reinforcement_candidate"]
+    assert len(approved_payload["sample_activation_ids"]) == 2
+    assert len(approved_payload["sample_observation_ids"]) == 2
+
+    deprecated_payload = top_refs[f"fact:{deprecated_fact.id}"]
+    assert deprecated_payload["current_status"] == "deprecated"
+    assert deprecated_payload["signals"] == ["current_status_not_approved", "deprecated_activation"]
+    assert payload["suggested_next_steps"] == [
+        "Run observations audit to compare activation refs with retrieval observation behavior.",
+        "Run observations empty-diagnostics if empty_retrieval is high for a surface or scope.",
+        "Use future reinforcement/decay reports before changing retrieval ranking or memory status.",
+    ]
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+
+
+def test_cli_activations_summary_lazily_migrates_legacy_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "activation-summary-legacy.db"
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        connection.execute("DROP TABLE memory_activations")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "summary",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_activation_summary"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 0
+    assert payload["quality_warnings"] == ["no_activations"]
