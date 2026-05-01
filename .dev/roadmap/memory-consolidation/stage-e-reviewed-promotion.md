@@ -108,8 +108,8 @@ Exact future names can change, but graph inspection must explain lineage.
 
 ### Status
 
-- In progress for the next release after v0.1.56.
-- Scope is deliberately conservative: semantic fact promotion conflict preflight only. It blocks silent same claim-slot contradictions before any promotion mutation, but does not automatically deprecate, supersede, approve, or change retrieval ranking.
+- Completed in v0.1.57 via PR #84.
+- Scope was deliberately conservative: semantic fact promotion conflict preflight only. It blocks silent same claim-slot contradictions before any promotion mutation, but does not automatically deprecate, supersede, approve, or change retrieval ranking.
 
 ### Objective
 
