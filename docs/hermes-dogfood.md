@@ -52,6 +52,7 @@ agent-memory observations empty-diagnostics ~/.agent-memory/memory.db --limit 20
 agent-memory observations review-candidates ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 agent-memory activations summary ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations reinforcement-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
+agent-memory activations decay-risk-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
@@ -69,6 +70,8 @@ Stage C starts with an internal `memory_activations` substrate. Retrieval observ
 `activations summary` is the first read-only Stage C dogfood report for this substrate. It summarizes activation counts, activation windows, surfaces/scopes, status counts for top refs, empty-retrieval evidence, and top refs with advisory signals such as `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, or `deprecated_activation`. Use it before reinforcement/decay scoring; it does not mutate memory status and does not affect ranking.
 
 `activations reinforcement-report` is the next read-only Stage C report. It scores memory refs with an explicit factor breakdown for repetition, strength, status trust, surface/scope diversity, and graph connectivity, then applies visible penalties for deprecated/disputed/missing refs and supersession/replacement relations. The score is bounded, deterministic, and advisory only; it does not mutate memory status, promote memories, or change ranking.
+
+`activations decay-risk-report` is the paired advisory view for weak activation evidence. It scores low repetition, weak strength, stale activity, low connectivity, and lifecycle status risk, but caps risk for approved/frequently activated/connected refs so "old" is not treated as automatically useless. It suggests review/explanation follow-up only; it does not delete traces, deprecate memories, mutate status, or change ranking.
 
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 

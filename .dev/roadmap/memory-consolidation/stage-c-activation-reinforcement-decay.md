@@ -103,9 +103,9 @@ agent-memory observations activation-summary <db> --limit 200 --top 20
 
 ### Status
 
-- In progress on branch `feat/reinforcement-report`.
+- Done in v0.1.50.
 - PR C2 completed in v0.1.49 with read-only `activations summary`.
-- C3 adds a bounded, explainable reinforcement score report over activation refs.
+- C3 added a bounded, explainable reinforcement score report over activation refs.
 
 ### Objective
 
@@ -137,16 +137,31 @@ Every score must show factor breakdown. Avoid black-box scores that cannot be ex
 
 ## PR C4: Add decay risk score calculation as read-only report
 
+### Status
+
+- In progress on branch `feat/decay-risk-report`.
+- PR C3 completed in v0.1.50 with read-only `activations reinforcement-report`.
+- C4 adds the paired advisory decay-risk report over activation refs.
+
 ### Objective
 
 Identify traces/memories that look weak, stale, low-use, low-connectivity, or noisy.
 
+```bash
+agent-memory activations decay-risk-report <db> --limit 200 --top 20 --frequent-threshold 3
+```
+
 ### Important nuance
 
 Old does not mean useless. A memory can be old and still strong if it is highly salient, explicitly approved, or strongly connected. Decay should be about weak activation/connectivity/usefulness, not time alone.
+
+### Output requirements
+
+Every risk score must show factor breakdown. Protected approved/frequent/connected refs must show protection signals so operators do not treat stale activity as a cleanup instruction.
 
 ### Acceptance
 
 - Decay report is advisory only.
 - Approved/high-salience/strongly connected memories are protected from naive age-only recommendations.
 - Report suggests review commands rather than deleting or deprecating anything.
+- Score does not mutate status and does not alter retrieval ranking.

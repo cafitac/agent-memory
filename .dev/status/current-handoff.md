@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 21:12 KST
+Last updated: 2026-05-01 21:44 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.49까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C3 `activations reinforcement-report` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations` substrate, C2 `activations summary`는 완료됐다. C3는 activation evidence를 기반으로 반복/강도/status trust/surface-scope diversity/graph connectivity와 deprecated/disputed/missing/supersession penalty를 설명 가능한 score로 보여주되 raw query/prompt 저장, retrieval ranking 변경, memory status mutation, long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.50까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C4 `activations decay-risk-report` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations`, C2 `activations summary`, C3 `activations reinforcement-report`는 완료됐다. C4는 activation evidence를 기반으로 low repetition, weak strength, stale activity, low connectivity, lifecycle status risk를 설명 가능한 score로 보여주되 approved/frequent/connected refs는 naive age-only decay에서 보호하고, raw query/prompt 저장, retrieval ranking 변경, memory status mutation, trace cleanup/delete, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -33,23 +33,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.49`
-- v0.1.49 added read-only `agent-memory activations summary`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.49/.venv/bin/agent-memory`.
+- `v0.1.50`
+- v0.1.50 added read-only `agent-memory activations reinforcement-report`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.50/.venv/bin/agent-memory`.
 
-Current local PR C3 modifications:
+Current local PR C4 modifications:
 
-- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/reinforcement-report` on `feat/reinforcement-report`
+- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/decay-risk-report` on `feat/decay-risk-report`
 - `src/agent_memory/api/cli.py`
-  - Adds `agent-memory activations reinforcement-report <db> --limit 200 --top 20 --frequent-threshold 3`.
-  - Emits read-only JSON with `kind: memory_reinforcement_report`.
-  - Includes bounded scoring contract, factor breakdowns, negative evidence, candidate signals, sample activation/observation ids, and activation windows.
-  - Factor weights: repetition 0.35, strength 0.2, status_trust 0.2, surface_scope_diversity 0.1, connectivity 0.15.
-  - Penalties: deprecated 0.4, disputed 0.3, missing 0.2, supersession/replacement 0.25.
+  - Adds `agent-memory activations decay-risk-report <db> --limit 200 --top 20 --frequent-threshold 3`.
+  - Emits read-only JSON with `kind: memory_decay_risk_report`.
+  - Includes bounded scoring contract, factor breakdowns, negative evidence, protection signals, sample activation/observation ids, and activation windows.
+  - Factor weights: low_repetition 0.3, weak_strength 0.2, stale_activity 0.2, low_connectivity 0.15, status_risk 0.15.
+  - Protections: approved_frequent_connected_max_score 0.25, approved_frequent_max_score 0.4.
 - `tests/test_memory_activations.py`
-  - Adds CLI tests for reinforcement score output, deterministic factor breakdowns, connectivity, deprecated penalty flagging, privacy, and lazy migration from DBs missing `memory_activations`.
+  - Adds CLI tests for decay risk score output, deterministic factor breakdowns, protection from age-only decay, privacy, and lazy migration from DBs missing `memory_activations`.
 - `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
-  - Document C3 in progress and the read-only dogfood command.
+  - Document C4 in progress and the read-only dogfood command.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -86,8 +86,8 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
 3. Stage C: activation and reinforcement signals
    - PR C1: activation events (done in v0.1.48)
    - PR C2: activation summary CLI (done in v0.1.49)
-   - PR C3: reinforcement score report (current)
-   - PR C4: decay risk score report
+   - PR C3: reinforcement score report (done in v0.1.50)
+   - PR C4: decay risk score report (current)
 4. Stage D: consolidation candidates before mutation
 5. Stage E: reviewed promotion into long-term memory
 6. Stage F: retrieval uses consolidation signals conservatively
@@ -108,16 +108,16 @@ Hard guardrails:
 
 ## Next best slice
 
-Finish PR C3: reinforcement score report CLI.
+Finish PR C4: decay risk score report CLI.
 
-C3 is intentionally read-only:
+C4 is intentionally read-only:
 
-- summarize local `memory_activations` rows into explainable score candidates
-- show repeated, approved, connected refs as strong reinforcement candidates
-- show deprecated/disputed/missing/superseded refs as penalties, not auto-actions
+- summarize local `memory_activations` rows into explainable decay-risk candidates
+- show weak/low-use/isolated/stale refs as review candidates, not auto-actions
+- protect approved/frequent/connected refs from naive age-only decay recommendations
 - show `empty_retrieval` rows as negative evidence, not a cleanup instruction
 - avoid raw query/prompt/query_preview/transcript output
-- avoid retrieval ranking changes and memory status mutation
+- avoid retrieval ranking changes, memory status mutation, trace cleanup/delete, and long-term memory creation
 
 ## Suggested verification before PR
 
@@ -129,6 +129,6 @@ git diff --check
 npm pack --dry-run
 ```
 
-Also run a temp DB CLI smoke for `agent-memory activations reinforcement-report` and verify the output contains no raw query/secret strings.
+Also run a temp DB CLI smoke for `agent-memory activations decay-risk-report` and verify the output contains no raw query/secret strings.
 
-If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/direct hook/Hermes E2E QA.
+If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/activation summary/reinforcement report/decay risk/direct hook/Hermes E2E QA.
