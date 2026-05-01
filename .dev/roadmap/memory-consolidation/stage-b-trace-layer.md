@@ -61,7 +61,7 @@ Introduce the storage substrate while keeping retrieval and Hermes behavior unch
 
 ### Implementation status
 
-- In progress on branch `feat/experience-traces-schema`.
+- Completed in v0.1.44 via PR #55.
 - Added `ExperienceTrace` model and `experience_traces` SQLite table with lazy migration.
 - Added explicit storage APIs: `insert_experience_trace(...)` and `list_experience_traces(...)`.
 - Stored fields are bounded/sanitized: content fingerprint, optional sanitized summary/signals, related memory refs, related observation ids, retention policy/expiry, and metadata.
@@ -79,7 +79,7 @@ Expose trace creation/listing for synthetic and manually sanitized events so the
 
 ```bash
 agent-memory traces record <db> --surface cli --event-kind user_correction --summary "sanitized summary" --scope project:agent-memory
-agent-memory traces list <db> --limit 50 --surface cli --output-json
+agent-memory traces list <db> --limit 50 --surface cli --event-kind user_correction --scope project:agent-memory
 ```
 
 Exact argument names may change, but the CLI must make it obvious that raw transcript input is not the default path.
@@ -96,6 +96,14 @@ Exact argument names may change, but the CLI must make it obvious that raw trans
 - Manual trace workflow works without Hermes.
 - JSON output is stable enough for Stage C reports.
 - Docs explain the command is experimental/local-only.
+
+### Implementation status
+
+- In progress on branch `feat/traces-cli`.
+- Added RED tests in `tests/test_cli.py` for `traces record`, filtered `traces list`, empty list output, and raw metadata stripping.
+- Implemented `traces record` as an explicit manual write path only; if `--content-sha256` is omitted, the CLI hashes the sanitized `--summary` instead of accepting raw transcript input.
+- Implemented `traces list` as read-only JSON with `--surface`, `--event-kind`, and `--scope` filters.
+- Hermes hook trace writes remain disabled by default and are deferred to PR B3.
 
 ## PR B3: Connect Hermes hook to trace recording as conservative opt-in
 

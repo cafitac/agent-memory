@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -47,9 +48,11 @@ from agent_memory.storage.sqlite import (
     get_fact,
     get_memory_status,
     initialize_database,
+    insert_experience_trace,
     list_candidate_episodes,
     list_candidate_facts,
     list_candidate_procedures,
+    list_experience_traces,
     list_fact_replacement_relations,
     list_facts_by_claim_slot,
     list_memory_status_history,
@@ -60,6 +63,33 @@ from agent_memory.storage.sqlite import (
 
 def _dump_models(models: list[Any]) -> str:
     return json.dumps([model.model_dump(mode="json") for model in models], indent=2)
+
+
+def _json_list(value: str, *, argument_name: str) -> list[Any]:
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError(f"{argument_name} must be a JSON list")
+    return parsed
+
+
+def _trace_content_sha256(*, explicit_hash: str | None, summary: str | None) -> str:
+    if explicit_hash:
+        return explicit_hash
+    if summary:
+        return hashlib.sha256(summary.encode("utf-8")).hexdigest()
+    raise ValueError("traces record requires --summary or --content-sha256")
+
+
+def _trace_filters_payload(*, surface: str | None, event_kind: str | None, scope: str | None) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in {
+            "surface": surface,
+            "event_kind": event_kind,
+            "scope": scope,
+        }.items()
+        if value is not None
+    }
 
 
 def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
@@ -920,6 +950,43 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_review_candidates_parser.add_argument("--top", type=int, default=10)
     observations_review_candidates_parser.add_argument("--frequent-threshold", type=int, default=3)
 
+    traces_parser = subparsers.add_parser(
+        "traces",
+        help="Record and list sanitized local experience traces. Experimental; does not create long-term memories.",
+    )
+    traces_subparsers = traces_parser.add_subparsers(dest="traces_action", required=True)
+    traces_record_parser = traces_subparsers.add_parser(
+        "record",
+        help="Record one explicitly sanitized experience trace.",
+    )
+    traces_record_parser.add_argument("db_path", type=Path)
+    traces_record_parser.add_argument("--surface", required=True)
+    traces_record_parser.add_argument("--event-kind", required=True)
+    traces_record_parser.add_argument("--summary")
+    traces_record_parser.add_argument("--content-sha256")
+    traces_record_parser.add_argument("--scope")
+    traces_record_parser.add_argument("--session-ref")
+    traces_record_parser.add_argument("--salience", type=float, default=0.0)
+    traces_record_parser.add_argument("--user-emphasis", type=float, default=0.0)
+    traces_record_parser.add_argument("--related-memory-refs-json", default="[]")
+    traces_record_parser.add_argument("--related-observation-ids-json", default="[]")
+    traces_record_parser.add_argument(
+        "--retention-policy",
+        choices=["ephemeral", "short", "review", "archive"],
+        default="ephemeral",
+    )
+    traces_record_parser.add_argument("--expires-at")
+    traces_record_parser.add_argument("--metadata-json", default="{}")
+    traces_list_parser = traces_subparsers.add_parser(
+        "list",
+        help="List sanitized experience traces without changing memory state.",
+    )
+    traces_list_parser.add_argument("db_path", type=Path)
+    traces_list_parser.add_argument("--limit", type=int, default=50)
+    traces_list_parser.add_argument("--surface")
+    traces_list_parser.add_argument("--event-kind")
+    traces_list_parser.add_argument("--scope")
+
     dogfood_parser = subparsers.add_parser("dogfood")
     dogfood_subparsers = dogfood_parser.add_subparsers(dest="dogfood_action", required=True)
     dogfood_baseline_parser = dogfood_subparsers.add_parser(
@@ -1369,6 +1436,72 @@ def main() -> None:
             )
             return
         raise ValueError(f"Unsupported observations action: {args.observations_action}")
+
+    if args.command == "traces":
+        if args.traces_action == "record":
+            related_memory_refs = _json_list(args.related_memory_refs_json, argument_name="--related-memory-refs-json")
+            related_observation_ids = _json_list(
+                args.related_observation_ids_json,
+                argument_name="--related-observation-ids-json",
+            )
+            metadata = json.loads(args.metadata_json)
+            if not isinstance(metadata, dict):
+                raise ValueError("--metadata-json must be a JSON object")
+            trace = insert_experience_trace(
+                args.db_path,
+                surface=args.surface,
+                event_kind=args.event_kind,
+                content_sha256=_trace_content_sha256(explicit_hash=args.content_sha256, summary=args.summary),
+                summary=args.summary,
+                scope=args.scope,
+                session_ref=args.session_ref,
+                salience=args.salience,
+                user_emphasis=args.user_emphasis,
+                related_memory_refs=[str(item) for item in related_memory_refs],
+                related_observation_ids=[int(item) for item in related_observation_ids],
+                retention_policy=args.retention_policy,
+                expires_at=args.expires_at,
+                metadata=metadata,
+            )
+            print(
+                json.dumps(
+                    {
+                        "kind": "experience_trace",
+                        "trace": trace.model_dump(mode="json"),
+                    },
+                    indent=2,
+                )
+            )
+            return
+        if args.traces_action == "list":
+            if args.limit < 1:
+                raise ValueError("traces list limit must be >= 1")
+            traces = list_experience_traces(
+                args.db_path,
+                limit=args.limit,
+                surface=args.surface,
+                event_kind=args.event_kind,
+                scope=args.scope,
+            )
+            print(
+                json.dumps(
+                    {
+                        "kind": "experience_traces",
+                        "read_only": True,
+                        "trace_count": len(traces),
+                        "limit": args.limit,
+                        "filters": _trace_filters_payload(
+                            surface=args.surface,
+                            event_kind=args.event_kind,
+                            scope=args.scope,
+                        ),
+                        "traces": [trace.model_dump(mode="json") for trace in traces],
+                    },
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported traces action: {args.traces_action}")
 
     if args.command == "dogfood":
         if args.dogfood_action == "baseline":

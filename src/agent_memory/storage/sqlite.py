@@ -1012,18 +1012,35 @@ def insert_experience_trace(
     return experience_trace_from_row(row)
 
 
-def list_experience_traces(db_path: Path | str, *, limit: int = 50) -> list[ExperienceTrace]:
+def list_experience_traces(
+    db_path: Path | str,
+    *,
+    limit: int = 50,
+    surface: str | None = None,
+    event_kind: str | None = None,
+    scope: str | None = None,
+) -> list[ExperienceTrace]:
+    where_clauses: list[str] = []
+    params: list[Any] = []
+    if surface is not None:
+        where_clauses.append("surface = ?")
+        params.append(surface)
+    if event_kind is not None:
+        where_clauses.append("event_kind = ?")
+        params.append(event_kind)
+    if scope is not None:
+        where_clauses.append("scope = ?")
+        params.append(scope)
+
+    sql = "SELECT * FROM experience_traces"
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
     with connect(db_path) as connection:
         _ensure_experience_traces_schema(connection)
-        rows = connection.execute(
-            """
-            SELECT *
-            FROM experience_traces
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        rows = connection.execute(sql, params).fetchall()
     return [experience_trace_from_row(row) for row in rows]
 
 

@@ -98,6 +98,122 @@ def test_python_module_cli_init_creates_database(tmp_path: Path) -> None:
 
 
 
+def test_python_module_cli_traces_record_and_list_use_sanitized_payloads(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-cli.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    secret_summary = "User corrected scope naming without secret password=SUPERSECRET token=abc123"
+    record_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "traces",
+            "record",
+            str(db_path),
+            "--surface",
+            "cli",
+            "--event-kind",
+            "user_correction",
+            "--summary",
+            "User corrected scope naming convention.",
+            "--scope",
+            "project:agent-memory",
+            "--session-ref",
+            "session:cli-test",
+            "--salience",
+            "0.75",
+            "--user-emphasis",
+            "0.5",
+            "--related-memory-refs-json",
+            '["fact:1"]',
+            "--related-observation-ids-json",
+            "[2, 3]",
+            "--retention-policy",
+            "short",
+            "--metadata-json",
+            json.dumps({"adapter": "manual", "raw_prompt": secret_summary}),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert record_result.returncode == 0, record_result.stderr
+    record_payload = json.loads(record_result.stdout)
+    assert record_payload["kind"] == "experience_trace"
+    assert record_payload["trace"]["surface"] == "cli"
+    assert record_payload["trace"]["event_kind"] == "user_correction"
+    assert record_payload["trace"]["content_sha256"]
+    assert record_payload["trace"]["metadata"] == {"adapter": "manual"}
+    assert "SUPERSECRET" not in record_result.stdout
+    assert "abc123" not in record_result.stdout
+    assert "raw_prompt" not in record_result.stdout
+
+    list_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "traces",
+            "list",
+            str(db_path),
+            "--surface",
+            "cli",
+            "--event-kind",
+            "user_correction",
+            "--scope",
+            "project:agent-memory",
+            "--limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert list_result.returncode == 0, list_result.stderr
+    list_payload = json.loads(list_result.stdout)
+    assert list_payload["kind"] == "experience_traces"
+    assert list_payload["read_only"] is True
+    assert list_payload["filters"] == {
+        "surface": "cli",
+        "event_kind": "user_correction",
+        "scope": "project:agent-memory",
+    }
+    assert len(list_payload["traces"]) == 1
+    assert list_payload["traces"][0]["id"] == record_payload["trace"]["id"]
+    assert "SUPERSECRET" not in list_result.stdout
+    assert "abc123" not in list_result.stdout
+    assert "raw_prompt" not in list_result.stdout
+
+
+
+def test_python_module_cli_traces_list_handles_empty_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "empty-trace-cli.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "traces", "list", str(db_path), "--limit", "10"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "experience_traces"
+    assert payload["read_only"] is True
+    assert payload["trace_count"] == 0
+    assert payload["traces"] == []
+
+
+
 def test_python_module_cli_retrieve_observe_records_secret_safe_local_observation(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieve-observation.db"
     initialize_database(db_path)

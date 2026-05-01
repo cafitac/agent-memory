@@ -51,13 +51,15 @@ agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10 -
 agent-memory observations empty-diagnostics ~/.agent-memory/memory.db --limit 200 --top 10 --high-empty-threshold 0.5
 agent-memory observations review-candidates ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
+agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
+agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
 ```
 
 Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, whether retrieval is often empty, and whether any frequently injected refs are now deprecated/disputed/missing. The audit command is read-only and summarizes local observation rows without emitting raw query text or query previews. Keep this data local unless you intentionally export it.
 
 `dogfood baseline` is the preferred one-command snapshot before trace/consolidation work. It is read-only JSON that includes the package version, DB path/schema metadata, memory status counts, observation audit, empty diagnostics, signal-bearing review candidates, sanitized Hermes doctor metadata, and a local E2E marker set to `not_executed`. It intentionally does not include raw queries, query previews, prompt text, full Hermes config, environment secrets, or the bootstrap command.
 
-Stage B trace work starts with storage only. `experience_traces` is a local, explicit-write substrate for bounded event fingerprints and sanitized summaries/signals. It is not queried by default retrieval, is not injected into prompts, and is not written by Hermes unless a later opt-in hook slice enables that behavior.
+Stage B trace work now includes a manual CLI for explicit local dogfood. `experience_traces` is a local substrate for bounded event fingerprints and sanitized summaries/signals; `traces record` writes only when invoked explicitly, and `traces list` emits read-only filtered JSON. Traces are not queried by default retrieval, are not injected into prompts, and are not written by Hermes unless a later opt-in hook slice enables that behavior.
 
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs. It does not emit raw query text, query previews, or prompt content.
 
