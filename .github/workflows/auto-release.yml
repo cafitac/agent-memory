@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/workflows/**'
+      - '.dev/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'PRIVACY.md'
   workflow_dispatch:
 
 permissions:
@@ -145,7 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.bump.outputs.tag }}"
-          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true
+          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true -f run_published_install_smoke=false
 
   tag-and-publish-release-sync:
     if: >-
@@ -211,4 +219,4 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.release_sync.outputs.tag }}"
-          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true
+          gh workflow run publish.yml --ref "$TAG" -f publish_pypi=true -f publish_npm=true -f run_published_install_smoke=false

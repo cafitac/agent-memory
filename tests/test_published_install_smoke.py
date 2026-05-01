@@ -134,22 +134,47 @@ def test_published_install_script_rejects_bad_doctor_payload() -> None:
         smoke_published_install._assert_doctor_ok(step)
 
 
-def test_published_install_workflow_runs_script_after_publish() -> None:
+def test_publish_workflow_makes_published_install_smoke_opt_in() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "publish.yml").read_text()
 
+    assert "run_published_install_smoke:" in workflow
+    assert "default: false" in workflow
+    assert "inputs.run_published_install_smoke" in workflow
     assert "published-install-smoke" in workflow
     assert "scripts/smoke_published_install.py" in workflow
     assert "--output-json .artifacts/published-install-smoke.json" in workflow
-    assert "--propagation-attempts" in workflow
-    assert "--propagation-delay-seconds" in workflow
     assert "actions/upload-artifact" in workflow
     assert "published-install-smoke-result" in workflow
-    assert "needs:" in workflow
-    assert "publish-pypi" in workflow
-    assert "publish-npm" in workflow
-    assert "--attempts 12" in workflow
-    assert "--propagation-attempts 36" in workflow
-    assert "--propagation-delay-seconds 20" in workflow
+    assert "--attempts 3" in workflow
+    assert "--propagation-attempts 6" in workflow
+    assert "--propagation-delay-seconds 10" in workflow
+
+
+def test_publish_workflow_does_not_repeat_full_pytest_suite() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "publish.yml").read_text()
+
+    assert "uv run pytest tests/ -q" not in workflow
+    assert "Run tests" not in workflow
+    assert "scripts/check_release_metadata.py" in workflow
+    assert "scripts/smoke_release_readiness.py" in workflow
+    assert "uvx --from build python -m build" in workflow
+
+
+def test_auto_release_skips_docs_and_workflow_only_pushes() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "auto-release.yml").read_text()
+
+    assert "paths-ignore:" in workflow
+    assert "'.github/workflows/**'" in workflow
+    assert "'.dev/**'" in workflow
+    assert "'docs/**'" in workflow
+    assert "'README.md'" in workflow
+
+
+def test_auto_release_dispatches_fast_publish_by_default() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "auto-release.yml").read_text()
+
+    assert "gh workflow run publish.yml" in workflow
+    assert "-f run_published_install_smoke=false" in workflow
 
 
 def test_standalone_published_install_workflow_is_manual() -> None:

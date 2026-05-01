@@ -70,17 +70,31 @@ uv tool uninstall cafitac-agent-memory
 
 ## Automated published smoke
 
-The release workflow now runs the published install smoke matrix after npm and PyPI publish succeed. Maintainers can rerun it manually without cutting a new release:
+The fast release path does not run the slow published install matrix by default. Feature PRs and release-sync PRs already run `ci.yml`; docs/workflow-only pushes are ignored by `auto-release.yml`; `publish.yml` is reserved for tag/manual publish, package build, registry publish, and GitHub Release creation. This keeps GitHub Actions minutes bounded while still leaving an explicit external-install gate when needed.
+
+Run the published install matrix manually before a high-confidence external-user checkpoint, after a suspicious publish, or when changing launcher/install behavior:
 
 ```bash
 gh workflow run published-install-smoke.yml \
   --repo cafitac/agent-memory \
   -f version=<version> \
   -f attempts=6 \
-  -f delay_seconds=10
+  -f propagation_attempts=12 \
+  -f propagation_delay_seconds=10
 ```
 
-The workflow executes `scripts/smoke_published_install.py`, which validates the exact published version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx` from isolated temporary homes. Both the release workflow and the manual workflow pass `--output-json .artifacts/published-install-smoke.json` and upload that file as the `published-install-smoke-result` artifact, including failure summaries.
+For an inline smoke during a manual publish dispatch, opt in explicitly:
+
+```bash
+gh workflow run publish.yml \
+  --repo cafitac/agent-memory \
+  --ref v<version> \
+  -f publish_pypi=true \
+  -f publish_npm=true \
+  -f run_published_install_smoke=true
+```
+
+The workflows execute `scripts/smoke_published_install.py`, which validates the exact published version through npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx` from isolated temporary homes. Smoke artifacts are uploaded as `published-install-smoke-result` and include failure summaries plus registry propagation diagnostics.
 
 Local maintainer smoke for the current `package.json` version:
 
