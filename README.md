@@ -114,6 +114,7 @@ agent-memory observations review-candidates "$DB" --limit 200 --top 10 --frequen
 agent-memory activations summary "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3
+agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
 agent-memory dogfood baseline "$DB" --output-json
 agent-memory traces record "$DB" --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list "$DB" --surface cli --limit 20
@@ -131,6 +132,8 @@ Stage C starts with `memory_activations`, a local-only internal substrate that d
 `agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequent-threshold 3` adds a deterministic read-only score over activation refs. The report explains every candidate score with factor breakdowns for repetition, strength, status trust, surface/scope diversity, and graph connectivity, plus penalties for deprecated/disputed/missing refs and supersession/replacement relations. It is advisory only: it does not change retrieval ranking, memory status, or long-term promotion state.
 
 `agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3` adds the paired read-only decay-risk view. It flags weak/low-use/low-connectivity/stale activation refs with factor breakdowns, but protects approved, frequently activated, connected refs from naive age-only recommendations. The output suggests review/explanation commands only; it does not delete traces, deprecate memories, alter status, or change retrieval ranking.
+
+`agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2` starts Stage D as a read-only trace clustering diagnostic. It groups sanitized `experience_traces` with deterministic scope/memory/summary keys, emits stable candidate fingerprints, evidence windows, surfaces/scopes, safe summaries, related memory/observation refs, current status and activation reinforcement context, guessed memory type, and risk flags. It does not create, approve, reject, snooze, or mutate memories, and it never prints raw prompts, queries, transcripts, or query previews.
 
 `agent-memory dogfood baseline "$DB" --output-json` composes the same read-only observation reports with package version, database path/schema metadata, memory status counts, sanitized Hermes hook doctor metadata, a non-executed local E2E marker, and suggested next steps. The baseline intentionally omits raw queries, query previews, prompt text, full Hermes config, and the bootstrap command so outputs can be pasted side by side during later trace/consolidation PRs. Treat all of these reports as local operator telemetry, not a synced analytics feature or an automatic cleanup workflow.
 

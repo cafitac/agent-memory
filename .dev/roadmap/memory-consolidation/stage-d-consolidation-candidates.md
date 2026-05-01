@@ -17,6 +17,11 @@ This is where the product starts to feel like memory consolidation, but it must 
 
 ## PR D1: Add trace clustering for consolidation candidates
 
+### Status
+
+- In progress on branch `feat/consolidation-candidates`.
+- PR C4 completed in v0.1.51 with read-only `activations decay-risk-report`.
+
 ### Objective
 
 Group related traces into candidate clusters using deterministic lexical/metadata logic first.

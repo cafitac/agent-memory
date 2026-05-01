@@ -717,6 +717,149 @@ def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, freque
     }
 
 
+def _safe_summary_key(summary: str | None) -> str:
+    if not summary:
+        return "no-summary"
+    tokens = [token.strip(".,:;!?()[]{}\"'").lower() for token in summary.split()]
+    safe_tokens = [token for token in tokens if len(token) >= 4][:8]
+    return "-".join(safe_tokens) or "summary"
+
+
+def _consolidation_cluster_key(trace: Any) -> str:
+    if trace.related_memory_refs:
+        return f"scope:{trace.scope or 'global'}|memory:{sorted(trace.related_memory_refs)[0]}"
+    return f"scope:{trace.scope or 'global'}|summary:{_safe_summary_key(trace.summary)}"
+
+
+def _guess_consolidation_memory_type(traces: list[Any]) -> str:
+    joined = " ".join(trace.summary or "" for trace in traces).lower()
+    if any(token in joined for token in ["prefer", "prefers", "preference", "wants", "does not want"]):
+        return "preference"
+    if any(token in joined for token in ["step", "workflow", "procedure", "run ", "command"]):
+        return "procedural"
+    if any(token in joined for token in ["happened", "session", "meeting", "incident"]):
+        return "episodic"
+    if joined:
+        return "semantic"
+    return "unknown"
+
+
+def _consolidation_candidate_payload(db_path: Path, *, cluster_key: str, traces: list[Any]) -> dict[str, Any]:
+    trace_ids = sorted(trace.id for trace in traces)
+    related_memory_refs = sorted({ref for trace in traces for ref in trace.related_memory_refs})
+    related_observation_ids = sorted({oid for trace in traces for oid in trace.related_observation_ids})
+    surfaces = sorted({trace.surface for trace in traces})
+    scopes = sorted({trace.scope for trace in traces if trace.scope is not None})
+    retention_policies = dict(sorted(Counter(trace.retention_policy for trace in traces).items()))
+    event_kinds = dict(sorted(Counter(trace.event_kind for trace in traces).items()))
+    safe_summaries = sorted({trace.summary for trace in traces if trace.summary})[:5]
+    salience_total = round(sum(trace.salience for trace in traces), 4)
+    user_emphasis_total = round(sum(trace.user_emphasis for trace in traces), 4)
+    activations = list_memory_activations(db_path, limit=500)
+    activations_by_ref = Counter(
+        activation.memory_ref for activation in activations if activation.memory_ref in set(related_memory_refs)
+    )
+    current_statuses = {
+        memory_ref: _current_status_for_memory_ref(db_path, memory_ref) for memory_ref in related_memory_refs
+    }
+    risk_flags = []
+    if not related_memory_refs:
+        risk_flags.append("no_related_memory_refs")
+    if any(status not in {"approved", None} for status in current_statuses.values()):
+        risk_flags.append("non_approved_related_memory")
+    if len(traces) < 3:
+        risk_flags.append("low_evidence_count")
+    if not safe_summaries:
+        risk_flags.append("missing_safe_summary")
+    fingerprint_payload = {
+        "cluster_key": cluster_key,
+        "trace_ids": trace_ids,
+        "related_memory_refs": related_memory_refs,
+    }
+    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    candidate_id = f"candidate:{fingerprint}"
+    return {
+        "candidate_id": candidate_id,
+        "cluster_key": cluster_key,
+        "fingerprint": fingerprint,
+        "guessed_memory_type": _guess_consolidation_memory_type(traces),
+        "evidence_count": len(traces),
+        "evidence_trace_ids": trace_ids,
+        "evidence_window": {
+            "first_trace_id": min(trace_ids),
+            "latest_trace_id": max(trace_ids),
+        },
+        "surfaces": surfaces,
+        "scopes": scopes,
+        "event_kind_counts": event_kinds,
+        "retention_policy_counts": retention_policies,
+        "safe_summaries": safe_summaries,
+        "related_memory_refs": related_memory_refs,
+        "related_observation_ids": related_observation_ids[:20],
+        "salience_total": salience_total,
+        "user_emphasis_total": user_emphasis_total,
+        "reinforcement": {
+            "activation_count": sum(activations_by_ref.values()),
+            "activation_counts_by_ref": dict(sorted(activations_by_ref.items())),
+            "current_statuses": current_statuses,
+        },
+        "risk_flags": risk_flags,
+        "suggested_review_commands": [
+            f"agent-memory consolidation explain {db_path} {candidate_id}",
+        ],
+    }
+
+
+def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min_evidence: int) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("consolidation candidates limit must be >= 1")
+    if top < 1:
+        raise ValueError("consolidation candidates top must be >= 1")
+    if min_evidence < 1:
+        raise ValueError("consolidation candidates min evidence must be >= 1")
+
+    traces = list_experience_traces(db_path, limit=limit)
+    clusters: dict[str, list[Any]] = defaultdict(list)
+    for trace in traces:
+        clusters[_consolidation_cluster_key(trace)].append(trace)
+
+    candidates = [
+        _consolidation_candidate_payload(db_path, cluster_key=cluster_key, traces=cluster_traces)
+        for cluster_key, cluster_traces in clusters.items()
+        if len(cluster_traces) >= min_evidence
+    ]
+    candidates.sort(
+        key=lambda candidate: (
+            -candidate["evidence_count"],
+            -candidate["reinforcement"]["activation_count"],
+            candidate["cluster_key"],
+        )
+    )
+
+    quality_warnings = []
+    if not traces:
+        quality_warnings.append("no_traces")
+    elif len(candidates) == 0:
+        quality_warnings.append("no_clusters_meet_min_evidence")
+
+    return {
+        "kind": "memory_consolidation_candidates",
+        "read_only": True,
+        "trace_count": len(traces),
+        "candidate_count": len(candidates[:top]),
+        "limit": limit,
+        "top": top,
+        "min_evidence": min_evidence,
+        "quality_warnings": quality_warnings,
+        "candidates": candidates[:top],
+        "suggested_next_steps": [
+            "Inspect candidate explanations before any promotion workflow.",
+            "Keep this report read-only; do not create or approve long-term memories automatically.",
+            "Use candidate fingerprints for future reject/snooze workflows only after human review UX exists.",
+        ],
+    }
+
+
 def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("activations summary limit must be >= 1")
@@ -1489,6 +1632,20 @@ def _build_parser() -> argparse.ArgumentParser:
     activations_decay_parser.add_argument("--top", type=int, default=20)
     activations_decay_parser.add_argument("--frequent-threshold", type=int, default=3)
 
+    consolidation_parser = subparsers.add_parser(
+        "consolidation",
+        help="Read-only consolidation candidate diagnostics over traces and activation evidence.",
+    )
+    consolidation_subparsers = consolidation_parser.add_subparsers(dest="consolidation_action", required=True)
+    consolidation_candidates_parser = consolidation_subparsers.add_parser(
+        "candidates",
+        help="Group sanitized traces into read-only consolidation candidates without promoting memories.",
+    )
+    consolidation_candidates_parser.add_argument("db_path", type=Path)
+    consolidation_candidates_parser.add_argument("--limit", type=int, default=200)
+    consolidation_candidates_parser.add_argument("--top", type=int, default=20)
+    consolidation_candidates_parser.add_argument("--min-evidence", type=int, default=2)
+
     traces_parser = subparsers.add_parser(
         "traces",
         help="Record and list sanitized local experience traces. Experimental; does not create long-term memories.",
@@ -2046,6 +2203,22 @@ def main() -> None:
             )
             return
         raise ValueError(f"Unsupported activations action: {args.activations_action}")
+
+    if args.command == "consolidation":
+        if args.consolidation_action == "candidates":
+            print(
+                json.dumps(
+                    _consolidation_candidates_report(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        min_evidence=args.min_evidence,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported consolidation action: {args.consolidation_action}")
 
     if args.command == "traces":
         if args.traces_action == "record":

@@ -11,6 +11,7 @@ from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.storage.sqlite import (
     connect,
     initialize_database,
+    insert_experience_trace,
     insert_relation,
     list_memory_activations,
     record_retrieval_observation,
@@ -643,3 +644,157 @@ def test_cli_activations_decay_risk_report_lazily_migrates_legacy_database(tmp_p
     assert payload["read_only"] is True
     assert payload["activation_count"] == 0
     assert payload["quality_warnings"] == ["no_activations"]
+
+
+def test_cli_consolidation_candidates_clusters_safe_trace_evidence(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-candidates.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Consolidation candidate durable preference is CONSOLIDATION_CANDIDATE_OK.",
+        metadata={"project": "consolidation-candidates"},
+    )
+    approved_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Consolidation candidate",
+        predicate="stable_phrase",
+        object_ref_or_value="CONSOLIDATION_CANDIDATE_OK",
+        evidence_ids=[source.id],
+        scope="project:consolidation-candidates",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{approved_fact.id}",
+        relation_type="supports",
+        to_ref="concept:consolidation-candidates",
+        evidence_ids=[source.id],
+        weight=0.8,
+        confidence=0.8,
+    )
+    for idx in range(3):
+        observation = record_retrieval_observation(
+            db_path,
+            surface="hermes" if idx < 2 else "cli",
+            query="SUPERSECRET consolidation query must not leak",
+            preferred_scope="project:consolidation-candidates",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(approved_fact.id, label="approved consolidation target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "abc123", "session_id": f"session-consolidation-{idx}"},
+        )
+        insert_experience_trace(
+            db_path,
+            surface="hermes" if idx < 2 else "cli",
+            event_kind="tool_success",
+            content_sha256=f"hash-consolidation-{idx}",
+            summary="User prefers safe review gates for consolidation candidates.",
+            scope="project:consolidation-candidates",
+            session_ref=f"session-consolidation-{idx}",
+            salience=0.8,
+            user_emphasis=0.6,
+            related_memory_refs=[f"fact:{approved_fact.id}"],
+            related_observation_ids=[observation.id],
+            retention_policy="review",
+            metadata={"raw_prompt": "SUPERSECRET", "query_preview": "abc123"},
+        )
+    insert_experience_trace(
+        db_path,
+        surface="hermes",
+        event_kind="tool_error",
+        content_sha256="hash-weak-noise",
+        summary="One-off weak trace should not become a candidate.",
+        scope="project:noise",
+        salience=0.1,
+        user_emphasis=0.0,
+        retention_policy="ephemeral",
+        metadata={"api_key": "SUPERSECRET"},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--min-evidence",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_candidates"
+    assert payload["read_only"] is True
+    assert payload["trace_count"] == 4
+    assert payload["candidate_count"] == 1
+    assert payload["quality_warnings"] == []
+    candidate = payload["candidates"][0]
+    assert candidate["candidate_id"].startswith("candidate:")
+    assert candidate["cluster_key"] == "scope:project:consolidation-candidates|memory:fact:1"
+    assert candidate["guessed_memory_type"] == "preference"
+    assert candidate["evidence_count"] == 3
+    assert candidate["surfaces"] == ["cli", "hermes"]
+    assert candidate["scopes"] == ["project:consolidation-candidates"]
+    assert candidate["related_memory_refs"] == [f"fact:{approved_fact.id}"]
+    assert candidate["related_observation_ids"]
+    assert candidate["reinforcement"]["activation_count"] == 3
+    assert candidate["reinforcement"]["current_statuses"] == {f"fact:{approved_fact.id}": "approved"}
+    assert candidate["risk_flags"] == []
+    assert candidate["safe_summaries"] == ["User prefers safe review gates for consolidation candidates."]
+    assert candidate["suggested_review_commands"] == [
+        f"agent-memory consolidation explain {db_path} {candidate['candidate_id']}",
+    ]
+    assert payload["suggested_next_steps"] == [
+        "Inspect candidate explanations before any promotion workflow.",
+        "Keep this report read-only; do not create or approve long-term memories automatically.",
+        "Use candidate fingerprints for future reject/snooze workflows only after human review UX exists.",
+    ]
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+
+
+def test_cli_consolidation_candidates_lazily_migrates_legacy_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-candidates-legacy.db"
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        connection.execute("DROP TABLE experience_traces")
+        connection.execute("DROP TABLE memory_activations")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_candidates"
+    assert payload["read_only"] is True
+    assert payload["trace_count"] == 0
+    assert payload["candidate_count"] == 0
+    assert payload["quality_warnings"] == ["no_traces"]
