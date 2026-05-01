@@ -810,6 +810,89 @@ def _consolidation_candidate_payload(db_path: Path, *, cluster_key: str, traces:
     }
 
 
+def _consolidation_group_reason(candidate: dict[str, Any]) -> dict[str, Any]:
+    cluster_key = candidate["cluster_key"]
+    reason: dict[str, Any] = {"cluster_key": cluster_key, "reason": "summary_similarity"}
+    if cluster_key.startswith("scope:") and "|" in cluster_key:
+        scope_part, key_part = cluster_key.split("|", 1)
+        reason["shared_scope"] = scope_part.removeprefix("scope:")
+        if key_part.startswith("memory:"):
+            reason["reason"] = "shared_related_memory_ref"
+            reason["shared_memory_ref"] = key_part.removeprefix("memory:")
+        elif key_part.startswith("summary:"):
+            reason["summary_key"] = key_part.removeprefix("summary:")
+    return reason
+
+
+def _consolidation_memory_type_reason(candidate: dict[str, Any]) -> dict[str, str]:
+    guessed_type = candidate["guessed_memory_type"]
+    reasons = {
+        "preference": "safe summaries contain preference-like language",
+        "procedural": "safe summaries contain workflow or command language",
+        "episodic": "safe summaries contain session or incident language",
+        "semantic": "safe summaries contain durable factual language",
+        "unknown": "insufficient safe summary evidence",
+    }
+    return {"value": guessed_type, "reason": reasons.get(guessed_type, "heuristic classification")}
+
+
+def _consolidation_candidate_explanation(
+    db_path: Path,
+    *,
+    candidate_id: str,
+    limit: int,
+    min_evidence: int,
+) -> dict[str, Any]:
+    report = _consolidation_candidates_report(db_path, limit=limit, top=limit, min_evidence=min_evidence)
+    for candidate in report["candidates"]:
+        if candidate["candidate_id"] != candidate_id:
+            continue
+        return {
+            "kind": "memory_consolidation_candidate_explanation",
+            "read_only": True,
+            "found": True,
+            "candidate_id": candidate_id,
+            "candidate": candidate,
+            "why_grouped": _consolidation_group_reason(candidate),
+            "evidence": {
+                "trace_ids": candidate["evidence_trace_ids"],
+                "evidence_window": candidate["evidence_window"],
+                "safe_summaries": candidate["safe_summaries"],
+                "surfaces": candidate["surfaces"],
+                "scopes": candidate["scopes"],
+                "event_kind_counts": candidate["event_kind_counts"],
+                "retention_policy_counts": candidate["retention_policy_counts"],
+                "related_observation_ids": candidate["related_observation_ids"],
+            },
+            "supporting_signals": {
+                "salience_total": candidate["salience_total"],
+                "user_emphasis_total": candidate["user_emphasis_total"],
+                "activation_count": candidate["reinforcement"]["activation_count"],
+                "activation_counts_by_ref": candidate["reinforcement"]["activation_counts_by_ref"],
+                "current_statuses": candidate["reinforcement"]["current_statuses"],
+            },
+            "memory_type_guess": _consolidation_memory_type_reason(candidate),
+            "risk_flags": candidate["risk_flags"],
+            "review_state": {
+                "promotion_allowed": False,
+                "requires_human_approval": True,
+                "mutation_commands_available": False,
+            },
+            "suggested_next_steps": [
+                "Use this explanation for human review only; it does not create or approve memory.",
+                "Compare related memory refs and risk flags before considering any future promotion command.",
+                "Reject/snooze workflows are intentionally unavailable until candidate quality is trusted.",
+            ],
+        }
+    return {
+        "kind": "memory_consolidation_candidate_explanation",
+        "read_only": True,
+        "candidate_id": candidate_id,
+        "found": False,
+        "error": "candidate_not_found",
+    }
+
+
 def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min_evidence: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("consolidation candidates limit must be >= 1")
@@ -1645,6 +1728,14 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_candidates_parser.add_argument("--limit", type=int, default=200)
     consolidation_candidates_parser.add_argument("--top", type=int, default=20)
     consolidation_candidates_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_explain_parser = consolidation_subparsers.add_parser(
+        "explain",
+        help="Explain one read-only consolidation candidate without promoting or mutating memory.",
+    )
+    consolidation_explain_parser.add_argument("db_path", type=Path)
+    consolidation_explain_parser.add_argument("candidate_id")
+    consolidation_explain_parser.add_argument("--limit", type=int, default=200)
+    consolidation_explain_parser.add_argument("--min-evidence", type=int, default=2)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -2217,6 +2308,17 @@ def main() -> None:
                     indent=2,
                 )
             )
+            return
+        if args.consolidation_action == "explain":
+            payload = _consolidation_candidate_explanation(
+                args.db_path,
+                candidate_id=args.candidate_id,
+                limit=args.limit,
+                min_evidence=args.min_evidence,
+            )
+            print(json.dumps(payload, indent=2))
+            if not payload.get("found", False):
+                sys.exit(1)
             return
         raise ValueError(f"Unsupported consolidation action: {args.consolidation_action}")
 

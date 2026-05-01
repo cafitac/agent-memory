@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 22:18 KST
+Last updated: 2026-05-01 22:51 KST
 
 ## Trigger for the next session
 
@@ -16,13 +16,19 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.51까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage D / PR D1 `consolidation candidates` read-only trace clustering CLI를 구현하는 단계야. Stage A baseline, Stage B trace substrate/CLI/Hermes opt-in/retention report, Stage C activation summary/reinforcement/decay-risk reports는 완료됐다. D1은 sanitized `experience_traces`를 deterministic scope/memory/summary key로 묶고 candidate fingerprint, evidence window, surfaces/scopes, safe summaries, related refs, activation/status reinforcement context, guessed memory type, risk flags를 보여주되 raw query/prompt/transcript 출력, retrieval ranking 변경, memory status mutation, reject/snooze mutation, long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.52까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage D / PR D3 `consolidation explain` read-only candidate explanation CLI를 구현하는 단계다. Stage A baseline, Stage B trace substrate/CLI/Hermes opt-in/retention report, Stage C activation summary/reinforcement/decay-risk reports, Stage D D1/D2 `consolidation candidates` read-only candidate report는 완료됐다. D3는 candidate id 하나를 받아 왜 그룹화됐는지, 어떤 safe trace/activation/status signal이 받치는지, memory type 추정 이유와 risk/review guardrail이 무엇인지 설명하되 raw prompt/query/transcript/query_preview 출력, retrieval ranking 변경, memory status mutation, approve/reject/snooze/promotion mutation, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
 Canonical repo path:
 
 - `/Users/reddit/Project/agent-memory`
+
+Current worktree:
+
+- `/Users/reddit/Project/agent-memory/.worktrees/consolidation-explain`
+- Branch: `feat/consolidation-explain`
+- Base: `origin/main`
 
 Expected GitHub identity:
 
@@ -33,25 +39,24 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.51`
-- v0.1.51 added read-only `agent-memory activations decay-risk-report`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.51/.venv/bin/agent-memory`.
+- `v0.1.52`
+- v0.1.52 added read-only `agent-memory consolidation candidates`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.52/.venv/bin/agent-memory`.
 
-Current local PR D1 modifications:
+Current local PR D3 modifications:
 
-- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-candidates` on `feat/consolidation-candidates`
 - `src/agent_memory/api/cli.py`
-  - Adds `agent-memory consolidation candidates <db> --limit 200 --top 20 --min-evidence 2`.
-  - Emits read-only JSON with `kind: memory_consolidation_candidates`.
-  - Groups sanitized `experience_traces` by deterministic cluster keys:
-    - `scope:<scope>|memory:<first-related-memory-ref>` when related refs exist
-    - otherwise `scope:<scope>|summary:<safe-summary-token-key>`
-  - Includes candidate id/fingerprint, evidence trace ids/window, surfaces/scopes, event kind counts, retention policy counts, safe summaries, related memory/observation refs, salience/user-emphasis totals, activation counts/current statuses, guessed memory type, risk flags, and suggested explanation command.
-  - Does not mutate memory state, create long-term memories, reject/snooze candidates, or change retrieval ranking.
+  - Adds `agent-memory consolidation explain <db> <candidate-id> --limit 200 --min-evidence 2`.
+  - Emits read-only JSON with `kind: memory_consolidation_candidate_explanation`.
+  - Reuses the deterministic `consolidation candidates` report to find the candidate by stable id.
+  - Includes candidate payload, grouping reason, safe evidence trace ids/windows/summaries, surfaces/scopes, event kind counts, retention policy counts, related observation ids, salience/user emphasis totals, activation/status signals, memory type guess rationale, risk flags, review-state guardrails, and suggested next steps.
+  - Unknown candidate ids return JSON with `found: false`, `error: candidate_not_found`, and non-zero exit.
+  - Does not mutate memory state, create long-term memories, approve/promote/reject/snooze candidates, delete traces, or change retrieval ranking.
 - `tests/test_memory_activations.py`
-  - Adds CLI tests for consolidation candidate clustering, deterministic safe output, privacy, activation/status context, and lazy migration from DBs missing `experience_traces`/`memory_activations`.
+  - Adds CLI tests for safe candidate explanation output and unknown-candidate read-only error output.
+  - Tests assert raw prompt/user message/secret/query_preview-like values are absent.
 - `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-d-consolidation-candidates.md`, `.dev/status/current-handoff.md`
-  - Document D1 in progress and the read-only dogfood command.
+  - Document the read-only `consolidation explain` command and guardrails.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -91,8 +96,9 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR C3: reinforcement score report (done in v0.1.50)
    - PR C4: decay risk score report (done in v0.1.51)
 4. Stage D: consolidation candidates before mutation
-   - PR D1: trace clustering for consolidation candidates (current)
-   - PR D2: candidate CLI surface may be folded into D1 if PR remains small; otherwise next slice should refine candidates/explain.
+   - PR D1: trace clustering for consolidation candidates (done in v0.1.52)
+   - PR D2: candidate CLI surface (done in v0.1.52 with D1)
+   - PR D3: candidate explanation details (current)
 5. Stage E: reviewed promotion into long-term memory
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
@@ -113,12 +119,12 @@ Hard guardrails:
 
 ## Next best slice
 
-Finish PR D1: consolidation candidate trace clustering CLI.
+Finish PR D3: candidate explanation details.
 
-D1 is intentionally read-only:
+D3 is intentionally read-only:
 
-- summarize local sanitized `experience_traces` into candidate clusters
-- preserve evidence trace ids and candidate fingerprints for future explanation/reject/snooze workflows
+- explain one existing candidate id generated by `consolidation candidates`
+- preserve evidence trace ids and stable candidate fingerprints for future review/reject/snooze workflows
 - include activation/status context but do not auto-promote or alter status
 - avoid raw query/prompt/query_preview/transcript output
 - avoid retrieval ranking changes, memory status mutation, trace cleanup/delete, reject/snooze writes, and long-term memory creation
@@ -126,13 +132,17 @@ D1 is intentionally read-only:
 ## Suggested verification before PR
 
 ```bash
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py::test_cli_consolidation_explain_details_candidate_without_raw_trace_payload tests/test_memory_activations.py::test_cli_consolidation_explain_unknown_candidate_is_read_only_error -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_cli.py tests/test_experience_traces.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest -q
 git diff --check
 npm pack --dry-run
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+node --check bin/agent-memory.js
 ```
 
-Also run a temp DB CLI smoke for `agent-memory consolidation candidates` and verify the output contains no raw query/secret strings.
+Also run a temp DB CLI smoke for `agent-memory consolidation explain` and verify the output contains no raw query/secret strings.
 
-If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/activation summary/reinforcement report/decay risk/consolidation candidates/direct hook/Hermes E2E QA.
+If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/activation summary/reinforcement report/decay risk/consolidation candidates/consolidation explain/direct hook/Hermes E2E QA.

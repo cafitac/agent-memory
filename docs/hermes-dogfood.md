@@ -54,6 +54,7 @@ agent-memory activations summary ~/.agent-memory/memory.db --limit 200 --top 20 
 agent-memory activations reinforcement-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations decay-risk-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates ~/.agent-memory/memory.db --limit 200 --top 20 --min-evidence 2
+agent-memory consolidation explain ~/.agent-memory/memory.db <candidate-id> --limit 200 --min-evidence 2
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
@@ -75,6 +76,8 @@ Stage C starts with an internal `memory_activations` substrate. Retrieval observ
 `activations decay-risk-report` is the paired advisory view for weak activation evidence. It scores low repetition, weak strength, stale activity, low connectivity, and lifecycle status risk, but caps risk for approved/frequently activated/connected refs so "old" is not treated as automatically useless. It suggests review/explanation follow-up only; it does not delete traces, deprecate memories, mutate status, or change ranking.
 
 `consolidation candidates` starts Stage D as a read-only dogfood report over sanitized traces. It groups `experience_traces` with deterministic cluster keys, reports candidate fingerprints, evidence windows, surfaces/scopes, safe summaries, related memory/observation refs, activation/status reinforcement context, guessed memory type, and risk flags. It is an advisory review queue only: no raw prompts/queries/transcripts, no automatic long-term memory creation, no approval, no reject/snooze state yet, and no ranking change.
+
+`consolidation explain` expands a single candidate id into a read-only explanation packet for local review. It answers why the candidate was grouped, which safe traces/activations/status signals support it, why the memory type was guessed, and which risk flags or review guardrails apply. Unknown candidate ids produce JSON with `found: false` plus a non-zero exit. The command remains local-only and advisory: it does not promote, approve, reject, snooze, mutate status, delete traces, change ranking, or print raw prompt/query/transcript/`query_preview` data.
 
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 
