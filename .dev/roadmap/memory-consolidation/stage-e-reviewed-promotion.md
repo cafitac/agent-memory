@@ -106,9 +106,33 @@ Exact future names can change, but graph inspection must explain lineage.
 
 ## PR E4: Add conflict/supersession checks during promotion
 
+### Status
+
+- In progress for the next release after v0.1.56.
+- Scope is deliberately conservative: semantic fact promotion conflict preflight only. It blocks silent same claim-slot contradictions before any promotion mutation, but does not automatically deprecate, supersede, approve, or change retrieval ranking.
+
 ### Objective
 
 Prevent promotion from creating contradictory durable memory silently.
+
+### Implemented shape
+
+`consolidation promote fact` computes a read-only `conflict_preflight` for the requested fact fields before creating provenance sources, facts, status transitions, or lineage edges. The preflight compares the requested claim slot:
+
+- `subject_ref`
+- `predicate`
+- `scope`
+
+against existing approved/candidate/disputed/deprecated facts. Existing same-slot facts with a different `object_ref_or_value` are reported as conflicts. Blocked output is a non-zero safe failure with:
+
+- `promoted: false`
+- `read_only: true`
+- `error: conflict_preflight_required`
+- status counts for the claim slot
+- safe conflicting fact summaries
+- suggested `review explain`, `review replacements`, and `graph inspect` commands
+
+A reviewer can pass `--allow-conflict` only after accepting that both claims should coexist. Successful promotions still keep the previous E1/E3 behavior: default status is `candidate`, `--approve --actor --reason` is explicit, lineage edges are created only after successful promotion, and default retrieval remains approved-only.
 
 ### Acceptance
 

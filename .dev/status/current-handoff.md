@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-02 01:14 KST
+Last updated: 2026-05-02 05:33 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.56까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.56에는 Stage E / PR E3 consolidation graph lineage relation edges가 포함됐다. 다음 제품 slice는 Stage E / PR E4 conflict/supersession preflight 또는 그보다 작은 read-only promotion conflict preview다.
+agent-memory는 v0.1.56까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재 Stage E / PR E4 conflict/supersession preflight 작업이 `feat/consolidation-conflict-preflight` worktree에서 진행 중이다. E4는 semantic fact promotion 전에 같은 claim slot의 기존 fact와 충돌하는지 read-only preflight로 확인하고, 충돌 시 mutation 없이 safe failure를 반환하는 범위다.
 
 ## Current repo state
 
@@ -28,7 +28,7 @@ Current branch expectation:
 
 - Root checkout should be on `main` after docs/handoff cleanup PR is merged.
 - `origin/main` includes v0.1.56 release-sync PR #82.
-- No Stage E feature worktree is expected to remain active after E3.
+- Feature worktree currently active: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-conflict-preflight` on branch `feat/consolidation-conflict-preflight`.
 
 Expected GitHub identity:
 
@@ -176,28 +176,29 @@ Roadmap sequence:
    - E1 semantic fact promotion done in v0.1.54
    - E2 promotion audit report done in v0.1.55
    - E3 consolidation graph lineage relation edges done in v0.1.56
-   - E4 conflict/supersession preflight is next recommended
+   - E4 conflict/supersession preflight is in progress on `feat/consolidation-conflict-preflight`
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Next recommended PR-sized slice: Stage E / PR E4
+## Active PR-sized slice: Stage E / PR E4
 
 Goal:
 
 - Prevent manual semantic fact promotion from silently creating contradictory durable memory.
 
-Suggested first, smaller shape:
+Current implemented shape:
 
-- Add read-only conflict/supersession preflight output before any forced mutation behavior.
-- Compare candidate/promotion fields against existing same claim-slot approved/candidate/deprecated facts.
-- Return suggested review commands such as `review explain`, `review replacements`, and `graph inspect`.
-- Keep default behavior conservative: no automatic deprecation, no automatic supersession, no retrieval ranking change.
+- `consolidation promote fact` runs read-only conflict preflight before promotion mutation.
+- Same claim-slot facts (`subject_ref`, `predicate`, `scope`) with different `object_ref_or_value` block promotion unless `--allow-conflict` is provided.
+- Blocked output includes `read_only: true`, `error: conflict_preflight_required`, status counts, safe conflicting fact summaries, and suggested `review explain`, `review replacements`, and `graph inspect` commands.
+- Successful promotions keep default retrieval approved-only and E3 lineage behavior.
 
 Out of scope unless deliberately re-scoped:
 
 - procedure/preference promotion
 - automatic promotion
+- automatic deprecation/supersession
 - destructive cleanup/decay
 - retrieval ranking changes
 

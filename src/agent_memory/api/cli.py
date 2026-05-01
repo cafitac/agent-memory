@@ -160,6 +160,95 @@ def _status_counts_for_facts(facts) -> dict[str, int]:
     return counts
 
 
+def _promotion_conflict_commands(db_path: Path, *, fact_id: int) -> dict[str, str]:
+    fact_ref = f"fact:{fact_id}"
+    return {
+        "review_explain": f"agent-memory review explain fact {db_path} {fact_id}",
+        "review_replacements": f"agent-memory review replacements fact {db_path} {fact_id}",
+        "graph_inspect": f"agent-memory graph inspect {db_path} {fact_ref} --depth 1",
+    }
+
+
+def _promotion_conflict_fact_payload(db_path: Path, fact) -> dict[str, Any]:
+    replacement_chain = _fact_replacement_chain_payload(
+        list_fact_replacement_relations(db_path, fact_id=fact.id),
+        fact_id=fact.id,
+    )
+    return {
+        "fact_id": fact.id,
+        "status": fact.status,
+        "subject_ref": fact.subject_ref,
+        "predicate": fact.predicate,
+        "object_ref_or_value": fact.object_ref_or_value,
+        "scope": fact.scope,
+        "confidence": fact.confidence,
+        "replacement_chain": replacement_chain,
+        "commands": _promotion_conflict_commands(db_path, fact_id=fact.id),
+    }
+
+
+def _promotion_conflict_preflight(
+    db_path: Path,
+    *,
+    subject_ref: str,
+    predicate: str,
+    object_ref_or_value: str,
+    scope: str,
+    allow_conflict: bool,
+) -> dict[str, Any]:
+    claim_facts = list_facts_by_claim_slot(
+        db_path,
+        subject_ref=subject_ref,
+        predicate=predicate,
+        scope=scope,
+    )
+    conflicts = [
+        _promotion_conflict_fact_payload(db_path, fact)
+        for fact in claim_facts
+        if fact.object_ref_or_value != object_ref_or_value and fact.status in {"approved", "candidate", "disputed", "deprecated"}
+    ]
+    matching_facts = [
+        _promotion_conflict_fact_payload(db_path, fact)
+        for fact in claim_facts
+        if fact.object_ref_or_value == object_ref_or_value
+    ]
+    if conflicts and allow_conflict:
+        result = "allowed_by_explicit_action"
+    elif conflicts:
+        result = "blocked"
+    else:
+        result = "clear"
+    suggested_next_steps = [
+        "Run the suggested review and graph commands before changing lifecycle status.",
+        "Use review supersede after promotion only if a human explicitly chooses a replacement chain.",
+    ]
+    if conflicts and not allow_conflict:
+        suggested_next_steps.append(
+            "Use --allow-conflict only after reviewing the conflicting claim slot and explicitly accepting coexisting claims."
+        )
+    return {
+        "read_only": True,
+        "result": result,
+        "requires_explicit_action": bool(conflicts),
+        "claim_slot": {
+            "subject_ref": subject_ref,
+            "predicate": predicate,
+            "scope": scope,
+        },
+        "requested_fact": {
+            "subject_ref": subject_ref,
+            "predicate": predicate,
+            "object_ref_or_value": object_ref_or_value,
+            "scope": scope,
+        },
+        "status_counts": _status_counts_for_facts(claim_facts),
+        "conflict_count": len(conflicts),
+        "conflicts": conflicts,
+        "matching_facts": matching_facts,
+        "suggested_next_steps": suggested_next_steps,
+    }
+
+
 def _memory_ref_parts(memory_ref: str) -> tuple[str, int] | None:
     memory_type, separator, raw_id = memory_ref.partition(":")
     if separator != ":" or not raw_id.isdigit() or memory_type not in {"fact", "procedure", "episode"}:
@@ -1063,6 +1152,7 @@ def _promote_consolidation_candidate_fact(
     approve: bool,
     actor: str | None,
     reason: str | None,
+    allow_conflict: bool,
     limit: int,
     min_evidence: int,
 ) -> dict[str, Any]:
@@ -1079,6 +1169,26 @@ def _promote_consolidation_candidate_fact(
             "memory_type": "fact",
             "promoted": False,
             "error": "candidate_not_found",
+        }
+
+    conflict_preflight = _promotion_conflict_preflight(
+        db_path,
+        subject_ref=subject_ref,
+        predicate=predicate,
+        object_ref_or_value=object_ref_or_value,
+        scope=scope,
+        allow_conflict=allow_conflict,
+    )
+    if conflict_preflight["result"] == "blocked":
+        return {
+            "kind": "memory_consolidation_promotion",
+            "candidate_id": candidate_id,
+            "memory_type": "fact",
+            "promoted": False,
+            "read_only": True,
+            "error": "conflict_preflight_required",
+            "conflict_preflight": conflict_preflight,
+            "retrieval_policy": "default_retrieval_remains_approved_only",
         }
 
     evidence = explanation["evidence"]
@@ -1148,6 +1258,7 @@ def _promote_consolidation_candidate_fact(
             "safe_summaries": evidence["safe_summaries"],
             "candidate_fingerprint": explanation["candidate"]["fingerprint"],
         },
+        "conflict_preflight": conflict_preflight,
         "lineage": lineage,
         "retrieval_policy": "default_retrieval_remains_approved_only",
     }
@@ -2030,6 +2141,11 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_promote_fact_parser.add_argument("--scope", required=True)
     consolidation_promote_fact_parser.add_argument("--confidence", type=float, default=0.75)
     consolidation_promote_fact_parser.add_argument("--approve", action="store_true")
+    consolidation_promote_fact_parser.add_argument(
+        "--allow-conflict",
+        action="store_true",
+        help="Explicitly allow promotion when same subject/predicate/scope facts conflict.",
+    )
     consolidation_promote_fact_parser.add_argument("--actor")
     consolidation_promote_fact_parser.add_argument("--reason")
     consolidation_promote_fact_parser.add_argument("--limit", type=int, default=200)
@@ -2637,6 +2753,7 @@ def main() -> None:
                 approve=args.approve,
                 actor=args.actor,
                 reason=args.reason,
+                allow_conflict=args.allow_conflict,
                 limit=args.limit,
                 min_evidence=args.min_evidence,
             )

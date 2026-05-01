@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from agent_memory.core.curation import approve_fact, create_candidate_fact, deprecate_memory
+from agent_memory.core.curation import approve_fact, approve_memory, create_candidate_fact, deprecate_memory
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.storage.sqlite import (
@@ -975,7 +975,7 @@ def _seed_consolidation_promotion_candidate(db_path: Path) -> str:
         predicate="requires",
         object_ref_or_value="explicit human review",
         evidence_ids=[source.id],
-        scope="project:consolidation-promote",
+        scope="project:activation-evidence",
         confidence=0.95,
     )
     approve_fact(db_path=db_path, fact_id=approved_fact.id)
@@ -1210,7 +1210,7 @@ def test_cli_consolidation_promotions_report_lists_manual_promotions_without_mut
         ("auditable candidate promotion reports", []),
         (
             "auditable approved promotion reports",
-            ["--approve", "--actor", "tester", "--reason", "human reviewed candidate evidence"],
+            ["--allow-conflict", "--approve", "--actor", "tester", "--reason", "human reviewed candidate evidence"],
         ),
     ):
         result = subprocess.run(
@@ -1533,3 +1533,157 @@ def test_cli_consolidation_promotions_report_includes_lineage_without_mutation(t
         assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == sources_before
         assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == relations_before
         assert connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0] == transitions_before
+
+
+def _table_count(db_path: Path, table_name: str) -> int:
+    with connect(db_path) as connection:
+        return int(connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+
+
+def test_cli_consolidation_promote_fact_blocks_conflicting_claim_slot_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promote-conflict-blocked.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+    existing_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E4 conflict preflight",
+        predicate="requires",
+        object_ref_or_value="legacy review workflow",
+        evidence_ids=[],
+        scope="project:e4-conflict",
+        confidence=0.95,
+    )
+    approve_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=existing_fact.id,
+        reason="existing approved memory",
+        actor="tester",
+    )
+    before_counts = {
+        table_name: _table_count(db_path, table_name)
+        for table_name in ["facts", "source_records", "relations", "memory_status_transitions"]
+    }
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory E4 conflict preflight",
+            "--predicate",
+            "requires",
+            "--object-ref-or-value",
+            "explicit promotion review gate",
+            "--scope",
+            "project:e4-conflict",
+            "--approve",
+            "--actor",
+            "tester",
+            "--reason",
+            "reviewed D2 explanation",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_promotion"
+    assert payload["promoted"] is False
+    assert payload["read_only"] is True
+    assert payload["error"] == "conflict_preflight_required"
+    assert payload["conflict_preflight"]["result"] == "blocked"
+    assert payload["conflict_preflight"]["requires_explicit_action"] is True
+    assert payload["conflict_preflight"]["claim_slot"] == {
+        "subject_ref": "Agent Memory E4 conflict preflight",
+        "predicate": "requires",
+        "scope": "project:e4-conflict",
+    }
+    assert payload["conflict_preflight"]["status_counts"]["approved"] == 1
+    assert payload["conflict_preflight"]["conflicts"][0]["fact_id"] == existing_fact.id
+    assert payload["conflict_preflight"]["conflicts"][0]["status"] == "approved"
+    assert payload["conflict_preflight"]["conflicts"][0]["object_ref_or_value"] == "legacy review workflow"
+    assert "review_explain" in payload["conflict_preflight"]["conflicts"][0]["commands"]
+    assert "review_replacements" in payload["conflict_preflight"]["conflicts"][0]["commands"]
+    assert "graph_inspect" in payload["conflict_preflight"]["conflicts"][0]["commands"]
+    assert "Use --allow-conflict" in " ".join(payload["conflict_preflight"]["suggested_next_steps"])
+    assert "RAW_PROMOTION_SECRET" not in result.stdout
+    assert "PROMOTION_QUERY_PREVIEW" not in result.stdout
+    after_counts = {
+        table_name: _table_count(db_path, table_name)
+        for table_name in ["facts", "source_records", "relations", "memory_status_transitions"]
+    }
+    assert after_counts == before_counts
+
+
+def test_cli_consolidation_promote_fact_allow_conflict_is_explicit_and_preserves_preflight(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promote-conflict-allowed.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+    existing_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E4 conflict preflight",
+        predicate="requires",
+        object_ref_or_value="legacy review workflow",
+        evidence_ids=[],
+        scope="project:e4-conflict",
+        confidence=0.95,
+    )
+    approve_memory(
+        db_path=db_path,
+        memory_type="fact",
+        memory_id=existing_fact.id,
+        reason="existing approved memory",
+        actor="tester",
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory E4 conflict preflight",
+            "--predicate",
+            "requires",
+            "--object-ref-or-value",
+            "explicit promotion review gate",
+            "--scope",
+            "project:e4-conflict",
+            "--allow-conflict",
+            "--actor",
+            "tester",
+            "--reason",
+            "reviewed D2 explanation and accepted conflicting candidate status",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["promoted"] is True
+    assert payload["status"] == "candidate"
+    assert payload["conflict_preflight"]["result"] == "allowed_by_explicit_action"
+    assert payload["conflict_preflight"]["requires_explicit_action"] is True
+    assert payload["conflict_preflight"]["conflicts"][0]["fact_id"] == existing_fact.id
+    assert payload["retrieval_policy"] == "default_retrieval_remains_approved_only"
+    assert get_fact(db_path, fact_id=payload["fact"]["id"]).status == "candidate"
