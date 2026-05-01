@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/agent-memory",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "description": "Thin npm launcher for the cafitac-agent-memory Python CLI",
   "license": "MIT",
   "homepage": "https://github.com/cafitac/agent-memory#readme",
