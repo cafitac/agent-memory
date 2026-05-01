@@ -15,6 +15,11 @@ Turn trusted consolidation candidates into durable memory only through explicit 
 
 ## PR E1: Add manual consolidation promotion for semantic facts
 
+### Status
+
+- In progress on branch `feat/consolidation-promote-fact` as of 2026-05-01 23:57 KST.
+- Scope is deliberately narrow: semantic fact promotion only. Procedure/preference promotion, graph lineage edges, and conflict preflight remain future PRs.
+
 ### Objective
 
 Promote a candidate into a Fact after explicit user action.
@@ -22,8 +27,17 @@ Promote a candidate into a Fact after explicit user action.
 ### Candidate CLI
 
 ```bash
-agent-memory consolidation promote fact <db> <candidate-id> --status candidate
-agent-memory consolidation promote fact <db> <candidate-id> --approve
+agent-memory consolidation promote fact <db> <candidate-id> \
+  --subject-ref "agent-memory" \
+  --predicate "prefers" \
+  --object-ref-or-value "explicit human-reviewed promotion" \
+  --scope project:agent-memory
+agent-memory consolidation promote fact <db> <candidate-id> \
+  --subject-ref "agent-memory" \
+  --predicate "prefers" \
+  --object-ref-or-value "explicit human-reviewed promotion" \
+  --scope project:agent-memory \
+  --approve --actor maintainer --reason "reviewed candidate evidence"
 ```
 
 Prefer candidate status by default unless the user explicitly chooses approval.

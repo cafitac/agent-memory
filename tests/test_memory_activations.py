@@ -10,10 +10,12 @@ from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.storage.sqlite import (
     connect,
+    get_fact,
     initialize_database,
     insert_experience_trace,
     insert_relation,
     list_memory_activations,
+    list_memory_status_history,
     record_retrieval_observation,
 )
 
@@ -957,3 +959,239 @@ def test_cli_consolidation_explain_unknown_candidate_is_read_only_error(tmp_path
         "found": False,
         "error": "candidate_not_found",
     }
+
+
+def _seed_consolidation_promotion_candidate(db_path: Path) -> str:
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Consolidation promotion source text.",
+        metadata={"project": "consolidation-promote"},
+    )
+    approved_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory consolidation promotion",
+        predicate="requires",
+        object_ref_or_value="explicit human review",
+        evidence_ids=[source.id],
+        scope="project:consolidation-promote",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=approved_fact.id)
+    for idx in range(3):
+        observation = record_retrieval_observation(
+            db_path,
+            surface="hermes",
+            query="RAW_PROMOTION_SECRET must not be stored in promotion provenance",
+            preferred_scope="project:consolidation-promote",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(approved_fact.id, label="approved consolidation promotion target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "PROMOTION_QUERY_PREVIEW", "session_id": f"session-promote-{idx}"},
+        )
+        insert_experience_trace(
+            db_path,
+            surface="hermes",
+            event_kind="tool_success",
+            content_sha256=f"hash-consolidation-promote-{idx}",
+            summary="Agent Memory consolidation promotion requires explicit human review.",
+            scope="project:consolidation-promote",
+            session_ref=f"session-promote-{idx}",
+            salience=0.8,
+            user_emphasis=0.6,
+            related_memory_refs=[f"fact:{approved_fact.id}"],
+            related_observation_ids=[observation.id],
+            retention_policy="review",
+            metadata={"raw_prompt": "RAW_PROMOTION_SECRET", "query_preview": "PROMOTION_QUERY_PREVIEW"},
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    candidates_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--min-evidence",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert candidates_result.returncode == 0, candidates_result.stderr
+    return json.loads(candidates_result.stdout)["candidates"][0]["candidate_id"]
+
+
+def test_cli_consolidation_promote_fact_defaults_to_candidate_with_safe_provenance(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promote-candidate.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory consolidation promotion",
+            "--predicate",
+            "requires",
+            "--object-ref-or-value",
+            "explicit promotion review gate",
+            "--scope",
+            "project:consolidation-promote",
+            "--confidence",
+            "0.91",
+            "--actor",
+            "tester",
+            "--reason",
+            "reviewed D2 explanation",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_promotion"
+    assert payload["candidate_id"] == candidate_id
+    assert payload["memory_type"] == "fact"
+    assert payload["status"] == "candidate"
+    assert payload["approved"] is False
+    assert payload["fact"]["status"] == "candidate"
+    assert payload["fact"]["subject_ref"] == "Agent Memory consolidation promotion"
+    assert payload["fact"]["evidence_ids"] == [payload["provenance_source_id"]]
+    assert payload["provenance"]["trace_ids"]
+    assert payload["provenance"]["safe_summaries"] == [
+        "Agent Memory consolidation promotion requires explicit human review."
+    ]
+    assert payload["retrieval_policy"] == "default_retrieval_remains_approved_only"
+    assert "RAW_PROMOTION_SECRET" not in result.stdout
+    assert "PROMOTION_QUERY_PREVIEW" not in result.stdout
+
+    fact = get_fact(db_path, fact_id=payload["fact"]["id"])
+    assert fact.status == "candidate"
+    retrieve_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "retrieve", str(db_path), "explicit promotion review gate"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+    retrieved_fact_ids = {fact["id"] for fact in json.loads(retrieve_result.stdout)["semantic_facts"]}
+    assert payload["fact"]["id"] not in retrieved_fact_ids
+
+
+def test_cli_consolidation_promote_fact_can_explicitly_approve_and_log_history(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promote-approved.db"
+    initialize_database(db_path)
+    candidate_id = _seed_consolidation_promotion_candidate(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            candidate_id,
+            "--subject-ref",
+            "Agent Memory consolidation promotion",
+            "--predicate",
+            "requires",
+            "--object-ref-or-value",
+            "explicit human approval",
+            "--scope",
+            "project:consolidation-promote",
+            "--approve",
+            "--actor",
+            "tester",
+            "--reason",
+            "human reviewed candidate evidence",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "approved"
+    assert payload["approved"] is True
+    assert payload["fact"]["status"] == "approved"
+    history = list_memory_status_history(db_path, memory_type="fact", memory_id=payload["fact"]["id"])
+    assert len(history) == 1
+    assert history[0].from_status == "candidate"
+    assert history[0].to_status == "approved"
+    assert history[0].actor == "tester"
+    assert history[0].reason == "human reviewed candidate evidence"
+    assert history[0].evidence_ids == [payload["provenance_source_id"]]
+
+
+def test_cli_consolidation_promote_fact_unknown_candidate_is_safe_error(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-promote-missing.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "promote",
+            "fact",
+            str(db_path),
+            "candidate:missing",
+            "--subject-ref",
+            "Missing",
+            "--predicate",
+            "requires",
+            "--object-ref-or-value",
+            "nothing",
+            "--scope",
+            "project:missing",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert json.loads(result.stdout) == {
+        "kind": "memory_consolidation_promotion",
+        "candidate_id": "candidate:missing",
+        "memory_type": "fact",
+        "promoted": False,
+        "error": "candidate_not_found",
+    }
+    with connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+        source_tables = connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sources'"
+        ).fetchone()[0]
+        if source_tables:
+            assert connection.execute("SELECT COUNT(*) FROM sources").fetchone()[0] == 0
