@@ -526,6 +526,197 @@ def _activation_reinforcement_report(db_path: Path, *, limit: int, top: int, fre
     }
 
 
+def _decay_risk_scoring_contract() -> dict[str, Any]:
+    return {
+        "max_score": 1.0,
+        "weights": {
+            "low_connectivity": 0.15,
+            "low_repetition": 0.3,
+            "stale_activity": 0.2,
+            "status_risk": 0.15,
+            "weak_strength": 0.2,
+        },
+        "protections": {
+            "approved_frequent_connected_max_score": 0.25,
+            "approved_frequent_max_score": 0.4,
+        },
+    }
+
+
+def _decay_status_risk_value(current_status: str | None) -> float:
+    if current_status == "approved":
+        return 0.0
+    if current_status == "candidate":
+        return 0.5
+    if current_status in {"deprecated", "disputed"}:
+        return 0.8
+    if current_status == "missing":
+        return 0.7
+    return 0.4
+
+
+def _decay_risk_candidate_payload(
+    db_path: Path,
+    *,
+    memory_ref: str,
+    ref_activations,
+    frequent_threshold: int,
+    latest_activation_id: int,
+) -> dict[str, Any]:
+    scoring = _decay_risk_scoring_contract()
+    weights = scoring["weights"]
+    protections_config = scoring["protections"]
+
+    current_status = _current_status_for_memory_ref(db_path, memory_ref)
+    activation_count = len(ref_activations)
+    total_strength = sum(activation.strength for activation in ref_activations)
+    relations = list_relations_for_node(db_path, node_ref=memory_ref)
+    latest_ref_activation_id = max(activation.id for activation in ref_activations)
+
+    low_repetition_ratio = max(0.0, 1.0 - min(activation_count / frequent_threshold, 1.0))
+    weak_strength_ratio = max(0.0, 1.0 - min(total_strength / frequent_threshold, 1.0))
+    stale_distance = max(0, latest_activation_id - latest_ref_activation_id)
+    stale_ratio = min(stale_distance / frequent_threshold, 1.0)
+    low_connectivity_ratio = 0.0 if relations else 1.0
+    status_risk = _decay_status_risk_value(current_status)
+
+    factor_breakdown = {
+        "low_repetition": {
+            "activation_count": activation_count,
+            "threshold": frequent_threshold,
+            "ratio": round(low_repetition_ratio, 4),
+            "score": round(weights["low_repetition"] * low_repetition_ratio, 4),
+        },
+        "weak_strength": {
+            "total_strength": round(total_strength, 4),
+            "threshold": frequent_threshold,
+            "ratio": round(weak_strength_ratio, 4),
+            "score": round(weights["weak_strength"] * weak_strength_ratio, 4),
+        },
+        "stale_activity": {
+            "latest_activation_id": latest_ref_activation_id,
+            "global_latest_activation_id": latest_activation_id,
+            "activation_id_distance": stale_distance,
+            "ratio": round(stale_ratio, 4),
+            "score": round(weights["stale_activity"] * stale_ratio, 4),
+        },
+        "low_connectivity": {
+            "relation_count": len(relations),
+            "ratio": round(low_connectivity_ratio, 4),
+            "score": round(weights["low_connectivity"] * low_connectivity_ratio, 4),
+        },
+        "status_risk": {
+            "value": current_status,
+            "risk_ratio": status_risk,
+            "score": round(weights["status_risk"] * status_risk, 4),
+        },
+    }
+
+    raw_score = sum(factor["score"] for factor in factor_breakdown.values())
+    protections = []
+    if current_status == "approved" and activation_count >= frequent_threshold and relations:
+        protections.append("approved_frequent_connected_max_score")
+        raw_score = min(raw_score, protections_config["approved_frequent_connected_max_score"])
+    elif current_status == "approved" and activation_count >= frequent_threshold:
+        protections.append("approved_frequent_max_score")
+        raw_score = min(raw_score, protections_config["approved_frequent_max_score"])
+    score = round(max(0.0, min(scoring["max_score"], raw_score)), 4)
+
+    signals = []
+    if score >= 0.5:
+        signals.append("decay_review_candidate")
+    if protections:
+        signals.append("protected_from_age_only_decay")
+    if activation_count < frequent_threshold:
+        signals.append("low_activation_count")
+    else:
+        signals.append("frequently_activated")
+    if not relations:
+        signals.append("isolated_memory")
+    else:
+        signals.append("connected_memory")
+    if current_status == "deprecated":
+        signals.append("deprecated_memory")
+    elif current_status == "disputed":
+        signals.append("disputed_memory")
+    elif current_status == "missing":
+        signals.append("missing_memory_ref")
+
+    return {
+        "memory_ref": memory_ref,
+        "score": score,
+        "current_status": current_status,
+        "activation_count": activation_count,
+        "total_strength": round(total_strength, 4),
+        "factor_breakdown": factor_breakdown,
+        "protections": protections,
+        "signals": signals,
+        "sample_activation_ids": [activation.id for activation in ref_activations[:5]],
+        "sample_observation_ids": _sample_observation_ids(ref_activations),
+        "activation_window": _activation_window(ref_activations),
+    }
+
+
+def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("activations decay-risk-report limit must be >= 1")
+    if top < 1:
+        raise ValueError("activations decay-risk-report top must be >= 1")
+    if frequent_threshold < 1:
+        raise ValueError("activations decay-risk-report frequent threshold must be >= 1")
+
+    activations = list_memory_activations(db_path, limit=limit)
+    activations_by_ref: dict[str, list[Any]] = defaultdict(list)
+    empty_retrieval_count = 0
+    for activation in activations:
+        if activation.activation_kind == "empty_retrieval":
+            empty_retrieval_count += 1
+        if activation.memory_ref is not None:
+            activations_by_ref[activation.memory_ref].append(activation)
+
+    latest_activation_id = max((activation.id for activation in activations), default=0)
+    candidates = [
+        _decay_risk_candidate_payload(
+            db_path,
+            memory_ref=memory_ref,
+            ref_activations=ref_activations,
+            frequent_threshold=frequent_threshold,
+            latest_activation_id=latest_activation_id,
+        )
+        for memory_ref, ref_activations in activations_by_ref.items()
+    ]
+    candidates.sort(key=lambda candidate: (-candidate["score"], candidate["current_status"] or "", candidate["memory_ref"]))
+
+    quality_warnings = []
+    if not activations:
+        quality_warnings.append("no_activations")
+    if 0 < len(activations) < 10:
+        quality_warnings.append("low_activation_count")
+
+    empty_ratio = empty_retrieval_count / len(activations) if activations else 0.0
+    return {
+        "kind": "memory_decay_risk_report",
+        "read_only": True,
+        "activation_count": len(activations),
+        "limit": limit,
+        "top": top,
+        "frequent_threshold": frequent_threshold,
+        "activation_window": _activation_window(activations),
+        "scoring": _decay_risk_scoring_contract(),
+        "quality_warnings": quality_warnings,
+        "negative_evidence": {
+            "empty_retrieval_count": empty_retrieval_count,
+            "empty_retrieval_ratio": round(empty_ratio, 4),
+        },
+        "decay_risk_candidates": candidates[:top],
+        "suggested_next_steps": [
+            "Inspect high decay-risk refs with activations summary and review explain before any status change.",
+            "Treat this report as advisory only; do not delete, deprecate, or mutate from decay score alone.",
+            "Use future consolidation candidate reports to compare weak refs with trace clusters before cleanup.",
+        ],
+    }
+
+
 def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("activations summary limit must be >= 1")
@@ -1289,6 +1480,14 @@ def _build_parser() -> argparse.ArgumentParser:
     activations_reinforcement_parser.add_argument("--limit", type=int, default=200)
     activations_reinforcement_parser.add_argument("--top", type=int, default=20)
     activations_reinforcement_parser.add_argument("--frequent-threshold", type=int, default=3)
+    activations_decay_parser = activations_subparsers.add_parser(
+        "decay-risk-report",
+        help="Score activation refs as read-only decay-risk review candidates without mutating memory state.",
+    )
+    activations_decay_parser.add_argument("db_path", type=Path)
+    activations_decay_parser.add_argument("--limit", type=int, default=200)
+    activations_decay_parser.add_argument("--top", type=int, default=20)
+    activations_decay_parser.add_argument("--frequent-threshold", type=int, default=3)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -1824,6 +2023,19 @@ def main() -> None:
             print(
                 json.dumps(
                     _activation_reinforcement_report(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.activations_action == "decay-risk-report":
+            print(
+                json.dumps(
+                    _activation_decay_risk_report(
                         args.db_path,
                         limit=args.limit,
                         top=args.top,

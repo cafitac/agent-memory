@@ -474,3 +474,172 @@ def test_cli_activations_reinforcement_report_lazily_migrates_legacy_database(tm
     assert payload["read_only"] is True
     assert payload["activation_count"] == 0
     assert payload["quality_warnings"] == ["no_activations"]
+
+
+def test_cli_activations_decay_risk_report_flags_weak_refs_without_age_only_decay(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "decay-risk-report.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Decay risk target phrase is DECAY_RISK_REPORT_OK.",
+        metadata={"project": "decay-risk-report"},
+    )
+    protected_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Decay risk",
+        predicate="strong_phrase",
+        object_ref_or_value="DECAY_RISK_REPORT_OK",
+        evidence_ids=[source.id],
+        scope="project:decay-risk-report",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=protected_fact.id)
+    weak_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Decay risk",
+        predicate="weak_phrase",
+        object_ref_or_value="WEAK_DECAY_RISK_VALUE",
+        evidence_ids=[source.id],
+        scope="project:decay-risk-report",
+        confidence=0.4,
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{protected_fact.id}",
+        relation_type="mentions",
+        to_ref="concept:decay-risk-report",
+        evidence_ids=[source.id],
+        weight=0.8,
+        confidence=0.8,
+    )
+
+    for idx in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes" if idx < 2 else "cli",
+            query="SUPERSECRET protected decay query must not leak",
+            preferred_scope="project:decay-risk-report",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_trace(protected_fact.id, label="protected decay target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "abc123", "session_id": f"session-decay-{idx}"},
+        )
+    record_retrieval_observation(
+        db_path,
+        surface="cli",
+        query="SUPERSECRET weak decay query",
+        preferred_scope="project:decay-risk-report",
+        limit=5,
+        statuses=("candidate",),
+        retrieval_trace=[_trace(weak_fact.id, label="weak decay target")],
+        response_mode="verify_first",
+        metadata={"raw_prompt": "SUPERSECRET"},
+    )
+    record_retrieval_observation(
+        db_path,
+        surface="hermes",
+        query="SUPERSECRET empty decay query",
+        preferred_scope="project:missing",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[],
+        response_mode="verify_first",
+        metadata={"api_key": "***"},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "decay-risk-report",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_decay_risk_report"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 5
+    assert payload["scoring"] == {
+        "max_score": 1.0,
+        "weights": {
+            "low_connectivity": 0.15,
+            "low_repetition": 0.3,
+            "stale_activity": 0.2,
+            "status_risk": 0.15,
+            "weak_strength": 0.2,
+        },
+        "protections": {
+            "approved_frequent_connected_max_score": 0.25,
+            "approved_frequent_max_score": 0.4,
+        },
+    }
+
+    candidates = {item["memory_ref"]: item for item in payload["decay_risk_candidates"]}
+    weak_payload = candidates[f"fact:{weak_fact.id}"]
+    protected_payload = candidates[f"fact:{protected_fact.id}"]
+    assert weak_payload["score"] > protected_payload["score"]
+    assert weak_payload["current_status"] == "candidate"
+    assert weak_payload["factor_breakdown"]["low_repetition"]["activation_count"] == 1
+    assert weak_payload["factor_breakdown"]["low_connectivity"]["relation_count"] == 0
+    assert weak_payload["signals"] == ["decay_review_candidate", "low_activation_count", "isolated_memory"]
+    assert protected_payload["current_status"] == "approved"
+    assert protected_payload["score"] <= 0.25
+    assert protected_payload["protections"] == ["approved_frequent_connected_max_score"]
+    assert "protected_from_age_only_decay" in protected_payload["signals"]
+    assert payload["negative_evidence"] == {"empty_retrieval_count": 1, "empty_retrieval_ratio": 0.2}
+    assert payload["suggested_next_steps"] == [
+        "Inspect high decay-risk refs with activations summary and review explain before any status change.",
+        "Treat this report as advisory only; do not delete, deprecate, or mutate from decay score alone.",
+        "Use future consolidation candidate reports to compare weak refs with trace clusters before cleanup.",
+    ]
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+
+
+def test_cli_activations_decay_risk_report_lazily_migrates_legacy_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "decay-risk-report-legacy.db"
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        connection.execute("DROP TABLE memory_activations")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "decay-risk-report",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_decay_risk_report"
+    assert payload["read_only"] is True
+    assert payload["activation_count"] == 0
+    assert payload["quality_warnings"] == ["no_activations"]
