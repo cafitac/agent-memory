@@ -197,6 +197,7 @@ def _audit_retrieval_observations(
     )
     memory_ref_counts: Counter[str] = Counter()
     sample_observation_ids_by_ref: dict[str, list[int]] = defaultdict(list)
+    observation_windows_by_ref: dict[str, dict[str, Any]] = {}
     empty_retrieval_count = 0
     for observation in observations:
         if not observation.retrieved_memory_refs:
@@ -206,6 +207,21 @@ def _audit_retrieval_observations(
             sample_ids = sample_observation_ids_by_ref[memory_ref]
             if len(sample_ids) < 5:
                 sample_ids.append(observation.id)
+            window = observation_windows_by_ref.setdefault(
+                memory_ref,
+                {
+                    "first_observation_id": observation.id,
+                    "first_observed_at": observation.created_at,
+                    "latest_observation_id": observation.id,
+                    "latest_observed_at": observation.created_at,
+                },
+            )
+            if observation.id < window["first_observation_id"]:
+                window["first_observation_id"] = observation.id
+                window["first_observed_at"] = observation.created_at
+            if observation.id > window["latest_observation_id"]:
+                window["latest_observation_id"] = observation.id
+                window["latest_observed_at"] = observation.created_at
 
     top_memory_refs = []
     for memory_ref, injection_count in sorted(memory_ref_counts.items(), key=lambda item: (-item[1], item[0]))[:top]:
@@ -222,6 +238,7 @@ def _audit_retrieval_observations(
                 "current_status": current_status,
                 "signals": signals,
                 "sample_observation_ids": sample_observation_ids_by_ref[memory_ref],
+                "observation_window": observation_windows_by_ref[memory_ref],
             }
         )
 
@@ -282,6 +299,12 @@ def _review_candidates_from_observations(
         if graph["edges"]:
             signals.append("has_graph_relations")
 
+        history = review_explain["history"] if review_explain is not None else []
+        status_history_summary = {
+            "transition_count": len(history),
+            "latest_transition": history[-1] if history else None,
+        }
+
         commands = {"graph_inspect": f"agent-memory graph inspect {db_path} {memory_ref} --depth 1"}
         if parts is not None:
             memory_type, memory_id = parts
@@ -299,6 +322,7 @@ def _review_candidates_from_observations(
                 **top_ref,
                 "signals": signals,
                 "review_explain": review_explain,
+                "status_history_summary": status_history_summary,
                 "graph_summary": {
                     "start_ref": graph["start_ref"],
                     "depth": graph["depth"],
@@ -313,6 +337,8 @@ def _review_candidates_from_observations(
     return {
         "kind": "retrieval_observation_review_candidates",
         "read_only": True,
+        "observation_count": audit["observation_count"],
+        "candidate_count": len(candidates),
         "observation_audit": audit,
         "candidates": candidates,
     }

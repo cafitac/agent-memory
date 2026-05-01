@@ -58,7 +58,8 @@ Use this before tuning ranking or adding broader graph traversal: first confirm 
 - fact refs include the same lifecycle explanation as `agent-memory review explain fact ...`.
 - replacement/supersedes chains are surfaced as candidate signals instead of mutating anything.
 - relation graph neighbors are summarized so you know when `agent-memory graph inspect ...` is worth running.
-- the JSON includes copy-paste follow-up commands for `review explain`, `review replacements`, and `graph inspect`.
+- the JSON includes `observation_count`/`candidate_count`, each ref's observation window, and copy-paste follow-up commands for `review explain`, `review replacements`, and `graph inspect`.
+- fact refs include a `status_history_summary` so historical injections that were later deprecated/superseded are easier to distinguish from currently approved frequent memories.
 
 Do not treat review candidates as automatic cleanup recommendations. They are a short list for human review; approve/deprecate/supersede decisions should still be explicit curation actions.
 

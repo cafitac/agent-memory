@@ -257,6 +257,9 @@ def test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_wi
     assert top_ref["current_status"] == "deprecated"
     assert top_ref["signals"] == ["frequently_injected", "current_status_not_approved"]
     assert top_ref["sample_observation_ids"]
+    assert top_ref["observation_window"]["first_observation_id"] <= top_ref["observation_window"]["latest_observation_id"]
+    assert top_ref["observation_window"]["first_observed_at"]
+    assert top_ref["observation_window"]["latest_observed_at"]
     assert "SUPERSECRET" not in audit_result.stdout
     assert "abc123" not in audit_result.stdout
 
@@ -351,6 +354,8 @@ def test_python_module_cli_observations_review_candidates_explains_top_refs_with
     payload = json.loads(review_result.stdout)
     assert payload["kind"] == "retrieval_observation_review_candidates"
     assert payload["read_only"] is True
+    assert payload["observation_count"] == 2
+    assert payload["candidate_count"] == 1
     assert payload["observation_audit"]["kind"] == "retrieval_observation_audit"
     assert payload["observation_audit"]["read_only"] is True
     candidate = payload["candidates"][0]
@@ -363,6 +368,11 @@ def test_python_module_cli_observations_review_candidates_explains_top_refs_with
         "has_replacement",
         "has_graph_relations",
     ]
+    assert candidate["observation_window"]["first_observation_id"] <= candidate["observation_window"]["latest_observation_id"]
+    assert candidate["observation_window"]["first_observed_at"]
+    assert candidate["observation_window"]["latest_observed_at"]
+    assert candidate["status_history_summary"]["transition_count"] == 2
+    assert candidate["status_history_summary"]["latest_transition"]["to_status"] == "deprecated"
     assert candidate["review_explain"]["decision"]["visible_in_default_retrieval"] is False
     assert candidate["review_explain"]["replacement_chain"]["superseded_by"][0]["replacement_fact_id"] == replacement_fact.id
     assert candidate["graph_summary"]["edge_count"] == 1
