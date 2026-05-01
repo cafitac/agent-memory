@@ -301,9 +301,13 @@ def test_build_hermes_adapter_payload_includes_alternative_memories_for_top_n_co
     )
     adapter_payload = build_hermes_adapter_payload(packet, top_k=3)
 
+    expected_memory_ids = [trace.memory_id for trace in packet.retrieval_trace[:3]]
+    assert len(expected_memory_ids) == 3
+    assert set(expected_memory_ids) == {branch_fact.id, owner_fact.id, deploy_fact.id}
+
     assert adapter_payload.top_memory.model_dump() == {
         "memory_type": "fact",
-        "memory_id": 1,
+        "memory_id": expected_memory_ids[0],
         "label": "Project Multi",
         "trust_band": "high",
         "has_hidden_alternatives": False,
@@ -311,14 +315,14 @@ def test_build_hermes_adapter_payload_includes_alternative_memories_for_top_n_co
     assert [memory.model_dump() for memory in adapter_payload.alternative_memories] == [
         {
             "memory_type": "fact",
-            "memory_id": 2,
+            "memory_id": expected_memory_ids[1],
             "label": "Project Multi",
             "trust_band": "high",
             "has_hidden_alternatives": False,
         },
         {
             "memory_type": "fact",
-            "memory_id": 3,
+            "memory_id": expected_memory_ids[2],
             "label": "Project Multi",
             "trust_band": "high",
             "has_hidden_alternatives": False,
@@ -327,15 +331,15 @@ def test_build_hermes_adapter_payload_includes_alternative_memories_for_top_n_co
     assert render_hermes_prompt_lines(adapter_payload) == [
         "Memory response mode: direct",
         "Prompt prefix: Answer directly using the top-ranked memory.",
-        "Top memory: fact #1 (Project Multi), trust=high, hidden_alternatives=no",
-        "Alternative memory: fact #2 (Project Multi), trust=high, hidden_alternatives=no",
-        "Alternative memory: fact #3 (Project Multi), trust=high, hidden_alternatives=no",
-        "Guideline: Use fact #1 (Project Multi) as the primary memory for the answer.",
+        f"Top memory: fact #{expected_memory_ids[0]} (Project Multi), trust=high, hidden_alternatives=no",
+        f"Alternative memory: fact #{expected_memory_ids[1]} (Project Multi), trust=high, hidden_alternatives=no",
+        f"Alternative memory: fact #{expected_memory_ids[2]} (Project Multi), trust=high, hidden_alternatives=no",
+        f"Guideline: Use fact #{expected_memory_ids[0]} (Project Multi) as the primary memory for the answer.",
         "Guideline: Answer directly; no uncertainty qualifier is required.",
         "Reason codes: top_ranked_memory, no_hidden_alternatives_detected",
     ]
     assert render_hermes_prompt_text(adapter_payload).splitlines()[3] == (
-        "Alternative memory: fact #2 (Project Multi), trust=high, hidden_alternatives=no"
+        f"Alternative memory: fact #{expected_memory_ids[1]} (Project Multi), trust=high, hidden_alternatives=no"
     )
 
 

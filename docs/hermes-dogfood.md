@@ -48,10 +48,13 @@ Hermes pre-LLM hook retrievals write a secret-safe local observation row to the 
 ```bash
 agent-memory observations list ~/.agent-memory/memory.db --limit 20
 agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
+agent-memory observations empty-diagnostics ~/.agent-memory/memory.db --limit 200 --top 10 --high-empty-threshold 0.5
 agent-memory observations review-candidates ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 ```
 
 Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, whether retrieval is often empty, and whether any frequently injected refs are now deprecated/disputed/missing. The audit command is read-only and summarizes local observation rows without emitting raw query text or query previews. Keep this data local unless you intentionally export it.
+
+When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs. It does not emit raw query text, query previews, or prompt content.
 
 `observations review-candidates` is the next read-only step after audit. It keeps the same secret-safe observation summary, then expands each top ref into a forensic candidate:
 

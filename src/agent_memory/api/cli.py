@@ -267,6 +267,140 @@ def _audit_retrieval_observations(
     }
 
 
+def _observation_window(observations) -> dict[str, Any] | None:
+    if not observations:
+        return None
+    first = min(observations, key=lambda observation: observation.id)
+    latest = max(observations, key=lambda observation: observation.id)
+    return {
+        "first_observation_id": first.id,
+        "first_observed_at": first.created_at,
+        "latest_observation_id": latest.id,
+        "latest_observed_at": latest.created_at,
+    }
+
+
+def _empty_diagnostic_segment_payload(
+    *,
+    segment_name: str,
+    segment_value: Any,
+    observations,
+    high_empty_threshold: float,
+) -> dict[str, Any]:
+    empty_observations = [observation for observation in observations if not observation.retrieved_memory_refs]
+    total_count = len(observations)
+    empty_count = len(empty_observations)
+    empty_ratio = empty_count / total_count if total_count else 0.0
+    signals = []
+    if empty_ratio >= high_empty_threshold and empty_count > 0:
+        signals.append("high_empty_segment")
+    return {
+        segment_name: segment_value,
+        "total_count": total_count,
+        "empty_count": empty_count,
+        "empty_ratio": round(empty_ratio, 4),
+        "signals": signals,
+        "sample_observation_ids": [observation.id for observation in empty_observations[:5]],
+        "observation_window": _observation_window(observations),
+    }
+
+
+def _empty_retrieval_diagnostics(
+    db_path: Path,
+    *,
+    limit: int,
+    top: int,
+    high_empty_threshold: float,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("observations empty-diagnostics limit must be >= 1")
+    if top < 1:
+        raise ValueError("observations empty-diagnostics top must be >= 1")
+    if high_empty_threshold < 0 or high_empty_threshold > 1:
+        raise ValueError("observations empty-diagnostics high empty threshold must be between 0 and 1")
+
+    observations = list_retrieval_observations(db_path, limit=limit)
+    empty_observations = [observation for observation in observations if not observation.retrieved_memory_refs]
+    empty_retrieval_ratio = len(empty_observations) / len(observations) if observations else 0.0
+
+    observations_by_surface: dict[str, list[Any]] = defaultdict(list)
+    observations_by_scope: dict[str | None, list[Any]] = defaultdict(list)
+    observations_by_statuses: dict[tuple[str, ...], list[Any]] = defaultdict(list)
+    for observation in observations:
+        observations_by_surface[observation.surface].append(observation)
+        observations_by_scope[observation.preferred_scope].append(observation)
+        observations_by_statuses[tuple(observation.statuses)].append(observation)
+
+    def sort_segments(items):
+        return sorted(
+            items,
+            key=lambda item: (-item["empty_count"], -item["empty_ratio"], str(next(iter(item.values())))),
+        )[:top]
+
+    empty_by_surface = sort_segments(
+        [
+            _empty_diagnostic_segment_payload(
+                segment_name="surface",
+                segment_value=surface,
+                observations=segment_observations,
+                high_empty_threshold=high_empty_threshold,
+            )
+            for surface, segment_observations in observations_by_surface.items()
+        ]
+    )
+    empty_by_preferred_scope = sort_segments(
+        [
+            _empty_diagnostic_segment_payload(
+                segment_name="preferred_scope",
+                segment_value=preferred_scope,
+                observations=segment_observations,
+                high_empty_threshold=high_empty_threshold,
+            )
+            for preferred_scope, segment_observations in observations_by_scope.items()
+        ]
+    )
+    empty_by_status_filter = sort_segments(
+        [
+            _empty_diagnostic_segment_payload(
+                segment_name="statuses",
+                segment_value=list(statuses),
+                observations=segment_observations,
+                high_empty_threshold=high_empty_threshold,
+            )
+            for statuses, segment_observations in observations_by_statuses.items()
+        ]
+    )
+
+    quality_warnings = []
+    if not observations:
+        quality_warnings.append("no_observations")
+    if 0 < len(observations) < 10:
+        quality_warnings.append("low_observation_count")
+    if empty_retrieval_ratio >= high_empty_threshold and observations:
+        quality_warnings.append("high_empty_retrieval_ratio")
+
+    return {
+        "kind": "retrieval_empty_diagnostics",
+        "read_only": True,
+        "observation_count": len(observations),
+        "limit": limit,
+        "top": top,
+        "high_empty_threshold": high_empty_threshold,
+        "empty_retrieval_count": len(empty_observations),
+        "empty_retrieval_ratio": round(empty_retrieval_ratio, 4),
+        "quality_warnings": quality_warnings,
+        "observation_window": _observation_window(observations),
+        "empty_by_surface": empty_by_surface,
+        "empty_by_preferred_scope": empty_by_preferred_scope,
+        "empty_by_status_filter": empty_by_status_filter,
+        "suggested_next_steps": [
+            "Run observations audit to compare empty vs non-empty retrieval surfaces.",
+            "Check preferred scope values for scope mismatches before changing ranking.",
+            "Add or approve memories only after confirming the missing queries represent durable user needs.",
+        ],
+    }
+
+
 def _review_candidates_from_observations(
     db_path: Path,
     *,
@@ -654,6 +788,14 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_audit_parser.add_argument("--limit", type=int, default=200)
     observations_audit_parser.add_argument("--top", type=int, default=10)
     observations_audit_parser.add_argument("--frequent-threshold", type=int, default=3)
+    observations_empty_diagnostics_parser = observations_subparsers.add_parser(
+        "empty-diagnostics",
+        help="Build a read-only diagnostic report for empty retrieval observations.",
+    )
+    observations_empty_diagnostics_parser.add_argument("db_path", type=Path)
+    observations_empty_diagnostics_parser.add_argument("--limit", type=int, default=200)
+    observations_empty_diagnostics_parser.add_argument("--top", type=int, default=10)
+    observations_empty_diagnostics_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
     observations_review_candidates_parser = observations_subparsers.add_parser(
         "review-candidates",
         help="Build a read-only forensic review report from top retrieval observation refs.",
@@ -1054,6 +1196,19 @@ def main() -> None:
                         limit=args.limit,
                         top=args.top,
                         frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.observations_action == "empty-diagnostics":
+            print(
+                json.dumps(
+                    _empty_retrieval_diagnostics(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        high_empty_threshold=args.high_empty_threshold,
                     ),
                     indent=2,
                 )
