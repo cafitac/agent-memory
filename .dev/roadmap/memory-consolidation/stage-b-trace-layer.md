@@ -59,6 +59,16 @@ Introduce the storage substrate while keeping retrieval and Hermes behavior unch
 - No default memory retrieval/ranking change.
 - The table design explicitly supports retention and provenance.
 
+### Implementation status
+
+- In progress on branch `feat/experience-traces-schema`.
+- Added `ExperienceTrace` model and `experience_traces` SQLite table with lazy migration.
+- Added explicit storage APIs: `insert_experience_trace(...)` and `list_experience_traces(...)`.
+- Stored fields are bounded/sanitized: content fingerprint, optional sanitized summary/signals, related memory refs, related observation ids, retention policy/expiry, and metadata.
+- Raw prompt/transcript/content columns are intentionally absent; known raw metadata keys are stripped before persistence.
+- Retrieval output/ranking remains unchanged by trace writes.
+- Focused tests live in `tests/test_experience_traces.py`.
+
 ## PR B2: Add `traces record` and `traces list` read-safe CLI
 
 ### Objective

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 13:20 KST
+Last updated: 2026-05-01 14:14 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.42까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 PR A2 dogfood baseline snapshot/report를 구현하는 단계야. PR A1 planning checkpoint는 이미 로드맵/아키텍처/제품/상태 문서로 고정됐고, 이번 A2는 `agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json` 형태의 read-only baseline을 추가한다. A2가 merge/release되면 다음 자연스러운 작업은 Stage B의 PR B1 lightweight `experience_traces` schema다.
+agent-memory는 v0.1.43까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B1 lightweight `experience_traces` schema를 구현하는 단계야. Stage A의 planning checkpoint와 `agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json` read-only baseline은 완료됐다. 이번 B1은 trace storage/model/API만 추가하고, CLI/Hermes trace writes/default retrieval 변화는 다음 PR로 미룬다.
 
 ## Current repo state
 
@@ -32,20 +32,24 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.42`
-- v0.1.42 is the docs-only memory consolidation roadmap checkpoint release.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.42/.venv/bin/agent-memory`.
+- `v0.1.43`
+- v0.1.43 added the read-only dogfood baseline report CLI.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.43/.venv/bin/agent-memory`.
 
-Current local PR A2 modifications:
+Current local PR B1 modifications:
 
-- `src/agent_memory/api/cli.py`
-  - Adds `agent-memory dogfood baseline <db> --output-json`.
-  - The report is read-only and composes observation audit, empty diagnostics, signal-bearing review candidates, DB/schema metadata, memory status counts, sanitized Hermes doctor metadata, and a non-executed local E2E marker.
-- `tests/test_cli.py`
-  - Adds regression coverage for populated observations and empty/no-observation DBs.
-  - Asserts no raw query/query preview fields or test secrets are emitted.
-- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`, `.dev/status/current-handoff.md`
-  - Document the baseline command and A2 implementation status.
+- `src/agent_memory/core/models.py`
+  - Adds `ExperienceTrace` for sanitized, bounded event traces.
+- `src/agent_memory/storage/schema.sql`
+  - Adds `experience_traces` table and indexes.
+- `src/agent_memory/storage/sqlite.py`
+  - Adds lazy migration for `experience_traces`.
+  - Adds explicit write/list APIs: `insert_experience_trace(...)` and `list_experience_traces(...)`.
+  - Strips known raw metadata keys before writing trace metadata.
+- `tests/test_experience_traces.py`
+  - Covers new DB schema, lazy migration, sanitized insert/list behavior, and unchanged retrieval output.
+- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`, `.dev/status/current-handoff.md`
+  - Document that B1 is storage-only: no CLI, no Hermes writes, no retrieval/ranking change.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -124,14 +128,15 @@ Hard guardrails:
 
 ## Next best slice
 
-PR A2: Add the dogfood baseline snapshot/report command.
+PR B1: Add a lightweight `experience_traces` schema behind an explicit write path.
 
 Before acting, read:
 
 1. `.dev/status/current-handoff.md`
-2. `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
-3. `src/agent_memory/api/cli.py`
-4. `tests/test_cli.py`
+2. `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
+3. `src/agent_memory/core/models.py`
+4. `src/agent_memory/storage/sqlite.py`
+5. `tests/test_experience_traces.py`
 
 Suggested first commands next session:
 
@@ -139,9 +144,8 @@ Suggested first commands next session:
 cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git diff --check
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py -q -k dogfood_baseline
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_experience_traces.py -q
 HOME=/Users/reddit .venv/bin/python -m pytest -q
-HOME=/Users/reddit .venv/bin/python -m agent_memory.api.cli dogfood baseline /Users/reddit/.agent-memory/memory.db --output-json >/tmp/agent-memory-dogfood-baseline.json
 ```
 
-If the user asks to proceed after that, finish A2 verification, create the PR, merge/release after CI, and run published-artifact smoke plus the local baseline command. After A2 merges, the next implementation slice is PR B1 in `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`.
+If the user asks to proceed after that, finish B1 verification, create the PR, merge/release after CI, and run published-artifact smoke. Because B1 does not change Hermes hook behavior, Hermes QA should still verify the existing v0.1.43 hook path after installing the new release.

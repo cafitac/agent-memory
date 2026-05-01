@@ -11,6 +11,7 @@ from typing import Any, Callable, Literal, TypeVar
 
 from agent_memory.core.models import (
     Episode,
+    ExperienceTrace,
     Fact,
     MemoryStatus,
     MemoryStatusTransition,
@@ -112,6 +113,7 @@ def initialize_database(db_path: Path | str) -> None:
         )
         _ensure_memory_status_transitions_schema(connection)
         _ensure_retrieval_observations_schema(connection)
+        _ensure_experience_traces_schema(connection)
 
 
 def _ensure_memory_status_transitions_schema(connection: sqlite3.Connection) -> None:
@@ -159,6 +161,36 @@ def _ensure_retrieval_observations_schema(connection: sqlite3.Connection) -> Non
     )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at)"
+    )
+
+
+def _ensure_experience_traces_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experience_traces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            surface TEXT NOT NULL,
+            event_kind TEXT NOT NULL,
+            scope TEXT,
+            session_ref TEXT,
+            content_sha256 TEXT NOT NULL,
+            summary TEXT,
+            salience REAL NOT NULL DEFAULT 0.0,
+            user_emphasis REAL NOT NULL DEFAULT 0.0,
+            related_memory_refs_json TEXT NOT NULL DEFAULT '[]',
+            related_observation_ids_json TEXT NOT NULL DEFAULT '[]',
+            retention_policy TEXT NOT NULL CHECK (retention_policy IN ('ephemeral', 'short', 'review', 'archive')) DEFAULT 'ephemeral',
+            expires_at TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_experience_traces_created_at ON experience_traces(created_at, id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_experience_traces_surface_kind ON experience_traces(surface, event_kind, created_at)"
     )
 
 
@@ -899,6 +931,102 @@ def list_retrieval_observations(db_path: Path | str, *, limit: int = 50) -> list
     return [retrieval_observation_from_row(row) for row in rows]
 
 
+_RAW_TRACE_METADATA_KEYS = {
+    "content",
+    "prompt",
+    "query",
+    "query_preview",
+    "raw_content",
+    "raw_prompt",
+    "raw_query",
+    "raw_user_message",
+    "transcript",
+    "user_message",
+}
+
+
+def _sanitize_trace_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key.lower() not in _RAW_TRACE_METADATA_KEYS
+    }
+
+
+def insert_experience_trace(
+    db_path: Path | str,
+    *,
+    surface: str,
+    event_kind: str,
+    content_sha256: str,
+    summary: str | None = None,
+    scope: str | None = None,
+    session_ref: str | None = None,
+    salience: float = 0.0,
+    user_emphasis: float = 0.0,
+    related_memory_refs: list[str] | None = None,
+    related_observation_ids: list[int] | None = None,
+    retention_policy: Literal["ephemeral", "short", "review", "archive"] = "ephemeral",
+    expires_at: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ExperienceTrace:
+    sanitized_metadata = _sanitize_trace_metadata(metadata or {})
+    with connect(db_path) as connection:
+        _ensure_experience_traces_schema(connection)
+        cursor = connection.execute(
+            """
+            INSERT INTO experience_traces (
+                surface,
+                event_kind,
+                scope,
+                session_ref,
+                content_sha256,
+                summary,
+                salience,
+                user_emphasis,
+                related_memory_refs_json,
+                related_observation_ids_json,
+                retention_policy,
+                expires_at,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                surface,
+                event_kind,
+                scope,
+                session_ref,
+                content_sha256,
+                summary,
+                salience,
+                user_emphasis,
+                json.dumps(related_memory_refs or []),
+                json.dumps(related_observation_ids or []),
+                retention_policy,
+                expires_at,
+                json.dumps(sanitized_metadata, sort_keys=True),
+            ),
+        )
+        row = connection.execute("SELECT * FROM experience_traces WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return experience_trace_from_row(row)
+
+
+def list_experience_traces(db_path: Path | str, *, limit: int = 50) -> list[ExperienceTrace]:
+    with connect(db_path) as connection:
+        _ensure_experience_traces_schema(connection)
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM experience_traces
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [experience_trace_from_row(row) for row in rows]
+
+
 def _search_model_rows_with_trace(
     db_path: Path | str,
     *,
@@ -1306,6 +1434,26 @@ def retrieval_observation_from_row(row: sqlite3.Row) -> RetrievalObservation:
         retrieved_memory_refs=json.loads(row["retrieved_memory_refs_json"]),
         top_memory_ref=row["top_memory_ref"],
         response_mode=row["response_mode"],
+        metadata=json.loads(row["metadata_json"]),
+    )
+
+
+def experience_trace_from_row(row: sqlite3.Row) -> ExperienceTrace:
+    return ExperienceTrace(
+        id=row["id"],
+        created_at=row["created_at"],
+        surface=row["surface"],
+        event_kind=row["event_kind"],
+        scope=row["scope"],
+        session_ref=row["session_ref"],
+        content_sha256=row["content_sha256"],
+        summary=row["summary"],
+        salience=row["salience"],
+        user_emphasis=row["user_emphasis"],
+        related_memory_refs=json.loads(row["related_memory_refs_json"]),
+        related_observation_ids=json.loads(row["related_observation_ids_json"]),
+        retention_policy=row["retention_policy"],
+        expires_at=row["expires_at"],
         metadata=json.loads(row["metadata_json"]),
     )
 

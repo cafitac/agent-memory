@@ -109,9 +109,29 @@ CREATE TABLE IF NOT EXISTS retrieval_observations (
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS experience_traces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    surface TEXT NOT NULL,
+    event_kind TEXT NOT NULL,
+    scope TEXT,
+    session_ref TEXT,
+    content_sha256 TEXT NOT NULL,
+    summary TEXT,
+    salience REAL NOT NULL DEFAULT 0.0,
+    user_emphasis REAL NOT NULL DEFAULT 0.0,
+    related_memory_refs_json TEXT NOT NULL DEFAULT '[]',
+    related_observation_ids_json TEXT NOT NULL DEFAULT '[]',
+    retention_policy TEXT NOT NULL CHECK (retention_policy IN ('ephemeral', 'short', 'review', 'archive')) DEFAULT 'ephemeral',
+    expires_at TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_memory_status_transitions_memory ON memory_status_transitions(memory_type, memory_id, id);
 CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id);
 CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at);
+CREATE INDEX IF NOT EXISTS idx_experience_traces_created_at ON experience_traces(created_at, id);
+CREATE INDEX IF NOT EXISTS idx_experience_traces_surface_kind ON experience_traces(surface, event_kind, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_facts_status_scope ON facts(status, scope);
 CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_ref);
