@@ -893,6 +893,102 @@ def _consolidation_candidate_explanation(
     }
 
 
+def _promotion_history_payload(db_path: Path, *, memory_type: str, memory_id: int) -> list[dict[str, Any]]:
+    return [
+        {
+            "from_status": transition.from_status,
+            "to_status": transition.to_status,
+            "actor": transition.actor,
+            "reason": transition.reason,
+            "evidence_ids": transition.evidence_ids,
+        }
+        for transition in list_memory_status_history(db_path, memory_type=memory_type, memory_id=memory_id)
+    ]
+
+
+def _consolidation_promotions_report(db_path: Path, *, limit: int) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("consolidation promotions report limit must be >= 1")
+
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                facts.id AS fact_id,
+                facts.subject_ref AS subject_ref,
+                facts.predicate AS predicate,
+                facts.object_ref_or_value AS object_ref_or_value,
+                facts.evidence_ids_json AS fact_evidence_ids_json,
+                facts.confidence AS confidence,
+                facts.valid_from AS valid_from,
+                facts.valid_to AS valid_to,
+                facts.scope AS scope,
+                facts.status AS status,
+                facts.searchable_text AS searchable_text,
+                source_records.id AS source_id,
+                source_records.source_type AS source_type,
+                source_records.external_ref AS external_ref,
+                source_records.created_at AS source_created_at,
+                source_records.content AS source_content,
+                source_records.metadata_json AS source_metadata_json
+            FROM facts
+            JOIN source_records ON facts.evidence_ids_json = '[' || source_records.id || ']'
+            WHERE source_records.source_type = 'consolidation_candidate'
+              AND source_records.metadata_json LIKE '%"promotion_kind": "manual_reviewed_fact"%'
+            ORDER BY source_records.id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    promotions: list[dict[str, Any]] = []
+    status_counts: Counter[str] = Counter()
+    for row in rows:
+        source_metadata = json.loads(row["source_metadata_json"])
+        source_content = json.loads(row["source_content"])
+        evidence_ids = json.loads(row["fact_evidence_ids_json"])
+        status_counts[row["status"]] += 1
+        promotions.append(
+            {
+                "memory_type": "fact",
+                "candidate_id": row["external_ref"],
+                "promotion_kind": "manual_reviewed_fact",
+                "fact": {
+                    "id": row["fact_id"],
+                    "subject_ref": row["subject_ref"],
+                    "predicate": row["predicate"],
+                    "object_ref_or_value": row["object_ref_or_value"],
+                    "evidence_ids": evidence_ids,
+                    "confidence": row["confidence"],
+                    "valid_from": row["valid_from"],
+                    "valid_to": row["valid_to"],
+                    "scope": row["scope"],
+                    "status": row["status"],
+                    "searchable_text": row["searchable_text"],
+                },
+                "provenance_source_id": row["source_id"],
+                "provenance": {
+                    "source_type": row["source_type"],
+                    "candidate_fingerprint": row["external_ref"],
+                    "trace_ids": source_metadata.get("trace_ids", []),
+                    "related_observation_ids": source_metadata.get("related_observation_ids", []),
+                    "safe_summaries": source_content.get("safe_summaries", []),
+                    "created_at": row["source_created_at"],
+                },
+                "approval_history": _promotion_history_payload(db_path, memory_type="fact", memory_id=row["fact_id"]),
+            }
+        )
+
+    return {
+        "kind": "memory_consolidation_promotions_report",
+        "read_only": True,
+        "total_promotions": len(promotions),
+        "status_counts": dict(sorted(status_counts.items())),
+        "promotions": promotions,
+        "retrieval_policy": "default_retrieval_remains_approved_only",
+    }
+
+
 def _promote_consolidation_candidate_fact(
     db_path: Path,
     *,
@@ -1829,6 +1925,20 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_explain_parser.add_argument("candidate_id")
     consolidation_explain_parser.add_argument("--limit", type=int, default=200)
     consolidation_explain_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_promotions_parser = consolidation_subparsers.add_parser(
+        "promotions",
+        help="Inspect manual consolidation promotions as a read-only audit report.",
+    )
+    consolidation_promotions_subparsers = consolidation_promotions_parser.add_subparsers(
+        dest="promotions_action",
+        required=True,
+    )
+    consolidation_promotions_report_parser = consolidation_promotions_subparsers.add_parser(
+        "report",
+        help="List manual reviewed consolidation promotions without changing memory state.",
+    )
+    consolidation_promotions_report_parser.add_argument("db_path", type=Path)
+    consolidation_promotions_report_parser.add_argument("--limit", type=int, default=50)
     consolidation_promote_parser = consolidation_subparsers.add_parser(
         "promote",
         help="Promote a reviewed consolidation candidate into candidate or approved memory.",
@@ -2436,6 +2546,11 @@ def main() -> None:
             print(json.dumps(payload, indent=2))
             if not payload.get("found", False):
                 sys.exit(1)
+            return
+        if args.consolidation_action == "promotions":
+            if args.promotions_action != "report":
+                raise ValueError(f"Unsupported consolidation promotions action: {args.promotions_action}")
+            print(json.dumps(_consolidation_promotions_report(args.db_path, limit=args.limit), indent=2))
             return
         if args.consolidation_action == "promote":
             if args.promotion_memory_type != "fact":

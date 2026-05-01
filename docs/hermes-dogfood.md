@@ -60,6 +60,7 @@ agent-memory consolidation promote fact ~/.agent-memory/memory.db <candidate-id>
   --predicate "prefers" \
   --object-ref-or-value "explicit human-reviewed promotion" \
   --scope project:agent-memory
+agent-memory consolidation promotions report ~/.agent-memory/memory.db --limit 50
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
@@ -85,6 +86,8 @@ Stage C starts with an internal `memory_activations` substrate. Retrieval observ
 `consolidation explain` expands a single candidate id into a read-only explanation packet for local review. It answers why the candidate was grouped, which safe traces/activations/status signals support it, why the memory type was guessed, and which risk flags or review guardrails apply. Unknown candidate ids produce JSON with `found: false` plus a non-zero exit. The command remains local-only and advisory: it does not promote, approve, reject, snooze, mutate status, delete traces, change ranking, or print raw prompts/queries/transcripts/query previews.
 
 `consolidation promote fact` is the first mutating Stage E command and should be used only after a human reviews `consolidation explain`. The reviewer supplies the final semantic fact fields; the candidate contributes only safe provenance. Default output is a `candidate` fact hidden from default retrieval. Add `--approve --actor ... --reason ...` only when approval is explicit; that path logs the candidate-to-approved transition with the generated provenance source id. Unknown candidate ids are safe failures that do not create facts or sources. Procedure/preference promotion, graph lineage edges, and conflict preflight remain out of scope for this slice.
+
+`consolidation promotions report` is the paired read-only audit surface for Stage E manual promotions. It lists promoted fact ids/statuses, candidate fingerprints, safe provenance summaries, trace/observation ids, and approval history so local dogfood can review what was promoted without touching retrieval ranking or mutating facts, sources, transitions, traces, approval queues, reject/snooze state, or long-term graph edges. It does not print raw prompts, transcripts, query previews, or raw trace metadata.
 
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 
