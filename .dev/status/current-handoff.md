@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-02 00:43 KST
+Last updated: 2026-05-02 00:59 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.55까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.55에는 Stage E / PR E2 read-only `agent-memory consolidation promotions report` audit surface가 포함됐다. 현재 다음 제품 slice는 Stage E / PR E3 consolidation graph lineage relation edges다.
+agent-memory는 v0.1.55까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재 Stage E / PR E3 consolidation graph lineage relation edges를 `feat/consolidation-graph-lineage` worktree에서 진행 중이다. E3 범위는 manual semantic fact promotion이 candidate fingerprint -> promoted fact -> generated provenance source lineage edges를 만들고, `graph inspect`/promotion report에서 이를 설명하게 하는 것이다.
 
 ## Current repo state
 
@@ -26,9 +26,9 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should be on `main` or a short-lived docs/feature branch.
+- Root checkout should be on `main`.
+- Active E3 worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-graph-lineage` on branch `feat/consolidation-graph-lineage`.
 - `origin/main` includes v0.1.55 release commit `794ecb3`.
-- No Stage E feature worktree is expected to remain active after E2; create a fresh scoped worktree for E3 if starting implementation.
 
 Expected GitHub identity:
 
@@ -153,7 +153,7 @@ Roadmap sequence:
 5. Stage E: reviewed promotion into long-term memory
    - E1 semantic fact promotion done in v0.1.54
    - E2 promotion audit report done in v0.1.55
-   - E3 consolidation graph lineage relation edges is next
+   - E3 consolidation graph lineage relation edges is in progress on `feat/consolidation-graph-lineage`
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
