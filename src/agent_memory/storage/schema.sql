@@ -127,11 +127,27 @@ CREATE TABLE IF NOT EXISTS experience_traces (
     metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS memory_activations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    surface TEXT NOT NULL,
+    activation_kind TEXT NOT NULL CHECK (activation_kind IN ('retrieved', 'empty_retrieval')),
+    memory_ref TEXT,
+    observation_id INTEGER,
+    trace_id INTEGER,
+    scope TEXT,
+    strength REAL NOT NULL DEFAULT 0.0,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_memory_status_transitions_memory ON memory_status_transitions(memory_type, memory_id, id);
 CREATE INDEX IF NOT EXISTS idx_retrieval_observations_created_at ON retrieval_observations(created_at, id);
 CREATE INDEX IF NOT EXISTS idx_retrieval_observations_surface ON retrieval_observations(surface, created_at);
 CREATE INDEX IF NOT EXISTS idx_experience_traces_created_at ON experience_traces(created_at, id);
 CREATE INDEX IF NOT EXISTS idx_experience_traces_surface_kind ON experience_traces(surface, event_kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_activations_created_at ON memory_activations(created_at, id);
+CREATE INDEX IF NOT EXISTS idx_memory_activations_memory ON memory_activations(memory_ref, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_activations_observation ON memory_activations(observation_id);
 
 CREATE INDEX IF NOT EXISTS idx_facts_status_scope ON facts(status, scope);
 CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_ref);

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 16:00 KST
+Last updated: 2026-05-01 16:57 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.46까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B4 `traces retention-report` read-only trace retention guardrail을 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces` storage substrate, B2 `traces record/list`, B3 Hermes `--record-trace` opt-in trace recording은 완료됐다. 이번 B4는 trace volume/expiry를 read-only로 점검하고, raw transcript 저장/default retrieval 변화/long-term memory 자동 생성/trace deletion은 하지 않는다.
+agent-memory는 v0.1.47까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C1 `memory_activations` activation-event substrate를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`는 완료됐다. C1은 retrieval observation을 activation evidence로 bridge하되, raw query/prompt 저장, retrieval ranking 변경, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -32,26 +32,28 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.46`
-- v0.1.46 added opt-in Hermes hook trace recording via `--record-trace`.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.46/.venv/bin/agent-memory`.
+- `v0.1.47`
+- v0.1.47 added read-only trace retention-report guardrails.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.47/.venv/bin/agent-memory`.
 
-Current local PR B4 modifications:
+Current local PR C1 modifications:
 
-- Branch: `feat/trace-retention-report`
+- Branch: `feat/activation-events`
+- `src/agent_memory/core/models.py`
+  - Adds `MemoryActivation` model.
+- `src/agent_memory/storage/schema.sql`
+  - Adds `memory_activations` table and indexes.
 - `src/agent_memory/storage/sqlite.py`
-  - Adds `build_trace_retention_report(...)` as a read-only trace retention report.
-  - Report includes trace count, retention-policy counts, expired trace refs, expirable traces missing `expires_at`, volume warnings, and suggested next steps.
-  - Report intentionally omits trace summary/metadata/raw content and does not delete traces.
-- `src/agent_memory/api/cli.py`
-  - Adds `agent-memory traces retention-report <db>`.
-  - Options: `--now`, `--max-trace-count`, `--expired-limit`, `--missing-expiry-limit`.
-- `tests/test_experience_traces.py`
-  - Adds storage-level retention report coverage for expired traces, missing expiry, volume warnings, secret-safe output, and read-only behavior.
-- `tests/test_cli.py`
-  - Adds module CLI coverage for `traces retention-report` secret-safe/read-only behavior.
-- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/roadmap-v0.md`, `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`, `.dev/status/current-handoff.md`
-  - Document B3 complete and B4 in progress as read-only retention reporting first.
+  - Adds lazy `_ensure_memory_activations_schema(...)`.
+  - Adds `list_memory_activations(...)` and `memory_activation_from_row(...)`.
+  - `record_retrieval_observation(...)` now records activation evidence:
+    - `retrieved` rows for selected memory refs.
+    - `empty_retrieval` row when retrieval is empty.
+  - Activation metadata is sanitized; raw prompt/query/query_preview/user_message/transcript keys are omitted.
+- `tests/test_memory_activations.py`
+  - Covers schema creation, secret-safe activation recording, empty retrieval negative evidence, and lazy migration.
+- `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/roadmap-v0.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
+  - Document C1 in progress.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -84,9 +86,9 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR B1: `experience_traces` schema (done in v0.1.44)
    - PR B2: `traces record/list` CLI (done in v0.1.45)
    - PR B3: Hermes trace recording opt-in (done in v0.1.46)
-   - PR B4: trace retention/safety guardrails (current)
+   - PR B4: trace retention/safety guardrails (done in v0.1.47)
 3. Stage C: activation and reinforcement signals
-   - PR C1: activation events
+   - PR C1: activation events (current)
    - PR C2: activation summary CLI
    - PR C3: reinforcement score report
    - PR C4: decay risk score report
@@ -110,22 +112,24 @@ Hard guardrails:
 
 ## Next best slice
 
-PR B4: Add trace retention and local-only safety guardrails.
+Finish PR C1: activation event substrate.
 
-B4 is intentionally read-only first:
+C1 is intentionally a substrate/bridge first:
 
-- identify expired traces deterministically
-- flag expirable trace policies without `expires_at`
-- warn when total trace count exceeds an operator budget
-- avoid mutation/deletion until a later explicitly scoped PR
-- avoid raw prompt/transcript/query_preview/metadata/summary output in the retention report
+- create local-only `memory_activations` rows from retrieval observations
+- link activation rows to observation ids and memory refs
+- represent empty retrievals as negative evidence
+- keep existing observation command outputs compatible
+- avoid raw query/prompt/query_preview/transcript storage in activation rows
+- avoid retrieval ranking changes and long-term memory promotion
 
 ## Suggested verification before PR
 
 ```bash
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_experience_traces.py::test_trace_retention_report_identifies_expired_missing_expiry_and_volume tests/test_cli.py::test_python_module_cli_traces_retention_report_is_read_only_and_secret_safe -q
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_memory_activations.py -q
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_memory_activations.py tests/test_cli.py tests/test_experience_traces.py -q
 HOME=/Users/reddit .venv/bin/python -m pytest -q
+git diff --check
 npm pack --dry-run
 ```
 

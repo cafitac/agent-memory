@@ -13,6 +13,7 @@ from agent_memory.core.models import (
     Episode,
     ExperienceTrace,
     Fact,
+    MemoryActivation,
     MemoryStatus,
     MemoryStatusTransition,
     Procedure,
@@ -114,6 +115,7 @@ def initialize_database(db_path: Path | str) -> None:
         _ensure_memory_status_transitions_schema(connection)
         _ensure_retrieval_observations_schema(connection)
         _ensure_experience_traces_schema(connection)
+        _ensure_memory_activations_schema(connection)
 
 
 def _ensure_memory_status_transitions_schema(connection: sqlite3.Connection) -> None:
@@ -191,6 +193,34 @@ def _ensure_experience_traces_schema(connection: sqlite3.Connection) -> None:
     )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_experience_traces_surface_kind ON experience_traces(surface, event_kind, created_at)"
+    )
+
+
+def _ensure_memory_activations_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS memory_activations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            surface TEXT NOT NULL,
+            activation_kind TEXT NOT NULL CHECK (activation_kind IN ('retrieved', 'empty_retrieval')),
+            memory_ref TEXT,
+            observation_id INTEGER,
+            trace_id INTEGER,
+            scope TEXT,
+            strength REAL NOT NULL DEFAULT 0.0,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_activations_created_at ON memory_activations(created_at, id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_activations_memory ON memory_activations(memory_ref, created_at)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_activations_observation ON memory_activations(observation_id)"
     )
 
 
@@ -866,6 +896,68 @@ def _memory_ref(memory_type: str, memory_id: int) -> str:
     return f"{memory_type}:{memory_id}"
 
 
+_RAW_ACTIVATION_METADATA_KEYS = {
+    "content",
+    "prompt",
+    "query",
+    "query_preview",
+    "raw_content",
+    "raw_prompt",
+    "raw_query",
+    "raw_user_message",
+    "transcript",
+    "user_message",
+}
+
+
+def _sanitize_activation_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key.lower() not in _RAW_ACTIVATION_METADATA_KEYS
+    }
+
+
+def _insert_memory_activation_row(
+    connection: sqlite3.Connection,
+    *,
+    surface: str,
+    activation_kind: Literal["retrieved", "empty_retrieval"],
+    memory_ref: str | None,
+    observation_id: int | None,
+    trace_id: int | None = None,
+    scope: str | None,
+    strength: float,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    _ensure_memory_activations_schema(connection)
+    connection.execute(
+        """
+        INSERT INTO memory_activations (
+            surface,
+            activation_kind,
+            memory_ref,
+            observation_id,
+            trace_id,
+            scope,
+            strength,
+            metadata_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            surface,
+            activation_kind,
+            memory_ref,
+            observation_id,
+            trace_id,
+            scope,
+            strength,
+            json.dumps(_sanitize_activation_metadata(metadata or {}), sort_keys=True),
+        ),
+    )
+
+
 def record_retrieval_observation(
     db_path: Path | str,
     *,
@@ -881,8 +973,15 @@ def record_retrieval_observation(
     retrieved_memory_refs = [_memory_ref(trace.memory_type, trace.memory_id) for trace in retrieval_trace]
     top_memory_ref = retrieved_memory_refs[0] if retrieved_memory_refs else None
     query_sha256 = hashlib.sha256(query.encode("utf-8")).hexdigest()
+    activation_metadata = _sanitize_activation_metadata(
+        {
+            **(metadata or {}),
+            "response_mode": response_mode,
+        }
+    )
     with connect(db_path) as connection:
         _ensure_retrieval_observations_schema(connection)
+        _ensure_memory_activations_schema(connection)
         cursor = connection.execute(
             """
             INSERT INTO retrieval_observations (
@@ -912,7 +1011,31 @@ def record_retrieval_observation(
                 json.dumps(metadata or {}, sort_keys=True),
             ),
         )
-        row = connection.execute("SELECT * FROM retrieval_observations WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        observation_id = cursor.lastrowid
+        if retrieved_memory_refs:
+            for memory_ref in retrieved_memory_refs:
+                _insert_memory_activation_row(
+                    connection,
+                    surface=surface,
+                    activation_kind="retrieved",
+                    memory_ref=memory_ref,
+                    observation_id=observation_id,
+                    scope=preferred_scope,
+                    strength=1.0,
+                    metadata=activation_metadata,
+                )
+        else:
+            _insert_memory_activation_row(
+                connection,
+                surface=surface,
+                activation_kind="empty_retrieval",
+                memory_ref=None,
+                observation_id=observation_id,
+                scope=preferred_scope,
+                strength=0.0,
+                metadata=activation_metadata,
+            )
+        row = connection.execute("SELECT * FROM retrieval_observations WHERE id = ?", (observation_id,)).fetchone()
     return retrieval_observation_from_row(row)
 
 
@@ -929,6 +1052,21 @@ def list_retrieval_observations(db_path: Path | str, *, limit: int = 50) -> list
             (limit,),
         ).fetchall()
     return [retrieval_observation_from_row(row) for row in rows]
+
+
+def list_memory_activations(db_path: Path | str, *, limit: int = 50) -> list[MemoryActivation]:
+    with connect(db_path) as connection:
+        _ensure_memory_activations_schema(connection)
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM memory_activations
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [memory_activation_from_row(row) for row in rows]
 
 
 _RAW_TRACE_METADATA_KEYS = {
@@ -1547,6 +1685,21 @@ def retrieval_observation_from_row(row: sqlite3.Row) -> RetrievalObservation:
         retrieved_memory_refs=json.loads(row["retrieved_memory_refs_json"]),
         top_memory_ref=row["top_memory_ref"],
         response_mode=row["response_mode"],
+        metadata=json.loads(row["metadata_json"]),
+    )
+
+
+def memory_activation_from_row(row: sqlite3.Row) -> MemoryActivation:
+    return MemoryActivation(
+        id=row["id"],
+        created_at=row["created_at"],
+        surface=row["surface"],
+        activation_kind=row["activation_kind"],
+        memory_ref=row["memory_ref"],
+        observation_id=row["observation_id"],
+        trace_id=row["trace_id"],
+        scope=row["scope"],
+        strength=row["strength"],
         metadata=json.loads(row["metadata_json"]),
     )
 

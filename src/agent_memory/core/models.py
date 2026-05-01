@@ -99,6 +99,19 @@ class RetrievalObservation(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryActivation(BaseModel):
+    id: int
+    created_at: str
+    surface: str
+    activation_kind: Literal["retrieved", "empty_retrieval"]
+    memory_ref: str | None = None
+    observation_id: int | None = None
+    trace_id: int | None = None
+    scope: str | None = None
+    strength: float = 0.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ExperienceTrace(BaseModel):
     id: int
     created_at: str

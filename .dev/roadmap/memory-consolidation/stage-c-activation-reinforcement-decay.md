@@ -23,6 +23,12 @@ Turn traces and retrieval observations into measurable signals. This stage still
 
 ## PR C1: Introduce activation events for retrieval use
 
+### Status
+
+- In progress on branch `feat/activation-events`.
+- PR B4 completed in v0.1.47 with read-only trace retention guardrails.
+- C1 adds a `memory_activations` substrate and bridges retrieval observations into activation rows.
+
 ### Objective
 
 Add the concept of activation without changing prompt-time retrieval ranking.
@@ -45,6 +51,8 @@ Prefer the simplest path that keeps v0.1.41 observation output compatible.
 ### Acceptance
 
 - Existing observation commands keep their output contract.
+- Retrieval observations automatically create local activation evidence for selected refs.
+- Empty retrievals create `empty_retrieval` activation rows as negative evidence.
 - Activation events are local-only and secret-safe.
 - No retrieval ranking change.
 - Empty retrievals can still be represented as useful negative evidence.
