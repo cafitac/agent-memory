@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 11:10 KST
+Last updated: 2026-05-01 11:37 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.39까지 배포/Hermes QA가 완료됐고, 현재는 Priority 5 dogfood/noise monitoring에서 v0.1.39 dogfood 결과를 바탕으로 `observations review-candidates`의 JSON 계약을 더 운영 친화적으로 다듬는 slice를 진행 중이야. 브랜치는 `feat/observation-review-temporal`, worktree는 `/Users/reddit/Project/agent-memory/.worktrees/observation-review-temporal`야. 목표는 review-candidates 결과에 top-level count, per-ref observation window, fact status-history summary를 추가해 historical injections와 현재 lifecycle 상태를 더 쉽게 구분하는 것이다. 자동 cleanup/mutation은 여전히 하지 않는다.
+agent-memory는 v0.1.40까지 배포/Hermes QA가 완료됐고, 현재는 Priority 5 dogfood/noise monitoring에서 empty retrieval/high empty ratio 진단을 강화하는 read-only slice를 진행 중이야. 브랜치는 `feat/empty-retrieval-diagnostics`, worktree는 `/Users/reddit/Project/agent-memory/.worktrees/empty-retrieval-diagnostics`야. 목표는 `observations empty-diagnostics`를 추가해 empty-heavy observation을 surface/scope/status filter별로 묶고, scope mismatch나 승인된 memory coverage 부족을 사람이 안전하게 판단하게 하는 것이다. 자동 cleanup/mutation은 여전히 하지 않는다.
 
 ## Current repo state
 
@@ -32,17 +32,17 @@ Expected GitHub identity:
 
 Verified before this slice:
 
-- latest completed release: `v0.1.39`
-- v0.1.39 added read-only `agent-memory observations review-candidates` and completed published smoke/Hermes runtime QA.
-- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.39/.venv/bin/python -m agent_memory.api.cli hermes-pre-llm-hook ...` against `/Users/reddit/.agent-memory/memory.db`.
+- latest completed release: `v0.1.40`
+- v0.1.40 added observation windows/counts/status-history summaries to review-candidates and completed published smoke/Hermes runtime QA.
+- local Hermes hook uses `/Users/reddit/.agent-memory/runtime/v0.1.40/.venv/bin/python -m agent_memory.api.cli hermes-pre-llm-hook ...` against `/Users/reddit/.agent-memory/memory.db`.
 - root checkout was clean on `main...origin/main` except local-only untracked state.
 - open PRs were `[]`.
 
 Active slice/worktree:
 
-- branch: `feat/observation-review-temporal`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/observation-review-temporal`
-- intended release after merge: likely `v0.1.40`
+- branch: `feat/empty-retrieval-diagnostics`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/empty-retrieval-diagnostics`
+- intended release after merge: likely `v0.1.41`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -54,63 +54,76 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## Current slice: observation review temporal summaries
+## Current slice: empty retrieval diagnostics
 
 Goal:
 
 - Keep dogfood/noise monitoring read-only.
-- Make `observations review-candidates` easier to consume from local dogfood output.
-- Add compact count/window/history summaries without exposing raw user queries and without mutating memory.
+- Make high empty retrieval ratio actionable without storing or emitting raw user queries.
+- Diagnose empty-heavy segments by surface, preferred scope, and retrieval status filter before changing rankers or adding graph traversal.
 
 Implemented so far in the active worktree:
 
-- `observations audit` top refs now include `observation_window`:
-  - `first_observation_id`
-  - `first_observed_at`
-  - `latest_observation_id`
-  - `latest_observed_at`
-- `observations review-candidates` now includes top-level:
+- New CLI command:
+  - `agent-memory observations empty-diagnostics <db_path> --limit 200 --top 10 --high-empty-threshold 0.5`
+- Output contract:
+  - `kind: retrieval_empty_diagnostics`
+  - `read_only: true`
   - `observation_count`
-  - `candidate_count`
-- Each review candidate now includes:
-  - the propagated `observation_window`
-  - `status_history_summary.transition_count`
-  - `status_history_summary.latest_transition`
+  - `empty_retrieval_count`
+  - `empty_retrieval_ratio`
+  - `quality_warnings`
+  - top-level `observation_window`
+  - `empty_by_surface[]`
+  - `empty_by_preferred_scope[]`
+  - `empty_by_status_filter[]`
+  - `suggested_next_steps`
+- Segment entries include:
+  - segment key (`surface`, `preferred_scope`, or `statuses`)
+  - `total_count`
+  - `empty_count`
+  - `empty_ratio`
+  - `signals`, currently `high_empty_segment` when above threshold
+  - `sample_observation_ids`
+  - `observation_window`
+- Secret-safety preserved:
+  - no raw query text
+  - no query previews
+  - no prompt content
 - Docs updated:
   - `README.md`
   - `docs/hermes-dogfood.md`
 - Tests updated in `tests/test_cli.py`:
-  - audit regression asserts per-ref observation window.
-  - review-candidates regression asserts top-level counts and status history summary.
+  - new regression asserts empty diagnostics segment grouping, read-only shape, next-step hints, and no secret leakage from raw query strings.
 
 Verification so far:
 
 - RED confirmed:
-  - focused tests failed on missing `observation_window` and top-level `observation_count`.
+  - focused test initially failed because `empty-diagnostics` parser choice was missing.
 - GREEN focused:
-  - `TMPDIR=$PWD/.tmp-test uv run pytest tests/test_cli.py::test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_without_raw_queries tests/test_cli.py::test_python_module_cli_observations_review_candidates_explains_top_refs_without_mutation_or_raw_queries -q`
-  - `2 passed`
+  - `TMPDIR=$PWD/.tmp-test uv run pytest tests/test_cli.py::test_python_module_cli_observations_empty_diagnostics_groups_empty_segments_without_raw_queries -q`
+  - `1 passed`
 
 Remaining before PR:
 
-1. Run broader/full local verification:
-   - focused CLI tests around audit/review-candidates
+1. Run broader focused CLI tests around observations audit/review-candidates/empty-diagnostics.
+2. Run full local verification:
    - `uv run pytest tests/ -q`
    - `uv run python scripts/check_release_metadata.py`
    - `uv run python scripts/smoke_release_readiness.py`
    - `npm pack --dry-run`
    - `git diff --check`
    - `node --check bin/agent-memory.js`
-2. Run real local DB smoke for `observations review-candidates` and verify the new fields exist.
-3. Run static diff secret scan.
-4. Create PR, watch CI, merge, follow release-sync/publish/published smoke/Hermes QA.
-5. After v0.1.40 install, repeat Hermes hook doctor and installed `observations review-candidates` against the existing local DB.
+3. Run real local DB smoke for `observations empty-diagnostics` and verify no raw query fields appear.
+4. Run static diff secret scan.
+5. Create PR, watch CI, merge, follow release-sync/publish/published smoke/Hermes QA.
+6. After v0.1.41 install, repeat Hermes hook doctor and installed `observations empty-diagnostics` against the existing local DB.
 
 ## Next natural slice after this one
 
-After the review-candidates contract is released and dogfooded, continue Priority 5 by either:
+After empty retrieval diagnostics are released and dogfooded, continue Priority 5 by either:
 
-1. improving retrieval diagnostics for empty retrieval/high empty ratio, or
-2. adding an explicit human review cadence/checklist around candidate reports.
+1. adding an explicit human review cadence/checklist around audit/review-candidates/empty-diagnostics, or
+2. improving candidate report UX further by bundling suggested follow-up commands into a richer read-only triage report.
 
-Avoid automatic cleanup/deprecation until the review candidate workflow has been used on real local data for a while.
+Avoid automatic cleanup/deprecation until the review and diagnostics workflow has been used on real local data for a while.

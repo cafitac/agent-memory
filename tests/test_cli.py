@@ -385,6 +385,122 @@ def test_python_module_cli_observations_review_candidates_explains_top_refs_with
     assert "abc123" not in review_result.stdout
 
 
+def test_python_module_cli_observations_empty_diagnostics_groups_empty_segments_without_raw_queries(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "observation-empty-diagnostics.db"
+    initialize_database(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for secret_query in (
+        "no matching alpha sensitive marker SUPERSECRET",
+        "no matching beta sensitive marker ABC123",
+    ):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                secret_query,
+                "--preferred-scope",
+                "project:missing-scope",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Empty diagnostics hit target phrase is EMPTY_DIAG_OK.",
+        metadata={"project": "empty-diagnostics"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Empty diagnostics",
+        predicate="target_phrase",
+        object_ref_or_value="EMPTY_DIAG_OK",
+        evidence_ids=[source.id],
+        scope="project:empty-diagnostics",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hit_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the empty diagnostics target phrase?",
+            "--preferred-scope",
+            "project:empty-diagnostics",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert hit_result.returncode == 0, hit_result.stderr
+
+    diagnostics_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "empty-diagnostics",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--high-empty-threshold",
+            "0.5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert diagnostics_result.returncode == 0, diagnostics_result.stderr
+    payload = json.loads(diagnostics_result.stdout)
+    assert payload["kind"] == "retrieval_empty_diagnostics"
+    assert payload["read_only"] is True
+    assert payload["observation_count"] == 3
+    assert payload["empty_retrieval_count"] == 2
+    assert payload["empty_retrieval_ratio"] == 0.6667
+    assert payload["empty_by_surface"][0]["surface"] == "cli-test"
+    assert payload["empty_by_surface"][0]["empty_count"] == 2
+    scope_segment = payload["empty_by_preferred_scope"][0]
+    assert scope_segment["preferred_scope"] == "project:missing-scope"
+    assert scope_segment["empty_count"] == 2
+    assert scope_segment["total_count"] == 2
+    assert scope_segment["empty_ratio"] == 1.0
+    assert scope_segment["signals"] == ["high_empty_segment"]
+    assert scope_segment["sample_observation_ids"]
+    assert scope_segment["observation_window"]["first_observation_id"] <= scope_segment["observation_window"]["latest_observation_id"]
+    assert payload["suggested_next_steps"] == [
+        "Run observations audit to compare empty vs non-empty retrieval surfaces.",
+        "Check preferred scope values for scope mismatches before changing ranking.",
+        "Add or approve memories only after confirming the missing queries represent durable user needs.",
+    ]
+    assert "SUPERSECRET" not in diagnostics_result.stdout
+    assert "ABC123" not in diagnostics_result.stdout
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)
