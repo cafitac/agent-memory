@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 14:41 KST
+Last updated: 2026-05-01 15:23 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.44까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B2 `traces record/list` read-safe CLI를 구현하는 단계야. Stage A baseline과 Stage B / PR B1 `experience_traces` storage substrate는 완료됐다. 이번 B2는 수동 sanitized trace record/list CLI만 추가하고, Hermes trace auto-write/default retrieval 변화는 다음 PR로 미룬다.
+agent-memory는 v0.1.45까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage B / PR B3 `hermes-pre-llm-hook --record-trace` opt-in trace recording을 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces` storage substrate, Stage B / PR B2 `traces record/list` read-safe CLI는 완료됐다. 이번 B3는 Hermes real turn trace recording을 명시 opt-in으로만 추가하고, raw prompt 저장/default retrieval 변화/long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -32,22 +32,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.44`
-- v0.1.44 added the storage-only `experience_traces` substrate.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.44/.venv/bin/agent-memory`.
+- `v0.1.45`
+- v0.1.45 added manual sanitized `traces record/list` CLI.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.45/.venv/bin/agent-memory`.
 
-Current local PR B2 modifications:
+Current local PR B3 modifications:
 
+- `src/agent_memory/integrations/hermes_hooks.py`
+  - Adds `record_trace` option for `HermesPreLlmHookOptions` and `HermesHookConfigSnippetOptions`.
+  - Records one `experience_traces` row only when `--record-trace` is explicitly enabled.
+  - Stores hash-only turn fingerprints, hashed session refs, safe metadata, and related retrieved memory refs.
+  - Skips synthetic Hermes doctor/test payloads and swallows trace write failures.
 - `src/agent_memory/api/cli.py`
-  - Adds `traces record` and `traces list` subcommands.
-  - `traces record` is an explicit manual write path; it hashes sanitized `--summary` when `--content-sha256` is omitted.
-  - `traces list` is read-only JSON with `--surface`, `--event-kind`, and `--scope` filters.
-- `src/agent_memory/storage/sqlite.py`
-  - Extends `list_experience_traces(...)` with optional filters for surface/event kind/scope.
+  - Adds `--record-trace` to `hermes-pre-llm-hook`, `hermes-hook-config-snippet`, `hermes-install-hook`, and `hermes-bootstrap`.
 - `tests/test_cli.py`
-  - Adds CLI coverage for record/list, empty DB output, filtering, and raw metadata stripping.
+  - Adds coverage for default no-trace behavior, opt-in trace recording, synthetic skip, and non-blocking trace write failure.
 - `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/roadmap-v0.md`, `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`, `.dev/status/current-handoff.md`
-  - Document B2 as explicit local/manual trace dogfood only.
+  - Document B2 complete and B3 as conservative opt-in only.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -126,14 +127,14 @@ Hard guardrails:
 
 ## Next best slice
 
-PR B2: Add `traces record` and `traces list` read-safe CLI.
+PR B3: Connect Hermes hook to trace recording as conservative opt-in.
 
 Before acting, read:
 
 1. `.dev/status/current-handoff.md`
 2. `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
-3. `src/agent_memory/api/cli.py`
-4. `src/agent_memory/storage/sqlite.py`
+3. `src/agent_memory/integrations/hermes_hooks.py`
+4. `src/agent_memory/api/cli.py`
 5. `tests/test_cli.py`
 
 Suggested first commands next session:
@@ -142,8 +143,9 @@ Suggested first commands next session:
 cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git diff --check
-HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'traces_record or traces_list or experience_trace'
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py -q -k 'hermes_pre_llm_hook and trace'
+HOME=/Users/reddit .venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q
 HOME=/Users/reddit .venv/bin/python -m pytest -q
 ```
 
-If the user asks to proceed after that, finish B2 verification, create the PR, merge/release after CI, and run published-artifact smoke. Because B2 adds CLI behavior but does not enable Hermes hook trace writes, Hermes QA should verify the existing v0.1.44 hook path after installing the new release.
+If the user asks to proceed after that, finish B3 verification, create the PR, merge/release after CI, and run published-artifact smoke. Because B3 touches Hermes runtime behavior, install the new release runtime with `/usr/local/bin/python3.11`, update `/Users/reddit/.hermes/config.yaml`, verify default hook behavior, run an explicit `--record-trace` direct smoke on a temp DB, run real Hermes E2E expecting `DIRECT_CMD_MEMORY_LAYER_OK`, and run `HOME=/Users/reddit hermes hooks doctor`.

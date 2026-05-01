@@ -65,15 +65,16 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: SQLite migration/model/storage APIs for trace id, surface, scope, event kind, timestamp, redaction/hash metadata, summary/signals, TTL/retention fields, and source/provenance refs.
   - Acceptance: tests prove raw prompt text is not required or emitted; existing DBs migrate lazily; normal retrieval is unchanged.
 
-- [ ] PR B2: Add `traces record` and `traces list` read-safe CLI
-  - Status: in progress on branch `feat/traces-cli`.
+- [x] PR B2: Add `traces record` and `traces list` read-safe CLI
+  - Status: completed in v0.1.45 via PR #57.
   - Goal: let developers create and inspect sanitized traces manually before adapters write them.
   - Scope: CLI commands for recording synthetic/sanitized events and listing grouped traces with JSON output.
   - Acceptance: list output redacts or omits raw content, supports scope/surface filters, and has stable JSON suitable for later reports.
 
 - [ ] PR B3: Connect Hermes hook to trace recording as conservative opt-in
+  - Status: in progress on branch `feat/hermes-trace-opt-in`.
   - Goal: record lightweight Hermes turn traces only when explicitly enabled.
-  - Scope: Hermes adapter config/env flag, non-blocking write path, synthetic doctor/test skip behavior, docs.
+  - Scope: `--record-trace` flag for hook/snippet/install/bootstrap, non-blocking write path, synthetic doctor/test skip behavior, docs.
   - Acceptance: hook failures never block Hermes; doctor/test payloads do not pollute traces; local E2E confirms enabled traces are recorded and disabled mode is unchanged.
 
 - [ ] PR B4: Add trace retention and local-only safety guardrails

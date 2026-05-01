@@ -8,8 +8,9 @@ from pathlib import Path
 from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
-from agent_memory.integrations.hermes_hooks import scope_from_cwd
-from agent_memory.storage.sqlite import initialize_database, insert_relation, update_memory_status
+from agent_memory.integrations import hermes_hooks
+from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
+from agent_memory.storage.sqlite import initialize_database, insert_relation, list_experience_traces, update_memory_status
 
 
 def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood(tmp_path: Path) -> None:
@@ -1831,6 +1832,249 @@ def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_
     assert observation["surface"] == "hermes-pre-llm-hook"
     assert observation["retrieved_memory_refs"] == [f"fact:{fact.id}"]
     assert observation["metadata"] == {"hook_event_name": "pre_llm_call"}
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_does_not_record_trace_by_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-default-no-trace.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Default Hermes trace recording should remain disabled while retrieval still works.",
+        metadata={"project": "default-no-trace"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Default trace recording",
+        predicate="posture",
+        object_ref_or_value="disabled",
+        evidence_ids=[source.id],
+        scope="project:default-no-trace",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "real-session-default-no-trace",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "What is the default trace recording posture?",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:default-no-trace",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Default trace recording" in json.loads(result.stdout)["context"]
+    assert list_experience_traces(db_path) == []
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_records_trace_when_enabled(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-opt-in-trace.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Opt-in Hermes trace recording stores hash-only turn traces.",
+        metadata={"project": "opt-in-trace"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Opt-in trace recording",
+        predicate="stores",
+        object_ref_or_value="hash-only turn traces",
+        evidence_ids=[source.id],
+        scope="project:opt-in-trace",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    secret_prompt = "What does opt-in trace recording store? token=SHOULD_NOT_APPEAR"
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "real-session-opt-in-trace",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": secret_prompt,
+            "platform": "cli",
+            "model": "gpt-test",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:opt-in-trace",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+            "--record-trace",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Opt-in trace recording" in json.loads(result.stdout)["context"]
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.surface == "hermes-pre-llm-hook"
+    assert trace.event_kind == "turn"
+    assert trace.scope == "project:opt-in-trace"
+    assert trace.session_ref is not None
+    assert "real-session-opt-in-trace" not in trace.session_ref
+    assert trace.content_sha256 != secret_prompt
+    assert trace.summary is None
+    assert trace.related_memory_refs == [f"fact:{fact.id}"]
+    trace_json = trace.model_dump_json()
+    assert "SHOULD_NOT_APPEAR" not in trace_json
+    assert "user_message" not in trace_json
+    assert trace.metadata == {
+        "hook_event_name": "pre_llm_call",
+        "platform": "cli",
+        "model": "gpt-test",
+        "trace_recording": "opt_in",
+    }
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_skips_synthetic_doctor_trace_even_when_enabled(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-synthetic-trace.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Synthetic hook doctor trace rows should not be recorded.",
+        metadata={"project": "synthetic-trace"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Weather",
+        predicate="qa_marker",
+        object_ref_or_value="SYNTHETIC_TRACE_SKIP",
+        evidence_ids=[source.id],
+        scope="project:synthetic-trace",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "test-session",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "What is the weather?",
+            "conversation_history": [],
+            "is_first_turn": True,
+            "model": "gpt-4",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:synthetic-trace",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+            "--record-trace",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SYNTHETIC_TRACE_SKIP" in json.loads(result.stdout)["context"]
+    assert list_experience_traces(db_path) == []
+
+
+
+def test_hermes_pre_llm_hook_trace_write_failure_is_non_blocking(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "module-cli-hermes-trace-failure.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Hermes trace write failures should not block memory context injection.",
+        metadata={"project": "trace-failure"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Trace write failures",
+        predicate="behavior",
+        object_ref_or_value="non-blocking",
+        evidence_ids=[source.id],
+        scope="project:trace-failure",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    def fail_insert(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("trace write unavailable")
+
+    monkeypatch.setattr(hermes_hooks, "insert_experience_trace", fail_insert)
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="trace-failure-session",
+            cwd=str(tmp_path),
+            extra={"user_message": "What should trace write failures do?", "platform": "cli"},
+        ),
+        HermesPreLlmHookOptions(
+            db_path=db_path,
+            preferred_scope="project:trace-failure",
+            top_k=1,
+            max_prompt_lines=8,
+            record_trace=True,
+        ),
+    )
+
+    assert "context" in response
+    assert "Trace write failures" in response["context"]
+    assert list_experience_traces(db_path) == []
 
 
 
