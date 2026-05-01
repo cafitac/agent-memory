@@ -123,6 +123,16 @@ If a dedicated command feels premature, create a documented script under `script
 - Regression test with an empty DB or no observations.
 - Regression test that failures in optional Hermes metadata collection degrade gracefully.
 
+### Implementation status
+
+Implemented in PR A2:
+
+- Added `agent-memory dogfood baseline <db> --output-json` as a dedicated read-only CLI report.
+- Reused existing observation audit, empty diagnostics, and review-candidate logic instead of adding a new telemetry store.
+- Added memory status counts, DB path/schema metadata, sanitized Hermes doctor metadata, and a non-executed local E2E marker.
+- Kept secret-safety constraints: no raw queries, query previews, prompt text, full Hermes config, environment secrets, or bootstrap command in the baseline output.
+- Added CLI regression tests for a populated observation DB and an empty/no-observation DB.
+
 ### Verification
 
 Focused tests plus full test suite. If the command lands in the package CLI, include release readiness and npm dry-run checks. If Hermes behavior is untouched, real Hermes E2E is optional but a local run of the baseline command against `/Users/reddit/.agent-memory/memory.db` is required.

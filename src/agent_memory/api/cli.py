@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from agent_memory import __version__
 from agent_memory.adapters import (
     HermesVerificationResult,
     apply_hermes_verification_results,
@@ -42,6 +43,7 @@ from agent_memory.core.retrieval_eval import (
     render_retrieval_eval_text_report,
 )
 from agent_memory.storage.sqlite import (
+    connect,
     get_fact,
     get_memory_status,
     initialize_database,
@@ -478,6 +480,119 @@ def _review_candidates_from_observations(
     }
 
 
+def _memory_status_counts(db_path: Path) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
+    with connect(db_path) as connection:
+        for payload_name, table_name in (
+            ("facts", "facts"),
+            ("procedures", "procedures"),
+            ("episodes", "episodes"),
+        ):
+            rows = connection.execute(
+                f"SELECT status, COUNT(*) AS count FROM {table_name} GROUP BY status ORDER BY status"
+            ).fetchall()
+            counts[payload_name] = {row["status"]: row["count"] for row in rows}
+    return counts
+
+
+def _database_baseline_payload(db_path: Path) -> dict[str, Any]:
+    resolved_path = db_path.expanduser().resolve(strict=False)
+    payload: dict[str, Any] = {
+        "path": str(resolved_path),
+        "path_exists": resolved_path.exists(),
+        "schema_user_version": None,
+    }
+    if resolved_path.exists():
+        with connect(resolved_path) as connection:
+            payload["schema_user_version"] = connection.execute("PRAGMA user_version").fetchone()[0]
+    return payload
+
+
+def _hermes_baseline_payload(args: argparse.Namespace) -> dict[str, Any]:
+    doctor = diagnose_hermes_hook_setup(
+        HermesHookInstallOptions(
+            config_path=args.config_path,
+            snippet_options=HermesHookConfigSnippetOptions(
+                db_path=args.db_path,
+                python_executable=args.python_executable,
+                limit=args.hook_limit,
+                preferred_scope=args.preferred_scope,
+                top_k=args.top_k or 1,
+                max_prompt_lines=args.max_prompt_lines,
+                max_prompt_chars=args.max_prompt_chars,
+                max_prompt_tokens=args.max_prompt_tokens,
+                max_verification_steps=args.max_verification_steps,
+                max_alternatives=args.max_alternatives,
+                max_guidelines=args.max_guidelines,
+                include_reason_codes=not args.no_reason_codes,
+                timeout=args.timeout or 10,
+            ),
+        )
+    ).model_dump(mode="json")
+    doctor.pop("recommended_command", None)
+    return doctor
+
+
+def _signal_review_candidates_for_baseline(review_candidates: dict[str, Any]) -> dict[str, Any]:
+    signal_candidates = [candidate for candidate in review_candidates["candidates"] if candidate["signals"]]
+    return {
+        "kind": review_candidates["kind"],
+        "read_only": review_candidates["read_only"],
+        "observation_count": review_candidates["observation_count"],
+        "candidate_count": len(signal_candidates),
+        "candidates": signal_candidates,
+    }
+
+
+def _dogfood_baseline_payload(args: argparse.Namespace) -> dict[str, Any]:
+    audit = _audit_retrieval_observations(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+    )
+    empty_diagnostics = _empty_retrieval_diagnostics(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        high_empty_threshold=args.high_empty_threshold,
+    )
+    review_candidates = _signal_review_candidates_for_baseline(
+        _review_candidates_from_observations(
+            args.db_path,
+            limit=args.limit,
+            top=args.top,
+            frequent_threshold=args.frequent_threshold,
+        )
+    )
+    suggested_next_steps = []
+    if "no_observations" in audit["quality_warnings"]:
+        suggested_next_steps.append("Run agent-memory retrieve with --observe from Hermes or CLI surfaces before judging retrieval quality.")
+    if audit["empty_retrieval_count"]:
+        suggested_next_steps.append("Inspect empty_diagnostics before adding memories or changing ranking.")
+    if review_candidates["candidate_count"]:
+        suggested_next_steps.append("Review signal-bearing injected memories for stale status, replacement chains, or graph context.")
+    if not suggested_next_steps:
+        suggested_next_steps.append("Keep collecting observations and compare this baseline after retrieval or hook changes.")
+
+    return {
+        "kind": "dogfood_baseline",
+        "read_only": True,
+        "agent_memory_version": __version__,
+        "database": _database_baseline_payload(args.db_path),
+        "memory_counts": _memory_status_counts(args.db_path),
+        "observation_summary": audit,
+        "empty_diagnostics": empty_diagnostics,
+        "review_candidates": review_candidates,
+        "hermes": _hermes_baseline_payload(args),
+        "local_e2e_marker": {
+            "target_phrase": "not_executed",
+            "reason": "baseline is read-only; run a separate local E2E smoke for write-path validation",
+        },
+        "suggested_next_steps": suggested_next_steps,
+    }
+
+
 def _inspect_relation_graph(db_path: Path, *, start_ref: str, depth: int, limit: int) -> dict[str, Any]:
     if depth < 0:
         raise ValueError("graph inspect depth must be >= 0")
@@ -804,6 +919,32 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_review_candidates_parser.add_argument("--limit", type=int, default=200)
     observations_review_candidates_parser.add_argument("--top", type=int, default=10)
     observations_review_candidates_parser.add_argument("--frequent-threshold", type=int, default=3)
+
+    dogfood_parser = subparsers.add_parser("dogfood")
+    dogfood_subparsers = dogfood_parser.add_subparsers(dest="dogfood_action", required=True)
+    dogfood_baseline_parser = dogfood_subparsers.add_parser(
+        "baseline",
+        help="Build a read-only local dogfood baseline report for observations, memory counts, and Hermes hook setup.",
+    )
+    dogfood_baseline_parser.add_argument("db_path", type=Path)
+    dogfood_baseline_parser.add_argument("--output-json", action="store_true", help="Emit machine-readable JSON.")
+    dogfood_baseline_parser.add_argument("--limit", type=int, default=200)
+    dogfood_baseline_parser.add_argument("--top", type=int, default=10)
+    dogfood_baseline_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_baseline_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
+    dogfood_baseline_parser.add_argument("--config-path", type=Path, default=Path.home() / ".hermes" / "config.yaml")
+    dogfood_baseline_parser.add_argument("--python-executable")
+    dogfood_baseline_parser.add_argument("--hook-limit", type=int, default=5)
+    dogfood_baseline_parser.add_argument("--preferred-scope")
+    dogfood_baseline_parser.add_argument("--top-k", type=int)
+    dogfood_baseline_parser.add_argument("--max-prompt-lines", type=int)
+    dogfood_baseline_parser.add_argument("--max-prompt-chars", type=int)
+    dogfood_baseline_parser.add_argument("--max-prompt-tokens", type=int)
+    dogfood_baseline_parser.add_argument("--max-verification-steps", type=int)
+    dogfood_baseline_parser.add_argument("--max-alternatives", type=int)
+    dogfood_baseline_parser.add_argument("--max-guidelines", type=int)
+    dogfood_baseline_parser.add_argument("--no-reason-codes", action="store_true")
+    dogfood_baseline_parser.add_argument("--timeout", type=int)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -1228,6 +1369,12 @@ def main() -> None:
             )
             return
         raise ValueError(f"Unsupported observations action: {args.observations_action}")
+
+    if args.command == "dogfood":
+        if args.dogfood_action == "baseline":
+            print(json.dumps(_dogfood_baseline_payload(args), indent=2))
+            return
+        raise ValueError(f"Unsupported dogfood action: {args.dogfood_action}")
 
     if args.command == "graph":
         if args.graph_action == "inspect":
