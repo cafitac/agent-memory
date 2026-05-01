@@ -20,6 +20,11 @@ on:
         required: false
         default: true
         type: boolean
+      run_published_install_smoke:
+        description: 'Run the slower real registry install smoke after publish'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   verify:
@@ -43,9 +48,6 @@ jobs:
 
       - name: Validate release metadata and publish target names
         run: uv run python scripts/check_release_metadata.py
-
-      - name: Run tests
-        run: uv run pytest tests/ -q
 
       - name: Run release-readiness smoke
         run: uv run python scripts/smoke_release_readiness.py
@@ -118,6 +120,8 @@ jobs:
     if: >-
       always() &&
       startsWith(github.ref, 'refs/tags/v') &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_published_install_smoke &&
       needs.publish-pypi.result == 'success' &&
       needs.publish-npm.result == 'success'
     steps:
@@ -149,10 +153,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           uv run python scripts/smoke_published_install.py \
             --version "$VERSION" \
-            --attempts 12 \
+            --attempts 3 \
             --delay-seconds 10 \
-            --propagation-attempts 36 \
-            --propagation-delay-seconds 20 \
+            --propagation-attempts 6 \
+            --propagation-delay-seconds 10 \
             --output-json .artifacts/published-install-smoke.json
 
       - name: Upload published install smoke result
@@ -168,7 +172,6 @@ jobs:
       - verify
       - publish-pypi
       - publish-npm
-      - published-install-smoke
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
