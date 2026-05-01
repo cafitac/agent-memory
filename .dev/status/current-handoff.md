@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-01 17:54 KST
+Last updated: 2026-05-01 21:12 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.48까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C2 `activations summary` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations` substrate는 완료됐다. C2는 activation evidence를 요약해서 반복 활성화 ref, empty retrieval negative evidence, surface/scope/status 분포를 보여주되 raw query/prompt 저장, retrieval ranking 변경, memory status mutation, long-term memory 자동 생성은 하지 않는다.
+agent-memory는 v0.1.49까지 배포/Hermes QA가 완료됐고, 현재는 graph-based memory consolidation runtime 로드맵의 Stage C / PR C3 `activations reinforcement-report` read-only CLI를 구현하는 단계야. Stage A baseline, Stage B / PR B1 `experience_traces`, B2 `traces record/list`, B3 Hermes `--record-trace`, B4 `traces retention-report`, Stage C / PR C1 `memory_activations` substrate, C2 `activations summary`는 완료됐다. C3는 activation evidence를 기반으로 반복/강도/status trust/surface-scope diversity/graph connectivity와 deprecated/disputed/missing/supersession penalty를 설명 가능한 score로 보여주되 raw query/prompt 저장, retrieval ranking 변경, memory status mutation, long-term memory 자동 생성은 하지 않는다.
 
 ## Current repo state
 
@@ -33,22 +33,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.48`
-- v0.1.48 added secret-safe `memory_activations` rows bridged from retrieval observations.
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.48/.venv/bin/agent-memory`.
+- `v0.1.49`
+- v0.1.49 added read-only `agent-memory activations summary`.
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.49/.venv/bin/agent-memory`.
 
-Current local PR C2 modifications:
+Current local PR C3 modifications:
 
-- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/activation-summary` on `feat/activation-summary`
+- Branch/worktree: `/Users/reddit/Project/agent-memory/.worktrees/reinforcement-report` on `feat/reinforcement-report`
 - `src/agent_memory/api/cli.py`
-  - Adds `agent-memory activations summary <db> --limit 200 --top 20 --frequent-threshold 3`.
-  - Emits read-only JSON with `kind: memory_activation_summary`.
-  - Includes activation count/window, activation kind counts, surfaces/scopes, status summary, empty-retrieval evidence, top refs, and advisory signals.
-  - Signals include `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, `deprecated_activation`, `disputed_activation`, and `missing_memory_ref`.
+  - Adds `agent-memory activations reinforcement-report <db> --limit 200 --top 20 --frequent-threshold 3`.
+  - Emits read-only JSON with `kind: memory_reinforcement_report`.
+  - Includes bounded scoring contract, factor breakdowns, negative evidence, candidate signals, sample activation/observation ids, and activation windows.
+  - Factor weights: repetition 0.35, strength 0.2, status_trust 0.2, surface_scope_diversity 0.1, connectivity 0.15.
+  - Penalties: deprecated 0.4, disputed 0.3, missing 0.2, supersession/replacement 0.25.
 - `tests/test_memory_activations.py`
-  - Adds CLI tests for activation summary output, negative evidence, deprecated ref flagging, privacy, and lazy migration from DBs missing `memory_activations`.
+  - Adds CLI tests for reinforcement score output, deterministic factor breakdowns, connectivity, deprecated penalty flagging, privacy, and lazy migration from DBs missing `memory_activations`.
 - `README.md`, `docs/hermes-dogfood.md`, `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`, `.dev/status/current-handoff.md`
-  - Document C2 in progress and the read-only dogfood command.
+  - Document C3 in progress and the read-only dogfood command.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -84,8 +85,8 @@ The PR ladder in `.dev/roadmap/roadmap-v0.md` is the canonical sequence unless e
    - PR B4: trace retention/safety guardrails (done in v0.1.47)
 3. Stage C: activation and reinforcement signals
    - PR C1: activation events (done in v0.1.48)
-   - PR C2: activation summary CLI (current)
-   - PR C3: reinforcement score report
+   - PR C2: activation summary CLI (done in v0.1.49)
+   - PR C3: reinforcement score report (current)
    - PR C4: decay risk score report
 4. Stage D: consolidation candidates before mutation
 5. Stage E: reviewed promotion into long-term memory
@@ -107,14 +108,14 @@ Hard guardrails:
 
 ## Next best slice
 
-Finish PR C2: activation summary CLI.
+Finish PR C3: reinforcement score report CLI.
 
-C2 is intentionally read-only:
+C3 is intentionally read-only:
 
-- summarize local `memory_activations` rows
-- show repeated `retrieved` refs as likely reinforcement candidates when approved/frequent
+- summarize local `memory_activations` rows into explainable score candidates
+- show repeated, approved, connected refs as strong reinforcement candidates
+- show deprecated/disputed/missing/superseded refs as penalties, not auto-actions
 - show `empty_retrieval` rows as negative evidence, not a cleanup instruction
-- flag deprecated/disputed/missing refs as forensic signals
 - avoid raw query/prompt/query_preview/transcript output
 - avoid retrieval ranking changes and memory status mutation
 
@@ -128,6 +129,6 @@ git diff --check
 npm pack --dry-run
 ```
 
-Also run a temp DB CLI smoke for `agent-memory activations summary` and verify the output contains no raw query/secret strings.
+Also run a temp DB CLI smoke for `agent-memory activations reinforcement-report` and verify the output contains no raw query/secret strings.
 
 If this becomes a release, install the published artifact under `/Users/reddit/.agent-memory/runtime/vNEXT` using `/usr/local/bin/python3.11 -m venv`, update `/Users/reddit/.hermes/config.yaml`, and run the standard dogfood baseline/direct hook/Hermes E2E QA.
