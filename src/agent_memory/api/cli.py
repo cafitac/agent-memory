@@ -1095,6 +1095,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_pre_llm_hook_parser.add_argument("--max-alternatives", type=int)
     hermes_pre_llm_hook_parser.add_argument("--max-guidelines", type=int)
     hermes_pre_llm_hook_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_pre_llm_hook_parser.add_argument(
+        "--record-trace",
+        action="store_true",
+        help="Opt in to sanitized experience trace recording for real Hermes turns. Raw prompts are never stored.",
+    )
 
     hermes_hook_config_snippet_parser = subparsers.add_parser("hermes-hook-config-snippet")
     hermes_hook_config_snippet_parser.add_argument("db_path", type=Path)
@@ -1110,6 +1115,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_hook_config_snippet_parser.add_argument("--max-alternatives", type=int)
     hermes_hook_config_snippet_parser.add_argument("--max-guidelines", type=int)
     hermes_hook_config_snippet_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_hook_config_snippet_parser.add_argument(
+        "--record-trace",
+        action="store_true",
+        help="Include --record-trace in the rendered hook command for opt-in sanitized trace recording.",
+    )
     hermes_hook_config_snippet_parser.add_argument("--timeout", type=int)
 
     hermes_install_hook_parser = subparsers.add_parser("hermes-install-hook")
@@ -1127,6 +1137,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_install_hook_parser.add_argument("--max-alternatives", type=int)
     hermes_install_hook_parser.add_argument("--max-guidelines", type=int)
     hermes_install_hook_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_install_hook_parser.add_argument(
+        "--record-trace",
+        action="store_true",
+        help="Install the hook with opt-in sanitized experience trace recording enabled.",
+    )
     hermes_install_hook_parser.add_argument("--timeout", type=int)
 
     hermes_bootstrap_parser = subparsers.add_parser(
@@ -1152,6 +1167,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_bootstrap_parser.add_argument("--max-alternatives", type=int)
     hermes_bootstrap_parser.add_argument("--max-guidelines", type=int)
     hermes_bootstrap_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_bootstrap_parser.add_argument(
+        "--record-trace",
+        action="store_true",
+        help="Install the hook with opt-in sanitized experience trace recording enabled.",
+    )
     hermes_bootstrap_parser.add_argument("--timeout", type=int)
 
     hermes_doctor_parser = subparsers.add_parser(
@@ -1585,6 +1605,7 @@ def main() -> None:
                 max_alternatives=args.max_alternatives,
                 max_guidelines=args.max_guidelines,
                 include_reason_codes=not args.no_reason_codes,
+                record_trace=args.record_trace,
             ),
         )
         print(json.dumps(hook_response, indent=2))
@@ -1606,6 +1627,7 @@ def main() -> None:
                 max_alternatives=args.max_alternatives,
                 max_guidelines=args.max_guidelines,
                 include_reason_codes=not args.no_reason_codes,
+                record_trace=args.record_trace,
                 timeout=args.timeout,
             )
         )
@@ -1630,6 +1652,7 @@ def main() -> None:
                     max_alternatives=args.max_alternatives,
                     max_guidelines=args.max_guidelines,
                     include_reason_codes=not args.no_reason_codes,
+                    record_trace=args.record_trace,
                     timeout=args.timeout,
                 ),
             )

@@ -99,11 +99,11 @@ Exact argument names may change, but the CLI must make it obvious that raw trans
 
 ### Implementation status
 
-- In progress on branch `feat/traces-cli`.
-- Added RED tests in `tests/test_cli.py` for `traces record`, filtered `traces list`, empty list output, and raw metadata stripping.
-- Implemented `traces record` as an explicit manual write path only; if `--content-sha256` is omitted, the CLI hashes the sanitized `--summary` instead of accepting raw transcript input.
-- Implemented `traces list` as read-only JSON with `--surface`, `--event-kind`, and `--scope` filters.
-- Hermes hook trace writes remain disabled by default and are deferred to PR B3.
+- Completed in v0.1.45 via PR #57.
+- Added `traces record` as an explicit manual write path only; if `--content-sha256` is omitted, the CLI hashes the sanitized `--summary` instead of accepting raw transcript input.
+- Added `traces list` as read-only JSON with `--surface`, `--event-kind`, and `--scope` filters.
+- The command does not create long-term facts/episodes/procedures and does not alter retrieval ranking.
+- Hermes hook trace writes remain disabled by default and are handled as an explicit opt-in in PR B3.
 
 ## PR B3: Connect Hermes hook to trace recording as conservative opt-in
 
@@ -125,12 +125,15 @@ Let real Hermes turns create lightweight traces only when explicitly enabled, wh
 - Synthetic doctor/test payloads are skipped.
 - Trace write failure is swallowed/logged and does not fail the hook.
 
-### Acceptance
+### Implementation status
 
-- Disabled by default.
-- Non-blocking failures.
-- No raw prompts in trace rows or CLI output.
-- Local Hermes E2E still returns the QA marker.
+- In progress on branch `feat/hermes-trace-opt-in`.
+- Added `--record-trace` to `hermes-pre-llm-hook` and to hook snippet/install/bootstrap commands.
+- Default Hermes hook path still does not record traces.
+- Opt-in hook traces store hash-only turn fingerprints, hashed session refs, safe metadata (`hook_event_name`, `platform`, `model`, `trace_recording`), and related retrieved memory refs.
+- Synthetic Hermes doctor/test payloads are skipped even when `--record-trace` is present.
+- Trace write failures are swallowed so pre-LLM hook context injection remains non-blocking.
+- No default retrieval/ranking changes.
 
 ## PR B4: Add trace retention and local-only safety guardrails
 

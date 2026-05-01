@@ -11,8 +11,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent_memory.adapters import prepare_hermes_memory_context
+from agent_memory.core.models import MemoryPacket
 from agent_memory.core.retrieval import retrieve_memory_packet
-from agent_memory.storage.sqlite import initialize_database
+from agent_memory.storage.sqlite import initialize_database, insert_experience_trace
 
 
 def scope_from_cwd(cwd: str | Path | None) -> str | None:
@@ -75,6 +76,7 @@ class HermesPreLlmHookOptions(BaseModel):
     max_alternatives: int | None = None
     max_guidelines: int | None = None
     include_reason_codes: bool = True
+    record_trace: bool = False
 
 
 class HermesHookConfigSnippetOptions(BaseModel):
@@ -91,6 +93,7 @@ class HermesHookConfigSnippetOptions(BaseModel):
     max_alternatives: int | None = None
     max_guidelines: int | None = None
     include_reason_codes: bool = True
+    record_trace: bool = False
     timeout: int = 10
 
 
@@ -156,6 +159,8 @@ def build_hermes_hook_config_snippet(options: HermesHookConfigSnippetOptions) ->
         argv.extend(["--max-guidelines", str(options.max_guidelines)])
     if not options.include_reason_codes:
         argv.append("--no-reason-codes")
+    if options.record_trace:
+        argv.append("--record-trace")
 
     command = " ".join(shlex.quote(part) for part in argv)
     return "\n".join(
@@ -376,6 +381,61 @@ def load_hermes_shell_hook_payload(stdin_text: str | None = None) -> HermesShell
     return HermesShellHookPayload.model_validate(data)
 
 
+def _hashed_ref(prefix: str, value: str | None) -> str | None:
+    if value is None:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{prefix}:{digest}"
+
+
+def _memory_refs_from_packet(packet: MemoryPacket) -> list[str]:
+    refs: list[str] = []
+    for entry in packet.retrieval_trace:
+        ref = f"{entry.memory_type}:{entry.memory_id}"
+        if ref not in refs:
+            refs.append(ref)
+    return refs
+
+
+def _safe_hermes_trace_metadata(payload: HermesShellHookPayload) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "hook_event_name": payload.hook_event_name,
+        "trace_recording": "opt_in",
+    }
+    for key in ("platform", "model"):
+        value = payload.extra.get(key)
+        if isinstance(value, str) and value.strip():
+            metadata[key] = value.strip()
+    return metadata
+
+
+def _record_pre_llm_experience_trace(
+    *,
+    payload: HermesShellHookPayload,
+    options: HermesPreLlmHookOptions,
+    user_message: str,
+    effective_preferred_scope: str | None,
+    packet: MemoryPacket,
+) -> None:
+    if not options.record_trace or is_synthetic_hermes_doctor_payload(payload):
+        return
+    insert_experience_trace(
+        options.db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256=hashlib.sha256(user_message.encode("utf-8")).hexdigest(),
+        summary=None,
+        scope=effective_preferred_scope,
+        session_ref=_hashed_ref("session", payload.session_id),
+        related_memory_refs=_memory_refs_from_packet(packet),
+        retention_policy="ephemeral",
+        metadata=_safe_hermes_trace_metadata(payload),
+    )
+
+
 def build_pre_llm_hook_context(
     payload: HermesShellHookPayload,
     options: HermesPreLlmHookOptions,
@@ -414,6 +474,17 @@ def build_pre_llm_hook_context(
 
     if not context.prompt_text.strip():
         return {}
+
+    try:
+        _record_pre_llm_experience_trace(
+            payload=payload,
+            options=options,
+            user_message=user_message,
+            effective_preferred_scope=effective_preferred_scope,
+            packet=packet,
+        )
+    except Exception:
+        pass
 
     return {
         "context": "\n".join(
