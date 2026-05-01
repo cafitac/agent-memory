@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from agent_memory.api.cli import main
-from agent_memory.core.curation import approve_fact, create_candidate_fact
+from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.integrations.hermes_hooks import scope_from_cwd
 from agent_memory.storage.sqlite import initialize_database, insert_relation, update_memory_status
@@ -259,6 +259,120 @@ def test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_wi
     assert top_ref["sample_observation_ids"]
     assert "SUPERSECRET" not in audit_result.stdout
     assert "abc123" not in audit_result.stdout
+
+
+def test_python_module_cli_observations_review_candidates_explains_top_refs_without_mutation_or_raw_queries(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "observation-review-candidates.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Review candidate target phrase moved from OLD_VALUE to NEW_VALUE.",
+        metadata={"project": "observation-review"},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Review candidate",
+        predicate="target_phrase",
+        object_ref_or_value="OLD_VALUE",
+        evidence_ids=[source.id],
+        scope="project:observation-review",
+        confidence=0.7,
+    )
+    replacement_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Review candidate",
+        predicate="target_phrase",
+        object_ref_or_value="NEW_VALUE",
+        evidence_ids=[source.id],
+        scope="project:observation-review",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for secret_query in (
+        "What is the review candidate target phrase? password=SUPERSECRET",
+        "Repeat the review candidate target phrase token=abc123",
+    ):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                secret_query,
+                "--preferred-scope",
+                "project:observation-review",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    supersede_fact(
+        db_path=db_path,
+        superseded_fact_id=old_fact.id,
+        replacement_fact_id=replacement_fact.id,
+        reason="new target phrase replaced old one",
+        actor="test",
+        evidence_ids=[source.id],
+    )
+
+    review_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "observations",
+            "review-candidates",
+            str(db_path),
+            "--limit",
+            "50",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert review_result.returncode == 0, review_result.stderr
+    payload = json.loads(review_result.stdout)
+    assert payload["kind"] == "retrieval_observation_review_candidates"
+    assert payload["read_only"] is True
+    assert payload["observation_audit"]["kind"] == "retrieval_observation_audit"
+    assert payload["observation_audit"]["read_only"] is True
+    candidate = payload["candidates"][0]
+    assert candidate["memory_ref"] == f"fact:{old_fact.id}"
+    assert candidate["injection_count"] == 2
+    assert candidate["current_status"] == "deprecated"
+    assert candidate["signals"] == [
+        "frequently_injected",
+        "current_status_not_approved",
+        "has_replacement",
+        "has_graph_relations",
+    ]
+    assert candidate["review_explain"]["decision"]["visible_in_default_retrieval"] is False
+    assert candidate["review_explain"]["replacement_chain"]["superseded_by"][0]["replacement_fact_id"] == replacement_fact.id
+    assert candidate["graph_summary"]["edge_count"] == 1
+    assert candidate["commands"] == {
+        "review_explain": f"agent-memory review explain fact {db_path} {old_fact.id}",
+        "review_replacements": f"agent-memory review replacements fact {db_path} {old_fact.id}",
+        "graph_inspect": f"agent-memory graph inspect {db_path} fact:{old_fact.id} --depth 1",
+    }
+    assert "SUPERSECRET" not in review_result.stdout
+    assert "abc123" not in review_result.stdout
 
 
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:

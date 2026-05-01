@@ -48,9 +48,19 @@ Hermes pre-LLM hook retrievals write a secret-safe local observation row to the 
 ```bash
 agent-memory observations list ~/.agent-memory/memory.db --limit 20
 agent-memory observations audit ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
+agent-memory observations review-candidates ~/.agent-memory/memory.db --limit 200 --top 10 --frequent-threshold 3
 ```
 
 Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, whether retrieval is often empty, and whether any frequently injected refs are now deprecated/disputed/missing. The audit command is read-only and summarizes local observation rows without emitting raw query text or query previews. Keep this data local unless you intentionally export it.
+
+`observations review-candidates` is the next read-only step after audit. It keeps the same secret-safe observation summary, then expands each top ref into a forensic candidate:
+
+- fact refs include the same lifecycle explanation as `agent-memory review explain fact ...`.
+- replacement/supersedes chains are surfaced as candidate signals instead of mutating anything.
+- relation graph neighbors are summarized so you know when `agent-memory graph inspect ...` is worth running.
+- the JSON includes copy-paste follow-up commands for `review explain`, `review replacements`, and `graph inspect`.
+
+Do not treat review candidates as automatic cleanup recommendations. They are a short list for human review; approve/deprecate/supersede decisions should still be explicit curation actions.
 
 When the audit reports `quality_warnings`, treat them as QA signals rather than cleanup instructions:
 

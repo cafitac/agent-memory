@@ -125,14 +125,55 @@ def _status_counts_for_facts(facts) -> dict[str, int]:
     return counts
 
 
-def _current_status_for_memory_ref(db_path: Path, memory_ref: str) -> str | None:
+def _memory_ref_parts(memory_ref: str) -> tuple[str, int] | None:
     memory_type, separator, raw_id = memory_ref.partition(":")
     if separator != ":" or not raw_id.isdigit() or memory_type not in {"fact", "procedure", "episode"}:
         return None
+    return memory_type, int(raw_id)
+
+
+def _current_status_for_memory_ref(db_path: Path, memory_ref: str) -> str | None:
+    parts = _memory_ref_parts(memory_ref)
+    if parts is None:
+        return None
+    memory_type, memory_id = parts
     try:
-        return get_memory_status(db_path, memory_type=memory_type, memory_id=int(raw_id))
+        return get_memory_status(db_path, memory_type=memory_type, memory_id=memory_id)
     except ValueError:
         return "missing"
+
+
+def _fact_review_explanation_payload(db_path: Path, *, fact_id: int) -> dict[str, Any]:
+    fact = get_fact(db_path, fact_id=fact_id)
+    claim_facts = list_facts_by_claim_slot(
+        db_path,
+        subject_ref=fact.subject_ref,
+        predicate=fact.predicate,
+        scope=fact.scope,
+    )
+    history = list_memory_status_history(db_path, memory_type="fact", memory_id=fact.id)
+    replacement_relations = list_fact_replacement_relations(db_path, fact_id=fact.id)
+    replacement_chain = _fact_replacement_chain_payload(replacement_relations, fact_id=fact.id)
+    return {
+        "memory_type": "fact",
+        "memory_id": fact.id,
+        "fact": fact.model_dump(mode="json"),
+        "decision": {
+            "current_status": fact.status,
+            "visible_in_default_retrieval": fact.status == "approved",
+            "summary": _fact_decision_summary(status=fact.status, replacement_chain=replacement_chain),
+        },
+        "claim_slot": {
+            "subject_ref": fact.subject_ref,
+            "predicate": fact.predicate,
+            "scope": fact.scope,
+            "counts": _status_counts_for_facts(claim_facts),
+            "facts": [item.model_dump(mode="json") for item in claim_facts],
+        },
+        "history": [entry.model_dump(mode="json") for entry in history],
+        "replacement_chain": replacement_chain,
+        "default_retrieval_policy": "approved_only",
+    }
 
 
 def _audit_retrieval_observations(
@@ -206,6 +247,74 @@ def _audit_retrieval_observations(
         "empty_retrieval_ratio": round(empty_retrieval_ratio, 4),
         "quality_warnings": quality_warnings,
         "top_memory_refs": top_memory_refs,
+    }
+
+
+def _review_candidates_from_observations(
+    db_path: Path,
+    *,
+    limit: int,
+    top: int,
+    frequent_threshold: int,
+) -> dict[str, Any]:
+    audit = _audit_retrieval_observations(
+        db_path,
+        limit=limit,
+        top=top,
+        frequent_threshold=frequent_threshold,
+    )
+    candidates = []
+    for top_ref in audit["top_memory_refs"]:
+        memory_ref = top_ref["memory_ref"]
+        parts = _memory_ref_parts(memory_ref)
+        review_explain = None
+        replacement_chain = None
+        if parts is not None and parts[0] == "fact" and top_ref["current_status"] != "missing":
+            review_explain = _fact_review_explanation_payload(db_path, fact_id=parts[1])
+            replacement_chain = review_explain["replacement_chain"]
+
+        graph = _inspect_relation_graph(db_path, start_ref=memory_ref, depth=1, limit=25)
+        signals = list(top_ref["signals"])
+        if replacement_chain is not None and (
+            replacement_chain["superseded_by"] or replacement_chain["replaces"]
+        ):
+            signals.append("has_replacement")
+        if graph["edges"]:
+            signals.append("has_graph_relations")
+
+        commands = {"graph_inspect": f"agent-memory graph inspect {db_path} {memory_ref} --depth 1"}
+        if parts is not None:
+            memory_type, memory_id = parts
+            if memory_type == "fact":
+                commands["review_explain"] = f"agent-memory review explain fact {db_path} {memory_id}"
+                commands["review_replacements"] = f"agent-memory review replacements fact {db_path} {memory_id}"
+
+        ordered_commands = {}
+        for command_name in ("review_explain", "review_replacements", "graph_inspect"):
+            if command_name in commands:
+                ordered_commands[command_name] = commands[command_name]
+
+        candidates.append(
+            {
+                **top_ref,
+                "signals": signals,
+                "review_explain": review_explain,
+                "graph_summary": {
+                    "start_ref": graph["start_ref"],
+                    "depth": graph["depth"],
+                    "edge_count": len(graph["edges"]),
+                    "neighbor_refs": [edge["neighbor_ref"] for edge in graph["edges"]],
+                    "truncated": graph["truncated"],
+                },
+                "commands": ordered_commands,
+            }
+        )
+
+    return {
+        "kind": "retrieval_observation_review_candidates",
+        "read_only": True,
+        "observation_audit": audit,
+        "candidates": candidates,
     }
 
 
@@ -519,6 +628,14 @@ def _build_parser() -> argparse.ArgumentParser:
     observations_audit_parser.add_argument("--limit", type=int, default=200)
     observations_audit_parser.add_argument("--top", type=int, default=10)
     observations_audit_parser.add_argument("--frequent-threshold", type=int, default=3)
+    observations_review_candidates_parser = observations_subparsers.add_parser(
+        "review-candidates",
+        help="Build a read-only forensic review report from top retrieval observation refs.",
+    )
+    observations_review_candidates_parser.add_argument("db_path", type=Path)
+    observations_review_candidates_parser.add_argument("--limit", type=int, default=200)
+    observations_review_candidates_parser.add_argument("--top", type=int, default=10)
+    observations_review_candidates_parser.add_argument("--frequent-threshold", type=int, default=3)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -841,41 +958,7 @@ def main() -> None:
             )
             return
         elif args.review_action == "explain":
-            fact = get_fact(args.db_path, fact_id=args.memory_id)
-            claim_facts = list_facts_by_claim_slot(
-                args.db_path,
-                subject_ref=fact.subject_ref,
-                predicate=fact.predicate,
-                scope=fact.scope,
-            )
-            history = list_memory_status_history(args.db_path, memory_type="fact", memory_id=fact.id)
-            replacement_relations = list_fact_replacement_relations(args.db_path, fact_id=fact.id)
-            replacement_chain = _fact_replacement_chain_payload(replacement_relations, fact_id=fact.id)
-            print(
-                json.dumps(
-                    {
-                        "memory_type": "fact",
-                        "memory_id": fact.id,
-                        "fact": fact.model_dump(mode="json"),
-                        "decision": {
-                            "current_status": fact.status,
-                            "visible_in_default_retrieval": fact.status == "approved",
-                            "summary": _fact_decision_summary(status=fact.status, replacement_chain=replacement_chain),
-                        },
-                        "claim_slot": {
-                            "subject_ref": fact.subject_ref,
-                            "predicate": fact.predicate,
-                            "scope": fact.scope,
-                            "counts": _status_counts_for_facts(claim_facts),
-                            "facts": [item.model_dump(mode="json") for item in claim_facts],
-                        },
-                        "history": [entry.model_dump(mode="json") for entry in history],
-                        "replacement_chain": replacement_chain,
-                        "default_retrieval_policy": "approved_only",
-                    },
-                    indent=2,
-                )
-            )
+            print(json.dumps(_fact_review_explanation_payload(args.db_path, fact_id=args.memory_id), indent=2))
             return
         elif args.review_action == "conflicts":
             facts = list_facts_by_claim_slot(
@@ -941,6 +1024,19 @@ def main() -> None:
             print(
                 json.dumps(
                     _audit_retrieval_observations(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.observations_action == "review-candidates":
+            print(
+                json.dumps(
+                    _review_candidates_from_observations(
                         args.db_path,
                         limit=args.limit,
                         top=args.top,

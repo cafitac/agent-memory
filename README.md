@@ -109,9 +109,10 @@ For local dogfood and noise monitoring, retrievals can leave a secret-safe obser
 agent-memory retrieve "$DB" "How should I install agent-memory?" --preferred-scope user:default --observe cli
 agent-memory observations list "$DB" --limit 20
 agent-memory observations audit "$DB" --limit 200 --top 10 --frequent-threshold 3
+agent-memory observations review-candidates "$DB" --limit 200 --top 10 --frequent-threshold 3
 ```
 
-Use the observation log and audit report to spot frequently injected or surprising memories before changing retrieval behavior. The audit output is read-only JSON with surface/scope counts, empty-retrieval count and ratio, quality warnings such as `low_observation_count` or `high_empty_retrieval_ratio`, top injected memory refs, current status for known refs, and simple signals such as `frequently_injected` and `current_status_not_approved`. Treat it as local operator telemetry, not a synced analytics stream.
+Use the observation log and audit report to spot frequently injected or surprising memories before changing retrieval behavior. The audit output is read-only JSON with surface/scope counts, empty-retrieval count and ratio, quality warnings such as `low_observation_count` or `high_empty_retrieval_ratio`, top injected memory refs, current status for known refs, and simple signals such as `frequently_injected` and `current_status_not_approved`. `observations review-candidates` is also read-only; it turns the top audit refs into forensic candidates with fact review explanations, replacement-chain hints, graph-neighborhood summaries, and copy-paste follow-up commands such as `review explain`, `review replacements`, and `graph inspect`. Treat these reports as local operator telemetry, not a synced analytics feature or an automatic cleanup workflow.
 
 ## Hermes quickstart
 
