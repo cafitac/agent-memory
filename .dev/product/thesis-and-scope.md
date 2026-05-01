@@ -6,6 +6,10 @@ Status: AI-authored draft. Not yet human-approved.
 
 agent-memory should be a reusable memory runtime for AI agents, not just a transcript archive and not just a vector-search wrapper.
 
+The strongest version of the project should not merely save important notes.
+It should behave like a safe, inspectable approximation of memory consolidation:
+conversation and runtime experiences leave lightweight traces; repetition, salience, recency, graph connectivity, and demonstrated usefulness strengthen some traces; weak traces decay; strong trace clusters consolidate into long-term semantic, episodic, procedural, and preference memory.
+
 The strongest version of the project should make people say:
 - it remembers the right thing
 - it forgets the wrong thing
@@ -63,8 +67,10 @@ agent-memory responsibilities:
    - every durable claim should point to source records
    - every important retrieval should be explainable
 
-4. Memory is curated
+4. Memory is curated through consolidation, not pre-filtered at birth
    - not every observation becomes durable memory
+   - low-cost traces may be recorded before their long-term value is known
+   - repetition, salience, usefulness, and graph connectivity should decide what strengthens or decays
    - the system needs candidate, approval, dispute, and deprecation states
 
 5. Memory is connected
