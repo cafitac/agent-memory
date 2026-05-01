@@ -99,6 +99,24 @@ class RetrievalObservation(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExperienceTrace(BaseModel):
+    id: int
+    created_at: str
+    surface: str
+    event_kind: str
+    scope: str | None = None
+    session_ref: str | None = None
+    content_sha256: str
+    summary: str | None = None
+    salience: float = 0.0
+    user_emphasis: float = 0.0
+    related_memory_refs: list[str] = Field(default_factory=list)
+    related_observation_ids: list[int] = Field(default_factory=list)
+    retention_policy: Literal["ephemeral", "short", "review", "archive"] = "ephemeral"
+    expires_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ProvenanceSummary(BaseModel):
     source_id: int
     source_type: str
