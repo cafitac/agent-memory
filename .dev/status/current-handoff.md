@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 17:35 KST
+Last updated: 2026-05-04 18:05 KST
 
 ## Trigger for the next session
 
@@ -16,27 +16,25 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.67까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3a도 완료되어 saved G3 background dry-run JSON report를 `agent-memory dogfood background-dry-run <db> --report <json>`로 read-only 평가한다. 다만 실제 dogfood DB 확인 결과 `retrieval_observations`/`memory_activations`는 일반 Hermes 사용에서 쌓이지만 `experience_traces`는 명시적 trace/remember path 중심이라 sparse하다. 사람 뇌 같은 north-star를 위해 G4 apply-mode보다 먼저 G3b: ordinary Hermes turns의 metadata-only lightweight trace capture를 진행한다.
+agent-memory는 v0.1.68까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3b로 ordinary Hermes pre-LLM turns가 기본적으로 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 다음은 G3/G3a dogfood를 새 trace substrate 위에서 더 운영·측정하거나, storage health/trace quality report를 공식화하는 것이 안전하다. 아직 G4 apply-mode로 바로 가지 않는다.
 
 ## Current in-progress slice
 
-Active branch/worktree:
+No feature slice is currently in progress after v0.1.68 post-release validation.
 
-- Branch: `feat/ordinary-turn-traces`
-- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/ordinary-turn-traces`
+Completed latest slice:
 
-Current slice:
-
-- Stage G/G3b: record ordinary Hermes turns as metadata-only lightweight traces before any G4 apply mode.
-- Goal: normal non-synthetic Hermes turns should leave weak, bounded, local `turn` traces by default, without raw prompt/query/transcript storage and without creating approved long-term memory.
+- Stage G/G3b: ordinary Hermes turns now record metadata-only lightweight `turn` traces by default before any G4 apply mode.
+- PR #117 merged; release-sync PR #118 merged; v0.1.68 was published and smoke-tested.
+- Hermes runtime now points to `/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory`.
 
 Updated work order:
 
-1. G3b ordinary-turn trace capture: metadata-only, default-safe, non-blocking, RED tests first.
-2. Continue G3/G3a report dogfooding over the richer trace substrate.
-3. Only after reports are clean and trace quality is trusted, write a separate RED-tested G4 apply-mode plan.
+1. Completed: G3b ordinary-turn trace capture, metadata-only/default-safe/non-blocking with RED tests.
+2. Next safest: continue G3/G3a dogfood reports over the richer trace substrate and/or add a read-only storage-health/trace-quality report.
+3. Later only: write a separate RED-tested G4 apply-mode plan if reports are clean and trace quality is trusted.
 
-Do not proceed to G4 background apply mode until G3b is merged/released/dogfooded and the quality gates show enough safe candidate evidence. Do not broaden G3b into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
+Do not proceed to G4 background apply mode yet. Do not broaden ordinary-turn traces into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
 
 ## Current repo state
 
@@ -47,8 +45,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main`.
-- `main` and `origin/main` include v0.1.67 release-sync PR #115.
-- No active feature worktree is required after G3a cleanup.
+- `main` and `origin/main` include v0.1.68 release-sync PR #118.
+- No active feature worktree is required after G3b cleanup.
 
 Expected GitHub identity:
 
@@ -59,13 +57,13 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.67`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.67`
-- npm package: `@cafitac/agent-memory@0.1.67`
-- PyPI package: `cafitac-agent-memory==0.1.67`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.67.
-- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.67`.
+- `v0.1.68`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.68`
+- npm package: `@cafitac/agent-memory@0.1.68`
+- PyPI package: `cafitac-agent-memory==0.1.68`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.68.
+- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.68`.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -119,6 +117,32 @@ Release QA completed:
 - Runtime G3a live dogfood smoke against the latest saved local report succeeded with read-only/no-mutation/default-retrieval-unchanged assertions.
 - `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
 - `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.67 agent-memory pre-LLM hook.
+
+## Completed Stage G/G3b slice
+
+PR #117 `feat: record ordinary Hermes turn traces` merged and released in v0.1.68. Release-sync PR #118 merged.
+
+- Real non-synthetic Hermes pre-LLM turns now record metadata-only `turn` traces by default.
+- Ordinary trace rows use `surface=hermes-pre-llm-hook`, `event_kind=turn`, low salience, `retention_policy=ephemeral`, and metadata `trace_recording=default_metadata_only`, `candidate_policy=evidence_only`, `auto_approved=false`.
+- Trace storage remains secret-safe: no raw prompt, raw query, query preview, transcript, user message, or secret-like text is stored or printed.
+- Synthetic Hermes doctor/test payloads are skipped.
+- Trace write failures remain non-blocking; `--no-record-trace` disables runtime trace recording for a hook invocation.
+- Ordinary turns do not create facts/procedures/episodes, do not auto-approve memories, and do not change default retrieval ranking.
+
+Verification completed for G3b/v0.1.68:
+
+- Focused tests: `23 passed, 54 deselected`.
+- Full suite: `241 passed`.
+- Release readiness: `git diff --check`, `scripts/check_release_metadata.py`, `scripts/smoke_release_readiness.py`, `npm pack --dry-run`, and `node --check bin/agent-memory.js` passed.
+- GitHub PR #117 checks passed; main CI after merge passed.
+- Release-sync PR #118 main CI and auto-release passed.
+- GitHub Release `v0.1.68` published.
+- npm smoke verified `@cafitac/agent-memory@0.1.68` can record metadata-only ordinary turn traces through the public wrapper after normal PyPI/uvx propagation.
+- PyPI fresh venv smoke verified `cafitac-agent-memory==0.1.68` and metadata-only ordinary turn traces.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up to `/Users/reddit/.hermes/config.yaml.bak-v0.1.68` before updating the hook path to v0.1.68.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK` and recorded a metadata-only ordinary `turn` trace.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.68 agent-memory pre-LLM hook.
 
 ## Completed Stage G/G3 slice
 
@@ -222,7 +246,7 @@ The north-star remains a human-memory-like lifecycle:
 5. Lifecycle edges for reinforcement, conflict, supersession, decay risk, and audit history.
 6. Conservative background/reporting jobs before any background apply mode.
 
-Completed through v0.1.67:
+Completed through v0.1.68:
 
 - Stage C: activation evidence, activation summary, reinforcement report, decay risk report.
 - Stage D: read-only consolidation candidates and `consolidation explain`.
@@ -250,14 +274,14 @@ git tag --sort=-version:refname | head -5
 HOME=/Users/reddit gh pr list --repo cafitac/agent-memory --state open --json number,title,headRefName,url
 HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 
-/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
+/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
   --limit 200 \
   --top 20 \
   --min-evidence 2 \
   --output /Users/reddit/.agent-memory/reports/background-dry-run.json \
   --lock-path /Users/reddit/.agent-memory/background-dry-run.lock
 
-/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory dogfood background-dry-run /Users/reddit/.agent-memory/memory.db \
+/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory dogfood background-dry-run /Users/reddit/.agent-memory/memory.db \
   --report /Users/reddit/.agent-memory/reports/background-dry-run.json \
   --output /Users/reddit/.agent-memory/reports/background-dry-run-quality.json
 ```
