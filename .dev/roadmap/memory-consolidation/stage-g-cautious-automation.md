@@ -73,7 +73,7 @@ Allow advanced users to auto-approve safe preferences/procedures under strict po
 
 ## PR G3: Add background consolidation job in dry-run mode
 
-Status: In progress for the next release. This slice is dry-run/report-only; apply mode remains G4/later.
+Status: Complete in `v0.1.66` via PR #111. This slice is dry-run/report-only; apply mode remains G4/later.
 
 ### Objective
 
@@ -86,7 +86,7 @@ Make periodic candidate/scoring reports cron-friendly without changing memory.
 - Failures are non-blocking and readable.
 - Output is suitable for human review.
 
-### Planned implementation shape
+### Implemented shape
 
 - Command: `agent-memory consolidation background dry-run <db> [--output <path>] [--lock-path <path>]`.
 - Bundles existing read-only surfaces: `consolidation candidates`, `activations summary`, `activations reinforcement-report`, and `activations decay-risk-report`.
