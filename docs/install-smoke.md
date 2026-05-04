@@ -141,7 +141,7 @@ All four commands must report `read_only: true`, `mutated: false`, and `default_
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.66`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+As of the latest validated public install smoke, the validated tag is `v0.1.67`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
 
 ## Optional v0.1.66 remember-intent smoke
 

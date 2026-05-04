@@ -97,7 +97,7 @@ Make periodic candidate/scoring reports cron-friendly without changing memory.
 
 ## PR G3a: Dogfood background dry-run quality gates before G4
 
-Status: In progress after `v0.1.66`. This slice evaluates saved G3 dry-run reports without mutation so G4 does not start from anecdotal evidence.
+Status: Complete in `v0.1.67` via PR #114. This slice evaluates saved G3 dry-run reports without mutation so G4 does not start from anecdotal evidence.
 
 ### Objective
 
