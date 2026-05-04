@@ -112,6 +112,12 @@ agent-memory retrieval ranker-preview "$DB" "What memory would Hermes use here?"
 agent-memory retrieval decay-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5 --decay-weight 0.2 --frequent-threshold 3
 ```
 
+`retrieval graph-neighborhood-preview` is the bounded graph reinforcement follow-up. It walks relation edges from each retrieved memory only up to `--depth`, reports relation ids and neighbor refs used for the preview score, and keeps the graph delta capped so graph connectivity cannot become graph-only search. It is read-only and keeps default retrieval/Hermes hooks unchanged.
+
+```bash
+agent-memory retrieval graph-neighborhood-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5 --depth 1 --graph-weight 0.15
+```
+
 Use this after `activations decay-risk-report` and before any runtime prompt-filtering change. A high decay penalty is an evaluation signal, not an automatic deprecation/delete instruction.
 
 The output emits `kind: retrieval_ranker_preview`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, sanitized candidates, and `rank_changes`. It does not store the query, print `query_preview`, record retrieval observations, increment memory counters, or change Hermes prompt injection.

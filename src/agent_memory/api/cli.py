@@ -705,6 +705,239 @@ def _ref_activation_payload(db_path: Path, *, memory_ref: str, frequent_threshol
     )
 
 
+def _parse_memory_ref(value: str) -> tuple[str, int] | None:
+    if ":" not in value:
+        return None
+    memory_type, raw_id = value.split(":", 1)
+    if memory_type not in {"fact", "procedure", "episode"}:
+        return None
+    try:
+        return memory_type, int(raw_id)
+    except ValueError:
+        return None
+
+
+def _bounded_graph_neighborhood(db_path: Path, *, memory_ref: str, depth: int) -> dict[str, Any]:
+    if depth < 1:
+        raise ValueError("graph neighborhood depth must be >= 1")
+    seen_nodes = {memory_ref}
+    frontier = {memory_ref}
+    edges_by_id: dict[int, Any] = {}
+    neighbor_distances: dict[str, int] = {}
+    truncated = False
+    max_edges = 100
+
+    for current_depth in range(1, depth + 1):
+        next_frontier: set[str] = set()
+        for node_ref in sorted(frontier):
+            for relation in list_relations_for_node(db_path, node_ref=node_ref):
+                if len(edges_by_id) >= max_edges and relation.id not in edges_by_id:
+                    truncated = True
+                    continue
+                edges_by_id[relation.id] = relation
+                other_ref = relation.to_ref if relation.from_ref == node_ref else relation.from_ref
+                if other_ref not in neighbor_distances and other_ref != memory_ref:
+                    neighbor_distances[other_ref] = current_depth
+                if other_ref not in seen_nodes:
+                    seen_nodes.add(other_ref)
+                    next_frontier.add(other_ref)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    neighbor_refs = sorted(neighbor_distances, key=lambda ref: (neighbor_distances[ref], ref))
+    relation_payloads = [
+        {
+            "relation_id": relation.id,
+            "from_ref": relation.from_ref,
+            "relation_type": relation.relation_type,
+            "to_ref": relation.to_ref,
+            "confidence": relation.confidence,
+        }
+        for relation in sorted(edges_by_id.values(), key=lambda relation: relation.id)
+    ]
+    return {
+        "bounded": True,
+        "depth": depth,
+        "start_ref": memory_ref,
+        "neighbor_refs": neighbor_refs,
+        "neighbor_distances": {ref: neighbor_distances[ref] for ref in neighbor_refs},
+        "relation_count": len(relation_payloads),
+        "relation_ids": [relation["relation_id"] for relation in relation_payloads],
+        "relations": relation_payloads,
+        "truncated": truncated,
+    }
+
+
+def _neighbor_reinforcement_score(db_path: Path, *, neighbor_refs: list[str], neighbor_reinforcement_weight: float) -> tuple[float, list[str]]:
+    activated_neighbor_refs: list[str] = []
+    raw_score = 0.0
+    for neighbor_ref in neighbor_refs:
+        parsed = _parse_memory_ref(neighbor_ref)
+        if parsed is None:
+            continue
+        memory_type, memory_id = parsed
+        activity = _memory_activity_counts(db_path, memory_type=memory_type, memory_id=memory_id)
+        activation_count = activity["retrieval_count"] + activity["reinforcement_count"]
+        if activation_count <= 0:
+            continue
+        activated_neighbor_refs.append(neighbor_ref)
+        raw_score += min(float(activation_count), 5.0) * neighbor_reinforcement_weight
+    return raw_score, activated_neighbor_refs
+
+
+def _retrieval_graph_neighborhood_preview(
+    db_path: Path,
+    *,
+    query: str,
+    limit: int,
+    preferred_scope: str | None,
+    depth: int,
+    graph_weight: float,
+    graph_cap: float,
+    neighbor_reinforcement_weight: float,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("retrieval graph-neighborhood-preview limit must be >= 1")
+    if depth < 1:
+        raise ValueError("graph neighborhood depth must be >= 1")
+    if graph_weight <= 0:
+        raise ValueError("graph weight must be > 0")
+    if graph_cap < 0:
+        raise ValueError("graph cap must be >= 0")
+    if neighbor_reinforcement_weight < 0:
+        raise ValueError("neighbor reinforcement weight must be >= 0")
+
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        record_retrievals=False,
+    )
+    baseline_traces = list(packet.retrieval_trace)
+    baseline_rank_by_key = {
+        (trace.memory_type, trace.memory_id): index + 1
+        for index, trace in enumerate(baseline_traces)
+    }
+
+    preview_rows: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    for trace in baseline_traces:
+        memory_ref = f"{trace.memory_type}:{trace.memory_id}"
+        graph_neighborhood = _bounded_graph_neighborhood(db_path, memory_ref=memory_ref, depth=depth)
+        neighbor_reinforcement_score, activated_neighbor_refs = _neighbor_reinforcement_score(
+            db_path,
+            neighbor_refs=graph_neighborhood["neighbor_refs"],
+            neighbor_reinforcement_weight=neighbor_reinforcement_weight,
+        )
+        graph_signal = graph_neighborhood["relation_count"] * graph_weight
+        graph_neighborhood_delta = min(graph_cap, graph_signal + neighbor_reinforcement_score)
+        preview_total_score = trace.total_score + graph_neighborhood_delta
+        baseline_rank = baseline_rank_by_key[(trace.memory_type, trace.memory_id)]
+        reason_codes = ["opt_in_bounded_graph_neighborhood_preview"]
+        if graph_neighborhood_delta > 0:
+            reason_codes.append("bounded_graph_neighbor_support")
+        if activated_neighbor_refs:
+            reason_codes.append("activated_neighbor_support")
+        if graph_neighborhood["truncated"]:
+            reason_codes.append("graph_neighborhood_truncated")
+        graph_neighborhood["activated_neighbor_refs"] = activated_neighbor_refs
+        candidate = {
+            "memory_ref": memory_ref,
+            "memory_type": trace.memory_type,
+            "memory_id": trace.memory_id,
+            "label": trace.label,
+            "scope": trace.scope,
+            "baseline_rank": baseline_rank,
+            "preview_rank": None,
+            "rank_delta": 0,
+            "baseline_score_components": {
+                "total_score": round(trace.total_score, 4),
+                "rank_value": round(trace.rank_value, 4),
+                "scope_score": round(trace.scope_score, 4),
+                "lexical_score": round(trace.lexical_score, 4),
+                "relation_score": round(trace.relation_score, 4),
+                "recency_score": round(trace.recency_score, 4),
+                "reinforcement_score": round(trace.reinforcement_score, 4),
+                "conflict_penalty": round(trace.conflict_penalty, 4),
+            },
+            "preview_score_components": {
+                "graph_neighborhood_delta": round(graph_neighborhood_delta, 4),
+                "graph_signal": round(graph_signal, 4),
+                "neighbor_reinforcement_score": round(neighbor_reinforcement_score, 4),
+                "preview_total_score": round(preview_total_score, 4),
+            },
+            "graph_neighborhood": graph_neighborhood,
+            "activation_policy": _memory_activity_counts(
+                db_path,
+                memory_type=trace.memory_type,
+                memory_id=trace.memory_id,
+            ),
+            "advisory": {
+                "action": "compare_only",
+                "reason_codes": reason_codes,
+            },
+        }
+        preview_sort_key = (
+            trace.scope_priority,
+            -preview_total_score,
+            -max(trace.text_match_count, trace.relation_match_count),
+            -trace.relation_match_count,
+            -trace.recency_score,
+            -trace.reinforcement_score,
+            -trace.rank_value,
+            trace.memory_id,
+        )
+        preview_rows.append((preview_sort_key, candidate))
+
+    preview_rows.sort(key=lambda item: item[0])
+    candidates = [candidate for _sort_key, candidate in preview_rows]
+    for index, candidate in enumerate(candidates):
+        preview_rank = index + 1
+        candidate["preview_rank"] = preview_rank
+        candidate["rank_delta"] = candidate["baseline_rank"] - preview_rank
+
+    rank_changes = [
+        {
+            "memory_ref": candidate["memory_ref"],
+            "baseline_rank": candidate["baseline_rank"],
+            "preview_rank": candidate["preview_rank"],
+            "rank_delta": candidate["rank_delta"],
+        }
+        for candidate in candidates
+        if candidate["rank_delta"] != 0 or candidate["preview_score_components"]["graph_neighborhood_delta"] > 0
+    ]
+
+    return {
+        "kind": "retrieval_graph_neighborhood_preview",
+        "read_only": True,
+        "mutated": False,
+        "policy": "bounded_graph_neighborhood_reinforcement_preview",
+        "default_retrieval_policy": "approved_only",
+        "default_retrieval_unchanged": True,
+        "query": {
+            "stored": False,
+            "sha256_present": bool(hashlib.sha256(query.encode("utf-8")).hexdigest()),
+        },
+        "preferred_scope": preferred_scope,
+        "limit": limit,
+        "ranker_parameters": {
+            "depth": depth,
+            "graph_weight": graph_weight,
+            "graph_cap": graph_cap,
+            "neighbor_reinforcement_weight": neighbor_reinforcement_weight,
+        },
+        "baseline_source": "current_default_retrieval_trace",
+        "candidates": candidates,
+        "rank_changes": rank_changes,
+        "suggested_next_steps": [
+            "Treat this as an opt-in bounded graph preview only; do not change default retrieval without eval evidence.",
+            "Inspect surprising graph boosts with graph inspect before promoting any ranker policy.",
+            "Run live Hermes E2E before enabling graph-neighborhood reinforcement outside preview mode.",
+        ],
+    }
+
+
 def _retrieval_decay_preview(
     db_path: Path,
     *,
@@ -2634,6 +2867,19 @@ def _build_parser() -> argparse.ArgumentParser:
     retrieval_decay_preview_parser.add_argument("--decay-weight", type=float, default=0.2)
     retrieval_decay_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
 
+    retrieval_graph_neighborhood_preview_parser = retrieval_subparsers.add_parser(
+        "graph-neighborhood-preview",
+        help="Preview opt-in bounded graph-neighborhood reinforcement without mutating default retrieval or memory state.",
+    )
+    retrieval_graph_neighborhood_preview_parser.add_argument("db_path", type=Path)
+    retrieval_graph_neighborhood_preview_parser.add_argument("query")
+    retrieval_graph_neighborhood_preview_parser.add_argument("--limit", type=int, default=5)
+    retrieval_graph_neighborhood_preview_parser.add_argument("--preferred-scope")
+    retrieval_graph_neighborhood_preview_parser.add_argument("--depth", type=int, default=1)
+    retrieval_graph_neighborhood_preview_parser.add_argument("--graph-weight", type=float, default=0.15)
+    retrieval_graph_neighborhood_preview_parser.add_argument("--graph-cap", type=float, default=0.5)
+    retrieval_graph_neighborhood_preview_parser.add_argument("--neighbor-reinforcement-weight", type=float, default=0.1)
+
     observations_parser = subparsers.add_parser("observations")
     observations_subparsers = observations_parser.add_subparsers(dest="observations_action", required=True)
     observations_list_parser = observations_subparsers.add_parser("list")
@@ -3293,6 +3539,23 @@ def main() -> None:
                         preferred_scope=args.preferred_scope,
                         decay_weight=args.decay_weight,
                         frequent_threshold=args.frequent_threshold,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.retrieval_action == "graph-neighborhood-preview":
+            print(
+                json.dumps(
+                    _retrieval_graph_neighborhood_preview(
+                        args.db_path,
+                        query=args.query,
+                        limit=args.limit,
+                        preferred_scope=args.preferred_scope,
+                        depth=args.depth,
+                        graph_weight=args.graph_weight,
+                        graph_cap=args.graph_cap,
+                        neighbor_reinforcement_weight=args.neighbor_reinforcement_weight,
                     ),
                     indent=2,
                 )

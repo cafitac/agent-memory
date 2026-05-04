@@ -3729,3 +3729,258 @@ def test_python_module_retrieval_decay_preview_requires_positive_decay_weight(tm
 
     assert result.returncode != 0
     assert "decay weight must be > 0" in result.stderr
+
+
+def test_python_module_retrieval_graph_neighborhood_preview_boosts_connected_reinforced_memory_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-neighborhood-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content=(
+            "Project N uses Nebula core memory. "
+            "Project N uses Nebula connected memory. "
+            "Project N uses Nebula isolated memory."
+        ),
+        metadata={"raw_prompt": "password=SUPERSECRET token=abc123"},
+    )
+    core_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project N",
+        predicate="core_memory",
+        object_ref_or_value="Nebula core memory",
+        evidence_ids=[source.id],
+        scope="project:project-n",
+        confidence=0.9,
+    )
+    connected_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project N",
+        predicate="connected_memory",
+        object_ref_or_value="Nebula connected memory",
+        evidence_ids=[source.id],
+        scope="project:project-n",
+        confidence=0.82,
+    )
+    isolated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project N",
+        predicate="isolated_memory",
+        object_ref_or_value="Nebula isolated memory",
+        evidence_ids=[source.id],
+        scope="project:project-n",
+        confidence=0.84,
+    )
+    approve_fact(db_path=db_path, fact_id=core_fact.id)
+    approve_fact(db_path=db_path, fact_id=connected_fact.id)
+    approve_fact(db_path=db_path, fact_id=isolated_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{core_fact.id}",
+        relation_type="supports",
+        to_ref=f"fact:{connected_fact.id}",
+        evidence_ids=[source.id],
+        confidence=0.95,
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{connected_fact.id}",
+        relation_type="supports",
+        to_ref="concept:nebula",
+        evidence_ids=[source.id],
+        confidence=0.8,
+    )
+
+    for _ in range(4):
+        retrieve_memory_packet(
+            db_path,
+            query="Nebula core memory",
+            preferred_scope="project:project-n",
+            limit=5,
+            observation_surface="hermes",
+            observation_metadata={"query_preview": "SUPERSECRET should not leak"},
+        )
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_before = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        observation_count_before = connection.execute("SELECT COUNT(*) FROM retrieval_observations").fetchone()[0]
+        activation_count_before = connection.execute("SELECT COUNT(*) FROM memory_activations").fetchone()[0]
+        relation_count_before = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "graph-neighborhood-preview",
+            str(db_path),
+            "Project N Nebula memory password=SUPERSECRET",
+            "--preferred-scope",
+            "project:project-n",
+            "--limit",
+            "5",
+            "--depth",
+            "1",
+            "--graph-weight",
+            "0.4",
+            "--graph-cap",
+            "0.6",
+            "--neighbor-reinforcement-weight",
+            "0.25",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    assert "query_preview" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "retrieval_graph_neighborhood_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["policy"] == "bounded_graph_neighborhood_reinforcement_preview"
+    assert payload["query"] == {"stored": False, "sha256_present": True}
+    assert payload["ranker_parameters"]["depth"] == 1
+    assert payload["ranker_parameters"]["graph_weight"] == 0.4
+    assert payload["ranker_parameters"]["graph_cap"] == 0.6
+    assert payload["ranker_parameters"]["neighbor_reinforcement_weight"] == 0.25
+
+    candidates_by_ref = {candidate["memory_ref"]: candidate for candidate in payload["candidates"]}
+    connected_projection = candidates_by_ref[f"fact:{connected_fact.id}"]
+    isolated_projection = candidates_by_ref[f"fact:{isolated_fact.id}"]
+    assert connected_projection["graph_neighborhood"]["bounded"] is True
+    assert connected_projection["graph_neighborhood"]["depth"] == 1
+    assert f"fact:{core_fact.id}" in connected_projection["graph_neighborhood"]["neighbor_refs"]
+    assert connected_projection["preview_score_components"]["graph_neighborhood_delta"] > 0
+    assert connected_projection["preview_score_components"]["preview_total_score"] > connected_projection["baseline_score_components"]["total_score"]
+    assert "bounded_graph_neighbor_support" in connected_projection["advisory"]["reason_codes"]
+    assert isolated_projection["preview_score_components"]["graph_neighborhood_delta"] == 0
+    assert any(change["memory_ref"] == f"fact:{connected_fact.id}" for change in payload["rank_changes"])
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_after = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        observation_count_after = connection.execute("SELECT COUNT(*) FROM retrieval_observations").fetchone()[0]
+        activation_count_after = connection.execute("SELECT COUNT(*) FROM memory_activations").fetchone()[0]
+        relation_count_after = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+    assert retrieval_counts_after == retrieval_counts_before
+    assert observation_count_after == observation_count_before
+    assert activation_count_after == activation_count_before
+    assert relation_count_after == relation_count_before
+
+
+def test_python_module_retrieval_graph_neighborhood_preview_respects_depth_bound(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-neighborhood-depth.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project N Nebula first hop memory. Project N Nebula second hop memory.",
+        metadata={},
+    )
+    first = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project N",
+        predicate="first_hop",
+        object_ref_or_value="Nebula first hop memory",
+        evidence_ids=[source.id],
+        scope="project:project-n",
+        confidence=0.8,
+    )
+    second = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project N",
+        predicate="second_hop",
+        object_ref_or_value="Nebula second hop memory",
+        evidence_ids=[source.id],
+        scope="project:project-n",
+        confidence=0.8,
+    )
+    approve_fact(db_path=db_path, fact_id=first.id)
+    approve_fact(db_path=db_path, fact_id=second.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{first.id}",
+        relation_type="supports",
+        to_ref="concept:nebula",
+        evidence_ids=[source.id],
+    )
+    insert_relation(
+        db_path,
+        from_ref="concept:nebula",
+        relation_type="supports",
+        to_ref=f"fact:{second.id}",
+        evidence_ids=[source.id],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "graph-neighborhood-preview",
+            str(db_path),
+            "Project N Nebula memory",
+            "--preferred-scope",
+            "project:project-n",
+            "--limit",
+            "5",
+            "--depth",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    candidates_by_ref = {candidate["memory_ref"]: candidate for candidate in payload["candidates"]}
+    first_neighbors = candidates_by_ref[f"fact:{first.id}"]["graph_neighborhood"]["neighbor_refs"]
+    second_neighbors = candidates_by_ref[f"fact:{second.id}"]["graph_neighborhood"]["neighbor_refs"]
+    assert "concept:nebula" in first_neighbors
+    assert f"fact:{second.id}" not in first_neighbors
+    assert "concept:nebula" in second_neighbors
+    assert f"fact:{first.id}" not in second_neighbors
+
+
+def test_python_module_retrieval_graph_neighborhood_preview_requires_positive_graph_weight(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-neighborhood-validation.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "graph-neighborhood-preview",
+            str(db_path),
+            "anything",
+            "--graph-weight",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "graph weight must be > 0" in result.stderr
