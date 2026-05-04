@@ -17,7 +17,7 @@ Automation starts with explicit user intent, then narrow opt-in policies, then d
 
 ## PR G1: Add explicit `remember this` conservative auto-candidate path
 
-Status: In progress in `feat/remember-this-candidate`; RED tests and implementation target the Hermes opt-in trace path.
+Status: Complete in `v0.1.63` via PR #102. G1 uses the Hermes opt-in trace path and remains review-gated.
 
 ### Objective
 
