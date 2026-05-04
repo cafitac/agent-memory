@@ -2058,6 +2058,50 @@ def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_tur
 
 
 
+def test_hermes_pre_llm_hook_records_trace_even_when_no_context_is_injected(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "module-cli-hermes-no-context-turn-trace.db"
+    initialize_database(db_path)
+
+    class EmptyContext:
+        prompt_text = ""
+
+    monkeypatch.setattr(hermes_hooks, "prepare_hermes_memory_context", lambda *args, **kwargs: EmptyContext())
+
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="real-session-no-context-turn-trace",
+            cwd=str(tmp_path),
+            extra={
+                "user_message": "A live turn can be observed even when no memory context is injected.",
+                "platform": "cli",
+                "model": "gpt-test",
+            },
+        ),
+        HermesPreLlmHookOptions(
+            db_path=db_path,
+            preferred_scope="project:no-context-turn-trace",
+            top_k=1,
+        ),
+    )
+
+    assert response == {}
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.event_kind == "turn"
+    assert trace.scope == "project:no-context-turn-trace"
+    assert trace.related_memory_refs == []
+    assert trace.metadata == {
+        "hook_event_name": "pre_llm_call",
+        "platform": "cli",
+        "model": "gpt-test",
+        "trace_recording": "default_metadata_only",
+        "candidate_policy": "evidence_only",
+        "auto_approved": False,
+    }
+
+
 def test_python_module_cli_hermes_pre_llm_hook_can_disable_default_turn_trace(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-no-record-trace.db"
     initialize_database(db_path)

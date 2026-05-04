@@ -533,9 +533,6 @@ def build_pre_llm_hook_context(
     except Exception:
         return {}
 
-    if not context.prompt_text.strip():
-        return {}
-
     try:
         _record_pre_llm_experience_trace(
             payload=payload,
@@ -546,6 +543,9 @@ def build_pre_llm_hook_context(
         )
     except Exception:
         pass
+
+    if not context.prompt_text.strip():
+        return {}
 
     return {
         "context": "\n".join(
