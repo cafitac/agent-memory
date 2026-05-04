@@ -49,6 +49,8 @@ Summarize real/local `remember_intent` trace quality without mutating memory so 
 
 ## PR G2: Add opt-in auto-approval for narrow low-risk memories
 
+Status: In progress in `feat/remember-auto-approve`. This slice intentionally implements only `remember-preferences-v1` and leaves broader procedure/preference inference for later.
+
 ### Objective
 
 Allow advanced users to auto-approve safe preferences/procedures under strict policy.
@@ -59,6 +61,15 @@ Allow advanced users to auto-approve safe preferences/procedures under strict po
 - Policy is scope/type constrained.
 - Conflict preflight runs.
 - Every auto-approval has audit history and rollback/review path.
+
+### Implemented policy shape
+
+- Command: `agent-memory consolidation auto-approve remember-preferences <db> --policy remember-preferences-v1 --scope <scope> [--apply --actor ... --reason ...]`.
+- Default is dry-run/read-only; apply requires `--apply`, `--actor`, and `--reason`.
+- Eligible traces must be explicit/review-ready `remember_intent` rows in the selected scope with sanitized summaries shaped like `User prefers ...` or `I prefer ...`.
+- Approved memory type is constrained to semantic `fact`, `subject_ref=user`, `predicate=prefers`.
+- Secret-like summaries, ordinary turns, unsupported summary shapes, scope mismatches, and claim-slot conflicts are blocked.
+- Successful apply writes normal status-transition audit history and an `experience_trace:<id> --auto_approved_as--> fact:<id>` graph relation.
 
 ## PR G3: Add background consolidation job in dry-run mode
 

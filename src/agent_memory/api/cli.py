@@ -180,6 +180,189 @@ def _remember_intent_dogfood_report(db_path: Path, *, limit: int = 200, sample_l
     }
 
 
+_REMEMBER_PREFERENCE_POLICIES = {"remember-preferences-v1"}
+
+
+def _remember_preference_object_from_summary(summary: str | None) -> str | None:
+    if not summary:
+        return None
+    stripped = summary.strip()
+    for prefix in ("User prefers ", "I prefer "):
+        if stripped.lower().startswith(prefix.lower()):
+            value = stripped[len(prefix) :].strip()
+            return value or None
+    return None
+
+
+def _remember_preference_auto_approval_candidate(db_path: Path, trace: Any, *, scope: str) -> dict[str, Any]:
+    reason_codes: list[str] = []
+    proposed_object = _remember_preference_object_from_summary(trace.summary)
+    if trace.event_kind != "remember_intent":
+        reason_codes.append("not_remember_intent")
+    if trace.scope != scope:
+        reason_codes.append("scope_not_allowed")
+    if not _remember_intent_trace_is_review_ready(trace):
+        reason_codes.append("not_review_ready")
+    if _contains_secret_like_report_text(trace.summary):
+        reason_codes = ["secret_like_summary"]
+    if proposed_object is None and "secret_like_summary" not in reason_codes:
+        reason_codes.append("unsupported_preference_shape")
+    proposed_fact = None
+    conflict_preflight = None
+    if proposed_object is not None and not reason_codes:
+        proposed_fact = {
+            "subject_ref": "user",
+            "predicate": "prefers",
+            "object_ref_or_value": proposed_object,
+            "scope": scope,
+        }
+        conflict_preflight = _promotion_conflict_preflight(
+            db_path,
+            subject_ref="user",
+            predicate="prefers",
+            object_ref_or_value=proposed_object,
+            scope=scope,
+            allow_conflict=False,
+        )
+        if conflict_preflight["result"] == "blocked":
+            reason_codes = ["claim_slot_conflict"]
+    if reason_codes:
+        payload: dict[str, Any] = {
+            "trace_id": trace.id,
+            "scope": trace.scope,
+            "decision": "blocked",
+            "reason_codes": reason_codes,
+        }
+        if conflict_preflight is not None and reason_codes == ["claim_slot_conflict"]:
+            payload["conflict_preflight"] = conflict_preflight
+        return payload
+    return {
+        "trace_id": trace.id,
+        "scope": trace.scope,
+        "decision": "eligible",
+        "reason_codes": ["explicit_review_ready_remember_preference"],
+        "summary": trace.summary,
+        "proposed_fact": proposed_fact,
+        "conflict_preflight": conflict_preflight,
+    }
+
+
+def _remember_preference_auto_approval_report(
+    db_path: Path,
+    *,
+    policy: str,
+    scope: str,
+    apply: bool,
+    actor: str | None,
+    reason: str | None,
+    limit: int,
+) -> dict[str, Any]:
+    if policy not in _REMEMBER_PREFERENCE_POLICIES:
+        raise ValueError("unsupported auto-approval policy")
+    if not scope:
+        raise ValueError("--scope is required for remember preference auto-approval")
+    if apply and (not actor or not reason):
+        raise ValueError("--apply requires --actor and --reason for audit history")
+    traces = list_experience_traces(db_path, limit=limit, event_kind="remember_intent")
+    candidates: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    approved: list[dict[str, Any]] = []
+    trace_by_id = {trace.id: trace for trace in traces}
+    for trace in traces:
+        candidate = _remember_preference_auto_approval_candidate(db_path, trace, scope=scope)
+        if candidate["decision"] == "blocked":
+            if "not_review_ready" in candidate["reason_codes"] and candidate["reason_codes"] != ["secret_like_summary"]:
+                continue
+            blocked.append(candidate)
+            continue
+        if not apply:
+            preview = dict(candidate)
+            preview["decision"] = "would_approve"
+            candidates.append(preview)
+            continue
+        trace_for_apply = trace_by_id[candidate["trace_id"]]
+        proposed_fact = candidate["proposed_fact"]
+        source = ingest_source_text(
+            db_path,
+            source_type="remember_intent_trace",
+            content=trace_for_apply.summary or "remember preference",
+            adapter="agent-memory-g2-auto-approval",
+            external_ref=f"experience_trace:{trace_for_apply.id}",
+            metadata={
+                "trace_id": trace_for_apply.id,
+                "policy": policy,
+                "sanitized": True,
+            },
+        )
+        fact = create_candidate_fact(
+            db_path,
+            subject_ref=proposed_fact["subject_ref"],
+            predicate=proposed_fact["predicate"],
+            object_ref_or_value=proposed_fact["object_ref_or_value"],
+            evidence_ids=[source.id],
+            scope=proposed_fact["scope"],
+            confidence=0.8,
+        )
+        approved_fact = approve_memory(
+            db_path,
+            memory_type="fact",
+            memory_id=fact.id,
+            reason=reason,
+            actor=actor,
+            evidence_ids=[source.id],
+        )
+        relation = insert_relation(
+            db_path,
+            from_ref=f"experience_trace:{trace_for_apply.id}",
+            relation_type="auto_approved_as",
+            to_ref=f"fact:{approved_fact.id}",
+            evidence_ids=[source.id],
+            confidence=0.8,
+            review_actor=actor,
+            review_reason=reason,
+        )
+        approved.append(
+            {
+                "trace_id": trace_for_apply.id,
+                "memory_ref": f"fact:{approved_fact.id}",
+                "source_id": source.id,
+                "relation_id": relation.id,
+                "proposed_fact": proposed_fact,
+                "audit": {"actor": actor, "reason": reason, "policy": policy},
+            }
+        )
+    mutated = bool(approved)
+    return {
+        "kind": "remember_preference_auto_approval_report",
+        "policy": policy,
+        "apply": apply,
+        "read_only": not apply,
+        "mutated": mutated,
+        "default_retrieval_unchanged": not mutated,
+        "scope": scope,
+        "limit": limit,
+        "eligible_count": len(candidates) if not apply else len(approved),
+        "approved_count": len(approved),
+        "blocked_count": len(blocked),
+        "candidates": candidates,
+        "approved": approved,
+        "blocked": blocked,
+        "guardrails": {
+            "default_off": True,
+            "requires_apply": True,
+            "requires_actor_reason": True,
+            "allowed_memory_type": "fact",
+            "allowed_predicate": "prefers",
+            "conflict_preflight": True,
+            "secret_like_summaries_blocked": True,
+        },
+        "suggested_next_steps": [
+            "Review approved auto-approval audit history with review explain before broadening policy.",
+            "Keep this policy narrow and default-off until live dogfood evidence supports expansion.",
+        ],
+    }
+
+
 def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
     def parse_fact_ref(value: str) -> int | None:
         prefix = "fact:"
@@ -3084,6 +3267,25 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_promote_fact_parser.add_argument("--reason")
     consolidation_promote_fact_parser.add_argument("--limit", type=int, default=200)
     consolidation_promote_fact_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_auto_parser = consolidation_subparsers.add_parser(
+        "auto-approve",
+        help="Default-off guarded auto-approval policies for narrow remember-intent memories.",
+    )
+    consolidation_auto_subparsers = consolidation_auto_parser.add_subparsers(
+        dest="auto_approval_policy_kind",
+        required=True,
+    )
+    consolidation_auto_remember_parser = consolidation_auto_subparsers.add_parser(
+        "remember-preferences",
+        help="Dry-run or apply the G2 remember-preferences-v1 policy for explicit remember_intent traces.",
+    )
+    consolidation_auto_remember_parser.add_argument("db_path", type=Path)
+    consolidation_auto_remember_parser.add_argument("--policy", required=True, choices=sorted(_REMEMBER_PREFERENCE_POLICIES))
+    consolidation_auto_remember_parser.add_argument("--scope", required=True)
+    consolidation_auto_remember_parser.add_argument("--apply", action="store_true")
+    consolidation_auto_remember_parser.add_argument("--actor")
+    consolidation_auto_remember_parser.add_argument("--reason")
+    consolidation_auto_remember_parser.add_argument("--limit", type=int, default=200)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -3800,6 +4002,22 @@ def main() -> None:
             )
             print(json.dumps(payload, indent=2))
             if not payload.get("promoted", False):
+                sys.exit(1)
+            return
+        if args.consolidation_action == "auto-approve":
+            if args.auto_approval_policy_kind != "remember-preferences":
+                raise ValueError(f"Unsupported consolidation auto-approval policy kind: {args.auto_approval_policy_kind}")
+            payload = _remember_preference_auto_approval_report(
+                args.db_path,
+                policy=args.policy,
+                scope=args.scope,
+                apply=args.apply,
+                actor=args.actor,
+                reason=args.reason,
+                limit=args.limit,
+            )
+            print(json.dumps(payload, indent=2))
+            if args.apply and payload["blocked_count"] > 0 and payload["approved_count"] == 0:
                 sys.exit(1)
             return
         raise ValueError(f"Unsupported consolidation action: {args.consolidation_action}")

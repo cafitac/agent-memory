@@ -4142,6 +4142,268 @@ def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_r
 
 
 
+def test_consolidation_auto_approve_remember_preferences_is_default_dry_run_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-auto-approve-dry-run.db"
+    initialize_database(db_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="e" * 64,
+        summary="User prefers concise Korean handoffs.",
+        scope="project:g2",
+        session_ref="session:auto-dry-run",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 dry-run policy test",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_preference_auto_approval_report"
+    assert payload["policy"] == "remember-preferences-v1"
+    assert payload["apply"] is False
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["eligible_count"] == 1
+    assert payload["approved_count"] == 0
+    assert payload["blocked_count"] == 0
+    assert payload["candidates"][0]["decision"] == "would_approve"
+    assert payload["candidates"][0]["proposed_fact"] == {
+        "subject_ref": "user",
+        "predicate": "prefers",
+        "object_ref_or_value": "concise Korean handoffs.",
+        "scope": "project:g2",
+    }
+
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 0
+
+
+def test_consolidation_auto_approve_remember_preferences_apply_is_guarded_and_audited(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-auto-approve-apply.db"
+    initialize_database(db_path)
+    safe_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="f" * 64,
+        summary="User prefers concise Korean handoffs.",
+        scope="project:g2",
+        session_ref="session:auto-apply",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="0" * 64,
+        summary="User prefers token=SUPERSECRET.",
+        scope="project:g2",
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="1" * 64,
+        summary="User prefers this ordinary turn should not auto approve.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 guarded auto-approval test",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "token=" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_preference_auto_approval_report"
+    assert payload["apply"] is True
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["eligible_count"] == 1
+    assert payload["approved_count"] == 1
+    assert payload["blocked_count"] == 1
+    approved = payload["approved"][0]
+    assert approved["trace_id"] == safe_trace.id
+    assert approved["memory_ref"].startswith("fact:")
+    assert approved["audit"]["actor"] == "agent-memory:g2-test"
+    assert approved["audit"]["reason"] == "G2 guarded auto-approval test"
+    assert payload["blocked"][0]["reason_codes"] == ["secret_like_summary"]
+    assert "summary" not in payload["blocked"][0]
+
+    with sqlite3.connect(db_path) as connection:
+        fact_rows = connection.execute(
+            "SELECT id, subject_ref, predicate, object_ref_or_value, scope, status, evidence_ids_json FROM facts"
+        ).fetchall()
+        assert len(fact_rows) == 1
+        fact_row = fact_rows[0]
+        assert fact_row[1:6] == ("user", "prefers", "concise Korean handoffs.", "project:g2", "approved")
+        assert len(json.loads(fact_row[6])) == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        transition = connection.execute(
+            "SELECT memory_type, memory_id, from_status, to_status, actor, reason FROM memory_status_transitions"
+        ).fetchone()
+        assert transition == ("fact", fact_row[0], "candidate", "approved", "agent-memory:g2-test", "G2 guarded auto-approval test")
+        relation = connection.execute(
+            "SELECT from_ref, relation_type, to_ref FROM relations"
+        ).fetchone()
+        assert relation == (f"experience_trace:{safe_trace.id}", "auto_approved_as", f"fact:{fact_row[0]}")
+
+
+def test_consolidation_auto_approve_remember_preferences_blocks_conflicts_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-auto-approve-conflict.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path,
+        content="Existing reviewed preference says the user prefers verbose handoffs.",
+        source_type="note",
+        adapter="test",
+    )
+    create_candidate_fact(
+        db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="verbose handoffs.",
+        evidence_ids=[source.id],
+        scope="project:g2",
+        confidence=0.8,
+    )
+    approve_fact(db_path, fact_id=1)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="2" * 64,
+        summary="User prefers concise Korean handoffs.",
+        scope="project:g2",
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 guarded auto-approval test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["approved_count"] == 0
+    assert payload["blocked_count"] == 1
+    assert payload["blocked"][0]["reason_codes"] == ["claim_slot_conflict"]
+    assert payload["blocked"][0]["conflict_preflight"]["result"] == "blocked"
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM memory_status_transitions").fetchone()[0] == 1
+
+
 def test_dogfood_remember_intent_report_summarizes_review_ready_traces_without_mutation_or_secret_leaks(
     tmp_path: Path,
 ) -> None:

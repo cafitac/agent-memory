@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 14:30 KST
+Last updated: 2026-05-04 14:57 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,30 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.64까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path와 G1a `dogfood remember-intent` read-only quality gate가 완료됐다. 자동 승인/자동 장기 memory 생성은 아직 없다. 다음 후보는 Stage G/G2 narrow opt-in auto-approval 설계/RED 테스트다.
+agent-memory는 v0.1.64까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path와 G1a `dogfood remember-intent` read-only quality gate가 완료됐다. 현재 진행 중인 다음 작업은 Stage G/G2 narrow opt-in auto-approval이며, `remember-preferences-v1` 정책을 default-off dry-run/apply CLI로 구현 중이다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.64 post-release validation.
+Stage G/G2 narrow opt-in auto-approval is in progress in worktree `.worktrees/remember-auto-approve` on branch `feat/remember-auto-approve`.
 
-Recommended next slice:
+Current implementation slice:
 
-- Stage G/G2 narrow opt-in auto-approval design/RED-test slice.
-- Keep G2 default-off, scope/type constrained, conflict-preflighted, audited, reversible/reviewable, and live-Hermes tested.
-- Do not change default retrieval ranking, automatic deprecation/supersession, or decay mutation without explicit opt-in policy and audit history.
+- Adds `agent-memory consolidation auto-approve remember-preferences <db> --policy remember-preferences-v1 --scope <scope>`.
+- Default mode is dry-run/read-only and reports `would_approve` candidates without mutation.
+- Apply mode requires `--apply --actor ... --reason ...`.
+- Eligible rows are explicit/review-ready `remember_intent` traces in the selected scope with sanitized summaries shaped like `User prefers ...` or `I prefer ...`.
+- The only auto-approved memory shape is `fact(user, prefers, <value>, <scope>)`.
+- Guardrails block secret-like summaries, unsupported summary shapes, non-selected scopes, ordinary turns, and claim-slot conflicts.
+- Successful apply writes approval/status history and an `auto_approved_as` relation from the trace to the fact.
+
+Recommended remaining steps before merging:
+
+1. Re-run focused/related/full tests.
+2. Run release readiness/package dry-run/manual CLI smoke.
+3. Open PR and let CI validate.
+4. Merge/release, then update runtime/Hermes QA if auto-release publishes a new version.
+
+Do not broaden this slice into procedures, inferred preferences from ordinary conversation, background cron, or default retrieval ranking changes.
 
 ## Current repo state
 
