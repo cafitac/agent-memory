@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 16:46 KST
+Last updated: 2026-05-04 17:08 KST
 
 ## Trigger for the next session
 
@@ -16,23 +16,18 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.66까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3 background consolidation dry-run도 완료되어 cron-friendly/read-only/report-only wrapper `agent-memory consolidation background dry-run`을 제공한다. 다음 문서상 후보는 G4 background consolidation apply mode지만, 자동 적용은 위험도가 높으므로 먼저 G3 dry-run report를 실제 dogfood DB/cron에서 며칠 운영하며 lock/노이즈/추천 품질을 관찰하거나, G1-G3 신호를 함께 측정하는 eval/dogfood slice를 진행하는 편이 안전하다.
+agent-memory는 v0.1.67까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3a도 완료되어 saved G3 background dry-run JSON report를 `agent-memory dogfood background-dry-run <db> --report <json>`로 read-only 평가하고, G4 apply-mode 착수 전 conservative quality gate를 제공한다. 다음 문서상 후보는 G4 background consolidation apply mode지만, 자동 적용은 위험도가 높으므로 G3/G3a report를 실제 dogfood DB/cron에서 더 운영·측정한 뒤 별도 RED-tested G4 plan으로 진행하는 편이 안전하다.
 
 ## Current in-progress slice
 
-Stage G/G3a dogfood quality-gate slice is in progress on branch/worktree:
+No feature slice is currently in progress after v0.1.67 post-release validation.
 
-- Branch: `feat/g3-dogfood-quality-gates`
-- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/g3-dogfood-quality-gates`
-
-Goal: add a read-only `agent-memory dogfood background-dry-run <db> --report <json>` evaluator that summarizes saved G3 dry-run reports into conservative quality gates before any G4 apply-mode plan.
-
-Recommended next slice after this merges:
+Recommended next slice:
 
 - Preferred conservative path: keep collecting G3/G3a reports on the real local DB and use the quality-gate output to write a separate G4 plan only if reports are clean.
 - Alternative roadmap path: Stage G/G4 background consolidation apply mode, but only behind explicit flags/policy/audit/rollback and after a fresh RED-tested plan.
 
-Do not broaden the completed G2/G3 slices into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
+Do not broaden the completed G2/G3/G3a slices into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
 
 ## Current repo state
 
@@ -43,8 +38,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main`.
-- `main` and `origin/main` include v0.1.66 release-sync PR #112.
-- No active feature worktree is required after G3 cleanup.
+- `main` and `origin/main` include v0.1.67 release-sync PR #115.
+- No active feature worktree is required after G3a cleanup.
 
 Expected GitHub identity:
 
@@ -55,13 +50,13 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.66`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.66`
-- npm package: `@cafitac/agent-memory@0.1.66`
-- PyPI package: `cafitac-agent-memory==0.1.66`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.66/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.66.
-- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.66-20260504161000`.
+- `v0.1.67`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.67`
+- npm package: `@cafitac/agent-memory@0.1.67`
+- PyPI package: `cafitac-agent-memory==0.1.67`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.67.
+- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.67`.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -71,6 +66,50 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.omc/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed Stage G/G3a slice
+
+PR #114 `feat: add background dry-run dogfood gates` merged and released in v0.1.67. Release-sync PR #115 merged.
+
+- New command: `agent-memory dogfood background-dry-run <db> --report <json> [--output <path>]`.
+- It evaluates one or more saved G3 background dry-run JSON reports into aggregate quality gates.
+- Output kind is `background_dry_run_dogfood_report` with `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`.
+- It summarizes only secret-safe report metadata, per-report counts, warnings, and gate decisions; it does not echo raw report payloads, raw prompts, transcripts, query previews, tokens, or credentials.
+- Conservative gate decision `continue_dry_run_dogfooding_before_g4` is expected when reports are sparse/noisy; passing the gate is advisory and does not enable apply mode.
+- G3a does not mutate DB rows, create facts/relations/traces/retrieval observations, infer ordinary conversation preferences, or change Hermes/default retrieval behavior.
+
+Verification completed for G3a/v0.1.67:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'dogfood_background_dry_run'
+# 2 passed, 73 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'dogfood_background_dry_run or background_dry_run or dogfood or remember_intent or consolidation or activation or reinforcement or decay_risk'
+# 14 passed, 66 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 239 passed
+
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
+```
+
+Release QA completed:
+
+- PR #114 CI succeeded and merged. A push-event CI run initially hit a known flaky retrieval-eval fixture assertion, while the pull_request run passed; an empty retry commit made both push and pull_request checks pass.
+- Release-sync PR #115 validation workflow_dispatch CI succeeded and merged.
+- GitHub Release `v0.1.67` published.
+- npm registry shows `@cafitac/agent-memory@0.1.67`; clean `npm exec --package=@cafitac/agent-memory@0.1.67` smoke verified G3 + G3a command surfaces after normal PyPI/uvx propagation lag.
+- PyPI fresh venv smoke verified `cafitac-agent-memory==0.1.67`, G3 background dry-run, and G3a background-dry-run dogfood report.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up before updating the hook path to v0.1.67.
+- Direct `hermes-pre-llm-hook` smoke succeeded.
+- Runtime G3a live dogfood smoke against the latest saved local report succeeded with read-only/no-mutation/default-retrieval-unchanged assertions.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.67 agent-memory pre-LLM hook.
 
 ## Completed Stage G/G3 slice
 
@@ -174,7 +213,7 @@ The north-star remains a human-memory-like lifecycle:
 5. Lifecycle edges for reinforcement, conflict, supersession, decay risk, and audit history.
 6. Conservative background/reporting jobs before any background apply mode.
 
-Completed through v0.1.66:
+Completed through v0.1.67:
 
 - Stage C: activation evidence, activation summary, reinforcement report, decay risk report.
 - Stage D: read-only consolidation candidates and `consolidation explain`.
@@ -184,11 +223,11 @@ Completed through v0.1.66:
 - Stage G/G1a: remember-intent dogfood report.
 - Stage G/G2: narrow opt-in remember-preference auto-approval.
 - Stage G/G3: cron-friendly background consolidation dry-run report.
+- Stage G/G3a: read-only dogfood quality gates over saved G3 reports.
 
 Open candidates:
 
-- Finish Stage G/G3a: `dogfood background-dry-run` read-only quality gate over saved G3 reports.
-- Dogfood G3/G3a dry-run reports on the real local DB and define quality gates/noise thresholds.
+- Keep dogfooding G3/G3a dry-run reports on the real local DB and define stricter quality gates/noise thresholds before G4.
 - Stage G/G4 background apply mode, only after explicit policy/audit/rollback design.
 - Stage H eval/visualization/backup/public docs hardening.
 
@@ -202,12 +241,16 @@ git tag --sort=-version:refname | head -5
 HOME=/Users/reddit gh pr list --repo cafitac/agent-memory --state open --json number,title,headRefName,url
 HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 
-/Users/reddit/.agent-memory/runtime/v0.1.66/.venv/bin/agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
+/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
   --limit 200 \
   --top 20 \
   --min-evidence 2 \
   --output /Users/reddit/.agent-memory/reports/background-dry-run.json \
   --lock-path /Users/reddit/.agent-memory/background-dry-run.lock
+
+/Users/reddit/.agent-memory/runtime/v0.1.67/.venv/bin/agent-memory dogfood background-dry-run /Users/reddit/.agent-memory/memory.db \
+  --report /Users/reddit/.agent-memory/reports/background-dry-run.json \
+  --output /Users/reddit/.agent-memory/reports/background-dry-run-quality.json
 ```
 
 ## Safety rails
