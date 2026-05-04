@@ -140,3 +140,38 @@ A reviewer can pass `--allow-conflict` only after accepting that both claims sho
 - Conflicts require explicit action.
 - Suggested commands include review explain, replacements, and graph inspect.
 - Tests cover at least one conflicting candidate.
+
+## PR E5: Add explicit reviewed conflict relation edges
+
+### Status
+
+- In progress on `feat/consolidation-reviewed-relations`.
+
+### Objective
+
+Give reviewers an explicit graph-level action after E4 conflict preflight/`--allow-conflict`, without silently changing memory status or retrieval ranking.
+
+### Planned/implemented shape
+
+`review relate-conflict fact <db> <left-fact-id> <right-fact-id> --actor ... --reason ...` records a human-reviewed `conflicts_with` relation between two semantic facts when:
+
+- both facts exist;
+- they share the same claim slot (`subject_ref`, `predicate`, `scope`);
+- their `object_ref_or_value` differs;
+- review metadata is provided.
+
+The relation stores `review_actor`, `review_reason`, and `reviewed_at`. `review conflicts fact ...` surfaces these relation refs in its read-only same-slot report. Existing `review supersede fact ...` replacement relations use the same relation review metadata columns.
+
+### Guardrails
+
+- Does not approve, deprecate, supersede, reject, snooze, delete, or re-rank memories.
+- Does not create automatic retrieval policy changes.
+- Refuses cross-slot or duplicate-object conflict relations.
+- Keeps output secret-safe and avoids raw prompt/transcript/query preview fields.
+
+### Acceptance
+
+- Tests cover successful reviewed conflict relation creation.
+- Tests cover missing review metadata and cross-slot rejection without mutation.
+- Existing supersession/replacement behavior remains compatible.
+- Migration adds review metadata columns to existing relation tables.

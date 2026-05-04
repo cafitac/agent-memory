@@ -79,7 +79,10 @@ CREATE TABLE IF NOT EXISTS relations (
     evidence_ids_json TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 0.5,
     valid_from TEXT,
-    valid_to TEXT
+    valid_to TEXT,
+    review_actor TEXT,
+    review_reason TEXT,
+    reviewed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS memory_status_transitions (

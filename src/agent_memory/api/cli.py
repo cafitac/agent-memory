@@ -31,6 +31,7 @@ from agent_memory.core.curation import (
     create_candidate_fact,
     create_candidate_procedure,
     create_episode,
+    create_fact_conflict_relation,
     deprecate_memory,
     dispute_memory,
     supersede_fact,
@@ -55,6 +56,7 @@ from agent_memory.storage.sqlite import (
     list_candidate_facts,
     list_candidate_procedures,
     list_experience_traces,
+    list_fact_conflict_relations,
     list_fact_replacement_relations,
     list_memory_activations,
     list_facts_by_claim_slot,
@@ -130,6 +132,24 @@ def _fact_replacement_chain_payload(relations, *, fact_id: int) -> dict[str, lis
         elif payload["replacement_fact_id"] == fact_id:
             chain["replaces"].append(payload)
     return chain
+
+
+def _fact_conflict_relation_payload(relation) -> dict[str, Any]:
+    def parse_fact_ref(value: str) -> int | None:
+        prefix = "fact:"
+        if not value.startswith(prefix):
+            return None
+        return int(value[len(prefix) :])
+
+    return {
+        "relation_id": relation.id,
+        "left_fact_id": parse_fact_ref(relation.from_ref),
+        "right_fact_id": parse_fact_ref(relation.to_ref),
+        "relation_type": relation.relation_type,
+        "review_actor": relation.review_actor,
+        "review_reason": relation.review_reason,
+        "evidence_ids": relation.evidence_ids,
+    }
 
 
 def _fact_decision_summary(*, status: str, replacement_chain: dict[str, list[dict[str, Any]]]) -> str:
@@ -1986,6 +2006,18 @@ def _build_parser() -> argparse.ArgumentParser:
     review_replacements_parser.add_argument("db_path", type=Path)
     review_replacements_parser.add_argument("memory_id", type=int)
 
+    review_relate_conflict_parser = review_subparsers.add_parser(
+        "relate-conflict",
+        help="Record a human-reviewed conflict relation between two same-claim-slot facts without changing statuses.",
+    )
+    review_relate_conflict_parser.add_argument("memory_type", choices=["fact"])
+    review_relate_conflict_parser.add_argument("db_path", type=Path)
+    review_relate_conflict_parser.add_argument("left_memory_id", type=int)
+    review_relate_conflict_parser.add_argument("right_memory_id", type=int)
+    review_relate_conflict_parser.add_argument("--reason", required=True)
+    review_relate_conflict_parser.add_argument("--actor", required=True)
+    review_relate_conflict_parser.add_argument("--evidence-ids-json", default="[]")
+
     review_history_parser = review_subparsers.add_parser(
         "history",
         help="Show status transition history for one memory item.",
@@ -2546,6 +2578,34 @@ def main() -> None:
                 )
             )
             return
+        elif args.review_action == "relate-conflict":
+            relation = create_fact_conflict_relation(
+                db_path=args.db_path,
+                left_fact_id=args.left_memory_id,
+                right_fact_id=args.right_memory_id,
+                reason=args.reason,
+                actor=args.actor,
+                evidence_ids=json.loads(args.evidence_ids_json),
+            )
+            left_fact = get_fact(args.db_path, fact_id=args.left_memory_id)
+            print(
+                json.dumps(
+                    {
+                        "kind": "memory_review_conflict_relation",
+                        "memory_type": args.memory_type,
+                        "read_only": False,
+                        "status_mutation": False,
+                        "claim_slot": {
+                            "subject_ref": left_fact.subject_ref,
+                            "predicate": left_fact.predicate,
+                            "scope": left_fact.scope,
+                        },
+                        "relation": relation.model_dump(mode="json"),
+                    },
+                    indent=2,
+                )
+            )
+            return
         elif args.review_action == "history":
             history = list_memory_status_history(
                 args.db_path,
@@ -2574,6 +2634,14 @@ def main() -> None:
                 scope=args.scope,
             )
             counts = _status_counts_for_facts(facts)
+            conflict_relation_payloads = []
+            seen_relation_ids = set()
+            for fact in facts:
+                for relation in list_fact_conflict_relations(args.db_path, fact_id=fact.id):
+                    if relation.id in seen_relation_ids:
+                        continue
+                    seen_relation_ids.add(relation.id)
+                    conflict_relation_payloads.append(_fact_conflict_relation_payload(relation))
             print(
                 json.dumps(
                     {
@@ -2584,6 +2652,7 @@ def main() -> None:
                         },
                         "counts": counts,
                         "default_retrieval_policy": "approved_only",
+                        "conflict_relations": conflict_relation_payloads,
                         "facts": [fact.model_dump(mode="json") for fact in facts],
                     },
                     indent=2,
