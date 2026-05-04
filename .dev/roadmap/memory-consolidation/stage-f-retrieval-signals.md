@@ -15,6 +15,8 @@ Use consolidation signals to improve retrieval only after they are visible and t
 
 ## PR F1: Read-only retrieval policy preview
 
+Status: Completed in v0.1.59 via PR #90.
+
 ### Objective
 
 Expose lifecycle/retrieval policy decisions without changing default ranking, prompt injection, or memory state.
