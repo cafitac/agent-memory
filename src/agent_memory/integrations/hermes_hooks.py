@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import shlex
 import sys
@@ -412,6 +413,31 @@ def _safe_hermes_trace_metadata(payload: HermesShellHookPayload) -> dict[str, An
     return metadata
 
 
+_EXPLICIT_REMEMBER_PATTERNS = [
+    re.compile(r"^\s*remember\s+this\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*please\s+remember\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+]
+
+_SECRET_LIKE_PATTERNS = [
+    re.compile(r"\b(api[_-]?key|token|secret|password|passwd|pwd|credential|connection[_-]?string)\b\s*[:=]", re.IGNORECASE),
+    re.compile(r"\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{12,}\b", re.IGNORECASE),
+]
+
+
+def _explicit_remember_summary(user_message: str) -> str | None:
+    for pattern in _EXPLICIT_REMEMBER_PATTERNS:
+        match = pattern.match(user_message)
+        if not match:
+            continue
+        summary = " ".join(match.group("summary").strip().split())
+        return summary or None
+    return None
+
+
+def _contains_secret_like_text(text: str) -> bool:
+    return any(pattern.search(text) is not None for pattern in _SECRET_LIKE_PATTERNS)
+
+
 def _record_pre_llm_experience_trace(
     *,
     payload: HermesShellHookPayload,
@@ -422,6 +448,34 @@ def _record_pre_llm_experience_trace(
 ) -> None:
     if not options.record_trace or is_synthetic_hermes_doctor_payload(payload):
         return
+
+    remember_summary = _explicit_remember_summary(user_message)
+    if remember_summary and not _contains_secret_like_text(user_message):
+        metadata = _safe_hermes_trace_metadata(payload)
+        metadata.update(
+            {
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+            }
+        )
+        insert_experience_trace(
+            options.db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=hashlib.sha256(user_message.encode("utf-8")).hexdigest(),
+            summary=remember_summary,
+            scope=effective_preferred_scope,
+            session_ref=_hashed_ref("session", payload.session_id),
+            salience=1.0,
+            user_emphasis=1.0,
+            related_memory_refs=_memory_refs_from_packet(packet),
+            retention_policy="review",
+            metadata=metadata,
+        )
+        return
+
     insert_experience_trace(
         options.db_path,
         surface="hermes-pre-llm-hook",
