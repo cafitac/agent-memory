@@ -31,6 +31,22 @@ Capture user-directed remember intent as a candidate, not necessarily as approve
 - Candidate is explainable and reviewable.
 - G1 remains gated behind existing `--record-trace`; it records `remember_intent` review traces only, never approved facts/procedures/episodes.
 
+## PR G1a: Dogfood/evaluate explicit remember-intent traces before G2
+
+Status: In progress after `v0.1.63`; intended as a conservative quality gate before any auto-approval slice.
+
+### Objective
+
+Summarize real/local `remember_intent` trace quality without mutating memory so G2 policy work starts from measured noise and guardrail data.
+
+### Acceptance
+
+- Report is read-only and visibly says default retrieval is unchanged.
+- Counts inspected `remember_intent` traces, ordinary turn traces, review-ready traces, scope distribution, and unsafe samples.
+- Does not print raw metadata, raw prompts, transcripts, or secret-like summaries.
+- Does not create facts/procedures/episodes, relations, status transitions, candidates, or approvals.
+- Points next steps toward human review and G2 default-off policy design.
+
 ## PR G2: Add opt-in auto-approval for narrow low-risk memories
 
 ### Objective
