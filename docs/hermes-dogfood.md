@@ -78,6 +78,27 @@ For Stage G/G1 dogfood, explicit `Remember this:` / `Please remember:` turns bec
 
 `dogfood remember-intent` is the read-only G1 quality gate before any G2 auto-approval policy. It counts inspected `remember_intent` and ordinary turn traces, reports review-ready counts, scope distribution, safe samples, and unsafe sample counts. It intentionally omits raw trace metadata, raw prompts, and secret-like summaries; it does not mutate traces, memory records, relations, counters, retrieval ranking, or Hermes hook behavior.
 
+G2 introduces a single default-off auto-approval policy for explicit low-risk preference memories. First dry-run it:
+
+```bash
+agent-memory consolidation auto-approve remember-preferences ~/.agent-memory/memory.db \
+  --policy remember-preferences-v1 \
+  --scope user:default
+```
+
+The dry-run reports `kind: remember_preference_auto_approval_report`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, and `would_approve` candidates. To apply, the operator must explicitly pass `--apply` plus `--actor` and `--reason`:
+
+```bash
+agent-memory consolidation auto-approve remember-preferences ~/.agent-memory/memory.db \
+  --policy remember-preferences-v1 \
+  --scope user:default \
+  --apply \
+  --actor "reviewer:local" \
+  --reason "explicit remember preference reviewed for auto-approval"
+```
+
+Only review-ready `remember_intent` traces in the selected scope whose sanitized summary is shaped like `User prefers ...` or `I prefer ...` are eligible. The policy blocks secret-like summaries, ordinary turns, non-matching scopes, unsupported summary shapes, and claim-slot conflicts. Successful apply writes an approved `fact` with predicate `prefers`, normal status-transition audit history, and an `auto_approved_as` relation from the trace to the fact. Use `review history`, `review explain`, and `graph inspect` to inspect or roll forward with explicit human review; do not treat this policy as broad conversation memory automation.
+
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 
 `activations summary` is the first read-only Stage C dogfood report for this substrate. It summarizes activation counts, activation windows, surfaces/scopes, status counts for top refs, empty-retrieval evidence, and top refs with advisory signals such as `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, or `deprecated_activation`. Use it before reinforcement/decay scoring; it does not mutate memory status and does not affect ranking.
