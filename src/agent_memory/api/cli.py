@@ -97,6 +97,89 @@ def _trace_filters_payload(*, surface: str | None, event_kind: str | None, scope
     }
 
 
+_SECRET_LIKE_REPORT_MARKERS: tuple[str, ...] = (
+    "api_key",
+    "api-key",
+    "token=",
+    "token:",
+    "secret=",
+    "secret:",
+    "password=",
+    "password:",
+    "credential=",
+    "credential:",
+    "connection_string=",
+    "connection-string=",
+    "bearer ",
+)
+
+
+def _contains_secret_like_report_text(value: str | None) -> bool:
+    if value is None:
+        return False
+    lowered = value.lower()
+    return any(marker in lowered for marker in _SECRET_LIKE_REPORT_MARKERS)
+
+
+def _remember_intent_trace_is_review_ready(trace: Any) -> bool:
+    metadata = trace.metadata
+    return (
+        trace.event_kind == "remember_intent"
+        and trace.retention_policy == "review"
+        and metadata.get("candidate_policy") == "review_required"
+        and metadata.get("auto_approved") is False
+        and metadata.get("secret_scan") == "passed"
+        and not _contains_secret_like_report_text(trace.summary)
+    )
+
+
+def _remember_intent_sample_payload(trace: Any) -> dict[str, Any]:
+    metadata = trace.metadata
+    return {
+        "trace_id": trace.id,
+        "scope": trace.scope,
+        "summary": trace.summary,
+        "candidate_policy": metadata.get("candidate_policy"),
+        "auto_approved": metadata.get("auto_approved"),
+        "secret_scan": metadata.get("secret_scan"),
+    }
+
+
+def _remember_intent_dogfood_report(db_path: Path, *, limit: int = 200, sample_limit: int = 10) -> dict[str, Any]:
+    traces = list_experience_traces(db_path, limit=limit)
+    remember_traces = [trace for trace in traces if trace.event_kind == "remember_intent"]
+    ordinary_turns = [trace for trace in traces if trace.event_kind == "turn"]
+    review_ready_traces = [trace for trace in remember_traces if _remember_intent_trace_is_review_ready(trace)]
+    safe_samples = review_ready_traces[:sample_limit]
+    scope_counts = Counter(trace.scope or "unspecified" for trace in remember_traces)
+    unsafe_sample_count = len(remember_traces) - len(review_ready_traces)
+    suggested_next_steps = [
+        "Review remember_intent samples and their consolidation candidate explanations before enabling G2 auto-approval.",
+        "Keep G2 default-off and require policy, conflict preflight, audit history, and rollback/review commands.",
+    ]
+    if unsafe_sample_count:
+        suggested_next_steps.insert(1, "Inspect unsafe remember_intent counts before trusting any automation policy.")
+    return {
+        "kind": "remember_intent_dogfood_report",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "limit": limit,
+        "sample_limit": sample_limit,
+        "trace_counts": {
+            "total": len(traces),
+            "remember_intent": len(remember_traces),
+            "ordinary_turn": len(ordinary_turns),
+            "other": len(traces) - len(remember_traces) - len(ordinary_turns),
+        },
+        "review_ready_count": len(review_ready_traces),
+        "unsafe_sample_count": unsafe_sample_count,
+        "scopes": dict(sorted(scope_counts.items())),
+        "samples": [_remember_intent_sample_payload(trace) for trace in safe_samples],
+        "suggested_next_steps": suggested_next_steps,
+    }
+
+
 def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
     def parse_fact_ref(value: str) -> int | None:
         prefix = "fact:"
@@ -3073,6 +3156,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_baseline_parser.add_argument("--max-guidelines", type=int)
     dogfood_baseline_parser.add_argument("--no-reason-codes", action="store_true")
     dogfood_baseline_parser.add_argument("--timeout", type=int)
+    dogfood_remember_parser = dogfood_subparsers.add_parser(
+        "remember-intent",
+        help="Build a read-only dogfood report for explicit remember-intent traces before G2 automation.",
+    )
+    dogfood_remember_parser.add_argument("db_path", type=Path)
+    dogfood_remember_parser.add_argument("--limit", type=int, default=200)
+    dogfood_remember_parser.add_argument("--sample-limit", type=int, default=10)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -3803,6 +3893,22 @@ def main() -> None:
     if args.command == "dogfood":
         if args.dogfood_action == "baseline":
             print(json.dumps(_dogfood_baseline_payload(args), indent=2))
+            return
+        if args.dogfood_action == "remember-intent":
+            if args.limit < 1:
+                raise ValueError("dogfood remember-intent limit must be >= 1")
+            if args.sample_limit < 0:
+                raise ValueError("dogfood remember-intent sample limit must be >= 0")
+            print(
+                json.dumps(
+                    _remember_intent_dogfood_report(
+                        args.db_path,
+                        limit=args.limit,
+                        sample_limit=args.sample_limit,
+                    ),
+                    indent=2,
+                )
+            )
             return
         raise ValueError(f"Unsupported dogfood action: {args.dogfood_action}")
 

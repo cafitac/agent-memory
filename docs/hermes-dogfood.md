@@ -62,6 +62,7 @@ agent-memory consolidation promote fact ~/.agent-memory/memory.db <candidate-id>
   --scope project:agent-memory
 agent-memory consolidation promotions report ~/.agent-memory/memory.db --limit 50
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
+agent-memory dogfood remember-intent ~/.agent-memory/memory.db --limit 200 --sample-limit 10
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
 agent-memory traces retention-report ~/.agent-memory/memory.db --max-trace-count 10000
@@ -74,6 +75,8 @@ Use this before tuning ranking or adding broader graph traversal: first confirm 
 Stage B trace work includes a manual CLI for explicit local dogfood plus a Hermes hook opt-in for real turns. `experience_traces` is a local substrate for bounded event fingerprints and sanitized summaries/signals; `traces record` writes only when invoked explicitly, and `traces list` emits read-only filtered JSON. Hermes does not write traces by default. To enable real-turn trace rows, add `--record-trace` to `agent-memory hermes-pre-llm-hook ...` or render/install the hook with `--record-trace`. Hook traces store a content hash, hashed session ref, safe metadata such as platform/model, and related retrieved memory refs; they do not store raw prompts/user messages/query previews, skip synthetic doctor/test payloads, and are non-blocking if trace persistence fails. Traces are not queried by default retrieval and are not injected into prompts. Use `traces retention-report` to audit trace volume, expired refs, and expirable rows missing `expires_at`; it is read-only and intentionally omits trace metadata and summary text.
 
 For Stage G/G1 dogfood, explicit `Remember this:` / `Please remember:` turns become `remember_intent` review traces only when hook trace recording is already opt-in enabled and the message passes the conservative secret-like scan. These rows carry sanitized summaries, `retention_policy=review`, high salience/user emphasis, and metadata showing review is required and auto-approval is false. They are reviewable through the existing read-only consolidation candidate/explain commands; they do not create approved long-term memories.
+
+`dogfood remember-intent` is the read-only G1 quality gate before any G2 auto-approval policy. It counts inspected `remember_intent` and ordinary turn traces, reports review-ready counts, scope distribution, safe samples, and unsafe sample counts. It intentionally omits raw trace metadata, raw prompts, and secret-like summaries; it does not mutate traces, memory records, relations, counters, retrieval ranking, or Hermes hook behavior.
 
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 
@@ -161,6 +164,7 @@ agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db --preset conse
 agent-memory hermes-hook-config-snippet ~/.agent-memory/memory.db --preset balanced
 agent-memory doctor
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
+agent-memory dogfood remember-intent ~/.agent-memory/memory.db --limit 200 --sample-limit 10
 hermes hooks doctor
 ```
 

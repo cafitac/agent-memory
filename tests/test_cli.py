@@ -13,6 +13,7 @@ from agent_memory.integrations import hermes_hooks
 from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
 from agent_memory.storage.sqlite import (
     initialize_database,
+    insert_experience_trace,
     insert_relation,
     list_experience_traces,
     record_memory_retrieval,
@@ -4138,3 +4139,110 @@ def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_r
     assert "api_key" not in result.stdout
     candidates = json.loads(result.stdout)["candidates"]
     assert all(candidate["event_kind_counts"] != {"remember_intent": 1} for candidate in candidates)
+
+
+
+def test_dogfood_remember_intent_report_summarizes_review_ready_traces_without_mutation_or_secret_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-intent-dogfood.db"
+    initialize_database(db_path)
+    safe_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="a" * 64,
+        summary="Project prefers explicit review gates before long-term memory approval.",
+        scope="project:g1",
+        session_ref="session:safe",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+            "api_key": "SHOULD_NOT_APPEAR",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="b" * 64,
+        summary="Unsafe remember trace with token=SHOULD_NOT_APPEAR must stay out of samples.",
+        scope="project:g1",
+        session_ref="session:unsafe",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={"candidate_policy": "review_required", "auto_approved": False, "secret_scan": "passed"},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="c" * 64,
+        summary=None,
+        scope="project:g1",
+        session_ref="session:ordinary",
+        retention_policy="ephemeral",
+        metadata={"trace_recording": "opt_in"},
+    )
+
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "remember-intent",
+            str(db_path),
+            "--limit",
+            "20",
+            "--sample-limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_APPEAR" not in result.stdout
+    assert "api_key" not in result.stdout
+    assert "token=" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_intent_dogfood_report"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["trace_counts"] == {
+        "total": 3,
+        "remember_intent": 2,
+        "ordinary_turn": 1,
+        "other": 0,
+    }
+    assert payload["review_ready_count"] == 1
+    assert payload["unsafe_sample_count"] == 1
+    assert payload["scopes"] == {"project:g1": 2}
+    assert payload["samples"] == [
+        {
+            "trace_id": safe_trace.id,
+            "scope": "project:g1",
+            "summary": "Project prefers explicit review gates before long-term memory approval.",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        }
+    ]
+    assert payload["suggested_next_steps"][0].startswith("Review remember_intent")
+    assert _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"]) == before_counts
+
+
+def _table_counts(db_path: Path, tables: list[str]) -> dict[str, int]:
+    with sqlite3.connect(db_path) as connection:
+        return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}

@@ -16,13 +16,27 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.63까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path가 완료됐고, 기존 `--record-trace` opt-in 안에서만 `remember_intent` review traces를 만든다. 자동 승인/자동 장기 memory 생성은 아직 없다. 다음 후보는 G2 narrow opt-in auto-approval 전에 G1 dogfood/eval을 더 보거나, Stage G/G2를 엄격한 opt-in 정책으로 설계하는 것이다.
+agent-memory는 v0.1.63까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path가 완료됐고, 현재 진행 중인 다음 slice는 G2 전에 `dogfood remember-intent` read-only report로 G1 trace 품질을 측정하는 것이다. 자동 승인/자동 장기 memory 생성은 아직 없다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.63 post-release cleanup.
+Stage G/G1a remember-intent dogfood/eval report is in progress on branch `feat/remember-intent-eval` under `.worktrees/remember-intent-eval`.
 
-Recommended next slice:
+Current intended command:
+
+```bash
+agent-memory dogfood remember-intent "$DB" --limit 200 --sample-limit 10
+```
+
+Acceptance:
+
+- Read-only JSON report with `kind=remember_intent_dogfood_report`, `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`.
+- Counts inspected `remember_intent` traces, ordinary turn traces, review-ready traces, scope distribution, and unsafe sample count.
+- Prints only safe sample summaries and compact policy flags; does not print raw trace metadata, raw prompts, transcripts, or secret-like summaries.
+- Does not create facts/procedures/episodes, relations, candidates, approvals, status transitions, or retrieval observations.
+- Keeps G2 auto-approval out of scope.
+
+Next after this slice:
 
 - Dogfood/evaluate G1 remember-intent review traces before G2, or start G2 only as an explicit opt-in policy design/RED-test slice.
 - Do not change default retrieval ranking, automatic approval, deprecation/supersession, or decay mutation without opt-in policy, conflict preflight, audit history, and live Hermes E2E.
