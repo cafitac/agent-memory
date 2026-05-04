@@ -163,3 +163,15 @@ agent-memory consolidation background dry-run <db> \
 ```
 
 Verify the command exits zero, prints `kind: memory_consolidation_background_dry_run`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, `status: completed`, and writes the same JSON to `<tmp-report.json>`. Also hold the lock file from another process and verify a second run exits zero with `status: skipped_lock_busy` rather than mutating memory or failing cron.
+
+For the G3 dogfood quality-gate smoke, run the read-only evaluator over the saved report:
+
+```bash
+agent-memory dogfood background-dry-run <db> \
+  --report <tmp-report.json> \
+  --candidate-min 1 \
+  --max-decay-risk 0 \
+  --output <tmp-quality-report.json>
+```
+
+Verify it prints `kind: background_dry_run_dogfood_report`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, per-report summaries only, and no raw report payloads or `raw_prompt`/query fields. `quality_gate.pass: true` only means a separate G4 plan may be drafted; it does not apply, approve, or change retrieval.
