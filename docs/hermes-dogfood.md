@@ -54,6 +54,11 @@ agent-memory activations summary ~/.agent-memory/memory.db --limit 200 --top 20 
 agent-memory activations reinforcement-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations decay-risk-report ~/.agent-memory/memory.db --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates ~/.agent-memory/memory.db --limit 200 --top 20 --min-evidence 2
+agent-memory consolidation background dry-run ~/.agent-memory/memory.db \
+  --limit 200 \
+  --top 20 \
+  --min-evidence 2 \
+  --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory consolidation explain ~/.agent-memory/memory.db <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact ~/.agent-memory/memory.db <candidate-id> \
   --subject-ref "agent-memory" \
@@ -98,6 +103,19 @@ agent-memory consolidation auto-approve remember-preferences ~/.agent-memory/mem
 ```
 
 Only review-ready `remember_intent` traces in the selected scope whose sanitized summary is shaped like `User prefers ...` or `I prefer ...` are eligible. The policy blocks secret-like summaries, ordinary turns, non-matching scopes, unsupported summary shapes, and claim-slot conflicts. Successful apply writes an approved `fact` with predicate `prefers`, normal status-transition audit history, and an `auto_approved_as` relation from the trace to the fact. Use `review history`, `review explain`, and `graph inspect` to inspect or roll forward with explicit human review; do not treat this policy as broad conversation memory automation.
+
+G3 adds a cron-friendly dry-run wrapper over the existing read-only consolidation/activation diagnostics:
+
+```bash
+agent-memory consolidation background dry-run ~/.agent-memory/memory.db \
+  --limit 200 \
+  --top 20 \
+  --min-evidence 2 \
+  --frequent-threshold 3 \
+  --output ~/.agent-memory/reports/background-consolidation.json
+```
+
+The report emits `kind: memory_consolidation_background_dry_run`, takes a non-blocking file lock, writes the same JSON to `--output` when provided, and returns success with `status: skipped_lock_busy` if another run is already active. It bundles `consolidation candidates`, `activations summary`, `activations reinforcement-report`, and `activations decay-risk-report` for human review. It is intentionally read-only: no facts, sources, relations, status transitions, traces, retrieval observations, default retrieval ranking, or Hermes hook behavior are changed, and there is no apply mode in this command.
 
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 

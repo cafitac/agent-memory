@@ -117,6 +117,7 @@ agent-memory activations summary "$DB" --limit 200 --top 20 --frequent-threshold
 agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
+agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \

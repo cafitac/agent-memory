@@ -1,3 +1,4 @@
+import fcntl
 import json
 import os
 import sqlite3
@@ -4503,6 +4504,130 @@ def test_dogfood_remember_intent_report_summarizes_review_ready_traces_without_m
     ]
     assert payload["suggested_next_steps"][0].startswith("Review remember_intent")
     assert _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"]) == before_counts
+
+
+def test_consolidation_background_dry_run_writes_cron_friendly_read_only_report(tmp_path: Path) -> None:
+    db_path = tmp_path / "background-dry-run.db"
+    report_path = tmp_path / "reports" / "background-report.json"
+    lock_path = tmp_path / "background.lock"
+    initialize_database(db_path)
+    for index in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=f"{index}" * 64,
+            summary="User prefers concise Korean handoffs.",
+            scope="project:g3",
+            session_ref=f"session:g3:{index}",
+            salience=1.0,
+            user_emphasis=1.0,
+            retention_policy="review",
+            metadata={
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+                "raw_prompt": "token=SHOULD_NOT_APPEAR",
+            },
+        )
+
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "source_records", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "background",
+            "dry-run",
+            str(db_path),
+            "--limit",
+            "50",
+            "--top",
+            "10",
+            "--min-evidence",
+            "2",
+            "--output",
+            str(report_path),
+            "--lock-path",
+            str(lock_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_APPEAR" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_background_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["status"] == "completed"
+    assert payload["lock"]["acquired"] is True
+    assert payload["output_path"] == str(report_path)
+    assert payload["reports"]["candidates"]["kind"] == "memory_consolidation_candidates"
+    assert payload["reports"]["candidates"]["candidate_count"] == 1
+    assert payload["review_handoff"]["suitable_for_human_review"] is True
+    assert payload["automation_policy"]["apply_supported"] is False
+    assert report_path.exists()
+    file_payload = json.loads(report_path.read_text())
+    assert file_payload == payload
+    assert _table_counts(db_path, ["experience_traces", "facts", "source_records", "relations", "memory_status_transitions"]) == before_counts
+
+
+def test_consolidation_background_dry_run_skips_when_lock_is_busy_without_failing_cron(tmp_path: Path) -> None:
+    db_path = tmp_path / "background-lock.db"
+    report_path = tmp_path / "background-lock-report.json"
+    lock_path = tmp_path / "background.lock"
+    initialize_database(db_path)
+    lock_path.touch()
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    with lock_path.open("r+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "consolidation",
+                "background",
+                "dry-run",
+                str(db_path),
+                "--output",
+                str(report_path),
+                "--lock-path",
+                str(lock_path),
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_background_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "skipped_lock_busy"
+    assert payload["lock"]["acquired"] is False
+    assert payload["error"] is None
+    assert report_path.exists()
+    assert json.loads(report_path.read_text()) == payload
+    assert _table_counts(db_path, ["facts", "source_records", "relations", "memory_status_transitions"]) == {
+        "facts": 0,
+        "source_records": 0,
+        "relations": 0,
+        "memory_status_transitions": 0,
+    }
 
 
 def _table_counts(db_path: Path, tables: list[str]) -> dict[str, int]:

@@ -150,3 +150,16 @@ After installing `cafitac-agent-memory==0.1.65` or `@cafitac/agent-memory@0.1.65
 For the G1a report gate, seed or capture at least one safe remember-intent trace, then run `agent-memory dogfood remember-intent <db> --limit 200 --sample-limit 10`. The report should return `kind: remember_intent_dogfood_report`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, sanitized samples only, and no fact/procedure/episode/approval mutations.
 
 For the G2 narrow auto-approval smoke, seed a safe review-ready remember-intent trace whose summary is shaped like `User prefers concise Korean handoffs.`. First run `agent-memory consolidation auto-approve remember-preferences <db> --policy remember-preferences-v1 --scope <scope>` and verify the report is read-only with a `would_approve` candidate and no fact/source/relation/status mutation. Then run the same command with `--apply --actor <actor> --reason <reason>` and verify exactly one approved `fact` with predicate `prefers`, a status transition, and an `auto_approved_as` graph relation are created. Also smoke a conflicting same-slot approved fact and verify the apply command exits non-zero without mutation.
+
+For the G3 background dry-run smoke, seed at least two safe review traces with matching sanitized summaries, then run:
+
+```bash
+agent-memory consolidation background dry-run <db> \
+  --limit 50 \
+  --top 10 \
+  --min-evidence 2 \
+  --output <tmp-report.json> \
+  --lock-path <tmp-lock>
+```
+
+Verify the command exits zero, prints `kind: memory_consolidation_background_dry_run`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, `status: completed`, and writes the same JSON to `<tmp-report.json>`. Also hold the lock file from another process and verify a second run exits zero with `status: skipped_lock_busy` rather than mutating memory or failing cron.
