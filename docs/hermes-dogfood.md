@@ -113,9 +113,15 @@ agent-memory consolidation background dry-run ~/.agent-memory/memory.db \
   --min-evidence 2 \
   --frequent-threshold 3 \
   --output ~/.agent-memory/reports/background-consolidation.json
+agent-memory dogfood background-dry-run ~/.agent-memory/memory.db \
+  --report ~/.agent-memory/reports/background-consolidation.json \
+  --candidate-min 1 \
+  --max-decay-risk 0
 ```
 
 The report emits `kind: memory_consolidation_background_dry_run`, takes a non-blocking file lock, writes the same JSON to `--output` when provided, and returns success with `status: skipped_lock_busy` if another run is already active. It bundles `consolidation candidates`, `activations summary`, `activations reinforcement-report`, and `activations decay-risk-report` for human review. It is intentionally read-only: no facts, sources, relations, status transitions, traces, retrieval observations, default retrieval ranking, or Hermes hook behavior are changed, and there is no apply mode in this command.
+
+`dogfood background-dry-run` is the read-only G3 quality gate over one or more saved background reports. It summarizes status counts, candidate/reinforcement/decay-risk maxima, quality warnings, and a conservative `quality_gate.pass` without embedding raw report payloads or any `raw_prompt`/query fields. Passing means only that a separate G4 plan can be written and RED-tested; warnings, lock skips, failures, missing candidate signal, or excessive decay risk keep the recommendation at continued dry-run dogfooding.
 
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 

@@ -4630,6 +4630,189 @@ def test_consolidation_background_dry_run_skips_when_lock_is_busy_without_failin
     }
 
 
+def test_dogfood_background_dry_run_quality_gates_summarize_reports_without_mutation_or_secret_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "background-dogfood.db"
+    report_path = tmp_path / "background-report.json"
+    output_path = tmp_path / "background-quality.json"
+    initialize_database(db_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="a" * 64,
+        summary="User prefers read-only dogfood reports.",
+        scope="project:g3",
+        session_ref="session:g3:quality",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={"remember_intent": "explicit", "raw_prompt": "token=SHOULD_NOT_APPEAR"},
+    )
+    report_path.write_text(
+        json.dumps(
+            {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "completed",
+                "scan": {"quality_warnings": []},
+                "reports": {
+                    "candidates": {"candidate_count": 1, "trace_count": 2, "quality_warnings": []},
+                    "activation_summary": {"activation_count": 3, "quality_warnings": []},
+                    "reinforcement": {"candidate_count": 1, "quality_warnings": []},
+                    "decay_risk": {"decay_risk_candidates": [], "quality_warnings": []},
+                },
+                "review_handoff": {
+                    "candidate_count": 1,
+                    "reinforcement_candidate_count": 1,
+                    "decay_risk_candidate_count": 0,
+                },
+                "debug": {"raw_prompt": "token=SHOULD_NOT_APPEAR"},
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "source_records", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "background-dry-run",
+            str(db_path),
+            "--report",
+            str(report_path),
+            "--candidate-min",
+            "1",
+            "--max-decay-risk",
+            "0",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_APPEAR" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "background_dry_run_dogfood_report"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["report_count"] == 1
+    assert payload["status_counts"] == {"completed": 1}
+    assert payload["aggregate"]["candidate_count_max"] == 1
+    assert payload["aggregate"]["decay_risk_candidate_count_max"] == 0
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["quality_gate"]["decision"] == "dry_run_quality_gate_passed_plan_g4_only"
+    assert payload["automation_policy"]["apply_supported"] is False
+    assert payload["automation_policy"]["ordinary_conversation_auto_approval"] is False
+    assert payload["reports"][0]["path"] == str(report_path)
+    assert "raw_report" not in payload["reports"][0]
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(db_path, ["experience_traces", "facts", "source_records", "relations", "memory_status_transitions"]) == before_counts
+
+
+def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_noisy_or_incomplete(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "background-dogfood-blocked.db"
+    completed_report = tmp_path / "completed-report.json"
+    skipped_report = tmp_path / "skipped-report.json"
+    failed_report = tmp_path / "failed-report.json"
+    initialize_database(db_path)
+    completed_report.write_text(
+        json.dumps(
+            {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "completed",
+                "scan": {"quality_warnings": ["no_clusters_meet_min_evidence"]},
+                "reports": {
+                    "candidates": {"candidate_count": 0, "trace_count": 4, "quality_warnings": ["no_clusters_meet_min_evidence"]},
+                    "activation_summary": {"activation_count": 1, "quality_warnings": []},
+                    "reinforcement": {"candidate_count": 0, "quality_warnings": []},
+                    "decay_risk": {"decay_risk_candidates": [{"memory_ref": "fact:1"}], "quality_warnings": []},
+                },
+                "review_handoff": {
+                    "candidate_count": 0,
+                    "reinforcement_candidate_count": 0,
+                    "decay_risk_candidate_count": 1,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    skipped_report.write_text(
+        json.dumps({"kind": "memory_consolidation_background_dry_run", "status": "skipped_lock_busy", "mutated": False}),
+        encoding="utf-8",
+    )
+    failed_report.write_text(
+        json.dumps({"kind": "memory_consolidation_background_dry_run", "status": "failed", "mutated": False}),
+        encoding="utf-8",
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "background-dry-run",
+            str(db_path),
+            "--report",
+            str(completed_report),
+            "--report",
+            str(skipped_report),
+            "--report",
+            str(failed_report),
+            "--candidate-min",
+            "1",
+            "--max-decay-risk",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "background_dry_run_dogfood_report"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["report_count"] == 3
+    assert payload["status_counts"] == {"completed": 1, "failed": 1, "skipped_lock_busy": 1}
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "continue_dry_run_dogfooding_before_g4"
+    assert set(payload["quality_gate"]["blocked_reasons"]) >= {
+        "background_reports_have_failures_or_skips",
+        "candidate_signal_below_threshold",
+        "decay_risk_above_threshold",
+        "quality_warnings_present",
+    }
+    assert payload["aggregate"]["candidate_count_max"] == 0
+    assert payload["aggregate"]["decay_risk_candidate_count_max"] == 1
+    assert "Do not enable background apply mode from this report." in payload["suggested_next_steps"]
+
+
 def _table_counts(db_path: Path, tables: list[str]) -> dict[str, int]:
     with sqlite3.connect(db_path) as connection:
         return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}

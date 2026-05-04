@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 16:16 KST
+Last updated: 2026-05-04 16:46 KST
 
 ## Trigger for the next session
 
@@ -20,11 +20,16 @@ agent-memory는 v0.1.66까지 PR/CI/merge/release/npm/PyPI/published smoke/Herme
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.66 post-release validation.
+Stage G/G3a dogfood quality-gate slice is in progress on branch/worktree:
 
-Recommended next slice:
+- Branch: `feat/g3-dogfood-quality-gates`
+- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/g3-dogfood-quality-gates`
 
-- Preferred conservative path: run/extend G3 background dry-run dogfood/eval on the real local DB and document quality gates for any future apply mode.
+Goal: add a read-only `agent-memory dogfood background-dry-run <db> --report <json>` evaluator that summarizes saved G3 dry-run reports into conservative quality gates before any G4 apply-mode plan.
+
+Recommended next slice after this merges:
+
+- Preferred conservative path: keep collecting G3/G3a reports on the real local DB and use the quality-gate output to write a separate G4 plan only if reports are clean.
 - Alternative roadmap path: Stage G/G4 background consolidation apply mode, but only behind explicit flags/policy/audit/rollback and after a fresh RED-tested plan.
 
 Do not broaden the completed G2/G3 slices into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
@@ -182,7 +187,8 @@ Completed through v0.1.66:
 
 Open candidates:
 
-- Dogfood G3 dry-run reports on the real local DB and define quality gates/noise thresholds.
+- Finish Stage G/G3a: `dogfood background-dry-run` read-only quality gate over saved G3 reports.
+- Dogfood G3/G3a dry-run reports on the real local DB and define quality gates/noise thresholds.
 - Stage G/G4 background apply mode, only after explicit policy/audit/rollback design.
 - Stage H eval/visualization/backup/public docs hardening.
 

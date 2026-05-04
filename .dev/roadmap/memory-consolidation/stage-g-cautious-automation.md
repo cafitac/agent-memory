@@ -95,6 +95,22 @@ Make periodic candidate/scoring reports cron-friendly without changing memory.
 - Keeps `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`; no facts/sources/relations/status transitions/traces/retrieval observations are created.
 - Does not infer from ordinary conversation, does not add apply mode, and does not change default retrieval/Hermes hook behavior.
 
+## PR G3a: Dogfood background dry-run quality gates before G4
+
+Status: In progress after `v0.1.66`. This slice evaluates saved G3 dry-run reports without mutation so G4 does not start from anecdotal evidence.
+
+### Objective
+
+Summarize repeated G3 background dry-run outputs into a conservative quality gate for deciding whether a separate G4 plan is even worth drafting.
+
+### Acceptance
+
+- Evaluator is read-only and reports `mutated=false`, `default_retrieval_unchanged=true`.
+- Input is one or more saved `consolidation background dry-run` JSON reports.
+- Output summarizes status counts, candidate/reinforcement/decay-risk maxima, quality warnings, thresholds, and blocked reasons.
+- Raw report payloads, raw prompts, query text, query previews, `raw_prompt`, secrets, and transcripts are not embedded in the dogfood report.
+- Passing quality gates do not enable apply mode; they only recommend a separate G4 plan with RED tests, audit, and rollback.
+
 ## PR G4: Add background consolidation apply mode behind explicit flag
 
 ### Objective

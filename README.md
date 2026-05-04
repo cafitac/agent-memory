@@ -118,6 +118,7 @@ agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequ
 agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
 agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
+agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/background-consolidation.json --candidate-min 1 --max-decay-risk 0
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \
@@ -175,6 +176,17 @@ agent-memory consolidation auto-approve remember-preferences "$DB" \
 ```
 
 The policy is intentionally constrained to `fact` memories with predicate `prefers`, runs conflict preflight on the target claim slot before mutation, blocks secret-like summaries, writes normal review/status history through `approve_memory`, and records an `experience_trace:<id> --auto_approved_as--> fact:<id>` graph relation. It does not auto-approve ordinary conversation, procedures, broad inferred preferences, or conflicting claim slots.
+
+G3 dry-run dogfood should stay measurable before any G4 apply-mode plan. After one or more `consolidation background dry-run` JSON files exist, summarize their quality gates with:
+
+```bash
+agent-memory dogfood background-dry-run "$DB" \
+  --report ~/.agent-memory/reports/background-consolidation.json \
+  --candidate-min 1 \
+  --max-decay-risk 0
+```
+
+The dogfood report is read-only (`kind: background_dry_run_dogfood_report`) and emits only per-report summaries, status counts, aggregate candidate/reinforcement/decay-risk counts, thresholds, and `quality_gate.pass`. It does not include raw report payloads, raw prompts, `raw_prompt`, query text, or `query_preview`, and it does not mutate memory or enable apply mode. A passing gate means only "write a separate G4 plan with RED tests"; failures or warnings mean continue dry-run dogfooding.
 
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 

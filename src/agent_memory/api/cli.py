@@ -2378,6 +2378,175 @@ def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _collect_background_quality_warnings(report: dict[str, Any]) -> list[str]:
+    warnings: set[str] = set()
+    scan = report.get("scan")
+    if isinstance(scan, dict):
+        warnings.update(str(warning) for warning in scan.get("quality_warnings", []) if warning)
+    nested_reports = report.get("reports")
+    if isinstance(nested_reports, dict):
+        for nested in nested_reports.values():
+            if isinstance(nested, dict):
+                warnings.update(str(warning) for warning in nested.get("quality_warnings", []) if warning)
+    return sorted(warnings)
+
+
+def _background_dry_run_report_summary(path: Path) -> dict[str, Any]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "path": str(path),
+            "kind": None,
+            "status": "unreadable",
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "candidate_count": 0,
+            "reinforcement_candidate_count": 0,
+            "decay_risk_candidate_count": 0,
+            "activation_count": 0,
+            "quality_warnings": ["report_unreadable"],
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(raw, dict):
+        return {
+            "path": str(path),
+            "kind": None,
+            "status": "invalid",
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "candidate_count": 0,
+            "reinforcement_candidate_count": 0,
+            "decay_risk_candidate_count": 0,
+            "activation_count": 0,
+            "quality_warnings": ["report_not_json_object"],
+            "error": None,
+        }
+
+    reports = raw.get("reports") if isinstance(raw.get("reports"), dict) else {}
+    handoff = raw.get("review_handoff") if isinstance(raw.get("review_handoff"), dict) else {}
+    candidates = reports.get("candidates") if isinstance(reports.get("candidates"), dict) else {}
+    activation_summary = reports.get("activation_summary") if isinstance(reports.get("activation_summary"), dict) else {}
+    reinforcement = reports.get("reinforcement") if isinstance(reports.get("reinforcement"), dict) else {}
+    decay_risk = reports.get("decay_risk") if isinstance(reports.get("decay_risk"), dict) else {}
+    decay_candidates = decay_risk.get("decay_risk_candidates", []) if isinstance(decay_risk, dict) else []
+    decay_count = len(decay_candidates) if isinstance(decay_candidates, list) else _safe_int(decay_candidates)
+
+    return {
+        "path": str(path),
+        "kind": raw.get("kind"),
+        "status": raw.get("status", "unknown"),
+        "read_only": raw.get("read_only"),
+        "mutated": raw.get("mutated"),
+        "default_retrieval_unchanged": raw.get("default_retrieval_unchanged"),
+        "candidate_count": _safe_int(handoff.get("candidate_count", candidates.get("candidate_count"))),
+        "reinforcement_candidate_count": _safe_int(
+            handoff.get("reinforcement_candidate_count", reinforcement.get("candidate_count"))
+        ),
+        "decay_risk_candidate_count": _safe_int(handoff.get("decay_risk_candidate_count", decay_count)),
+        "activation_count": _safe_int(activation_summary.get("activation_count")),
+        "quality_warnings": _collect_background_quality_warnings(raw),
+        "error": None,
+    }
+
+
+def _background_dry_run_dogfood_report(
+    db_path: Path,
+    *,
+    report_paths: list[Path],
+    output_path: Path | None,
+    candidate_min: int,
+    max_decay_risk: int,
+    min_completed_runs: int,
+) -> dict[str, Any]:
+    if not report_paths:
+        raise ValueError("dogfood background-dry-run requires at least one --report path")
+    if candidate_min < 0:
+        raise ValueError("dogfood background-dry-run candidate-min must be >= 0")
+    if max_decay_risk < 0:
+        raise ValueError("dogfood background-dry-run max-decay-risk must be >= 0")
+    if min_completed_runs < 1:
+        raise ValueError("dogfood background-dry-run min-completed-runs must be >= 1")
+
+    summaries = [_background_dry_run_report_summary(path) for path in report_paths]
+    status_counter = Counter(str(summary.get("status", "unknown")) for summary in summaries)
+    status_counts = {status: status_counter[status] for status in sorted(status_counter)}
+    quality_warnings = sorted({warning for summary in summaries for warning in summary.get("quality_warnings", [])})
+    candidate_count_max = max((summary["candidate_count"] for summary in summaries), default=0)
+    reinforcement_candidate_count_max = max((summary["reinforcement_candidate_count"] for summary in summaries), default=0)
+    decay_risk_candidate_count_max = max((summary["decay_risk_candidate_count"] for summary in summaries), default=0)
+    activation_count_max = max((summary["activation_count"] for summary in summaries), default=0)
+    completed_count = status_counter.get("completed", 0)
+
+    blocked_reasons: list[str] = []
+    if completed_count < min_completed_runs:
+        blocked_reasons.append("not_enough_completed_background_runs")
+    if any(status != "completed" for status in status_counter):
+        blocked_reasons.append("background_reports_have_failures_or_skips")
+    if candidate_count_max < candidate_min:
+        blocked_reasons.append("candidate_signal_below_threshold")
+    if decay_risk_candidate_count_max > max_decay_risk:
+        blocked_reasons.append("decay_risk_above_threshold")
+    if quality_warnings:
+        blocked_reasons.append("quality_warnings_present")
+    if any(summary.get("mutated") is True for summary in summaries):
+        blocked_reasons.append("background_report_claims_mutation")
+    if any(summary.get("default_retrieval_unchanged") is False for summary in summaries):
+        blocked_reasons.append("default_retrieval_changed")
+
+    passed = not blocked_reasons
+    payload = {
+        "kind": "background_dry_run_dogfood_report",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(db_path),
+        "report_count": len(summaries),
+        "status_counts": status_counts,
+        "reports": summaries,
+        "aggregate": {
+            "completed_count": completed_count,
+            "candidate_count_max": candidate_count_max,
+            "reinforcement_candidate_count_max": reinforcement_candidate_count_max,
+            "decay_risk_candidate_count_max": decay_risk_candidate_count_max,
+            "activation_count_max": activation_count_max,
+            "quality_warnings": quality_warnings,
+        },
+        "thresholds": {
+            "candidate_min": candidate_min,
+            "max_decay_risk": max_decay_risk,
+            "min_completed_runs": min_completed_runs,
+        },
+        "quality_gate": {
+            "pass": passed,
+            "decision": "dry_run_quality_gate_passed_plan_g4_only" if passed else "continue_dry_run_dogfooding_before_g4",
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "suggested_next_steps": [
+            "Do not enable background apply mode from this report.",
+            "Use passing quality gates only to justify a separate G4 plan with RED tests, audit, and rollback.",
+            "Keep G3 dry-run reports read-only and review samples manually before any policy expansion.",
+        ],
+    }
+    _write_json_report(output_path, payload)
+    return payload
+
+
 def _consolidation_background_dry_run_report(
     db_path: Path,
     *,
@@ -3563,6 +3732,23 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_remember_parser.add_argument("db_path", type=Path)
     dogfood_remember_parser.add_argument("--limit", type=int, default=200)
     dogfood_remember_parser.add_argument("--sample-limit", type=int, default=10)
+    dogfood_background_parser = dogfood_subparsers.add_parser(
+        "background-dry-run",
+        help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
+    )
+    dogfood_background_parser.add_argument("db_path", type=Path)
+    dogfood_background_parser.add_argument(
+        "--report",
+        type=Path,
+        action="append",
+        required=True,
+        dest="reports",
+        help="Path to a JSON report produced by consolidation background dry-run; repeat for multiple runs.",
+    )
+    dogfood_background_parser.add_argument("--output", type=Path)
+    dogfood_background_parser.add_argument("--candidate-min", type=int, default=1)
+    dogfood_background_parser.add_argument("--max-decay-risk", type=int, default=0)
+    dogfood_background_parser.add_argument("--min-completed-runs", type=int, default=1)
 
     graph_parser = subparsers.add_parser("graph")
     graph_subparsers = graph_parser.add_subparsers(dest="graph_action", required=True)
@@ -4339,6 +4525,21 @@ def main() -> None:
                         args.db_path,
                         limit=args.limit,
                         sample_limit=args.sample_limit,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "background-dry-run":
+            print(
+                json.dumps(
+                    _background_dry_run_dogfood_report(
+                        args.db_path,
+                        report_paths=args.reports,
+                        output_path=args.output,
+                        candidate_min=args.candidate_min,
+                        max_decay_risk=args.max_decay_risk,
+                        min_completed_runs=args.min_completed_runs,
                     ),
                     indent=2,
                 )
