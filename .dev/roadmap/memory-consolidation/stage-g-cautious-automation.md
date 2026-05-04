@@ -49,7 +49,7 @@ Summarize real/local `remember_intent` trace quality without mutating memory so 
 
 ## PR G2: Add opt-in auto-approval for narrow low-risk memories
 
-Status: In progress in `feat/remember-auto-approve`. This slice intentionally implements only `remember-preferences-v1` and leaves broader procedure/preference inference for later.
+Status: Complete in `v0.1.65` via PR #108. This slice intentionally implements only `remember-preferences-v1` and leaves broader procedure/preference inference for later.
 
 ### Objective
 

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 14:57 KST
+Last updated: 2026-05-04 15:20 KST
 
 ## Trigger for the next session
 
@@ -16,30 +16,19 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.64까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path와 G1a `dogfood remember-intent` read-only quality gate가 완료됐다. 현재 진행 중인 다음 작업은 Stage G/G2 narrow opt-in auto-approval이며, `remember-preferences-v1` 정책을 default-off dry-run/apply CLI로 구현 중이다.
+agent-memory는 v0.1.65까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G2 narrow opt-in auto-approval도 완료되어 `remember-preferences-v1` 정책을 default-off dry-run/apply CLI로 제공한다. 다음 자연스러운 작업은 G3 background consolidation dry-run 설계/RED-test slice 또는 G2 dogfood 데이터를 더 쌓아 guardrail 품질을 점검하는 것이다.
 
 ## Current in-progress slice
 
-Stage G/G2 narrow opt-in auto-approval is in progress in worktree `.worktrees/remember-auto-approve` on branch `feat/remember-auto-approve`.
+No feature slice is currently in progress after v0.1.65 post-release validation.
 
-Current implementation slice:
+Recommended next slice:
 
-- Adds `agent-memory consolidation auto-approve remember-preferences <db> --policy remember-preferences-v1 --scope <scope>`.
-- Default mode is dry-run/read-only and reports `would_approve` candidates without mutation.
-- Apply mode requires `--apply --actor ... --reason ...`.
-- Eligible rows are explicit/review-ready `remember_intent` traces in the selected scope with sanitized summaries shaped like `User prefers ...` or `I prefer ...`.
-- The only auto-approved memory shape is `fact(user, prefers, <value>, <scope>)`.
-- Guardrails block secret-like summaries, unsupported summary shapes, non-selected scopes, ordinary turns, and claim-slot conflicts.
-- Successful apply writes approval/status history and an `auto_approved_as` relation from the trace to the fact.
+- Stage G/G3 background consolidation dry-run design/RED-test slice.
+- Keep it cron-friendly, read-only by default, file-lock/concurrency safe, and suitable for human review.
+- Alternatively, run G2 `remember-preferences-v1` dogfood on real opt-in remember traces first and tighten policy based on observed noise before adding background jobs.
 
-Recommended remaining steps before merging:
-
-1. Re-run focused/related/full tests.
-2. Run release readiness/package dry-run/manual CLI smoke.
-3. Open PR and let CI validate.
-4. Merge/release, then update runtime/Hermes QA if auto-release publishes a new version.
-
-Do not broaden this slice into procedures, inferred preferences from ordinary conversation, background cron, or default retrieval ranking changes.
+Do not broaden the completed G2 slice into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
 
 ## Current repo state
 
@@ -62,12 +51,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.64`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.64`
-- npm package: `@cafitac/agent-memory@0.1.64`
-- PyPI package: `cafitac-agent-memory==0.1.64`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.64/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.64.
+- `v0.1.65`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.65`
+- npm package: `@cafitac/agent-memory@0.1.65`
+- PyPI package: `cafitac-agent-memory==0.1.65`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.65/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.65.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -167,6 +156,53 @@ Release QA completed:
 - Direct v0.1.64 hook smoke verified review-only remember traces.
 - `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
 - `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.64 agent-memory pre-LLM hook.
+
+## Completed Stage G/G2 slice
+
+PR #108 `feat: add remember preference auto approval` merged and released in v0.1.65. Release-sync PR #109 merged.
+
+- New command: `agent-memory consolidation auto-approve remember-preferences <db> --policy remember-preferences-v1 --scope <scope>`.
+- Default mode is dry-run/read-only and reports `would_approve` candidates without mutation.
+- Apply mode requires explicit `--apply --actor ... --reason ...`.
+- Eligible rows are explicit/review-ready `remember_intent` traces in the selected scope with sanitized summaries shaped like `User prefers ...` or `I prefer ...`.
+- The only auto-approved memory shape is `fact(user, prefers, <value>, <scope>)`.
+- Guardrails block secret-like summaries, unsupported summary shapes, non-selected scopes, ordinary turns, and claim-slot conflicts.
+- Successful apply writes approval/status history and an `auto_approved_as` relation from the trace to the fact.
+- Default retrieval and Hermes hook ranking behavior remain unchanged.
+
+Verification completed for G2/v0.1.65:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'auto_approve_remember_preferences or remember_intent'
+# 6 passed, 65 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'auto_approve_remember_preferences or dogfood or remember_intent or hermes_pre_llm_hook or experience_trace or consolidation'
+# 24 passed, 52 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 235 passed
+
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
+```
+
+Release QA completed:
+
+- PR #108 CI succeeded and merged.
+- Release-sync PR #109 validation succeeded and merged.
+- GitHub Release `v0.1.65` published.
+- npm registry shows `@cafitac/agent-memory@0.1.65`.
+- PyPI JSON and fresh install show `cafitac-agent-memory==0.1.65`.
+- PyPI fresh venv smoke verified G2 dry-run/apply on a seeded temp DB.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.65` smoke verified the G2 command surface.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.65/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up before updating the hook path to v0.1.65.
+- Runtime G2 dry-run/apply smoke succeeded on a temp DB.
+- `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.65 agent-memory pre-LLM hook.
 
 ## Completed Stage F/F4 slice
 
