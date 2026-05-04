@@ -38,8 +38,10 @@ Test whether repeated/useful memories rank better without overwhelming lexical/s
 ### Acceptance
 
 - Default ranking unchanged.
-- Opt-in eval compares baseline vs reinforced ranking.
-- No precision regression on target fixtures.
+- `agent-memory retrieval ranker-preview <db> <query>` is read-only and reports baseline rank vs reinforcement-aware preview rank.
+- Preview output includes reinforcement deltas, rank changes, and no raw query/query-preview/prompt content.
+- Focused CLI coverage proves no retrieval counters, observations, facts, or relations mutate.
+- No precision regression on target fixtures before any default ranker change is considered.
 
 ## PR F3: Use decay risk as a prompt-time noise penalty behind opt-in
 

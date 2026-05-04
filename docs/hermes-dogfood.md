@@ -100,6 +100,14 @@ agent-memory retrieval policy-preview "$DB" "What memory would Hermes use here?"
 
 Use this before any opt-in ranker or prompt-time hiding experiment. A `flag_for_review` decision is an advisory signal, not an automatic cleanup instruction.
 
+`retrieval ranker-preview` is the opt-in reinforcement-aware follow-up. It runs the same approved-only retrieval path with `record_retrievals=false`, then computes a preview-only reinforcement delta so operators can compare baseline rank and preview rank before changing any runtime behavior.
+
+```bash
+agent-memory retrieval ranker-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5 --reinforcement-weight 0.15
+```
+
+The output emits `kind: retrieval_ranker_preview`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, sanitized candidates, and `rank_changes`. It does not store the query, print `query_preview`, record retrieval observations, increment memory counters, or change Hermes prompt injection.
+
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 
 `observations review-candidates` is the next read-only step after audit. It keeps the same secret-safe observation summary, then expands each top ref into a forensic candidate:

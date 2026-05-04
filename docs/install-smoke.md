@@ -126,6 +126,17 @@ Record:
 - output of `agent-memory doctor`
 - output of `hermes hooks doctor`
 
+## Retrieval preview smoke
+
+Published install smoke should include the read-only Stage F surfaces when validating a release that changes retrieval diagnostics:
+
+```bash
+agent-memory retrieval policy-preview "$DB" "install smoke query" --limit 5
+agent-memory retrieval ranker-preview "$DB" "install smoke query" --limit 5 --reinforcement-weight 0.15
+```
+
+Both commands must report `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`; neither command should print raw query previews or mutate retrieval counters.
+
 ## Release note
 
 As of the latest validated public install smoke, the validated tag is `v0.1.18`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
