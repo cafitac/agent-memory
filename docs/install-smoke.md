@@ -142,3 +142,7 @@ All four commands must report `read_only: true`, `mutated: false`, and `default_
 ## Release note
 
 As of the latest validated public install smoke, the validated tag is `v0.1.18`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+
+## Optional v0.1.63 remember-intent smoke
+
+After installing `cafitac-agent-memory==0.1.63` or `@cafitac/agent-memory@0.1.63`, initialize a temporary DB and run `hermes-pre-llm-hook --record-trace` with a synthetic payload whose `user_message` starts with `Remember this:`. Then verify `agent-memory traces list <db> --event-kind remember_intent` returns a review trace with `retention_policy=review` and `auto_approved=false`. This smoke should not create facts, procedures, episodes, or approved long-term memory.

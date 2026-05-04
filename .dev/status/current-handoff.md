@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 13:30 KST
+Last updated: 2026-05-04 13:55 KST
 
 ## Trigger for the next session
 
@@ -16,16 +16,16 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.62까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage F/F4 bounded graph-neighborhood reinforcement preview는 `agent-memory retrieval graph-neighborhood-preview <db> <query>`로 완료됐고, read-only/opt-in이며 default retrieval과 Hermes hook behavior를 변경하지 않는다. 다음 큰 방향은 Stage G cautious automation 전에 F1-F4 preview 신호를 eval/dogfood로 더 검증하거나, Stage G의 첫 read-only/approval-gated automation slice를 문서에서 확정하는 것이다.
+agent-memory는 v0.1.63까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path가 완료됐고, 기존 `--record-trace` opt-in 안에서만 `remember_intent` review traces를 만든다. 자동 승인/자동 장기 memory 생성은 아직 없다. 다음 후보는 G2 narrow opt-in auto-approval 전에 G1 dogfood/eval을 더 보거나, Stage G/G2를 엄격한 opt-in 정책으로 설계하는 것이다.
 
 ## Current in-progress slice
 
-Stage G/G1 is in progress in worktree `.worktrees/remember-this-candidate` on branch `feat/remember-this-candidate`.
+No feature slice is currently in progress after v0.1.63 post-release cleanup.
 
 Recommended next slice:
 
-- Finish G1 explicit `remember this` conservative auto-candidate: opt-in Hermes hook trace recording should create `remember_intent` review traces only, with no automatic fact/procedure/episode creation or approval.
-- Do not change default retrieval ranking, automatic approval, deprecation/supersession, or decay mutation. Keep G1 review-gated and secret-safe.
+- Dogfood/evaluate G1 remember-intent review traces before G2, or start G2 only as an explicit opt-in policy design/RED-test slice.
+- Do not change default retrieval ranking, automatic approval, deprecation/supersession, or decay mutation without opt-in policy, conflict preflight, audit history, and live Hermes E2E.
 
 ## Current repo state
 
@@ -36,7 +36,7 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main`.
-- `origin/main` includes v0.1.62 release-sync PR #100.
+- `origin/main` includes v0.1.63 release-sync PR #103.
 - No Stage F feature worktree is required after F4 cleanup; if `.worktrees/graph-neighborhood-ranker-preview` remains locally, it is safe to remove after verifying no uncommitted changes.
 
 Expected GitHub identity:
@@ -48,12 +48,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.62`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.62`
-- npm package: `@cafitac/agent-memory@0.1.62`
-- PyPI package: `cafitac-agent-memory==0.1.62`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.62/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.62.
+- `v0.1.63`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.63`
+- npm package: `@cafitac/agent-memory@0.1.63`
+- PyPI package: `cafitac-agent-memory==0.1.63`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.63/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.63.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -65,14 +65,9 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## In-progress Stage G/G1 slice
+## Completed Stage G/G1 slice
 
-Branch/worktree:
-
-- `feat/remember-this-candidate`
-- `/Users/reddit/Project/agent-memory/.worktrees/remember-this-candidate`
-
-Target behavior:
+PR #102 `feat: add explicit remember intent traces` merged and released in v0.1.63.
 
 - Existing Hermes trace recording remains disabled unless `--record-trace` is enabled.
 - With `--record-trace`, explicit `Remember this:` / `Please remember:` messages that pass the conservative secret-like scan are recorded as `experience_traces.event_kind=remember_intent`.
@@ -80,7 +75,7 @@ Target behavior:
 - Secret-like remember requests fall back to ordinary hash-only ephemeral turn traces and do not create remember review traces.
 - No facts/procedures/episodes are created or approved automatically; review remains through `consolidation candidates` and `consolidation explain`.
 
-Focused verification so far:
+Verification completed for G1/v0.1.63:
 
 ```bash
 /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'remember_intent or remember_candidate or secret_like_remember'
@@ -88,7 +83,31 @@ Focused verification so far:
 
 /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'hermes_pre_llm_hook or experience_trace or consolidation_candidates or remember'
 # 18 passed, 54 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 231 passed
+
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
 ```
+
+Release QA completed:
+
+- PR #102 CI succeeded and merged.
+- Release-sync PR #103 CI succeeded and merged.
+- GitHub Release `v0.1.63` published.
+- npm registry shows `@cafitac/agent-memory@0.1.63`.
+- PyPI JSON and fresh install show `cafitac-agent-memory==0.1.63`.
+- PyPI fresh venv smoke verified `remember_intent` trace creation.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.63` smoke succeeded for CLI/help.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.63/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up before updating the hook path to v0.1.63.
+- Direct v0.1.63 hook smoke verified review-only remember traces.
+- `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.63 agent-memory pre-LLM hook.
 
 ## Completed Stage F/F4 slice
 
