@@ -34,6 +34,12 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 5. Execute exactly one PR-sized slice unless the user explicitly asks for broader planning.
 6. If the plan changes, update both `../roadmap-v0.md` and the relevant stage file before implementing.
 
+## Current checkpoint
+
+- `current-progress-and-next-steps.md` — latest verified progress, live dogfood state, final target, and next recommended slices after `v0.1.69`.
+
+Use this current checkpoint together with `.dev/status/current-handoff.md` before choosing the next PR-sized task.
+
 ## Stage documents
 
 - `stage-a-plan-and-baseline.md` — lock the plan, add dogfood baseline snapshot.

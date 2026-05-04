@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 18:59 KST
+Last updated: 2026-05-04 22:30 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. v0.1.69는 v0.1.68 G3b ordinary-turn metadata-only trace capture의 empty-context hotfix다. 이제 injected memory context가 비어도 ordinary Hermes pre-LLM turn은 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 다음은 G3/G3a dogfood를 새 trace substrate 위에서 더 운영·측정하거나, storage health/trace quality report를 공식화하는 것이 안전하다. 아직 G4 apply-mode로 바로 가지 않는다.
+agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. v0.1.69는 v0.1.68 G3b ordinary-turn metadata-only trace capture의 empty-context hotfix다. 이제 injected memory context가 비어도 ordinary Hermes pre-LLM turn은 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 2026-05-04 22:25 KST 기준 live DB는 observation/activation/trace가 계속 증가하고 있고, ordinary conversation에서 facts는 증가하지 않는 conservative 상태가 정상이다. 현재 진행상황과 최종 목표/다음 단계는 `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`에 정리되어 있다. 다음 추천 PR-sized slice는 read-only `dogfood storage-health` 또는 `dogfood trace-quality` 공식화다. 아직 G4 apply-mode로 바로 가지 않는다.
 
 ## Current in-progress slice
 
@@ -32,7 +32,7 @@ Completed latest slice:
 Updated work order:
 
 1. Completed: G3b ordinary-turn trace capture, metadata-only/default-safe/non-blocking with RED tests.
-2. Next safest: continue G3/G3a dogfood reports over the richer trace substrate and/or add a read-only storage-health/trace-quality report.
+2. Next safest: implement read-only `dogfood storage-health` and/or `dogfood trace-quality` using `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` as the current checkpoint.
 3. Later only: write a separate RED-tested G4 apply-mode plan if reports are clean and trace quality is trusted.
 
 Do not proceed to G4 background apply mode yet. Do not broaden ordinary-turn traces into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
