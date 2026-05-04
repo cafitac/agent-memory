@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 12:45 KST
+Last updated: 2026-05-04 13:05 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,16 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.61까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. 현재 Stage F/F4 bounded graph-neighborhood reinforcement를 `feat/graph-neighborhood-ranker-preview` worktree에서 진행 중이다. F4는 `retrieval graph-neighborhood-preview` read-only/opt-in command로 default retrieval과 Hermes hook behavior를 변경하지 않는다.
+agent-memory는 v0.1.62까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage F/F4 bounded graph-neighborhood reinforcement preview는 `agent-memory retrieval graph-neighborhood-preview <db> <query>`로 완료됐고, read-only/opt-in이며 default retrieval과 Hermes hook behavior를 변경하지 않는다. 다음 큰 방향은 Stage G cautious automation 전에 F1-F4 preview 신호를 eval/dogfood로 더 검증하거나, Stage G의 첫 read-only/approval-gated automation slice를 문서에서 확정하는 것이다.
 
 ## Current in-progress slice
 
-Stage F/F4 bounded graph-neighborhood reinforcement is in progress.
+No feature slice is currently in progress after v0.1.62 post-release cleanup.
 
-- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/graph-neighborhood-ranker-preview`
-- Branch: `feat/graph-neighborhood-ranker-preview`
-- Command under development: `agent-memory retrieval graph-neighborhood-preview <db> <query>`
-- Current behavior target: read-only preview with `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`; no retrieval observations/counters/activations/facts/relations mutate; raw query/query_preview/prompt content is omitted.
-- Focused RED and GREEN coverage added in `tests/test_cli.py` for bounded depth, graph-neighbor boost, secret-safe output, and non-mutation.
+Recommended next slice:
+
+- Either add evaluation/dogfood measurement around Stage F previews before changing defaults, or start Stage G with a conservative read-only automation preflight.
+- Do not change default retrieval ranking, automatic promotion, deprecation/supersession, or decay mutation without an opt-in preview, eval evidence, and live Hermes E2E.
 
 ## Current repo state
 
@@ -36,9 +35,9 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should be on `main` after docs/handoff cleanup PR is merged.
-- `origin/main` includes v0.1.61 release-sync PR #97 after the F3 release path.
-- No Stage F feature worktree is expected to remain active after F3 cleanup.
+- Root checkout should be on `main`.
+- `origin/main` includes v0.1.62 release-sync PR #100.
+- No Stage F feature worktree is required after F4 cleanup; if `.worktrees/graph-neighborhood-ranker-preview` remains locally, it is safe to remove after verifying no uncommitted changes.
 
 Expected GitHub identity:
 
@@ -49,12 +48,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.61`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.61`
-- npm package: `@cafitac/agent-memory@0.1.61`
-- PyPI package: `cafitac-agent-memory==0.1.61`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.61/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.61.
+- `v0.1.62`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.62`
+- npm package: `@cafitac/agent-memory@0.1.62`
+- PyPI package: `cafitac-agent-memory==0.1.62`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.62/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.62.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -65,6 +64,51 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/` if scoped worktrees are active
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed Stage F/F4 slice
+
+PR #99 `feat: add graph-neighborhood retrieval preview` merged and released in v0.1.62.
+
+- `agent-memory retrieval graph-neighborhood-preview <db> <query>` is an opt-in/read-only preview command.
+- Output kind is `retrieval_graph_neighborhood_preview` with `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`.
+- The preview reports baseline rank vs graph-neighborhood preview rank without changing `retrieve`, Hermes hook behavior, or default ranking.
+- Traversal is bounded by explicit depth/neighbor controls and capped scoring; explanations include relation ids/types, neighbor refs, activated neighbor refs, graph boost, and rank deltas.
+- Output omits raw query/query_preview/prompt/transcript content and uses existing relation edges only.
+- Focused CLI coverage proves no retrieval counters, observations, activations, facts, or relations mutate.
+
+Verification completed for F4/v0.1.62:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_graph_neighborhood_preview'
+# 3 passed, 61 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_graph_neighborhood_preview or retrieval_decay_preview or retrieval_ranker_preview or retrieval_policy_preview or graph_inspect'
+# 11 passed, 53 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 228 passed
+
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
+```
+
+Release QA completed:
+
+- PR #99 CI succeeded and merged.
+- Release-sync PR #100 merged.
+- GitHub Release `v0.1.62` published.
+- npm registry shows `@cafitac/agent-memory@0.1.62`.
+- PyPI JSON and files show `cafitac-agent-memory==0.1.62`.
+- PyPI fresh venv smoke: import version `0.1.62`, CLI `--help`, and `retrieval graph-neighborhood-preview --help` succeeded.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.62` smoke succeeded for CLI `--help` and `retrieval graph-neighborhood-preview --help`.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.62/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up before updating the hook path to v0.1.62.
+- Direct pre-LLM hook smoke succeeded and did not echo the synthetic prompt.
+- `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.62 agent-memory pre-LLM hook.
 
 ## Completed workflow optimization slice
 
@@ -215,6 +259,7 @@ Roadmap sequence:
    - F1 read-only retrieval policy preview done in v0.1.59
    - F2 opt-in reinforcement ranker preview done in v0.1.60
    - F3 decay-risk prompt-time noise penalty preview done in v0.1.61
+   - F4 bounded graph-neighborhood reinforcement preview done in v0.1.62
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 

@@ -66,7 +66,7 @@ Reduce stale/noisy injections while protecting old but salient memories.
 
 ## PR F4: Add bounded graph neighborhood reinforcement
 
-Status: In progress via branch `feat/graph-neighborhood-ranker-preview`.
+Status: Completed in v0.1.62 via PR #99.
 
 ### Objective
 
@@ -82,3 +82,4 @@ Let graph connectivity help retrieval without becoming graph-only search.
 - Focused CLI coverage proves no retrieval counters, observations, activations, facts, or relations mutate.
 - Optional embeddings remain optional; F4 uses existing relation edges only.
 - Default retrieval/Hermes behavior remains unchanged until eval fixtures and live Hermes E2E justify a policy change.
+- v0.1.62 published-install smoke and Hermes runtime QA completed with the v0.1.62 hook.
