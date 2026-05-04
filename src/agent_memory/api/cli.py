@@ -650,6 +650,213 @@ def _retrieval_ranker_preview(
     }
 
 
+def _ref_activation_payload(db_path: Path, *, memory_ref: str, frequent_threshold: int) -> dict[str, Any]:
+    activations = [
+        activation
+        for activation in list_memory_activations(db_path, limit=1000)
+        if activation.memory_ref == memory_ref
+    ]
+    latest_global_activation_id = max((activation.id for activation in list_memory_activations(db_path, limit=1000)), default=0)
+    if not activations:
+        current_status = _current_status_for_memory_ref(db_path, memory_ref)
+        relations = list_relations_for_node(db_path, node_ref=memory_ref)
+        score = 0.65
+        if current_status == "approved" and relations:
+            score = 0.35
+        signals = ["no_activation_history"]
+        if relations:
+            signals.append("connected_memory")
+        else:
+            signals.append("isolated_memory")
+        return {
+            "score": score,
+            "current_status": current_status,
+            "activation_count": 0,
+            "total_strength": 0.0,
+            "factor_breakdown": {
+                "low_repetition": {"activation_count": 0, "threshold": frequent_threshold, "ratio": 1.0, "score": 0.3},
+                "weak_strength": {"total_strength": 0.0, "threshold": frequent_threshold, "ratio": 1.0, "score": 0.2},
+                "stale_activity": {
+                    "latest_activation_id": None,
+                    "global_latest_activation_id": latest_global_activation_id,
+                    "activation_id_distance": None,
+                    "ratio": 1.0,
+                    "score": 0.2,
+                },
+                "low_connectivity": {
+                    "relation_count": len(relations),
+                    "ratio": 0.0 if relations else 1.0,
+                    "score": 0.0 if relations else 0.15,
+                },
+                "status_risk": {"value": current_status, "risk_ratio": _decay_status_risk_value(current_status), "score": 0.0},
+            },
+            "protections": [],
+            "signals": signals,
+            "sample_activation_ids": [],
+            "sample_observation_ids": [],
+            "activation_window": None,
+        }
+    return _decay_risk_candidate_payload(
+        db_path,
+        memory_ref=memory_ref,
+        ref_activations=activations,
+        frequent_threshold=frequent_threshold,
+        latest_activation_id=latest_global_activation_id,
+    )
+
+
+def _retrieval_decay_preview(
+    db_path: Path,
+    *,
+    query: str,
+    limit: int,
+    preferred_scope: str | None,
+    decay_weight: float,
+    frequent_threshold: int,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("retrieval decay-preview limit must be >= 1")
+    if decay_weight <= 0:
+        raise ValueError("decay weight must be > 0")
+    if frequent_threshold < 1:
+        raise ValueError("frequent threshold must be >= 1")
+
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        record_retrievals=False,
+    )
+    baseline_traces = list(packet.retrieval_trace)
+    baseline_rank_by_key = {
+        (trace.memory_type, trace.memory_id): index + 1
+        for index, trace in enumerate(baseline_traces)
+    }
+
+    preview_rows: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    excluded_candidates: list[dict[str, Any]] = []
+    for trace in baseline_traces:
+        memory_ref = f"{trace.memory_type}:{trace.memory_id}"
+        relation_policy = _relation_policy_for_memory(
+            db_path,
+            memory_ref=memory_ref,
+            memory_type=trace.memory_type,
+            memory_id=trace.memory_id,
+        )
+        decay_risk = _ref_activation_payload(db_path, memory_ref=memory_ref, frequent_threshold=frequent_threshold)
+        decay_penalty = round(decay_risk["score"] * decay_weight, 4)
+        preview_total_score = trace.total_score - decay_penalty
+        baseline_rank = baseline_rank_by_key[(trace.memory_type, trace.memory_id)]
+        reason_codes = ["opt_in_decay_risk_penalty_preview"]
+        action = "compare_only"
+        if relation_policy["superseded_by_count"] > 0:
+            action = "exclude"
+            reason_codes.append("superseded_memory")
+        elif decay_risk["score"] >= 0.5:
+            reason_codes.append("decay_review_candidate")
+        if "protected_from_age_only_decay" in decay_risk["signals"]:
+            reason_codes.append("protected_from_age_only_decay")
+        candidate = {
+            "memory_ref": memory_ref,
+            "memory_type": trace.memory_type,
+            "memory_id": trace.memory_id,
+            "label": trace.label,
+            "scope": trace.scope,
+            "baseline_rank": baseline_rank,
+            "preview_rank": None,
+            "rank_delta": 0,
+            "baseline_score_components": {
+                "total_score": round(trace.total_score, 4),
+                "rank_value": round(trace.rank_value, 4),
+                "scope_score": round(trace.scope_score, 4),
+                "lexical_score": round(trace.lexical_score, 4),
+                "relation_score": round(trace.relation_score, 4),
+                "recency_score": round(trace.recency_score, 4),
+                "reinforcement_score": round(trace.reinforcement_score, 4),
+                "conflict_penalty": round(trace.conflict_penalty, 4),
+            },
+            "preview_score_components": {
+                "decay_penalty": decay_penalty,
+                "preview_total_score": round(preview_total_score, 4),
+            },
+            "decay_risk": decay_risk,
+            "relation_policy": relation_policy,
+            "activation_policy": _memory_activity_counts(
+                db_path,
+                memory_type=trace.memory_type,
+                memory_id=trace.memory_id,
+            ),
+            "advisory": {
+                "action": action,
+                "reason_codes": reason_codes,
+            },
+        }
+        if action == "exclude":
+            excluded_candidates.append(candidate)
+            continue
+        preview_sort_key = (
+            trace.scope_priority,
+            -preview_total_score,
+            -max(trace.text_match_count, trace.relation_match_count),
+            -trace.relation_match_count,
+            -trace.recency_score,
+            -trace.reinforcement_score,
+            -trace.rank_value,
+            trace.memory_id,
+        )
+        preview_rows.append((preview_sort_key, candidate))
+
+    preview_rows.sort(key=lambda item: item[0])
+    ranked_candidates = [candidate for _sort_key, candidate in preview_rows]
+    for index, candidate in enumerate(ranked_candidates):
+        preview_rank = index + 1
+        candidate["preview_rank"] = preview_rank
+        candidate["rank_delta"] = candidate["baseline_rank"] - preview_rank
+    candidates = [*ranked_candidates, *excluded_candidates]
+
+    rank_changes = [
+        {
+            "memory_ref": candidate["memory_ref"],
+            "baseline_rank": candidate["baseline_rank"],
+            "preview_rank": candidate["preview_rank"],
+            "rank_delta": candidate["rank_delta"],
+            "action": candidate["advisory"]["action"],
+        }
+        for candidate in candidates
+        if candidate["rank_delta"] != 0
+        or candidate["preview_score_components"]["decay_penalty"] > 0
+        or candidate["advisory"]["action"] == "exclude"
+    ]
+
+    return {
+        "kind": "retrieval_decay_preview",
+        "read_only": True,
+        "mutated": False,
+        "policy": "decay_risk_penalty_preview",
+        "default_retrieval_policy": "approved_only",
+        "default_retrieval_unchanged": True,
+        "query": {
+            "stored": False,
+            "sha256_present": bool(hashlib.sha256(query.encode("utf-8")).hexdigest()),
+        },
+        "preferred_scope": preferred_scope,
+        "limit": limit,
+        "ranker_parameters": {
+            "decay_weight": decay_weight,
+            "frequent_threshold": frequent_threshold,
+        },
+        "baseline_source": "current_default_retrieval_trace",
+        "candidates": candidates,
+        "rank_changes": rank_changes,
+        "suggested_next_steps": [
+            "Treat this as an opt-in noise-penalty preview only; do not change default retrieval without eval evidence.",
+            "Inspect high decay-risk candidates with activations decay-risk-report before any lifecycle mutation.",
+            "Run live Hermes E2E before promoting decay policy beyond preview mode.",
+        ],
+    }
+
+
 def _audit_retrieval_observations(
     db_path: Path,
     *,
@@ -2416,6 +2623,17 @@ def _build_parser() -> argparse.ArgumentParser:
     retrieval_ranker_preview_parser.add_argument("--reinforcement-weight", type=float, default=0.15)
     retrieval_ranker_preview_parser.add_argument("--reinforcement-cap", type=float, default=0.5)
 
+    retrieval_decay_preview_parser = retrieval_subparsers.add_parser(
+        "decay-preview",
+        help="Preview opt-in decay-risk prompt-time noise penalties without mutating default retrieval or memory state.",
+    )
+    retrieval_decay_preview_parser.add_argument("db_path", type=Path)
+    retrieval_decay_preview_parser.add_argument("query")
+    retrieval_decay_preview_parser.add_argument("--limit", type=int, default=5)
+    retrieval_decay_preview_parser.add_argument("--preferred-scope")
+    retrieval_decay_preview_parser.add_argument("--decay-weight", type=float, default=0.2)
+    retrieval_decay_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+
     observations_parser = subparsers.add_parser("observations")
     observations_subparsers = observations_parser.add_subparsers(dest="observations_action", required=True)
     observations_list_parser = observations_subparsers.add_parser("list")
@@ -3060,6 +3278,21 @@ def main() -> None:
                         preferred_scope=args.preferred_scope,
                         reinforcement_weight=args.reinforcement_weight,
                         reinforcement_cap=args.reinforcement_cap,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.retrieval_action == "decay-preview":
+            print(
+                json.dumps(
+                    _retrieval_decay_preview(
+                        args.db_path,
+                        query=args.query,
+                        limit=args.limit,
+                        preferred_scope=args.preferred_scope,
+                        decay_weight=args.decay_weight,
+                        frequent_threshold=args.frequent_threshold,
                     ),
                     indent=2,
                 )

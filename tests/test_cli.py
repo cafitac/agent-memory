@@ -8,6 +8,7 @@ from pathlib import Path
 from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
+from agent_memory.core.retrieval import retrieve_memory_packet
 from agent_memory.integrations import hermes_hooks
 from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
 from agent_memory.storage.sqlite import (
@@ -3500,3 +3501,231 @@ def test_python_module_retrieval_ranker_preview_requires_positive_reinforcement_
 
     assert result.returncode != 0
     assert "reinforcement weight must be > 0" in result.stderr
+
+
+
+def test_python_module_retrieval_decay_preview_penalizes_stale_weak_memory_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "decay-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project Z uses Zephyr memory. Zephyr stable memory is connected. Zephyr stale memory is isolated.",
+        metadata={"raw_prompt": "password=SUPERSECRET token=abc123"},
+    )
+    stale_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Z",
+        predicate="stale_note",
+        object_ref_or_value="Zephyr stale isolated memory",
+        evidence_ids=[source.id],
+        scope="project:project-z",
+        confidence=0.55,
+    )
+    protected_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Z",
+        predicate="stable_note",
+        object_ref_or_value="Zephyr stable connected memory",
+        evidence_ids=[source.id],
+        scope="project:project-z",
+        confidence=0.85,
+    )
+    approve_fact(db_path=db_path, fact_id=stale_fact.id)
+    approve_fact(db_path=db_path, fact_id=protected_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{protected_fact.id}",
+        relation_type="supports",
+        to_ref="concept:zephyr-memory",
+        evidence_ids=[source.id],
+        confidence=0.9,
+    )
+
+    retrieve_memory_packet(
+        db_path,
+        query="Zephyr stale memory",
+        preferred_scope="project:project-z",
+        limit=5,
+        observation_surface="cli",
+        observation_metadata={"query_preview": "SUPERSECRET should not leak"},
+    )
+    for _ in range(4):
+        retrieve_memory_packet(
+            db_path,
+            query="Zephyr stable memory",
+            preferred_scope="project:project-z",
+            limit=5,
+            observation_surface="hermes",
+            observation_metadata={"raw_prompt": "SUPERSECRET should not leak"},
+        )
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_before = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        observation_count_before = connection.execute("SELECT COUNT(*) FROM retrieval_observations").fetchone()[0]
+        activation_count_before = connection.execute("SELECT COUNT(*) FROM memory_activations").fetchone()[0]
+        relation_count_before = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "decay-preview",
+            str(db_path),
+            "Project Z Zephyr memory? password=SUPERSECRET",
+            "--preferred-scope",
+            "project:project-z",
+            "--limit",
+            "5",
+            "--decay-weight",
+            "0.5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    assert "query_preview" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "retrieval_decay_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["policy"] == "decay_risk_penalty_preview"
+    assert payload["query"] == {"stored": False, "sha256_present": True}
+    assert payload["ranker_parameters"]["decay_weight"] == 0.5
+    assert payload["ranker_parameters"]["frequent_threshold"] == 3
+
+    candidates_by_ref = {candidate["memory_ref"]: candidate for candidate in payload["candidates"]}
+    stale_projection = candidates_by_ref[f"fact:{stale_fact.id}"]
+    protected_projection = candidates_by_ref[f"fact:{protected_fact.id}"]
+    assert stale_projection["decay_risk"]["score"] > protected_projection["decay_risk"]["score"]
+    assert stale_projection["preview_score_components"]["decay_penalty"] > 0
+    assert stale_projection["preview_score_components"]["preview_total_score"] < stale_projection["baseline_score_components"]["total_score"]
+    assert "isolated_memory" in stale_projection["decay_risk"]["signals"]
+    assert "protected_from_age_only_decay" in protected_projection["decay_risk"]["signals"]
+    assert protected_projection["advisory"]["action"] == "compare_only"
+    assert any(change["memory_ref"] == f"fact:{stale_fact.id}" for change in payload["rank_changes"])
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_after = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        observation_count_after = connection.execute("SELECT COUNT(*) FROM retrieval_observations").fetchone()[0]
+        activation_count_after = connection.execute("SELECT COUNT(*) FROM memory_activations").fetchone()[0]
+        relation_count_after = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+    assert retrieval_counts_after == retrieval_counts_before
+    assert observation_count_after == observation_count_before
+    assert activation_count_after == activation_count_before
+    assert relation_count_after == relation_count_before
+
+
+def test_python_module_retrieval_decay_preview_marks_superseded_memory_excluded(tmp_path: Path) -> None:
+    db_path = tmp_path / "decay-preview-superseded.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project Z Zephyr old path. Project Z Zephyr new path.",
+        metadata={},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Z old",
+        predicate="memory_path",
+        object_ref_or_value="Zephyr old path",
+        evidence_ids=[source.id],
+        scope="project:project-z",
+        confidence=0.9,
+    )
+    new_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Z new",
+        predicate="memory_path",
+        object_ref_or_value="Zephyr new path",
+        evidence_ids=[source.id],
+        scope="project:project-z",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    approve_fact(db_path=db_path, fact_id=new_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{old_fact.id}",
+        relation_type="superseded_by",
+        to_ref=f"fact:{new_fact.id}",
+        evidence_ids=[source.id],
+        confidence=0.95,
+        review_actor="reviewer:alice",
+        review_reason="new path replaces old path",
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "decay-preview",
+            str(db_path),
+            "Project Z Zephyr path",
+            "--preferred-scope",
+            "project:project-z",
+            "--limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    candidates_by_ref = {candidate["memory_ref"]: candidate for candidate in payload["candidates"]}
+    old_projection = candidates_by_ref[f"fact:{old_fact.id}"]
+    assert old_projection["advisory"]["action"] == "exclude"
+    assert old_projection["preview_rank"] is None
+    assert "superseded_memory" in old_projection["advisory"]["reason_codes"]
+    assert any(change["memory_ref"] == f"fact:{old_fact.id}" for change in payload["rank_changes"])
+
+
+def test_python_module_retrieval_decay_preview_requires_positive_decay_weight(tmp_path: Path) -> None:
+    db_path = tmp_path / "decay-preview-validation.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "decay-preview",
+            str(db_path),
+            "anything",
+            "--decay-weight",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "decay weight must be > 0" in result.stderr
