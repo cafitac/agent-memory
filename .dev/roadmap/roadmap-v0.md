@@ -34,6 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.69`, including current dogfood state and next recommended slices.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
