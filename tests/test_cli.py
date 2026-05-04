@@ -3381,3 +3381,122 @@ def test_python_module_retrieval_policy_preview_excludes_superseded_default_fact
     assert projection["preview_decision"]["action"] == "include"
     assert projection["relation_policy"]["superseded_by_count"] == 0
     assert "superseded" not in projection["signals"]
+
+
+def test_python_module_retrieval_ranker_preview_compares_reinforcement_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "ranker-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project Y uses the Nimbus deployment pattern. Project Y also references legacy Nimbus notes.",
+        metadata={"raw_prompt": "password=SUPERSECRET token=abc123"},
+    )
+    first_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Y",
+        predicate="deployment_pattern",
+        object_ref_or_value="Nimbus primary",
+        evidence_ids=[source.id],
+        scope="project:project-y",
+        confidence=0.95,
+    )
+    reinforced_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Y",
+        predicate="deployment_note",
+        object_ref_or_value="Nimbus reinforced",
+        evidence_ids=[source.id],
+        scope="project:project-y",
+        confidence=0.5,
+    )
+    approve_fact(db_path=db_path, fact_id=first_fact.id)
+    approve_fact(db_path=db_path, fact_id=reinforced_fact.id)
+    for _ in range(4):
+        record_memory_retrieval(db_path, memory_type="fact", memory_id=reinforced_fact.id)
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_before = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        relation_count_before = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "ranker-preview",
+            str(db_path),
+            "Project Y Nimbus deployment? password=SUPERSECRET",
+            "--preferred-scope",
+            "project:project-y",
+            "--limit",
+            "5",
+            "--reinforcement-weight",
+            "0.25",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    assert "query_preview" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "retrieval_ranker_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["policy"] == "reinforcement_aware_preview"
+    assert payload["query"] == {"stored": False, "sha256_present": True}
+    assert payload["ranker_parameters"]["reinforcement_weight"] == 0.25
+
+    candidates_by_ref = {candidate["memory_ref"]: candidate for candidate in payload["candidates"]}
+    reinforced_projection = candidates_by_ref[f"fact:{reinforced_fact.id}"]
+    assert reinforced_projection["activation_policy"]["retrieval_count"] == 4
+    assert reinforced_projection["preview_score_components"]["reinforcement_delta"] > 0
+    assert reinforced_projection["preview_score_components"]["preview_total_score"] > reinforced_projection["baseline_score_components"]["total_score"]
+    assert any(change["memory_ref"] == f"fact:{reinforced_fact.id}" for change in payload["rank_changes"])
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_after = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        relation_count_after = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+    assert retrieval_counts_after == retrieval_counts_before
+    assert relation_count_after == relation_count_before
+
+
+def test_python_module_retrieval_ranker_preview_requires_positive_reinforcement_weight(tmp_path: Path) -> None:
+    db_path = tmp_path / "ranker-preview-validation.db"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "ranker-preview",
+            str(db_path),
+            "anything",
+            "--reinforcement-weight",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "reinforcement weight must be > 0" in result.stderr

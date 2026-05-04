@@ -525,6 +525,131 @@ def _retrieval_policy_preview(db_path: Path, *, query: str, limit: int, preferre
     }
 
 
+def _retrieval_ranker_preview(
+    db_path: Path,
+    *,
+    query: str,
+    limit: int,
+    preferred_scope: str | None,
+    reinforcement_weight: float,
+    reinforcement_cap: float,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("retrieval ranker-preview limit must be >= 1")
+    if reinforcement_weight <= 0:
+        raise ValueError("reinforcement weight must be > 0")
+    if reinforcement_cap < 0:
+        raise ValueError("reinforcement cap must be >= 0")
+
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        record_retrievals=False,
+    )
+    baseline_traces = list(packet.retrieval_trace)
+    baseline_rank_by_key = {
+        (trace.memory_type, trace.memory_id): index + 1
+        for index, trace in enumerate(baseline_traces)
+    }
+
+    preview_rows: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    for trace in baseline_traces:
+        memory_ref = f"{trace.memory_type}:{trace.memory_id}"
+        activity_counts = _memory_activity_counts(db_path, memory_type=trace.memory_type, memory_id=trace.memory_id)
+        reinforcement_delta = min(reinforcement_cap, trace.reinforcement_score * reinforcement_weight)
+        preview_total_score = trace.total_score + reinforcement_delta
+        baseline_rank = baseline_rank_by_key[(trace.memory_type, trace.memory_id)]
+        candidate = {
+            "memory_ref": memory_ref,
+            "memory_type": trace.memory_type,
+            "memory_id": trace.memory_id,
+            "label": trace.label,
+            "scope": trace.scope,
+            "baseline_rank": baseline_rank,
+            "preview_rank": None,
+            "rank_delta": 0,
+            "baseline_score_components": {
+                "total_score": round(trace.total_score, 4),
+                "rank_value": round(trace.rank_value, 4),
+                "scope_score": round(trace.scope_score, 4),
+                "lexical_score": round(trace.lexical_score, 4),
+                "relation_score": round(trace.relation_score, 4),
+                "recency_score": round(trace.recency_score, 4),
+                "reinforcement_score": round(trace.reinforcement_score, 4),
+                "conflict_penalty": round(trace.conflict_penalty, 4),
+            },
+            "preview_score_components": {
+                "reinforcement_delta": round(reinforcement_delta, 4),
+                "preview_total_score": round(preview_total_score, 4),
+            },
+            "activation_policy": activity_counts,
+            "advisory": {
+                "action": "compare_only",
+                "reason_codes": ["opt_in_reinforcement_ranker_preview"],
+            },
+        }
+        if reinforcement_delta > 0:
+            candidate["advisory"]["reason_codes"].append("reinforcement_history_boost")
+        preview_sort_key = (
+            trace.scope_priority,
+            -preview_total_score,
+            -max(trace.text_match_count, trace.relation_match_count),
+            -trace.relation_match_count,
+            -trace.recency_score,
+            -trace.reinforcement_score,
+            -trace.rank_value,
+            trace.memory_id,
+        )
+        preview_rows.append((preview_sort_key, candidate))
+
+    preview_rows.sort(key=lambda item: item[0])
+    candidates = [candidate for _sort_key, candidate in preview_rows]
+    for index, candidate in enumerate(candidates):
+        preview_rank = index + 1
+        candidate["preview_rank"] = preview_rank
+        candidate["rank_delta"] = candidate["baseline_rank"] - preview_rank
+
+    rank_changes = [
+        {
+            "memory_ref": candidate["memory_ref"],
+            "baseline_rank": candidate["baseline_rank"],
+            "preview_rank": candidate["preview_rank"],
+            "rank_delta": candidate["rank_delta"],
+        }
+        for candidate in candidates
+        if candidate["rank_delta"] != 0 or candidate["preview_score_components"]["reinforcement_delta"] > 0
+    ]
+
+    return {
+        "kind": "retrieval_ranker_preview",
+        "read_only": True,
+        "mutated": False,
+        "policy": "reinforcement_aware_preview",
+        "default_retrieval_policy": "approved_only",
+        "default_retrieval_unchanged": True,
+        "query": {
+            "stored": False,
+            "sha256_present": bool(hashlib.sha256(query.encode("utf-8")).hexdigest()),
+        },
+        "preferred_scope": preferred_scope,
+        "limit": limit,
+        "ranker_parameters": {
+            "reinforcement_weight": reinforcement_weight,
+            "reinforcement_cap": reinforcement_cap,
+        },
+        "baseline_source": "current_default_retrieval_trace",
+        "candidates": candidates,
+        "rank_changes": rank_changes,
+        "suggested_next_steps": [
+            "Treat this as an opt-in experiment only; do not change default retrieval without eval evidence.",
+            "Compare rank_changes against fixture relevance before increasing reinforcement weight.",
+            "Run live Hermes E2E before promoting any ranker policy beyond preview mode.",
+        ],
+    }
+
+
 def _audit_retrieval_observations(
     db_path: Path,
     *,
@@ -2280,6 +2405,17 @@ def _build_parser() -> argparse.ArgumentParser:
     retrieval_policy_preview_parser.add_argument("--limit", type=int, default=5)
     retrieval_policy_preview_parser.add_argument("--preferred-scope")
 
+    retrieval_ranker_preview_parser = retrieval_subparsers.add_parser(
+        "ranker-preview",
+        help="Preview opt-in reinforcement-aware ranking without mutating default retrieval or memory state.",
+    )
+    retrieval_ranker_preview_parser.add_argument("db_path", type=Path)
+    retrieval_ranker_preview_parser.add_argument("query")
+    retrieval_ranker_preview_parser.add_argument("--limit", type=int, default=5)
+    retrieval_ranker_preview_parser.add_argument("--preferred-scope")
+    retrieval_ranker_preview_parser.add_argument("--reinforcement-weight", type=float, default=0.15)
+    retrieval_ranker_preview_parser.add_argument("--reinforcement-cap", type=float, default=0.5)
+
     observations_parser = subparsers.add_parser("observations")
     observations_subparsers = observations_parser.add_subparsers(dest="observations_action", required=True)
     observations_list_parser = observations_subparsers.add_parser("list")
@@ -2909,6 +3045,21 @@ def main() -> None:
                         query=args.query,
                         limit=args.limit,
                         preferred_scope=args.preferred_scope,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.retrieval_action == "ranker-preview":
+            print(
+                json.dumps(
+                    _retrieval_ranker_preview(
+                        args.db_path,
+                        query=args.query,
+                        limit=args.limit,
+                        preferred_scope=args.preferred_scope,
+                        reinforcement_weight=args.reinforcement_weight,
+                        reinforcement_cap=args.reinforcement_cap,
                     ),
                     indent=2,
                 )
