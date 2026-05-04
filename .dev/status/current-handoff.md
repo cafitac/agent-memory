@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 13:05 KST
+Last updated: 2026-05-04 13:30 KST
 
 ## Trigger for the next session
 
@@ -20,12 +20,12 @@ agent-memory는 v0.1.62까지 PR/CI/merge/release/npm/PyPI/published smoke/Herme
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.62 post-release cleanup.
+Stage G/G1 is in progress in worktree `.worktrees/remember-this-candidate` on branch `feat/remember-this-candidate`.
 
 Recommended next slice:
 
-- Either add evaluation/dogfood measurement around Stage F previews before changing defaults, or start Stage G with a conservative read-only automation preflight.
-- Do not change default retrieval ranking, automatic promotion, deprecation/supersession, or decay mutation without an opt-in preview, eval evidence, and live Hermes E2E.
+- Finish G1 explicit `remember this` conservative auto-candidate: opt-in Hermes hook trace recording should create `remember_intent` review traces only, with no automatic fact/procedure/episode creation or approval.
+- Do not change default retrieval ranking, automatic approval, deprecation/supersession, or decay mutation. Keep G1 review-gated and secret-safe.
 
 ## Current repo state
 
@@ -64,6 +64,31 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/` if scoped worktrees are active
 
 Do not delete or commit these unless the user explicitly asks.
+
+## In-progress Stage G/G1 slice
+
+Branch/worktree:
+
+- `feat/remember-this-candidate`
+- `/Users/reddit/Project/agent-memory/.worktrees/remember-this-candidate`
+
+Target behavior:
+
+- Existing Hermes trace recording remains disabled unless `--record-trace` is enabled.
+- With `--record-trace`, explicit `Remember this:` / `Please remember:` messages that pass the conservative secret-like scan are recorded as `experience_traces.event_kind=remember_intent`.
+- G1 rows use `retention_policy=review`, high salience/user emphasis, sanitized summary only, hashed session/content refs, and metadata `candidate_policy=review_required`, `auto_approved=false`.
+- Secret-like remember requests fall back to ordinary hash-only ephemeral turn traces and do not create remember review traces.
+- No facts/procedures/episodes are created or approved automatically; review remains through `consolidation candidates` and `consolidation explain`.
+
+Focused verification so far:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'remember_intent or remember_candidate or secret_like_remember'
+# 3 passed, 64 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'hermes_pre_llm_hook or experience_trace or consolidation_candidates or remember'
+# 18 passed, 54 deselected
+```
 
 ## Completed Stage F/F4 slice
 

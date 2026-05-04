@@ -3984,3 +3984,157 @@ def test_python_module_retrieval_graph_neighborhood_preview_requires_positive_gr
 
     assert result.returncode != 0
     assert "graph weight must be > 0" in result.stderr
+
+
+
+def test_hermes_pre_llm_hook_records_explicit_remember_intent_as_review_trace_without_approval(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-intent-trace.db"
+    initialize_database(db_path)
+
+    payload = HermesShellHookPayload(
+        hook_event_name="pre_llm_call",
+        session_id="real-remember-session",
+        cwd=str(tmp_path),
+        extra={
+            "user_message": "Remember this: Project G1 prefers explicit review before long-term memory approval.",
+            "platform": "cli",
+            "model": "gpt-test",
+        },
+    )
+    response = hermes_hooks.build_pre_llm_hook_context(
+        payload,
+        HermesPreLlmHookOptions(
+            db_path=db_path,
+            preferred_scope="project:g1",
+            record_trace=True,
+        ),
+    )
+
+    assert "context" in response
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.surface == "hermes-pre-llm-hook"
+    assert trace.event_kind == "remember_intent"
+    assert trace.scope == "project:g1"
+    assert trace.retention_policy == "review"
+    assert trace.salience == 1.0
+    assert trace.user_emphasis == 1.0
+    assert trace.summary == "Project G1 prefers explicit review before long-term memory approval."
+    assert trace.related_memory_refs == []
+    assert trace.metadata == {
+        "hook_event_name": "pre_llm_call",
+        "platform": "cli",
+        "model": "gpt-test",
+        "trace_recording": "opt_in",
+        "remember_intent": "explicit",
+        "candidate_policy": "review_required",
+        "auto_approved": False,
+        "secret_scan": "passed",
+    }
+
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM procedures").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM episodes").fetchone()[0] == 0
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--min-evidence",
+            "1",
+            "--top",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Remember this:" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_consolidation_candidates"
+    assert payload["read_only"] is True
+    candidate = payload["candidates"][0]
+    assert candidate["evidence_count"] == 1
+    assert candidate["event_kind_counts"] == {"remember_intent": 1}
+    assert candidate["retention_policy_counts"] == {"review": 1}
+    assert candidate["user_emphasis_total"] == 1.0
+    assert candidate["safe_summaries"] == ["Project G1 prefers explicit review before long-term memory approval."]
+
+
+def test_hermes_pre_llm_hook_does_not_create_remember_candidate_for_ordinary_turn(tmp_path: Path) -> None:
+    db_path = tmp_path / "ordinary-turn-no-remember-candidate.db"
+    initialize_database(db_path)
+
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="ordinary-session",
+            cwd=str(tmp_path),
+            extra={"user_message": "Please explain how review candidates work.", "platform": "cli"},
+        ),
+        HermesPreLlmHookOptions(db_path=db_path, preferred_scope="project:g1", record_trace=True),
+    )
+
+    assert "context" in response
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    assert traces[0].event_kind == "turn"
+    assert traces[0].retention_policy == "ephemeral"
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+
+
+def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_raw_text(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-secret-skip.db"
+    initialize_database(db_path)
+    secret_prompt = "remember this: api_key=SUPERSECRET should never be stored"
+
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="secret-remember-session",
+            cwd=str(tmp_path),
+            extra={"user_message": secret_prompt, "platform": "cli"},
+        ),
+        HermesPreLlmHookOptions(db_path=db_path, preferred_scope="project:g1", record_trace=True),
+    )
+
+    assert "context" in response
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    assert traces[0].event_kind == "turn"
+    assert traces[0].retention_policy == "ephemeral"
+    trace_json = traces[0].model_dump_json()
+    assert "SUPERSECRET" not in trace_json
+    assert "api_key" not in trace_json
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--min-evidence",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "api_key" not in result.stdout
+    candidates = json.loads(result.stdout)["candidates"]
+    assert all(candidate["event_kind_counts"] != {"remember_intent": 1} for candidate in candidates)

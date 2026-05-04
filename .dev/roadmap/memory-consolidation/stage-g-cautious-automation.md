@@ -17,6 +17,8 @@ Automation starts with explicit user intent, then narrow opt-in policies, then d
 
 ## PR G1: Add explicit `remember this` conservative auto-candidate path
 
+Status: In progress in `feat/remember-this-candidate`; RED tests and implementation target the Hermes opt-in trace path.
+
 ### Objective
 
 Capture user-directed remember intent as a candidate, not necessarily as approved memory.
@@ -27,6 +29,7 @@ Capture user-directed remember intent as a candidate, not necessarily as approve
 - Explicit remember-intent is test-covered.
 - Secret/redaction checks run before candidate creation.
 - Candidate is explainable and reviewable.
+- G1 remains gated behind existing `--record-trace`; it records `remember_intent` review traces only, never approved facts/procedures/episodes.
 
 ## PR G2: Add opt-in auto-approval for narrow low-risk memories
 
