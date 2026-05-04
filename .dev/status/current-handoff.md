@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 12:18 KST
+Last updated: 2026-05-04 12:45 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.61까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. v0.1.61에는 Stage F/F3 decay-risk prompt-time noise penalty preview가 포함됐다. 다음 제품 slice는 Stage F/F4 bounded graph neighborhood reinforcement 또는 all-DB `consolidation conflicts report` 같은 read-only diagnostics다.
+agent-memory는 v0.1.61까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. 현재 Stage F/F4 bounded graph-neighborhood reinforcement를 `feat/graph-neighborhood-ranker-preview` worktree에서 진행 중이다. F4는 `retrieval graph-neighborhood-preview` read-only/opt-in command로 default retrieval과 Hermes hook behavior를 변경하지 않는다.
+
+## Current in-progress slice
+
+Stage F/F4 bounded graph-neighborhood reinforcement is in progress.
+
+- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/graph-neighborhood-ranker-preview`
+- Branch: `feat/graph-neighborhood-ranker-preview`
+- Command under development: `agent-memory retrieval graph-neighborhood-preview <db> <query>`
+- Current behavior target: read-only preview with `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`; no retrieval observations/counters/activations/facts/relations mutate; raw query/query_preview/prompt content is omitted.
+- Focused RED and GREEN coverage added in `tests/test_cli.py` for bounded depth, graph-neighbor boost, secret-safe output, and non-mutation.
 
 ## Current repo state
 

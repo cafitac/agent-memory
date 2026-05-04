@@ -66,13 +66,19 @@ Reduce stale/noisy injections while protecting old but salient memories.
 
 ## PR F4: Add bounded graph neighborhood reinforcement
 
+Status: In progress via branch `feat/graph-neighborhood-ranker-preview`.
+
 ### Objective
 
 Let graph connectivity help retrieval without becoming graph-only search.
 
 ### Acceptance
 
-- Max depth and drift controls exist.
-- Graph+lexical beats lexical-only on target fixtures.
-- Explanations identify graph edges used.
-- Optional embeddings remain optional.
+- Default ranking unchanged.
+- `agent-memory retrieval graph-neighborhood-preview <db> <query>` is read-only and reports baseline rank vs bounded graph-neighborhood preview rank.
+- Max depth and drift controls exist through explicit `--depth`, bounded traversal, and capped `--graph-cap` scoring.
+- Explanations identify the graph edges, relation ids, neighbor refs, activated neighbor refs, and score deltas used.
+- Output omits raw query/query-preview/prompt content.
+- Focused CLI coverage proves no retrieval counters, observations, activations, facts, or relations mutate.
+- Optional embeddings remain optional; F4 uses existing relation edges only.
+- Default retrieval/Hermes behavior remains unchanged until eval fixtures and live Hermes E2E justify a policy change.
