@@ -3835,7 +3835,14 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_pre_llm_hook_parser.add_argument(
         "--record-trace",
         action="store_true",
-        help="Opt in to sanitized experience trace recording for real Hermes turns. Raw prompts are never stored.",
+        default=True,
+        help="Record sanitized metadata-only experience traces for real Hermes turns. Raw prompts are never stored.",
+    )
+    hermes_pre_llm_hook_parser.add_argument(
+        "--no-record-trace",
+        action="store_false",
+        dest="record_trace",
+        help="Disable Hermes turn trace recording for this hook invocation.",
     )
 
     hermes_hook_config_snippet_parser = subparsers.add_parser("hermes-hook-config-snippet")
@@ -3855,7 +3862,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_hook_config_snippet_parser.add_argument(
         "--record-trace",
         action="store_true",
-        help="Include --record-trace in the rendered hook command for opt-in sanitized trace recording.",
+        help="Include the backwards-compatible --record-trace flag in the rendered hook command. Sanitized metadata-only trace recording is enabled by default at runtime.",
     )
     hermes_hook_config_snippet_parser.add_argument("--timeout", type=int)
 
@@ -3877,7 +3884,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_install_hook_parser.add_argument(
         "--record-trace",
         action="store_true",
-        help="Install the hook with opt-in sanitized experience trace recording enabled.",
+        help="Install the hook with the backwards-compatible --record-trace flag. Sanitized metadata-only trace recording is enabled by default at runtime.",
     )
     hermes_install_hook_parser.add_argument("--timeout", type=int)
 
@@ -3907,7 +3914,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_bootstrap_parser.add_argument(
         "--record-trace",
         action="store_true",
-        help="Install the hook with opt-in sanitized experience trace recording enabled.",
+        help="Install the hook with the backwards-compatible --record-trace flag. Sanitized metadata-only trace recording is enabled by default at runtime.",
     )
     hermes_bootstrap_parser.add_argument("--timeout", type=int)
 
