@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 11:05 KST
+Last updated: 2026-05-04 11:42 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.59까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.59에는 Stage F / PR F1 read-only retrieval policy preview가 포함됐다. 다음 제품 slice는 Stage F/F2에서 reinforcement를 opt-in ranker로 작게 실험하거나, 그 전에 all-DB `consolidation conflicts report` 같은 read-only diagnostics를 추가하는 것이다.
+agent-memory는 v0.1.60까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.60에는 Stage F / PR F2 opt-in reinforcement ranker preview가 포함됐다. 다음 제품 slice는 Stage F/F3 decay-risk prompt-time noise penalty preview 또는 all-DB `consolidation conflicts report` 같은 read-only diagnostics다.
 
 ## Current repo state
 
@@ -27,8 +27,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main` after docs/handoff cleanup PR is merged.
-- `origin/main` includes v0.1.58 release-sync PR #88.
-- No Stage E feature worktree is expected to remain active after E5 cleanup.
+- `origin/main` includes v0.1.60 release-sync PR #94.
+- No Stage F feature worktree is expected to remain active after F2 cleanup.
 
 Expected GitHub identity:
 
@@ -39,12 +39,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.59`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.59`
-- npm package: `@cafitac/agent-memory@0.1.59`
-- PyPI package: `cafitac-agent-memory==0.1.59`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.59/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.59.
+- `v0.1.60`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.60`
+- npm package: `@cafitac/agent-memory@0.1.60`
+- PyPI package: `cafitac-agent-memory==0.1.60`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.60/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.60.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -203,54 +203,56 @@ Roadmap sequence:
    - E5 explicit reviewed conflict relation edges done in v0.1.58
 6. Stage F: retrieval uses consolidation signals conservatively
    - F1 read-only retrieval policy preview done in v0.1.59
+   - F2 opt-in reinforcement ranker preview done in v0.1.60
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
 ## Latest completed PR-sized slice
 
-Stage F / F1 read-only retrieval policy preview completed.
+Stage F / F2 opt-in reinforcement ranker preview completed.
 
-PR #90 `feat: add retrieval policy preview` merged and released in v0.1.59.
+PR #93 `feat: add reinforcement ranker preview` merged and released in v0.1.60. Release-sync PR #94 merged.
 
-- New command: `agent-memory retrieval policy-preview <db> <query> [--preferred-scope ...] [--limit N]`.
-- It reuses current approved-only retrieval with `record_retrievals=false`.
-- It returns read-only JSON with non-stored query hash marker, `mutated: false`, `default_retrieval_unchanged: true`, per-memory score components, activation/retrieval counts, conflict/supersession/replacement policy signals, and advisory preview actions.
-- It does not auto-rank, auto-hide, auto-deprecate, auto-promote, create observations, increment retrieval counters, or mutate facts/relations.
+- New command: `agent-memory retrieval ranker-preview <db> <query> [--preferred-scope ...] [--limit N] [--reinforcement-weight N] [--reinforcement-cap N]`.
+- It reuses current default retrieval trace with `record_retrievals=false`, then computes a preview-only reinforcement delta and rank comparison.
+- Output kind is `retrieval_ranker_preview`; it includes `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, baseline rank, preview rank, rank deltas, score components, and activation/retrieval counts.
+- It omits raw query text, query previews, prompts, transcripts, and secrets.
+- It does not create observations, increment retrieval counters, mutate facts/relations, or change default retrieval ranking.
 
-Verification completed for F1/v0.1.59:
+Verification completed for F2/v0.1.60:
 
 ```bash
-/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_policy_preview'
-# 2 passed, 54 deselected
-/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_policy_preview or retrieve'
-# 7 passed, 49 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_ranker_preview'
+# 2 passed, 56 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_ranker_preview or retrieval_policy_preview or retrieve'
+# 9 passed, 49 deselected
 /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
-# 220 passed
+# 222 passed
 git diff --check
 npm pack --dry-run
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
 node --check bin/agent-memory.js
 ```
 
 Release QA completed:
 
-- GitHub Release: `v0.1.59`
-- npm clean exec smoke: `npm-smoke-ok 0.1.59`
-- PyPI fresh venv smoke: `pypi-smoke-ok 0.1.59`
-- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.59/.venv/bin/agent-memory`
+- GitHub Release: `v0.1.60`
+- npm clean exec smoke: `npm-smoke-ok 0.1.60`
+- PyPI fresh venv smoke: `pypi-smoke-ok 0.1.60`
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.60/.venv/bin/agent-memory`
 - `agent-memory hermes-doctor`, `hermes hooks list`, `hermes hooks doctor`, `hermes hooks test pre_llm_call`, and `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` passed.
 
 ## Next recommended PR-sized slice
 
-Primary recommendation: Stage F / F2 opt-in reinforcement ranker preview/experiment.
+Primary recommendation: Stage F / F3 decay-risk prompt-time noise penalty preview/experiment.
 
 Suggested shape:
 
 - Keep default retrieval unchanged.
-- Add an explicit opt-in mode or eval path that compares baseline retrieval vs a small reinforcement score boost.
-- Use existing retrieval/reinforcement counters and F1 `policy-preview` explanations to make rank changes inspectable.
-- Require eval evidence before considering any default ranking change.
+- Add an explicit opt-in preview/eval path that shows how decay risk would downrank stale/noisy memories.
+- Protect high-salience or strongly connected old memories from blunt age-only penalties.
+- Require eval evidence and Hermes E2E before considering any default ranking change.
 
 Alternative smaller slice:
 

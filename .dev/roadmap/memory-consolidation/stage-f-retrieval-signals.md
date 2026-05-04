@@ -31,6 +31,8 @@ Expose lifecycle/retrieval policy decisions without changing default ranking, pr
 
 ## PR F2: Use reinforcement as a small ranking feature behind opt-in
 
+Status: Completed in v0.1.60 via PR #93.
+
 ### Objective
 
 Test whether repeated/useful memories rank better without overwhelming lexical/scope relevance.
@@ -41,6 +43,7 @@ Test whether repeated/useful memories rank better without overwhelming lexical/s
 - `agent-memory retrieval ranker-preview <db> <query>` is read-only and reports baseline rank vs reinforcement-aware preview rank.
 - Preview output includes reinforcement deltas, rank changes, and no raw query/query-preview/prompt content.
 - Focused CLI coverage proves no retrieval counters, observations, facts, or relations mutate.
+- v0.1.60 keeps default retrieval unchanged; the command is an opt-in experiment only.
 - No precision regression on target fixtures before any default ranker change is considered.
 
 ## PR F3: Use decay risk as a prompt-time noise penalty behind opt-in
