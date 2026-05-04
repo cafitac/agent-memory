@@ -69,6 +69,9 @@ class Relation(BaseModel):
     confidence: float = 0.5
     valid_from: str | None = None
     valid_to: str | None = None
+    review_actor: str | None = None
+    review_reason: str | None = None
+    reviewed_at: str | None = None
 
 
 class MemoryStatusTransition(BaseModel):

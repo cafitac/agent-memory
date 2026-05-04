@@ -109,6 +109,15 @@ def initialize_database(db_path: Path | str) -> None:
                 "reinforcement_count": "REAL NOT NULL DEFAULT 0.0",
             },
         )
+        _ensure_memory_table_columns(
+            connection,
+            table_name="relations",
+            required_columns={
+                "review_actor": "TEXT",
+                "review_reason": "TEXT",
+                "reviewed_at": "TEXT",
+            },
+        )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodes_status_scope_importance ON episodes(status, scope, importance_score)"
         )
@@ -421,6 +430,8 @@ def insert_relation(
     confidence: float = 0.5,
     valid_from: str | None = None,
     valid_to: str | None = None,
+    review_actor: str | None = None,
+    review_reason: str | None = None,
 ) -> Relation:
     with connect(db_path) as connection:
         cursor = connection.execute(
@@ -433,9 +444,12 @@ def insert_relation(
                 evidence_ids_json,
                 confidence,
                 valid_from,
-                valid_to
+                valid_to,
+                review_actor,
+                review_reason,
+                reviewed_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL AND ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
             """,
             (
                 from_ref,
@@ -446,6 +460,10 @@ def insert_relation(
                 confidence,
                 valid_from,
                 valid_to,
+                review_actor,
+                review_reason,
+                review_actor,
+                review_reason,
             ),
         )
         row = connection.execute("SELECT * FROM relations WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -491,6 +509,22 @@ def list_fact_replacement_relations(db_path: Path | str, *, fact_id: int) -> lis
             SELECT *
             FROM relations
             WHERE relation_type IN ('superseded_by', 'replaces')
+              AND (from_ref = ? OR to_ref = ?)
+            ORDER BY id ASC
+            """,
+            (fact_ref, fact_ref),
+        ).fetchall()
+    return [relation_from_row(row) for row in rows]
+
+
+def list_fact_conflict_relations(db_path: Path | str, *, fact_id: int) -> list[Relation]:
+    fact_ref = f"fact:{fact_id}"
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM relations
+            WHERE relation_type = 'conflicts_with'
               AND (from_ref = ? OR to_ref = ?)
             ORDER BY id ASC
             """,
@@ -1735,4 +1769,7 @@ def relation_from_row(row: sqlite3.Row) -> Relation:
         confidence=row["confidence"],
         valid_from=row["valid_from"],
         valid_to=row["valid_to"],
+        review_actor=row["review_actor"],
+        review_reason=row["review_reason"],
+        reviewed_at=row["reviewed_at"],
     )

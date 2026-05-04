@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-02 05:49 KST
+Last updated: 2026-05-04 10:06 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.57까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.57에는 Stage E / PR E4 consolidation promotion conflict preflight가 포함됐다. 다음 제품 slice는 E5 explicit human-reviewed supersession/conflict relation command 또는 더 작은 read-only/preflight 후속 점검이다.
+agent-memory는 v0.1.57까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재는 Stage E / PR E5 explicit reviewed conflict relation edges를 `feat/consolidation-reviewed-relations` worktree에서 진행 중이다. E5는 E4 conflict preflight 이후 사람이 의도적으로 공존시키는 충돌 fact들을 `conflicts_with` graph relation으로 남기되, status나 retrieval ranking은 바꾸지 않는 slice다.
 
 ## Current repo state
 
@@ -26,9 +26,9 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should be on `main` after docs/handoff cleanup PR is merged.
+- Root checkout should remain on `main` while E5 is developed in `.worktrees/consolidation-reviewed-relations`.
 - `origin/main` includes v0.1.57 release-sync PR #85.
-- No Stage E feature worktree is expected to remain active after E4 cleanup.
+- Active E5 worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations` on `feat/consolidation-reviewed-relations`.
 
 Expected GitHub identity:
 
@@ -175,6 +175,40 @@ hermes hooks test pre_llm_call
 
 `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.57 agent-memory pre-LLM hook.
 
+## In-progress Stage E / PR E5 slice
+
+Branch/worktree:
+
+- Branch: `feat/consolidation-reviewed-relations`
+- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations`
+
+Implemented so far:
+
+- Relation model/storage now supports optional `review_actor`, `review_reason`, and `reviewed_at` fields.
+- Existing relation tables are migrated with those review metadata columns on `initialize_database`.
+- `insert_relation` and `create_relation` accept review metadata.
+- Existing `review supersede fact ...` replacement edges retain compatibility and now store relation-level review metadata.
+- New `review relate-conflict fact <db> <left-fact-id> <right-fact-id> --actor ... --reason ... [--evidence-ids-json ...]` command records a `conflicts_with` relation.
+- The conflict relation command requires same claim slot (`subject_ref`, `predicate`, `scope`) and different object values; it rejects missing metadata/cross-slot attempts without mutation.
+- `review conflicts fact ...` now includes `conflict_relations` in its read-only output.
+- No status mutation or retrieval ranking/default policy change.
+
+Focused verification completed in worktree:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'relate_conflict or review_columns'
+# 3 passed, 51 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_review_and_scope_ranking.py -q
+# 58 passed
+```
+
+Still needed before PR:
+
+- Run full `tests/ -q`.
+- Run `git diff --check` and package/release readiness checks.
+- Smoke CLI help for `review relate-conflict` and `review conflicts`.
+- Commit, push, PR, CI, merge, release sync, published smoke, Hermes runtime QA.
+
 ## Canonical roadmap position
 
 The durable north-star is a graph-based memory consolidation runtime:
@@ -198,41 +232,25 @@ Roadmap sequence:
    - E2 promotion audit report done in v0.1.55
    - E3 consolidation graph lineage relation edges done in v0.1.56
    - E4 conflict/supersession preflight done in v0.1.57
+   - E5 explicit reviewed conflict relation edges in progress
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Next recommended PR-sized slice: Stage E / PR E5
+## Current recommended next step for this implementation session
 
-Goal:
+Finish E5 local validation, then open the feature PR.
 
-- Add an explicit human-reviewed supersession/conflict relation command after E4 has made contradictions visible.
-
-Suggested first shape:
-
-- Keep mutation explicit and review-gated.
-- Add a command that records a supersession/conflict relation only when the operator provides source fact, target fact, actor, and reason.
-- Do not auto-deprecate the old fact in the same slice unless the command name and flags make that lifecycle transition explicit.
-- Do not change retrieval ranking/default behavior.
-
-Alternative smaller slice:
-
-- Add a read-only `consolidation conflicts report` or broaden E4 preflight diagnostics before introducing new mutation.
-
-Out of scope unless deliberately re-scoped:
-
-- procedure/preference promotion
-- automatic promotion
-- automatic deprecation/supersession
-- destructive cleanup/decay
-- retrieval ranking changes
-
-## Recommended first commands for the next implementation session
+Commands:
 
 ```bash
-cd /Users/reddit/Project/agent-memory
-git status --short --branch
-git fetch origin --prune --tags
-git log --oneline -5
-sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
+cd /Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+git diff --check
+npm pack --dry-run
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+node --check bin/agent-memory.js
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review relate-conflict --help
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review conflicts --help
 ```

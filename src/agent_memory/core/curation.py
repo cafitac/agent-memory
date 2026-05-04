@@ -100,6 +100,8 @@ def create_relation(
     confidence: float = 0.5,
     valid_from: str | None = None,
     valid_to: str | None = None,
+    review_actor: str | None = None,
+    review_reason: str | None = None,
 ) -> Relation:
     return insert_relation(
         db_path,
@@ -111,6 +113,48 @@ def create_relation(
         confidence=confidence,
         valid_from=valid_from,
         valid_to=valid_to,
+        review_actor=review_actor,
+        review_reason=review_reason,
+    )
+
+
+def create_fact_conflict_relation(
+    db_path: Path | str,
+    *,
+    left_fact_id: int,
+    right_fact_id: int,
+    actor: str,
+    reason: str,
+    evidence_ids: list[int] | None = None,
+) -> Relation:
+    if left_fact_id == right_fact_id:
+        raise ValueError("A fact cannot conflict with itself")
+    if not actor:
+        raise ValueError("actor is required to record a reviewed conflict relation")
+    if not reason:
+        raise ValueError("reason is required to record a reviewed conflict relation")
+
+    left_fact = get_fact(db_path, fact_id=left_fact_id)
+    right_fact = get_fact(db_path, fact_id=right_fact_id)
+    if (
+        left_fact.subject_ref != right_fact.subject_ref
+        or left_fact.predicate != right_fact.predicate
+        or left_fact.scope != right_fact.scope
+    ):
+        raise ValueError("Reviewed conflict relations require facts in the same claim slot")
+    if left_fact.object_ref_or_value == right_fact.object_ref_or_value:
+        raise ValueError("Reviewed conflict relations require different object values")
+
+    return create_relation(
+        db_path=db_path,
+        from_ref=f"fact:{left_fact.id}",
+        relation_type="conflicts_with",
+        to_ref=f"fact:{right_fact.id}",
+        evidence_ids=evidence_ids or [],
+        weight=1.0,
+        confidence=min(left_fact.confidence, right_fact.confidence),
+        review_actor=actor,
+        review_reason=reason,
     )
 
 

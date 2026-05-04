@@ -2979,3 +2979,231 @@ def test_python_module_cli_retrieve_outputs_json_packet(tmp_path: Path) -> None:
     packet = json.loads(result.stdout)
     assert packet["semantic_facts"][0]["subject_ref"] == "Hermes"
     assert packet["procedural_guidance"] == []
+
+
+def _relation_count(db_path: Path) -> int:
+    with sqlite3.connect(db_path) as connection:
+        return connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+
+
+def test_python_module_cli_review_relate_conflict_records_reviewed_relation_without_status_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-relate-conflict.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Human review accepted that Agent Memory E5 has two conflicting rollout modes during migration.",
+        metadata={"project": "agent-memory-e5"},
+    )
+    first = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E5",
+        predicate="rollout_mode",
+        object_ref_or_value="strict supersession",
+        evidence_ids=[source.id],
+        scope="project:e5-reviewed-relations",
+        confidence=0.91,
+    )
+    second = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E5",
+        predicate="rollout_mode",
+        object_ref_or_value="temporary coexistence",
+        evidence_ids=[source.id],
+        scope="project:e5-reviewed-relations",
+        confidence=0.88,
+    )
+    approve_fact(db_path=db_path, fact_id=first.id)
+    approve_fact(db_path=db_path, fact_id=second.id)
+    before_relations = _relation_count(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "relate-conflict",
+            "fact",
+            str(db_path),
+            str(first.id),
+            str(second.id),
+            "--actor",
+            "maintainer",
+            "--reason",
+            "Reviewed E4 conflict preflight and accepted temporary coexistence before a later supersession decision.",
+            "--evidence-ids-json",
+            json.dumps([source.id]),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_review_conflict_relation"
+    assert payload["memory_type"] == "fact"
+    assert payload["read_only"] is False
+    assert payload["status_mutation"] is False
+    assert payload["relation"]["relation_type"] == "conflicts_with"
+    assert payload["relation"]["from_ref"] == f"fact:{first.id}"
+    assert payload["relation"]["to_ref"] == f"fact:{second.id}"
+    assert payload["relation"]["review_actor"] == "maintainer"
+    assert "temporary coexistence" in payload["relation"]["review_reason"]
+    assert payload["relation"]["evidence_ids"] == [source.id]
+    assert payload["claim_slot"] == {
+        "subject_ref": "Agent Memory E5",
+        "predicate": "rollout_mode",
+        "scope": "project:e5-reviewed-relations",
+    }
+    assert _relation_count(db_path) == before_relations + 1
+
+    conflicts_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "conflicts",
+            "fact",
+            str(db_path),
+            "Agent Memory E5",
+            "rollout_mode",
+            "--scope",
+            "project:e5-reviewed-relations",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert conflicts_result.returncode == 0, conflicts_result.stderr
+    conflicts_payload = json.loads(conflicts_result.stdout)
+    assert conflicts_payload["conflict_relations"] == [
+        {
+            "relation_id": payload["relation"]["id"],
+            "left_fact_id": first.id,
+            "right_fact_id": second.id,
+            "relation_type": "conflicts_with",
+            "review_actor": "maintainer",
+            "review_reason": "Reviewed E4 conflict preflight and accepted temporary coexistence before a later supersession decision.",
+            "evidence_ids": [source.id],
+        }
+    ]
+    statuses = {fact["id"]: fact["status"] for fact in conflicts_payload["facts"]}
+    assert statuses[first.id] == "approved"
+    assert statuses[second.id] == "approved"
+
+
+def test_python_module_cli_review_relate_conflict_requires_same_claim_slot_and_review_metadata(tmp_path: Path) -> None:
+    db_path = tmp_path / "review-relate-conflict-guard.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Human review must provide metadata and same-claim-slot facts before recording conflict relations.",
+        metadata={"project": "agent-memory-e5"},
+    )
+    first = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E5",
+        predicate="rollout_mode",
+        object_ref_or_value="strict supersession",
+        evidence_ids=[source.id],
+        scope="project:e5-reviewed-relations",
+        confidence=0.91,
+    )
+    different_slot = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Agent Memory E5",
+        predicate="owner",
+        object_ref_or_value="reviewer",
+        evidence_ids=[source.id],
+        scope="project:e5-reviewed-relations",
+        confidence=0.88,
+    )
+    before_relations = _relation_count(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    missing_metadata = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "relate-conflict",
+            "fact",
+            str(db_path),
+            str(first.id),
+            str(different_slot.id),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_metadata.returncode != 0
+    assert _relation_count(db_path) == before_relations
+
+    cross_slot = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "review",
+            "relate-conflict",
+            "fact",
+            str(db_path),
+            str(first.id),
+            str(different_slot.id),
+            "--actor",
+            "maintainer",
+            "--reason",
+            "Tried to link different claim slots.",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert cross_slot.returncode != 0
+    assert "same claim slot" in cross_slot.stderr
+    assert _relation_count(db_path) == before_relations
+
+
+def test_initialize_database_adds_review_columns_to_existing_relations_table(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-relations.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE relations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_ref TEXT NOT NULL,
+                relation_type TEXT NOT NULL,
+                to_ref TEXT NOT NULL,
+                weight REAL NOT NULL DEFAULT 1.0,
+                evidence_ids_json TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 0.5,
+                valid_from TEXT,
+                valid_to TEXT
+            )
+            """
+        )
+    initialize_database(db_path)
+
+    relation = insert_relation(
+        db_path,
+        from_ref="fact:1",
+        relation_type="conflicts_with",
+        to_ref="fact:2",
+        evidence_ids=[9],
+        review_actor="maintainer",
+        review_reason="legacy relation table gained review metadata columns",
+    )
+
+    assert relation.review_actor == "maintainer"
+    assert relation.review_reason == "legacy relation table gained review metadata columns"
+    assert relation.reviewed_at is not None
