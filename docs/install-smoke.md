@@ -141,8 +141,10 @@ All four commands must report `read_only: true`, `mutated: false`, and `default_
 
 ## Release note
 
-As of the latest validated public install smoke, the validated tag is `v0.1.18`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
+As of the latest validated public install smoke, the validated tag is `v0.1.64`. The primary npm path is expected to leave users with a direct shell command: `agent-memory [command]`; docs should not require users to type `uv`, `uvx`, or `python -m` after npm installation.
 
-## Optional v0.1.63 remember-intent smoke
+## Optional v0.1.64 remember-intent smoke
 
-After installing `cafitac-agent-memory==0.1.63` or `@cafitac/agent-memory@0.1.63`, initialize a temporary DB and run `hermes-pre-llm-hook --record-trace` with a synthetic payload whose `user_message` starts with `Remember this:`. Then verify `agent-memory traces list <db> --event-kind remember_intent` returns a review trace with `retention_policy=review` and `auto_approved=false`. This smoke should not create facts, procedures, episodes, or approved long-term memory.
+After installing `cafitac-agent-memory==0.1.64` or `@cafitac/agent-memory@0.1.64`, initialize a temporary DB and run `hermes-pre-llm-hook --record-trace` with a synthetic payload whose `user_message` starts with `Remember this:`. Then verify `agent-memory traces list <db> --event-kind remember_intent` returns a review trace with `retention_policy=review` and `auto_approved=false`. This smoke should not create facts, procedures, episodes, or approved long-term memory.
+
+For the G1a report gate, seed or capture at least one safe remember-intent trace, then run `agent-memory dogfood remember-intent <db> --limit 200 --sample-limit 10`. The report should return `kind: remember_intent_dogfood_report`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, sanitized samples only, and no fact/procedure/episode/approval mutations.
