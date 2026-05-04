@@ -320,6 +320,211 @@ def _fact_review_explanation_payload(db_path: Path, *, fact_id: int) -> dict[str
     }
 
 
+def _memory_activity_counts(db_path: Path, *, memory_type: str, memory_id: int) -> dict[str, int]:
+    table_by_type = {
+        "fact": "facts",
+        "procedure": "procedures",
+        "episode": "episodes",
+    }
+    table_name = table_by_type.get(memory_type)
+    if table_name is None:
+        return {"retrieval_count": 0, "reinforcement_count": 0}
+    with connect(db_path) as connection:
+        row = connection.execute(
+            f"SELECT retrieval_count, reinforcement_count FROM {table_name} WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+    if row is None:
+        return {"retrieval_count": 0, "reinforcement_count": 0}
+    return {
+        "retrieval_count": int(row["retrieval_count"] or 0),
+        "reinforcement_count": int(row["reinforcement_count"] or 0),
+    }
+
+
+def _relation_policy_for_memory(db_path: Path, *, memory_ref: str, memory_type: str, memory_id: int) -> dict[str, Any]:
+    relations = list_relations_for_node(db_path, node_ref=memory_ref)
+    conflict_relations = [relation for relation in relations if relation.relation_type == "conflicts_with"]
+    superseded_by_relations = [
+        relation for relation in relations if relation.relation_type == "superseded_by" and relation.from_ref == memory_ref
+    ]
+    replaces_relations = [
+        relation
+        for relation in relations
+        if (relation.relation_type == "replaces" and relation.from_ref == memory_ref)
+        or (relation.relation_type == "superseded_by" and relation.to_ref == memory_ref)
+    ]
+    reviewed_conflicts = [relation for relation in conflict_relations if relation.review_actor or relation.review_reason]
+    payload: dict[str, Any] = {
+        "relation_count": len(relations),
+        "reviewed_conflict_count": len(reviewed_conflicts),
+        "conflict_relation_ids": [relation.id for relation in conflict_relations],
+        "superseded_by_count": len(superseded_by_relations),
+        "superseded_by_relation_ids": [relation.id for relation in superseded_by_relations],
+        "replaces_count": len(replaces_relations),
+        "replacement_relation_ids": [relation.id for relation in replaces_relations],
+    }
+    if memory_type == "fact":
+        replacement_chain = _fact_replacement_chain_payload(
+            list_fact_replacement_relations(db_path, fact_id=memory_id),
+            fact_id=memory_id,
+        )
+        payload["replacement_chain"] = replacement_chain
+        payload["conflict_relations"] = [
+            _fact_conflict_relation_payload(relation)
+            for relation in list_fact_conflict_relations(db_path, fact_id=memory_id)
+        ]
+    return payload
+
+
+def _preview_policy_decision(*, current_status: str | None, trace, relation_policy: dict[str, Any]) -> dict[str, Any]:
+    reasons: list[str] = []
+    if current_status != "approved":
+        reasons.append("not_approved")
+        return {
+            "action": "exclude",
+            "visibility": "hidden_from_default_retrieval",
+            "reason_codes": reasons,
+        }
+    if relation_policy["superseded_by_count"] > 0:
+        reasons.append("superseded_by_reviewed_relation")
+        return {
+            "action": "exclude",
+            "visibility": "hidden_if_supersession_policy_enabled",
+            "reason_codes": reasons,
+        }
+    if relation_policy["reviewed_conflict_count"] > 0:
+        reasons.append("reviewed_conflict_relation")
+    if trace.conflict_count > 0:
+        reasons.append("same_claim_slot_conflict")
+    hidden_alternatives_are_expected_replacements = (
+        trace.hidden_alternative_count == trace.hidden_deprecated_alternatives_count
+        and trace.hidden_deprecated_alternatives_count > 0
+        and relation_policy["replaces_count"] > 0
+    )
+    if trace.hidden_alternative_count > 0 and not hidden_alternatives_are_expected_replacements:
+        reasons.append("hidden_non_default_alternatives")
+    if reasons:
+        return {
+            "action": "flag_for_review",
+            "visibility": "visible_but_requires_review_if_conflict_policy_enabled",
+            "reason_codes": reasons,
+        }
+    return {
+        "action": "include",
+        "visibility": "visible_in_default_retrieval",
+        "reason_codes": ["approved_without_lifecycle_penalty"],
+    }
+
+
+def _retrieval_policy_preview(db_path: Path, *, query: str, limit: int, preferred_scope: str | None) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("retrieval policy-preview limit must be >= 1")
+    packet = retrieve_memory_packet(
+        db_path=db_path,
+        query=query,
+        limit=limit,
+        preferred_scope=preferred_scope,
+        record_retrievals=False,
+    )
+    trace_by_key = {(trace.memory_type, trace.memory_id): trace for trace in packet.retrieval_trace}
+    memory_projections: list[dict[str, Any]] = []
+    for memory_type, models in (
+        ("fact", packet.semantic_facts),
+        ("procedure", packet.procedural_guidance),
+        ("episode", packet.episodic_context),
+    ):
+        for model in models:
+            trace = trace_by_key.get((memory_type, model.id))
+            if trace is None:
+                continue
+            memory_ref = f"{memory_type}:{model.id}"
+            current_status = _current_status_for_memory_ref(db_path, memory_ref)
+            relation_policy = _relation_policy_for_memory(
+                db_path,
+                memory_ref=memory_ref,
+                memory_type=memory_type,
+                memory_id=model.id,
+            )
+            preview_decision = _preview_policy_decision(
+                current_status=current_status,
+                trace=trace,
+                relation_policy=relation_policy,
+            )
+            activity_counts = _memory_activity_counts(db_path, memory_type=memory_type, memory_id=model.id)
+            signals = list(preview_decision["reason_codes"])
+            if relation_policy["reviewed_conflict_count"] > 0 and "reviewed_conflict_relation" not in signals:
+                signals.append("reviewed_conflict_relation")
+            if relation_policy["superseded_by_count"] > 0 and "superseded_by_reviewed_relation" not in signals:
+                signals.append("superseded_by_reviewed_relation")
+            if activity_counts["retrieval_count"] > 0 or activity_counts["reinforcement_count"] > 0:
+                signals.append("activation_or_retrieval_history")
+            memory_projections.append(
+                {
+                    "memory_ref": memory_ref,
+                    "memory_type": memory_type,
+                    "memory_id": model.id,
+                    "label": trace.label,
+                    "scope": trace.scope,
+                    "current_status": current_status,
+                    "current_visibility": "visible_in_default_retrieval"
+                    if current_status == "approved"
+                    else "hidden_from_default_retrieval",
+                    "preview_decision": preview_decision,
+                    "signals": signals,
+                    "score_components": {
+                        "total_score": round(trace.total_score, 4),
+                        "rank_value": round(trace.rank_value, 4),
+                        "scope_score": round(trace.scope_score, 4),
+                        "lexical_score": round(trace.lexical_score, 4),
+                        "relation_score": round(trace.relation_score, 4),
+                        "recency_score": round(trace.recency_score, 4),
+                        "reinforcement_score": round(trace.reinforcement_score, 4),
+                        "conflict_penalty": round(trace.conflict_penalty, 4),
+                    },
+                    "claim_slot_policy": {
+                        "same_claim_slot_conflict_count": trace.conflict_count,
+                        "hidden_disputed_alternatives_count": trace.hidden_disputed_alternatives_count,
+                        "hidden_deprecated_alternatives_count": trace.hidden_deprecated_alternatives_count,
+                        "hidden_alternative_count": trace.hidden_alternative_count,
+                    },
+                    "relation_policy": relation_policy,
+                    "activation_policy": activity_counts,
+                    "review_commands": {
+                        "review_explain": f"agent-memory review explain {memory_type} {db_path} {model.id}"
+                        if memory_type == "fact"
+                        else None,
+                        "graph_inspect": f"agent-memory graph inspect {db_path} {memory_ref} --depth 1",
+                    },
+                }
+            )
+    return {
+        "kind": "retrieval_policy_preview",
+        "read_only": True,
+        "mutated": False,
+        "policy": "conservative_preview",
+        "default_retrieval_policy": "approved_only",
+        "default_retrieval_unchanged": True,
+        "query": {
+            "stored": False,
+            "sha256_present": bool(hashlib.sha256(query.encode("utf-8")).hexdigest()),
+        },
+        "preferred_scope": preferred_scope,
+        "limit": limit,
+        "retrieved_counts": {
+            "facts": len(packet.semantic_facts),
+            "procedures": len(packet.procedural_guidance),
+            "episodes": len(packet.episodic_context),
+        },
+        "memory_projections": memory_projections,
+        "suggested_next_steps": [
+            "Use this report to inspect lifecycle effects before enabling opt-in retrieval ranking changes.",
+            "Review conflict/supersession relations explicitly before hiding or downranking memories.",
+            "Keep default retrieval unchanged until eval fixtures and live Hermes E2E pass.",
+        ],
+    }
+
+
 def _audit_retrieval_observations(
     db_path: Path,
     *,
@@ -2061,6 +2266,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Record a secret-safe local retrieval observation for this query.",
     )
 
+    retrieval_parser = subparsers.add_parser(
+        "retrieval",
+        help="Read-only retrieval policy previews and diagnostics.",
+    )
+    retrieval_subparsers = retrieval_parser.add_subparsers(dest="retrieval_action", required=True)
+    retrieval_policy_preview_parser = retrieval_subparsers.add_parser(
+        "policy-preview",
+        help="Preview conservative lifecycle-aware retrieval policy effects without mutating ranking or memory state.",
+    )
+    retrieval_policy_preview_parser.add_argument("db_path", type=Path)
+    retrieval_policy_preview_parser.add_argument("query")
+    retrieval_policy_preview_parser.add_argument("--limit", type=int, default=5)
+    retrieval_policy_preview_parser.add_argument("--preferred-scope")
+
     observations_parser = subparsers.add_parser("observations")
     observations_subparsers = observations_parser.add_subparsers(dest="observations_action", required=True)
     observations_list_parser = observations_subparsers.add_parser("list")
@@ -2680,6 +2899,22 @@ def main() -> None:
         )
         print(packet.model_dump_json(indent=2))
         return
+
+    if args.command == "retrieval":
+        if args.retrieval_action == "policy-preview":
+            print(
+                json.dumps(
+                    _retrieval_policy_preview(
+                        args.db_path,
+                        query=args.query,
+                        limit=args.limit,
+                        preferred_scope=args.preferred_scope,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        raise ValueError(f"Unsupported retrieval action: {args.retrieval_action}")
 
     if args.command == "observations":
         if args.observations_action == "list":
