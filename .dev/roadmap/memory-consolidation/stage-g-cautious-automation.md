@@ -113,7 +113,7 @@ Summarize repeated G3 background dry-run outputs into a conservative quality gat
 
 ## PR G3b: Record ordinary Hermes turns as metadata-only lightweight traces
 
-Status: Complete in `v0.1.68` via PR #117. This reordered the roadmap after v0.1.67 so ordinary conversation produces safe metadata-only trace evidence before any G4 apply mode.
+Status: Complete in `v0.1.68` via PR #117, with the empty-context trace recording hotfix released in `v0.1.69` via PR #120. This reordered the roadmap after v0.1.67 so ordinary conversation produces safe metadata-only trace evidence before any G4 apply mode.
 
 ### Why this comes before G4
 

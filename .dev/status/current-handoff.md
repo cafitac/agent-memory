@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 18:05 KST
+Last updated: 2026-05-04 18:59 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,18 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.68까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3b로 ordinary Hermes pre-LLM turns가 기본적으로 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 다음은 G3/G3a dogfood를 새 trace substrate 위에서 더 운영·측정하거나, storage health/trace quality report를 공식화하는 것이 안전하다. 아직 G4 apply-mode로 바로 가지 않는다.
+agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. v0.1.69는 v0.1.68 G3b ordinary-turn metadata-only trace capture의 empty-context hotfix다. 이제 injected memory context가 비어도 ordinary Hermes pre-LLM turn은 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 다음은 G3/G3a dogfood를 새 trace substrate 위에서 더 운영·측정하거나, storage health/trace quality report를 공식화하는 것이 안전하다. 아직 G4 apply-mode로 바로 가지 않는다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.68 post-release validation.
+No feature slice is currently in progress after v0.1.69 hotfix release validation.
 
 Completed latest slice:
 
 - Stage G/G3b: ordinary Hermes turns now record metadata-only lightweight `turn` traces by default before any G4 apply mode.
-- PR #117 merged; release-sync PR #118 merged; v0.1.68 was published and smoke-tested.
-- Hermes runtime now points to `/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory`.
+- Hotfix: trace recording now happens before the empty injected-context return, so no-context turns still leave safe trace evidence.
+- PR #120 merged; v0.1.69 GitHub release/npm/PyPI/published smoke/Hermes QA completed.
+- Hermes runtime now points to `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory`.
 
 Updated work order:
 
@@ -45,7 +46,7 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main`.
-- `main` and `origin/main` include v0.1.68 release-sync PR #118.
+- `main` and `origin/main` include v0.1.69 release-sync PR #120.
 - No active feature worktree is required after G3b cleanup.
 
 Expected GitHub identity:
@@ -57,13 +58,13 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.68`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.68`
-- npm package: `@cafitac/agent-memory@0.1.68`
-- PyPI package: `cafitac-agent-memory==0.1.68`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.68/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.68.
-- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.68`.
+- `v0.1.69`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.69`
+- npm package: `@cafitac/agent-memory@0.1.69`
+- PyPI package: `cafitac-agent-memory==0.1.69`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.69.
+- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.69`.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -73,6 +74,21 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.omc/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.69 empty-context trace hotfix
+
+PR #120 `chore: release v0.1.69 [skip release]` merged after commit `fix: record hermes turn traces before empty context return` landed on main.
+
+- Root cause: v0.1.68 recorded ordinary metadata-only traces after checking whether rendered memory context was empty, so no-injected-context turns could store retrieval observations/activations without storing an ordinary `experience_traces` row.
+- Fix: call `_record_pre_llm_experience_trace(...)` before `if not context.prompt_text.strip(): return {}`. Hook output remains `{}` when no memory context is injected.
+- Regression test: `test_hermes_pre_llm_hook_records_trace_even_when_no_context_is_injected`.
+- CI passed on the feature commit and release-sync PR.
+- GitHub Release `v0.1.69` published.
+- PyPI fresh venv smoke verified `cafitac-agent-memory==0.1.69`.
+- Clean npm temp-dir smoke verified `@cafitac/agent-memory@0.1.69`.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory` and `/Users/reddit/.hermes/config.yaml` now points to it.
+- `hermes hooks doctor` reports all shell hooks healthy.
+- Real Hermes chat smoke recorded one new retrieval observation, one activation, and one metadata-only ordinary trace; latest ordinary trace has `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, and `auto_approved=false`. Latest retrieval observations keep `query_preview` empty.
 
 ## Completed Stage G/G3a slice
 
