@@ -145,7 +145,7 @@ A reviewer can pass `--allow-conflict` only after accepting that both claims sho
 
 ### Status
 
-- In progress on `feat/consolidation-reviewed-relations`.
+- Completed in v0.1.58 via PR #87.
 
 ### Objective
 

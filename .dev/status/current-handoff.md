@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 10:06 KST
+Last updated: 2026-05-04 10:26 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.57까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재는 Stage E / PR E5 explicit reviewed conflict relation edges를 `feat/consolidation-reviewed-relations` worktree에서 진행 중이다. E5는 E4 conflict preflight 이후 사람이 의도적으로 공존시키는 충돌 fact들을 `conflicts_with` graph relation으로 남기되, status나 retrieval ranking은 바꾸지 않는 slice다.
+agent-memory는 v0.1.58까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.58에는 Stage E / PR E5 explicit reviewed conflict relation edges가 포함됐다. 다음 제품 slice는 Stage F에서 consolidation/lifecycle signals를 retrieval에 보수적으로 반영하는 read-only/advisory-first 작업이거나, Stage E 후속으로 `consolidation conflicts report` 같은 전체 DB read-only diagnostics를 추가하는 것이다.
 
 ## Current repo state
 
@@ -26,9 +26,9 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should remain on `main` while E5 is developed in `.worktrees/consolidation-reviewed-relations`.
-- `origin/main` includes v0.1.57 release-sync PR #85.
-- Active E5 worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations` on `feat/consolidation-reviewed-relations`.
+- Root checkout should be on `main` after docs/handoff cleanup PR is merged.
+- `origin/main` includes v0.1.58 release-sync PR #88.
+- No Stage E feature worktree is expected to remain active after E5 cleanup.
 
 Expected GitHub identity:
 
@@ -39,12 +39,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.57`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.57`
-- npm package: `@cafitac/agent-memory@0.1.57`
-- PyPI package: `cafitac-agent-memory==0.1.57`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.57.
+- `v0.1.58`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.58`
+- npm package: `@cafitac/agent-memory@0.1.58`
+- PyPI package: `cafitac-agent-memory==0.1.58`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.58/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.58.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -67,11 +67,11 @@ Result:
 - Slow real-registry `published-install-smoke` is opt-in via `run_published_install_smoke`, default `false`.
 - Standalone `published-install-smoke.yml` remains the manual external-install gate.
 
-## Completed Stage E / PR E1 slice
+## Completed Stage E slices
+
+### E1 — semantic fact promotion
 
 PR #76 `feat: add consolidation fact promotion` merged and released in v0.1.54.
-
-Behavior:
 
 - `agent-memory consolidation promote fact <db> <candidate-id> ...` creates semantic facts from explicitly reviewed candidates.
 - Reviewer supplies final fact fields; candidate contributes safe provenance only.
@@ -80,11 +80,9 @@ Behavior:
 - Unknown candidate ids fail without creating facts or provenance sources.
 - No automatic promotion, approval queue, procedure/preference promotion, or retrieval ranking change.
 
-## Completed Stage E / PR E2 slice
+### E2 — promotion audit report
 
 PR #78 `feat: add consolidation promotions report` merged and released in v0.1.55.
-
-Behavior:
 
 - `agent-memory consolidation promotions report <db> --limit 50` lists manual semantic fact promotions created by E1.
 - Report includes promoted fact id/status/claim fields, candidate fingerprint, generated provenance source id, safe summaries, trace ids, related observation ids, status counts, and approval history.
@@ -92,11 +90,9 @@ Behavior:
 - The command is read-only and omits raw prompts, transcripts, raw trace metadata, query previews, and secrets.
 - Default retrieval remains approved-only.
 
-## Completed Stage E / PR E3 slice
+### E3 — consolidation graph lineage relation edges
 
 PR #81 `feat: add consolidation promotion lineage` merged and released in v0.1.56.
-
-Behavior:
 
 - `agent-memory consolidation promote fact ...` records graph lineage relations when a manual semantic fact promotion succeeds.
 - Relation path:
@@ -108,106 +104,78 @@ Behavior:
 - Unknown candidate ids remain safe failures with no facts, sources, or lineage relations created.
 - No procedure/preference promotion, automatic promotion, cleanup/decay mutation, or retrieval ranking change.
 
-## Completed Stage E / PR E4 slice
+### E4 — promotion conflict preflight
 
 PR #84 `feat: add consolidation promotion conflict preflight` merged and released in v0.1.57.
 
-Behavior:
-
-- `agent-memory consolidation promote fact ...` now runs read-only conflict preflight before any promotion mutation.
+- `agent-memory consolidation promote fact ...` runs read-only conflict preflight before any promotion mutation.
 - Claim slot is `subject_ref` + `predicate` + `scope`.
 - Existing approved/candidate/disputed/deprecated same-slot facts with a different `object_ref_or_value` block promotion.
-- Blocked output returns non-zero with:
-  - `promoted: false`
-  - `read_only: true`
-  - `error: conflict_preflight_required`
-  - status counts for the claim slot
-  - safe conflicting fact summaries
-  - suggested `review explain`, `review replacements`, and `graph inspect` commands
+- Blocked output returns non-zero with `promoted: false`, `read_only: true`, `error: conflict_preflight_required`, status counts, safe conflicting fact summaries, and suggested `review explain`, `review replacements`, and `graph inspect` commands.
 - `--allow-conflict` is required to intentionally keep coexisting conflicting claims.
-- Successful promotions preserve E1/E3 behavior: default status is `candidate`, explicit `--approve --actor --reason` still logs approval, lineage edges are created only after successful promotion, and default retrieval remains approved-only.
-- Unknown candidate ids remain safe failures with no facts, sources, or lineage relations created.
+- Successful promotions preserve E1/E3 behavior.
 - No automatic deprecation, supersession, cleanup/decay mutation, approval queue, or retrieval ranking change.
 
-Verification completed for E4/v0.1.57:
+### E5 — explicit reviewed conflict relation edges
+
+PR #87 `feat: add reviewed conflict relations` merged and released in v0.1.58.
+
+- Relation model/storage supports optional `review_actor`, `review_reason`, and `reviewed_at` fields.
+- Existing relation tables are migrated with those review metadata columns on `initialize_database`.
+- `insert_relation` and `create_relation` accept review metadata.
+- Existing `review supersede fact ...` replacement edges remain compatible and now store relation-level review metadata.
+- New `review relate-conflict fact <db> <left-fact-id> <right-fact-id> --actor ... --reason ... [--evidence-ids-json ...]` command records a `conflicts_with` relation.
+- The conflict relation command requires same claim slot (`subject_ref`, `predicate`, `scope`) and different object values; it rejects missing metadata/cross-slot/same-object attempts without mutation.
+- `review conflicts fact ...` includes `conflict_relations` in its read-only output.
+- No approval, deprecation, supersession, status mutation, or retrieval ranking/default policy change.
+
+Verification completed for E5/v0.1.58:
 
 ```bash
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py -q
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_memory_activations.py tests/test_review_and_scope_ranking.py tests/test_experience_traces.py tests/test_cli.py -q
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 218 passed
+
 git diff --check
 npm pack --dry-run
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
 HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
 node --check bin/agent-memory.js
-PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli consolidation promote fact --help
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review relate-conflict --help
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review conflicts --help
 ```
 
 External release QA completed:
 
 ```bash
 npm view @cafitac/agent-memory version
-# 0.1.57
+# 0.1.58
 python3 - <<'PY'
 import json, urllib.request
 print(json.load(urllib.request.urlopen('https://pypi.org/pypi/cafitac-agent-memory/json'))['info']['version'])
 PY
-# 0.1.57
+# 0.1.58
 ```
 
 Published install smoke completed:
 
-- PyPI fresh venv install: `cafitac-agent-memory==0.1.57`, `consolidation promote fact --help` including `--allow-conflict`, and `graph inspect --help` succeeded.
-- npm clean `npm exec --package=@cafitac/agent-memory@0.1.57` smoke succeeded for `consolidation promote fact --help` including `--allow-conflict`, and `graph inspect --help`.
+- PyPI fresh venv install: `cafitac-agent-memory==0.1.58`, `review relate-conflict --help`, `review conflicts --help`, and `graph inspect --help` succeeded.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.58` smoke succeeded for `review relate-conflict --help`, `review conflicts --help`, and `graph inspect --help`.
 
 Hermes QA completed:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/agent-memory hermes-doctor \
+/Users/reddit/.agent-memory/runtime/v0.1.58/.venv/bin/agent-memory hermes-doctor \
   /Users/reddit/.agent-memory/memory.db \
   --config-path /Users/reddit/.hermes/config.yaml \
-  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.57/.venv/bin/python \
+  --python-executable /Users/reddit/.agent-memory/runtime/v0.1.58/.venv/bin/python \
   --timeout 15
-hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool
+hermes hooks list
 hermes hooks doctor
 hermes hooks test pre_llm_call
+hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool
 ```
 
-`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.57 agent-memory pre-LLM hook.
-
-## In-progress Stage E / PR E5 slice
-
-Branch/worktree:
-
-- Branch: `feat/consolidation-reviewed-relations`
-- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations`
-
-Implemented so far:
-
-- Relation model/storage now supports optional `review_actor`, `review_reason`, and `reviewed_at` fields.
-- Existing relation tables are migrated with those review metadata columns on `initialize_database`.
-- `insert_relation` and `create_relation` accept review metadata.
-- Existing `review supersede fact ...` replacement edges retain compatibility and now store relation-level review metadata.
-- New `review relate-conflict fact <db> <left-fact-id> <right-fact-id> --actor ... --reason ... [--evidence-ids-json ...]` command records a `conflicts_with` relation.
-- The conflict relation command requires same claim slot (`subject_ref`, `predicate`, `scope`) and different object values; it rejects missing metadata/cross-slot attempts without mutation.
-- `review conflicts fact ...` now includes `conflict_relations` in its read-only output.
-- No status mutation or retrieval ranking/default policy change.
-
-Focused verification completed in worktree:
-
-```bash
-/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'relate_conflict or review_columns'
-# 3 passed, 51 deselected
-/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_review_and_scope_ranking.py -q
-# 58 passed
-```
-
-Still needed before PR:
-
-- Run full `tests/ -q`.
-- Run `git diff --check` and package/release readiness checks.
-- Smoke CLI help for `review relate-conflict` and `review conflicts`.
-- Commit, push, PR, CI, merge, release sync, published smoke, Hermes runtime QA.
+`hermes hooks doctor` reported all shell hooks healthy, including the v0.1.58 agent-memory pre-LLM hook.
 
 ## Canonical roadmap position
 
@@ -217,7 +185,7 @@ The durable north-star is a graph-based memory consolidation runtime:
 - traces strengthen through repetition, recency, salience, user emphasis, graph connectivity, and retrieval usefulness
 - weak traces decay/expire/collapse into summaries
 - strong trace clusters consolidate into semantic, episodic, procedural, and preference memories
-- prompt-time retrieval remains explainable through provenance, status history, supersession, and graph relations
+- prompt-time retrieval remains explainable through provenance, status history, supersession, conflict relations, and graph relations
 
 Roadmap sequence:
 
@@ -232,25 +200,40 @@ Roadmap sequence:
    - E2 promotion audit report done in v0.1.55
    - E3 consolidation graph lineage relation edges done in v0.1.56
    - E4 conflict/supersession preflight done in v0.1.57
-   - E5 explicit reviewed conflict relation edges in progress
+   - E5 explicit reviewed conflict relation edges done in v0.1.58
 6. Stage F: retrieval uses consolidation signals conservatively
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Current recommended next step for this implementation session
+## Next recommended PR-sized slice
 
-Finish E5 local validation, then open the feature PR.
+Primary recommendation: Stage F / F1 read-only retrieval policy preview.
 
-Commands:
+Suggested shape:
+
+- Add a read-only command/report that previews how consolidation/lifecycle signals would affect retrieval ordering or visibility without changing default retrieval behavior.
+- Include status, supersession/replacement relations, reviewed conflicts, promotion lineage, activation/reinforcement/decay signals, and current approved-only visibility in one explanation payload.
+- Keep the conservative default retrieval path unchanged.
+- Do not auto-rank, auto-hide, auto-deprecate, or auto-promote in the first Stage F slice.
+
+Alternative smaller slice:
+
+- Add `agent-memory consolidation conflicts report "$DB"` as an all-DB read-only diagnostics command that finds same-claim-slot contradictions and existing `conflicts_with` relation coverage.
+
+Out of scope unless deliberately re-scoped:
+
+- procedure/preference promotion
+- automatic promotion
+- automatic deprecation/supersession
+- destructive cleanup/decay
+- default retrieval ranking changes
+
+## Recommended first commands for the next implementation session
 
 ```bash
-cd /Users/reddit/Project/agent-memory/.worktrees/consolidation-reviewed-relations
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
-git diff --check
-npm pack --dry-run
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
-HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
-node --check bin/agent-memory.js
-PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review relate-conflict --help
-PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli review conflicts --help
+cd /Users/reddit/Project/agent-memory
+git status --short --branch
+git fetch origin --prune --tags
+git log --oneline -5
+sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
 ```
