@@ -48,7 +48,7 @@ Test whether repeated/useful memories rank better without overwhelming lexical/s
 
 ## PR F3: Use decay risk as a prompt-time noise penalty behind opt-in
 
-Status: In progress via `feat/decay-risk-ranker-preview`.
+Status: Completed in v0.1.61 via PR #96.
 
 ### Objective
 
