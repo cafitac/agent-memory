@@ -33,7 +33,7 @@ Capture user-directed remember intent as a candidate, not necessarily as approve
 
 ## PR G1a: Dogfood/evaluate explicit remember-intent traces before G2
 
-Status: In progress after `v0.1.63`; intended as a conservative quality gate before any auto-approval slice.
+Status: Complete in `v0.1.64` via PR #105. This is a conservative quality gate before any auto-approval slice.
 
 ### Objective
 

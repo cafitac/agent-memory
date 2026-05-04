@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 13:55 KST
+Last updated: 2026-05-04 14:30 KST
 
 ## Trigger for the next session
 
@@ -16,30 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.63까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path가 완료됐고, 현재 진행 중인 다음 slice는 G2 전에 `dogfood remember-intent` read-only report로 G1 trace 품질을 측정하는 것이다. 자동 승인/자동 장기 memory 생성은 아직 없다.
+agent-memory는 v0.1.64까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G1 explicit `Remember this:` review trace path와 G1a `dogfood remember-intent` read-only quality gate가 완료됐다. 자동 승인/자동 장기 memory 생성은 아직 없다. 다음 후보는 Stage G/G2 narrow opt-in auto-approval 설계/RED 테스트다.
 
 ## Current in-progress slice
 
-Stage G/G1a remember-intent dogfood/eval report is in progress on branch `feat/remember-intent-eval` under `.worktrees/remember-intent-eval`.
+No feature slice is currently in progress after v0.1.64 post-release validation.
 
-Current intended command:
+Recommended next slice:
 
-```bash
-agent-memory dogfood remember-intent "$DB" --limit 200 --sample-limit 10
-```
-
-Acceptance:
-
-- Read-only JSON report with `kind=remember_intent_dogfood_report`, `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`.
-- Counts inspected `remember_intent` traces, ordinary turn traces, review-ready traces, scope distribution, and unsafe sample count.
-- Prints only safe sample summaries and compact policy flags; does not print raw trace metadata, raw prompts, transcripts, or secret-like summaries.
-- Does not create facts/procedures/episodes, relations, candidates, approvals, status transitions, or retrieval observations.
-- Keeps G2 auto-approval out of scope.
-
-Next after this slice:
-
-- Dogfood/evaluate G1 remember-intent review traces before G2, or start G2 only as an explicit opt-in policy design/RED-test slice.
-- Do not change default retrieval ranking, automatic approval, deprecation/supersession, or decay mutation without opt-in policy, conflict preflight, audit history, and live Hermes E2E.
+- Stage G/G2 narrow opt-in auto-approval design/RED-test slice.
+- Keep G2 default-off, scope/type constrained, conflict-preflighted, audited, reversible/reviewable, and live-Hermes tested.
+- Do not change default retrieval ranking, automatic deprecation/supersession, or decay mutation without explicit opt-in policy and audit history.
 
 ## Current repo state
 
@@ -50,7 +37,7 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should be on `main`.
-- `origin/main` includes v0.1.63 release-sync PR #103.
+- `origin/main` includes v0.1.64 release-sync PR #106.
 - No Stage F feature worktree is required after F4 cleanup; if `.worktrees/graph-neighborhood-ranker-preview` remains locally, it is safe to remove after verifying no uncommitted changes.
 
 Expected GitHub identity:
@@ -62,12 +49,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.63`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.63`
-- npm package: `@cafitac/agent-memory@0.1.63`
-- PyPI package: `cafitac-agent-memory==0.1.63`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.63/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.63.
+- `v0.1.64`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.64`
+- npm package: `@cafitac/agent-memory@0.1.64`
+- PyPI package: `cafitac-agent-memory==0.1.64`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.64/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.64.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -122,6 +109,51 @@ Release QA completed:
 - Direct v0.1.63 hook smoke verified review-only remember traces.
 - `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
 - `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.63 agent-memory pre-LLM hook.
+
+## Completed Stage G/G1a slice
+
+PR #105 `feat: add remember intent dogfood report` merged and released in v0.1.64. Release-sync PR #106 merged.
+
+- New command: `agent-memory dogfood remember-intent <db> --limit 200 --sample-limit 10`.
+- Output kind is `remember_intent_dogfood_report` with `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`.
+- The report counts inspected traces, `remember_intent` traces, ordinary turn traces, review-ready traces, unsafe samples, and remember-intent scopes.
+- Samples include safe sanitized summaries plus compact policy flags only; raw metadata, raw prompts/transcripts, and secret-like summaries are omitted.
+- No facts/procedures/episodes, relations, status transitions, candidates, approvals, retrieval observations, or hook behavior are mutated.
+- Real dogfood DB read-only report completed with zero current `remember_intent` traces.
+
+Verification completed for G1a/v0.1.64:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'remember_intent_report or dogfood_remember'
+# 1 passed, 67 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py tests/test_experience_traces.py -q -k 'dogfood or remember_intent or hermes_pre_llm_hook or experience_trace'
+# 21 passed, 52 deselected
+
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 232 passed
+
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
+```
+
+Release QA completed:
+
+- PR #105 CI succeeded and merged.
+- Release-sync PR #106 validation succeeded and merged.
+- GitHub Release `v0.1.64` published.
+- npm registry shows `@cafitac/agent-memory@0.1.64`.
+- PyPI JSON and fresh install show `cafitac-agent-memory==0.1.64`.
+- PyPI fresh venv smoke verified `dogfood remember-intent` on a seeded temp DB.
+- npm clean `npm exec --package=@cafitac/agent-memory@0.1.64` smoke verified `dogfood remember-intent` on a temp DB.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.64/.venv/bin/agent-memory`.
+- `/Users/reddit/.hermes/config.yaml` was backed up before updating the hook path to v0.1.64.
+- Direct v0.1.64 hook smoke verified review-only remember traces.
+- `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` returned `OK`.
+- `hermes hooks doctor` reported all shell hooks healthy, including the v0.1.64 agent-memory pre-LLM hook.
 
 ## Completed Stage F/F4 slice
 
