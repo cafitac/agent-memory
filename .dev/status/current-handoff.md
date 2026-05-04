@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 10:26 KST
+Last updated: 2026-05-04 11:05 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.58까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.58에는 Stage E / PR E5 explicit reviewed conflict relation edges가 포함됐다. 다음 제품 slice는 Stage F에서 consolidation/lifecycle signals를 retrieval에 보수적으로 반영하는 read-only/advisory-first 작업이거나, Stage E 후속으로 `consolidation conflicts report` 같은 전체 DB read-only diagnostics를 추가하는 것이다.
+agent-memory는 v0.1.59까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.59에는 Stage F / PR F1 read-only retrieval policy preview가 포함됐다. 다음 제품 slice는 Stage F/F2에서 reinforcement를 opt-in ranker로 작게 실험하거나, 그 전에 all-DB `consolidation conflicts report` 같은 read-only diagnostics를 추가하는 것이다.
 
 ## Current repo state
 
@@ -39,12 +39,12 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.58`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.58`
-- npm package: `@cafitac/agent-memory@0.1.58`
-- PyPI package: `cafitac-agent-memory==0.1.58`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.58/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.58.
+- `v0.1.59`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.59`
+- npm package: `@cafitac/agent-memory@0.1.59`
+- PyPI package: `cafitac-agent-memory==0.1.59`
+- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.59/.venv/bin/agent-memory`.
+- Hermes config hook command is allowlisted and points to v0.1.59.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -202,29 +202,55 @@ Roadmap sequence:
    - E4 conflict/supersession preflight done in v0.1.57
    - E5 explicit reviewed conflict relation edges done in v0.1.58
 6. Stage F: retrieval uses consolidation signals conservatively
+   - F1 read-only retrieval policy preview done in v0.1.59
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
 
-## Next recommended PR-sized slice
+## Latest completed PR-sized slice
 
-Current in-progress slice: Stage F / F1 read-only retrieval policy preview.
+Stage F / F1 read-only retrieval policy preview completed.
 
-Branch/worktree:
-
-- branch: `feat/retrieval-policy-preview`
-- worktree: `/Users/reddit/Project/agent-memory/.worktrees/retrieval-policy-preview`
-
-Implemented shape so far:
+PR #90 `feat: add retrieval policy preview` merged and released in v0.1.59.
 
 - New command: `agent-memory retrieval policy-preview <db> <query> [--preferred-scope ...] [--limit N]`.
 - It reuses current approved-only retrieval with `record_retrievals=false`.
 - It returns read-only JSON with non-stored query hash marker, `mutated: false`, `default_retrieval_unchanged: true`, per-memory score components, activation/retrieval counts, conflict/supersession/replacement policy signals, and advisory preview actions.
-- It should not auto-rank, auto-hide, auto-deprecate, auto-promote, create observations, increment retrieval counters, or mutate facts/relations.
+- It does not auto-rank, auto-hide, auto-deprecate, auto-promote, create observations, increment retrieval counters, or mutate facts/relations.
 
-Verification in progress:
+Verification completed for F1/v0.1.59:
 
-- Focused RED was confirmed before implementation: `retrieval` command was initially absent.
-- Current focused test status: `tests/test_cli.py -q -k 'retrieval_policy_preview'` passes locally.
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_policy_preview'
+# 2 passed, 54 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_policy_preview or retrieve'
+# 7 passed, 49 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 220 passed
+git diff --check
+npm pack --dry-run
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+HOME=/Users/reddit /Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+node --check bin/agent-memory.js
+```
+
+Release QA completed:
+
+- GitHub Release: `v0.1.59`
+- npm clean exec smoke: `npm-smoke-ok 0.1.59`
+- PyPI fresh venv smoke: `pypi-smoke-ok 0.1.59`
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.59/.venv/bin/agent-memory`
+- `agent-memory hermes-doctor`, `hermes hooks list`, `hermes hooks doctor`, `hermes hooks test pre_llm_call`, and `hermes chat --accept-hooks -Q -q 'Say exactly: OK' --source tool` passed.
+
+## Next recommended PR-sized slice
+
+Primary recommendation: Stage F / F2 opt-in reinforcement ranker preview/experiment.
+
+Suggested shape:
+
+- Keep default retrieval unchanged.
+- Add an explicit opt-in mode or eval path that compares baseline retrieval vs a small reinforcement score boost.
+- Use existing retrieval/reinforcement counters and F1 `policy-preview` explanations to make rank changes inspectable.
+- Require eval evidence before considering any default ranking change.
 
 Alternative smaller slice:
 
@@ -245,5 +271,5 @@ cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git fetch origin --prune --tags
 git log --oneline -5
-sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-e-reviewed-promotion.md
+sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-f-retrieval-signals.md
 ```
