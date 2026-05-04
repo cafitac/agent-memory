@@ -10,7 +10,13 @@ from agent_memory.core.curation import approve_fact, create_candidate_fact, supe
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.integrations import hermes_hooks
 from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
-from agent_memory.storage.sqlite import initialize_database, insert_relation, list_experience_traces, update_memory_status
+from agent_memory.storage.sqlite import (
+    initialize_database,
+    insert_relation,
+    list_experience_traces,
+    record_memory_retrieval,
+    update_memory_status,
+)
 
 
 def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood(tmp_path: Path) -> None:
@@ -3207,3 +3213,171 @@ def test_initialize_database_adds_review_columns_to_existing_relations_table(tmp
     assert relation.review_actor == "maintainer"
     assert relation.review_reason == "legacy relation table gained review metadata columns"
     assert relation.reviewed_at is not None
+
+
+def test_python_module_retrieval_policy_preview_is_read_only_and_flags_reviewed_conflicts(tmp_path: Path) -> None:
+    db_path = tmp_path / "policy-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project X branch policy has conflicting reviewed evidence.",
+        metadata={"project": "project-x", "raw_prompt": "password=SUPERSECRET token=abc123"},
+    )
+    older_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="EP-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+        confidence=0.91,
+    )
+    newer_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="PX-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+        confidence=0.92,
+    )
+    approve_fact(db_path=db_path, fact_id=older_fact.id)
+    approve_fact(db_path=db_path, fact_id=newer_fact.id)
+    record_memory_retrieval(db_path, memory_type="fact", memory_id=newer_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{older_fact.id}",
+        relation_type="conflicts_with",
+        to_ref=f"fact:{newer_fact.id}",
+        evidence_ids=[source.id],
+        review_actor="maintainer",
+        review_reason="same claim slot has contradictory values",
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_before = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        relation_count_before = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "policy-preview",
+            str(db_path),
+            "What branch pattern does Project X use? password=SUPERSECRET",
+            "--preferred-scope",
+            "project:project-x",
+            "--limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUPERSECRET" not in result.stdout
+    assert "abc123" not in result.stdout
+    assert "raw_prompt" not in result.stdout
+    assert "query_preview" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "retrieval_policy_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_policy"] == "approved_only"
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["query"] == {"stored": False, "sha256_present": True}
+    assert payload["policy"] == "conservative_preview"
+    assert payload["retrieved_counts"]["facts"] == 1
+
+    fact_projection = payload["memory_projections"][0]
+    assert fact_projection["memory_ref"] == f"fact:{newer_fact.id}"
+    assert fact_projection["current_status"] == "approved"
+    assert fact_projection["current_visibility"] == "visible_in_default_retrieval"
+    assert fact_projection["preview_decision"]["action"] == "flag_for_review"
+    assert "reviewed_conflict_relation" in fact_projection["signals"]
+    assert fact_projection["relation_policy"]["reviewed_conflict_count"] == 1
+    assert fact_projection["activation_policy"]["retrieval_count"] == 1
+    assert fact_projection["score_components"]["reinforcement_score"] >= 0
+
+    with sqlite3.connect(db_path) as connection:
+        retrieval_counts_after = {
+            row[0]: row[1]
+            for row in connection.execute("SELECT id, retrieval_count FROM facts").fetchall()
+        }
+        relation_count_after = connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+    assert retrieval_counts_after == retrieval_counts_before
+    assert relation_count_after == relation_count_before
+
+
+def test_python_module_retrieval_policy_preview_excludes_superseded_default_fact_without_retrieval_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "policy-preview-superseded.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="manual_note",
+        content="Project X moved from EP branches to PX branches.",
+        metadata={"project": "project-x"},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="EP-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+    )
+    replacement_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project X",
+        predicate="branch_pattern",
+        object_ref_or_value="PX-###",
+        evidence_ids=[source.id],
+        scope="project:project-x",
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    supersede_fact(
+        db_path=db_path,
+        superseded_fact_id=old_fact.id,
+        replacement_fact_id=replacement_fact.id,
+        reason="new policy supersedes the old branch pattern",
+        actor="maintainer",
+        evidence_ids=[source.id],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieval",
+            "policy-preview",
+            str(db_path),
+            "What branch pattern does Project X use?",
+            "--preferred-scope",
+            "project:project-x",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["read_only"] is True
+    assert payload["retrieved_counts"]["facts"] == 1
+    projection = payload["memory_projections"][0]
+    assert projection["memory_ref"] == f"fact:{replacement_fact.id}"
+    assert projection["preview_decision"]["action"] == "include"
+    assert projection["relation_policy"]["superseded_by_count"] == 0
+    assert "superseded" not in projection["signals"]

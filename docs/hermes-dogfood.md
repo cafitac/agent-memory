@@ -91,6 +91,15 @@ Stage C starts with an internal `memory_activations` substrate. Retrieval observ
 
 `review relate-conflict fact` is the explicit human-reviewed follow-up for accepted E4 conflicts. It records a `conflicts_with` graph relation only for same-claim-slot facts with different object values, requires `--actor` and `--reason`, stores review metadata on the relation, and does not mutate either fact's status or default retrieval ranking. Use it after `consolidation promote fact --allow-conflict` only when a reviewer intentionally keeps both claims during migration or split-environment rollout. `review conflicts fact` now includes these relation refs in its otherwise read-only same-slot report. `review supersede fact` replacement edges use the same relation review metadata columns.
 
+
+`retrieval policy-preview` is the first Stage F read-only lifecycle policy surface. It runs the existing approved-only retrieval path with `record_retrievals=false`, then explains what a conservative lifecycle-aware policy would do with each returned memory. The report includes score components, retrieval/reinforcement counts, same-claim-slot conflict counts, reviewed `conflicts_with` relations, supersession/replacement chains, and copy-paste review/graph inspection commands. It emits `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`; it never stores the raw query or a query preview, and it does not alter Hermes hook behavior.
+
+```bash
+agent-memory retrieval policy-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5
+```
+
+Use this before any opt-in ranker or prompt-time hiding experiment. A `flag_for_review` decision is an advisory signal, not an automatic cleanup instruction.
+
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.
 
 `observations review-candidates` is the next read-only step after audit. It keeps the same secret-safe observation summary, then expands each top ref into a forensic candidate:

@@ -207,14 +207,24 @@ Roadmap sequence:
 
 ## Next recommended PR-sized slice
 
-Primary recommendation: Stage F / F1 read-only retrieval policy preview.
+Current in-progress slice: Stage F / F1 read-only retrieval policy preview.
 
-Suggested shape:
+Branch/worktree:
 
-- Add a read-only command/report that previews how consolidation/lifecycle signals would affect retrieval ordering or visibility without changing default retrieval behavior.
-- Include status, supersession/replacement relations, reviewed conflicts, promotion lineage, activation/reinforcement/decay signals, and current approved-only visibility in one explanation payload.
-- Keep the conservative default retrieval path unchanged.
-- Do not auto-rank, auto-hide, auto-deprecate, or auto-promote in the first Stage F slice.
+- branch: `feat/retrieval-policy-preview`
+- worktree: `/Users/reddit/Project/agent-memory/.worktrees/retrieval-policy-preview`
+
+Implemented shape so far:
+
+- New command: `agent-memory retrieval policy-preview <db> <query> [--preferred-scope ...] [--limit N]`.
+- It reuses current approved-only retrieval with `record_retrievals=false`.
+- It returns read-only JSON with non-stored query hash marker, `mutated: false`, `default_retrieval_unchanged: true`, per-memory score components, activation/retrieval counts, conflict/supersession/replacement policy signals, and advisory preview actions.
+- It should not auto-rank, auto-hide, auto-deprecate, auto-promote, create observations, increment retrieval counters, or mutate facts/relations.
+
+Verification in progress:
+
+- Focused RED was confirmed before implementation: `retrieval` command was initially absent.
+- Current focused test status: `tests/test_cli.py -q -k 'retrieval_policy_preview'` passes locally.
 
 Alternative smaller slice:
 

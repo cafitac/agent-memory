@@ -13,17 +13,19 @@ Use consolidation signals to improve retrieval only after they are visible and t
 - Graph neighborhood reinforcement is bounded and measured.
 - Default retrieval remains safe until eval and Hermes E2E justify changes.
 
-## PR F1: Add activation/reinforcement metadata to retrieval explanations
+## PR F1: Read-only retrieval policy preview
 
 ### Objective
 
-Expose signal metadata without changing ranking.
+Expose lifecycle/retrieval policy decisions without changing default ranking, prompt injection, or memory state.
 
 ### Acceptance
 
-- Retrieval output remains backwards-compatible or clearly versioned.
-- Approved-only behavior and deprecated exclusion remain covered by tests.
-- Users can see why a memory was selected.
+- `agent-memory retrieval policy-preview <db> <query>` returns versioned/read-only JSON with `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`.
+- The command uses current approved-only retrieval with `record_retrievals=false`; it does not create observations, increment retrieval counters, or mutate facts/relations.
+- Output omits raw query text, query previews, prompts, transcripts, raw trace metadata, and secrets; it only exposes a non-stored query hash marker.
+- Per-memory projections explain score components, activation/retrieval counts, same-claim-slot conflict counts, reviewed conflict relations, supersession/replacement chains, and advisory decisions (`include`, `flag_for_review`, or `exclude`).
+- Existing `retrieve` behavior remains unchanged and covered by tests.
 
 ## PR F2: Use reinforcement as a small ranking feature behind opt-in
 
