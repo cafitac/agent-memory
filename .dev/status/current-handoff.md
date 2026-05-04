@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 15:20 KST
+Last updated: 2026-05-04 15:55 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,28 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.65까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G2 narrow opt-in auto-approval도 완료되어 `remember-preferences-v1` 정책을 default-off dry-run/apply CLI로 제공한다. 다음 자연스러운 작업은 G3 background consolidation dry-run 설계/RED-test slice 또는 G2 dogfood 데이터를 더 쌓아 guardrail 품질을 점검하는 것이다.
+agent-memory는 v0.1.65까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G2 narrow opt-in auto-approval도 완료되어 `remember-preferences-v1` 정책을 default-off dry-run/apply CLI로 제공한다. 현재 진행 중인 다음 작업은 G3 background consolidation dry-run slice이며, 목표는 cron-friendly/read-only/report-only wrapper를 추가하는 것이다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.65 post-release validation.
+Stage G/G3 background consolidation dry-run is in progress in worktree `/Users/reddit/Project/agent-memory/.worktrees/background-consolidation-dry-run` on branch `feat/background-consolidation-dry-run`.
 
-Recommended next slice:
+Implemented so far:
 
-- Stage G/G3 background consolidation dry-run design/RED-test slice.
-- Keep it cron-friendly, read-only by default, file-lock/concurrency safe, and suitable for human review.
-- Alternatively, run G2 `remember-preferences-v1` dogfood on real opt-in remember traces first and tighten policy based on observed noise before adding background jobs.
+- New command: `agent-memory consolidation background dry-run <db> [--output <path>] [--lock-path <path>]`.
+- It bundles read-only `consolidation candidates`, `activations summary`, `activations reinforcement-report`, and `activations decay-risk-report` into one cron-friendly JSON report.
+- It uses a non-blocking file lock; overlapping runs exit zero with `status: skipped_lock_busy` and write a readable skipped report if `--output` is supplied.
+- It is report-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, no apply mode, and no fact/source/relation/status/trace/retrieval-observation mutation.
+- RED tests were added first and failed because the `background` consolidation action did not exist; focused tests now pass.
+
+Current focused verification:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'background_dry_run'
+# 2 passed, 71 deselected
+```
+
+Next required steps: run related/full tests and release readiness, manual smoke the command, create/merge PR, then release/published smoke/Hermes runtime QA like previous slices.
 
 Do not broaden the completed G2 slice into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
 

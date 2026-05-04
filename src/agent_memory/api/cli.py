@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import sys
@@ -2370,6 +2371,180 @@ def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min
     }
 
 
+def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _consolidation_background_dry_run_report(
+    db_path: Path,
+    *,
+    limit: int,
+    top: int,
+    min_evidence: int,
+    frequent_threshold: int,
+    output_path: Path | None,
+    lock_path: Path,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("consolidation background dry-run limit must be >= 1")
+    if top < 1:
+        raise ValueError("consolidation background dry-run top must be >= 1")
+    if min_evidence < 1:
+        raise ValueError("consolidation background dry-run min evidence must be >= 1")
+    if frequent_threshold < 1:
+        raise ValueError("consolidation background dry-run frequent threshold must be >= 1")
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            payload = {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "skipped_lock_busy",
+                "error": None,
+                "db_path": str(db_path),
+                "output_path": str(output_path) if output_path is not None else None,
+                "lock": {
+                    "path": str(lock_path),
+                    "acquired": False,
+                    "mode": "non_blocking_exclusive",
+                },
+                "automation_policy": {
+                    "apply_supported": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "requires_human_review": True,
+                },
+                "reports": {},
+                "review_handoff": {
+                    "suitable_for_human_review": False,
+                    "reason": "background_dry_run_already_running",
+                    "next_steps": ["Keep the existing run; skipped runs are cron-safe and do not mutate memory."],
+                },
+            }
+            _write_json_report(output_path, payload)
+            return payload
+
+        try:
+            candidates = _consolidation_candidates_report(db_path, limit=limit, top=top, min_evidence=min_evidence)
+            activation_summary = _activation_summary(
+                db_path,
+                limit=limit,
+                top=top,
+                frequent_threshold=frequent_threshold,
+            )
+            reinforcement = _activation_reinforcement_report(
+                db_path,
+                limit=limit,
+                top=top,
+                frequent_threshold=frequent_threshold,
+            )
+            decay_risk = _activation_decay_risk_report(
+                db_path,
+                limit=limit,
+                top=top,
+                frequent_threshold=frequent_threshold,
+            )
+            quality_warnings = sorted(
+                set(
+                    candidates.get("quality_warnings", [])
+                    + activation_summary.get("quality_warnings", [])
+                    + reinforcement.get("quality_warnings", [])
+                    + decay_risk.get("quality_warnings", [])
+                )
+            )
+            payload = {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "completed",
+                "error": None,
+                "db_path": str(db_path),
+                "output_path": str(output_path) if output_path is not None else None,
+                "lock": {
+                    "path": str(lock_path),
+                    "acquired": True,
+                    "mode": "non_blocking_exclusive",
+                },
+                "scan": {
+                    "limit": limit,
+                    "top": top,
+                    "min_evidence": min_evidence,
+                    "frequent_threshold": frequent_threshold,
+                    "quality_warnings": quality_warnings,
+                },
+                "automation_policy": {
+                    "apply_supported": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "requires_human_review": True,
+                    "default_retrieval_policy": "approved_only_unchanged",
+                },
+                "reports": {
+                    "candidates": candidates,
+                    "activation_summary": activation_summary,
+                    "reinforcement": reinforcement,
+                    "decay_risk": decay_risk,
+                },
+                "review_handoff": {
+                    "suitable_for_human_review": True,
+                    "candidate_count": candidates.get("candidate_count", 0),
+                    "reinforcement_candidate_count": reinforcement.get("candidate_count", 0),
+                    "decay_risk_candidate_count": len(decay_risk.get("decay_risk_candidates", [])),
+                    "next_steps": [
+                        "Review this JSON report manually; it is intentionally read-only.",
+                        "Use existing explain/promote/auto-approve commands only as explicit follow-up actions.",
+                        "Do not infer or approve ordinary conversation memories from this background dry-run.",
+                    ],
+                },
+            }
+        except Exception as exc:
+            payload = {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "failed",
+                "error": {
+                    "type": exc.__class__.__name__,
+                    "message": str(exc),
+                },
+                "db_path": str(db_path),
+                "output_path": str(output_path) if output_path is not None else None,
+                "lock": {
+                    "path": str(lock_path),
+                    "acquired": True,
+                    "mode": "non_blocking_exclusive",
+                },
+                "automation_policy": {
+                    "apply_supported": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "requires_human_review": True,
+                    "default_retrieval_policy": "approved_only_unchanged",
+                },
+                "reports": {},
+                "review_handoff": {
+                    "suitable_for_human_review": False,
+                    "reason": "background_dry_run_failed_before_report_generation",
+                    "next_steps": [
+                        "Inspect the error object and rerun manually after fixing the local database or environment.",
+                        "No memory mutations were attempted by this dry-run command.",
+                    ],
+                },
+            }
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        _write_json_report(output_path, payload)
+        return payload
+
+
 def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_threshold: int) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("activations summary limit must be >= 1")
@@ -3216,6 +3391,29 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_candidates_parser.add_argument("--limit", type=int, default=200)
     consolidation_candidates_parser.add_argument("--top", type=int, default=20)
     consolidation_candidates_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_background_parser = consolidation_subparsers.add_parser(
+        "background",
+        help="Cron-friendly background consolidation diagnostics; dry-run only and never mutates memory.",
+    )
+    consolidation_background_subparsers = consolidation_background_parser.add_subparsers(
+        dest="background_action",
+        required=True,
+    )
+    consolidation_background_dry_run_parser = consolidation_background_subparsers.add_parser(
+        "dry-run",
+        help="Write a read-only background consolidation report for human review.",
+    )
+    consolidation_background_dry_run_parser.add_argument("db_path", type=Path)
+    consolidation_background_dry_run_parser.add_argument("--limit", type=int, default=200)
+    consolidation_background_dry_run_parser.add_argument("--top", type=int, default=20)
+    consolidation_background_dry_run_parser.add_argument("--min-evidence", type=int, default=2)
+    consolidation_background_dry_run_parser.add_argument("--frequent-threshold", type=int, default=3)
+    consolidation_background_dry_run_parser.add_argument("--output", type=Path)
+    consolidation_background_dry_run_parser.add_argument(
+        "--lock-path",
+        type=Path,
+        default=Path.home() / ".agent-memory" / "background-consolidation.lock",
+    )
     consolidation_explain_parser = consolidation_subparsers.add_parser(
         "explain",
         help="Explain one read-only consolidation candidate without promoting or mutating memory.",
@@ -3961,6 +4159,24 @@ def main() -> None:
                         limit=args.limit,
                         top=args.top,
                         min_evidence=args.min_evidence,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.consolidation_action == "background":
+            if args.background_action != "dry-run":
+                raise ValueError(f"Unsupported consolidation background action: {args.background_action}")
+            print(
+                json.dumps(
+                    _consolidation_background_dry_run_report(
+                        args.db_path,
+                        limit=args.limit,
+                        top=args.top,
+                        min_evidence=args.min_evidence,
+                        frequent_threshold=args.frequent_threshold,
+                        output_path=args.output,
+                        lock_path=args.lock_path,
                     ),
                     indent=2,
                 )
