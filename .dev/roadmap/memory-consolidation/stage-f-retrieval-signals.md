@@ -48,6 +48,8 @@ Test whether repeated/useful memories rank better without overwhelming lexical/s
 
 ## PR F3: Use decay risk as a prompt-time noise penalty behind opt-in
 
+Status: In progress via `feat/decay-risk-ranker-preview`.
+
 ### Objective
 
 Reduce stale/noisy injections while protecting old but salient memories.
@@ -55,9 +57,12 @@ Reduce stale/noisy injections while protecting old but salient memories.
 ### Acceptance
 
 - Default ranking unchanged.
-- High-salience or strongly connected old memories can still rank.
-- Deprecated/superseded facts remain excluded.
-- Hermes local QA marker remains retrievable in E2E.
+- `agent-memory retrieval decay-preview <db> <query>` is read-only and reports baseline rank vs decay-risk-penalized preview rank.
+- Output includes decay penalties, rank changes, activation/decay factors, relation policy, and no raw query/query-preview/prompt content.
+- High-salience or strongly connected old memories can still rank via explicit protection signals.
+- Deprecated/superseded facts remain excluded or marked as preview-only exclusions.
+- Focused CLI coverage proves no retrieval counters, observations, activations, facts, or relations mutate.
+- Hermes local QA marker remains retrievable in E2E before any default policy change is considered.
 
 ## PR F4: Add bounded graph neighborhood reinforcement
 

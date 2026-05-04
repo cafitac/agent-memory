@@ -106,6 +106,14 @@ Use this before any opt-in ranker or prompt-time hiding experiment. A `flag_for_
 agent-memory retrieval ranker-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5 --reinforcement-weight 0.15
 ```
 
+`retrieval decay-preview` is the opt-in decay-risk follow-up. It runs the same approved-only retrieval path with `record_retrievals=false`, then computes a preview-only prompt-time noise penalty from activation decay risk. It reports baseline rank, preview rank, decay penalty, lifecycle exclusion reasons, and decay-risk factors while keeping default retrieval and Hermes hooks unchanged.
+
+```bash
+agent-memory retrieval decay-preview "$DB" "What memory would Hermes use here?" --preferred-scope user:default --limit 5 --decay-weight 0.2 --frequent-threshold 3
+```
+
+Use this after `activations decay-risk-report` and before any runtime prompt-filtering change. A high decay penalty is an evaluation signal, not an automatic deprecation/delete instruction.
+
 The output emits `kind: retrieval_ranker_preview`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, sanitized candidates, and `rank_changes`. It does not store the query, print `query_preview`, record retrieval observations, increment memory counters, or change Hermes prompt injection.
 
 When `empty_retrieval_ratio` is high, run `observations empty-diagnostics` before changing rankers. It is a read-only, secret-safe segment report for empty observations. It groups empty-heavy rows by surface, preferred scope, and status filter; includes each segment's total count, empty count, empty ratio, sample observation ids, and observation window; and suggests operator checks such as scope mismatch review or adding/approving durable memories only after confirming the misses are real user needs.

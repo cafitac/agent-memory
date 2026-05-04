@@ -133,9 +133,10 @@ Published install smoke should include the read-only Stage F surfaces when valid
 ```bash
 agent-memory retrieval policy-preview "$DB" "install smoke query" --limit 5
 agent-memory retrieval ranker-preview "$DB" "install smoke query" --limit 5 --reinforcement-weight 0.15
+agent-memory retrieval decay-preview "$DB" "install smoke query" --limit 5 --decay-weight 0.2
 ```
 
-Both commands must report `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`; neither command should print raw query previews or mutate retrieval counters.
+All three commands must report `read_only: true`, `mutated: false`, and `default_retrieval_unchanged: true`; none should print raw query previews or mutate retrieval counters.
 
 ## Release note
 

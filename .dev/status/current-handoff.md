@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 11:42 KST
+Last updated: 2026-05-04 12:02 KST
 
 ## Trigger for the next session
 
@@ -16,7 +16,7 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.60까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. v0.1.60에는 Stage F / PR F2 opt-in reinforcement ranker preview가 포함됐다. 다음 제품 slice는 Stage F/F3 decay-risk prompt-time noise penalty preview 또는 all-DB `consolidation conflicts report` 같은 read-only diagnostics다.
+agent-memory는 v0.1.60까지 PR/CI/merge/release/npm/PyPI/Hermes QA가 완료됐다. 현재 Stage F/F3 decay-risk prompt-time noise penalty preview가 `feat/decay-risk-ranker-preview` worktree에서 구현/검증 중이다. F3는 default retrieval을 바꾸지 않는 opt-in/read-only `retrieval decay-preview` 실험으로 유지해야 한다.
 
 ## Current repo state
 
@@ -28,7 +28,7 @@ Current branch expectation:
 
 - Root checkout should be on `main` after docs/handoff cleanup PR is merged.
 - `origin/main` includes v0.1.60 release-sync PR #94.
-- No Stage F feature worktree is expected to remain active after F2 cleanup.
+- Active F3 feature worktree: `/Users/reddit/Project/agent-memory/.worktrees/decay-risk-ranker-preview` on `feat/decay-risk-ranker-preview` until PR/release cleanup completes.
 
 Expected GitHub identity:
 
@@ -204,8 +204,54 @@ Roadmap sequence:
 6. Stage F: retrieval uses consolidation signals conservatively
    - F1 read-only retrieval policy preview done in v0.1.59
    - F2 opt-in reinforcement ranker preview done in v0.1.60
+   - F3 decay-risk prompt-time noise penalty preview in progress on `feat/decay-risk-ranker-preview`
 7. Stage G: cautious automation
 8. Stage H: product hardening and public readiness
+
+
+## Active in-progress PR-sized slice
+
+Stage F / F3 decay-risk prompt-time noise penalty preview is implemented locally but not yet PR-merged/released.
+
+Branch/worktree:
+
+- Branch: `feat/decay-risk-ranker-preview`
+- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/decay-risk-ranker-preview`
+
+Implemented local command:
+
+```bash
+agent-memory retrieval decay-preview <db> <query> [--preferred-scope ...] [--limit N] [--decay-weight N] [--frequent-threshold N]
+```
+
+Current local behavior:
+
+- Output kind: `retrieval_decay_preview`.
+- `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`.
+- Uses current approved-only retrieval trace with `record_retrievals=false`.
+- Reports baseline rank vs decay-risk-penalized preview rank, decay penalties, rank changes, relation policy, activation/retrieval counts, and decay-risk factor breakdowns.
+- Omits raw query text, `query_preview`, prompts, transcripts, and secret-like metadata.
+- Does not create retrieval observations, increment counters, create activations, mutate facts/relations, or change `agent-memory retrieve` / Hermes hook behavior.
+- Reviewed supersession is preview-marked as `exclude`; frequently activated or connected approved memories receive protection signals so age alone does not downrank them.
+
+Local verification completed before PR:
+
+```bash
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_decay_preview'
+# 3 passed, 58 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/test_cli.py -q -k 'retrieval_decay_preview or retrieval_ranker_preview or retrieval_policy_preview or retrieve'
+# 12 passed, 49 deselected
+/Users/reddit/Project/agent-memory/.venv/bin/python -m pytest tests/ -q
+# 225 passed
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/check_release_metadata.py
+/Users/reddit/Project/agent-memory/.venv/bin/python scripts/smoke_release_readiness.py
+npm pack --dry-run
+node --check bin/agent-memory.js
+git diff --check
+PYTHONPATH=src /Users/reddit/Project/agent-memory/.venv/bin/python -m agent_memory.api.cli retrieval decay-preview --help
+```
+
+Next steps are PR creation, CI watch, merge, release-sync/publish verification, published PyPI/npm smoke, Hermes runtime update, Hermes QA, and post-release docs cleanup.
 
 ## Latest completed PR-sized slice
 
@@ -245,18 +291,7 @@ Release QA completed:
 
 ## Next recommended PR-sized slice
 
-Primary recommendation: Stage F / F3 decay-risk prompt-time noise penalty preview/experiment.
-
-Suggested shape:
-
-- Keep default retrieval unchanged.
-- Add an explicit opt-in preview/eval path that shows how decay risk would downrank stale/noisy memories.
-- Protect high-salience or strongly connected old memories from blunt age-only penalties.
-- Require eval evidence and Hermes E2E before considering any default ranking change.
-
-Alternative smaller slice:
-
-- Add `agent-memory consolidation conflicts report "$DB"` as an all-DB read-only diagnostics command that finds same-claim-slot contradictions and existing `conflicts_with` relation coverage.
+Primary recommendation: finish the active Stage F/F3 PR/release path for `retrieval decay-preview`. After F3 is merged, released, and Hermes-QA'd, the next product slice can be Stage F/F4 bounded graph-neighborhood reinforcement or an all-DB `consolidation conflicts report` read-only diagnostic.
 
 Out of scope unless deliberately re-scoped:
 
@@ -273,5 +308,8 @@ cd /Users/reddit/Project/agent-memory
 git status --short --branch
 git fetch origin --prune --tags
 git log --oneline -5
-sed -n '1,260p' .dev/roadmap/memory-consolidation/stage-f-retrieval-signals.md
+python - <<'PY'
+from pathlib import Path
+print(Path('.dev/roadmap/memory-consolidation/stage-f-retrieval-signals.md').read_text())
+PY
 ```
