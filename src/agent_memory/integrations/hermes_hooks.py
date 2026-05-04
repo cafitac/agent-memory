@@ -77,7 +77,7 @@ class HermesPreLlmHookOptions(BaseModel):
     max_alternatives: int | None = None
     max_guidelines: int | None = None
     include_reason_codes: bool = True
-    record_trace: bool = False
+    record_trace: bool = True
 
 
 class HermesHookConfigSnippetOptions(BaseModel):
@@ -484,9 +484,16 @@ def _record_pre_llm_experience_trace(
         summary=None,
         scope=effective_preferred_scope,
         session_ref=_hashed_ref("session", payload.session_id),
+        salience=0.1,
+        user_emphasis=0.0,
         related_memory_refs=_memory_refs_from_packet(packet),
         retention_policy="ephemeral",
-        metadata=_safe_hermes_trace_metadata(payload),
+        metadata={
+            **_safe_hermes_trace_metadata(payload),
+            "trace_recording": "default_metadata_only",
+            "candidate_policy": "evidence_only",
+            "auto_approved": False,
+        },
     )
 
 

@@ -1915,33 +1915,35 @@ def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_
 
 
 
-def test_python_module_cli_hermes_pre_llm_hook_does_not_record_trace_by_default(tmp_path: Path) -> None:
-    db_path = tmp_path / "module-cli-hermes-default-no-trace.db"
+def test_python_module_cli_hermes_pre_llm_hook_records_metadata_only_turn_trace_by_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-default-turn-trace.db"
     initialize_database(db_path)
     source = ingest_source_text(
         db_path=db_path,
         source_type="transcript",
-        content="Default Hermes trace recording should remain disabled while retrieval still works.",
-        metadata={"project": "default-no-trace"},
+        content="Default Hermes trace recording should store metadata-only ordinary turn traces.",
+        metadata={"project": "default-turn-trace"},
     )
     fact = create_candidate_fact(
         db_path=db_path,
         subject_ref="Default trace recording",
         predicate="posture",
-        object_ref_or_value="disabled",
+        object_ref_or_value="metadata-only ordinary turn traces",
         evidence_ids=[source.id],
-        scope="project:default-no-trace",
+        scope="project:default-turn-trace",
         confidence=0.95,
     )
     approve_fact(db_path=db_path, fact_id=fact.id)
 
+    secret_prompt = "What is the default trace recording posture? token=SHOULD_NOT_APPEAR"
     hook_payload = {
         "hook_event_name": "pre_llm_call",
-        "session_id": "real-session-default-no-trace",
+        "session_id": "real-session-default-turn-trace",
         "cwd": str(tmp_path),
         "extra": {
-            "user_message": "What is the default trace recording posture?",
+            "user_message": secret_prompt,
             "platform": "cli",
+            "model": "gpt-test",
         },
     }
     env = {**os.environ, "PYTHONPATH": "src"}
@@ -1953,7 +1955,7 @@ def test_python_module_cli_hermes_pre_llm_hook_does_not_record_trace_by_default(
             "hermes-pre-llm-hook",
             str(db_path),
             "--preferred-scope",
-            "project:default-no-trace",
+            "project:default-turn-trace",
             "--top-k",
             "1",
             "--max-prompt-lines",
@@ -1968,6 +1970,127 @@ def test_python_module_cli_hermes_pre_llm_hook_does_not_record_trace_by_default(
 
     assert result.returncode == 0, result.stderr
     assert "Default trace recording" in json.loads(result.stdout)["context"]
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.surface == "hermes-pre-llm-hook"
+    assert trace.event_kind == "turn"
+    assert trace.scope == "project:default-turn-trace"
+    assert trace.session_ref is not None
+    assert "real-session-default-turn-trace" not in trace.session_ref
+    assert trace.content_sha256 != secret_prompt
+    assert trace.summary is None
+    assert trace.salience == 0.1
+    assert trace.user_emphasis == 0.0
+    assert trace.retention_policy == "ephemeral"
+    assert trace.related_memory_refs == [f"fact:{fact.id}"]
+    trace_json = trace.model_dump_json()
+    assert "SHOULD_NOT_APPEAR" not in trace_json
+    assert "user_message" not in trace_json
+    assert trace.metadata == {
+        "hook_event_name": "pre_llm_call",
+        "platform": "cli",
+        "model": "gpt-test",
+        "trace_recording": "default_metadata_only",
+        "candidate_policy": "evidence_only",
+        "auto_approved": False,
+    }
+
+
+
+def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_turn(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-empty-retrieval-turn-trace.db"
+    initialize_database(db_path)
+
+    secret_prompt = "Explain a new topic with no matching memory. password=SHOULD_NOT_APPEAR"
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "real-session-empty-retrieval-turn-trace",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": secret_prompt,
+            "platform": "cli",
+            "model": "gpt-test",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:empty-retrieval-turn-trace",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "8",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Top memory: none" in json.loads(result.stdout)["context"]
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.event_kind == "turn"
+    assert trace.summary is None
+    assert trace.related_memory_refs == []
+    trace_json = trace.model_dump_json()
+    assert "SHOULD_NOT_APPEAR" not in trace_json
+    assert "password" not in trace_json
+    assert "user_message" not in trace_json
+    assert trace.metadata == {
+        "hook_event_name": "pre_llm_call",
+        "platform": "cli",
+        "model": "gpt-test",
+        "trace_recording": "default_metadata_only",
+        "candidate_policy": "evidence_only",
+        "auto_approved": False,
+    }
+
+
+
+def test_python_module_cli_hermes_pre_llm_hook_can_disable_default_turn_trace(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-no-record-trace.db"
+    initialize_database(db_path)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "real-session-no-record-trace",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "Explain a new topic without recording a trace.",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:no-record-trace",
+            "--no-record-trace",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
     assert list_experience_traces(db_path) == []
 
 
@@ -2046,7 +2169,9 @@ def test_python_module_cli_hermes_pre_llm_hook_records_trace_when_enabled(tmp_pa
         "hook_event_name": "pre_llm_call",
         "platform": "cli",
         "model": "gpt-test",
-        "trace_recording": "opt_in",
+        "trace_recording": "default_metadata_only",
+        "candidate_policy": "evidence_only",
+        "auto_approved": False,
     }
 
 

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 17:08 KST
+Last updated: 2026-05-04 17:35 KST
 
 ## Trigger for the next session
 
@@ -16,18 +16,27 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.67까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3a도 완료되어 saved G3 background dry-run JSON report를 `agent-memory dogfood background-dry-run <db> --report <json>`로 read-only 평가하고, G4 apply-mode 착수 전 conservative quality gate를 제공한다. 다음 문서상 후보는 G4 background consolidation apply mode지만, 자동 적용은 위험도가 높으므로 G3/G3a report를 실제 dogfood DB/cron에서 더 운영·측정한 뒤 별도 RED-tested G4 plan으로 진행하는 편이 안전하다.
+agent-memory는 v0.1.67까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. Stage G/G3a도 완료되어 saved G3 background dry-run JSON report를 `agent-memory dogfood background-dry-run <db> --report <json>`로 read-only 평가한다. 다만 실제 dogfood DB 확인 결과 `retrieval_observations`/`memory_activations`는 일반 Hermes 사용에서 쌓이지만 `experience_traces`는 명시적 trace/remember path 중심이라 sparse하다. 사람 뇌 같은 north-star를 위해 G4 apply-mode보다 먼저 G3b: ordinary Hermes turns의 metadata-only lightweight trace capture를 진행한다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.67 post-release validation.
+Active branch/worktree:
 
-Recommended next slice:
+- Branch: `feat/ordinary-turn-traces`
+- Worktree: `/Users/reddit/Project/agent-memory/.worktrees/ordinary-turn-traces`
 
-- Preferred conservative path: keep collecting G3/G3a reports on the real local DB and use the quality-gate output to write a separate G4 plan only if reports are clean.
-- Alternative roadmap path: Stage G/G4 background consolidation apply mode, but only behind explicit flags/policy/audit/rollback and after a fresh RED-tested plan.
+Current slice:
 
-Do not broaden the completed G2/G3/G3a slices into procedures, inferred preferences from ordinary conversation, background apply mode, or default retrieval ranking changes without a new RED-tested roadmap slice.
+- Stage G/G3b: record ordinary Hermes turns as metadata-only lightweight traces before any G4 apply mode.
+- Goal: normal non-synthetic Hermes turns should leave weak, bounded, local `turn` traces by default, without raw prompt/query/transcript storage and without creating approved long-term memory.
+
+Updated work order:
+
+1. G3b ordinary-turn trace capture: metadata-only, default-safe, non-blocking, RED tests first.
+2. Continue G3/G3a report dogfooding over the richer trace substrate.
+3. Only after reports are clean and trace quality is trusted, write a separate RED-tested G4 apply-mode plan.
+
+Do not proceed to G4 background apply mode until G3b is merged/released/dogfooded and the quality gates show enough safe candidate evidence. Do not broaden G3b into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
 
 ## Current repo state
 

@@ -111,6 +111,37 @@ Summarize repeated G3 background dry-run outputs into a conservative quality gat
 - Raw report payloads, raw prompts, query text, query previews, `raw_prompt`, secrets, and transcripts are not embedded in the dogfood report.
 - Passing quality gates do not enable apply mode; they only recommend a separate G4 plan with RED tests, audit, and rollback.
 
+## PR G3b: Record ordinary Hermes turns as metadata-only lightweight traces
+
+Status: Next slice before G4. This reorders the roadmap after v0.1.67: do not start background apply mode until ordinary conversation produces enough safe, reviewable trace evidence for brain-like consolidation.
+
+### Why this comes before G4
+
+The north-star is not a manual "Remember this" notebook. Ordinary Hermes usage should leave weak, bounded traces that can later strengthen through repetition, recency, salience, retrieval usefulness, and graph connectivity. G1/G2 were deliberately explicit and conservative; they are not the final memory model. Before any background apply mode, the runtime needs a safer evidence layer for ordinary turns.
+
+### Objective
+
+Let normal Hermes turns create local, metadata-only `turn` traces by default while preserving privacy and keeping long-term memory creation review-gated.
+
+### Acceptance
+
+- Default Hermes pre-LLM hook records a bounded `experience_traces` row for real non-synthetic turns.
+- The trace is metadata-only: no raw prompt, raw query, query preview, transcript, user message, or secret-like content is stored or printed.
+- Trace content is represented by a hash/fingerprint plus safe metadata, related retrieval observation ids/refs when available, scope, salience signals, and short/ephemeral retention.
+- Synthetic Hermes doctor/test payloads are still skipped.
+- Hook failures remain non-blocking.
+- Ordinary `turn` traces do not create facts/procedures/episodes, do not auto-approve candidates, and do not change retrieval ranking.
+- Explicit `Remember this:` remains higher-salience `remember_intent` with review policy; ordinary turns are lower-salience evidence only.
+- Docs and dogfood reports clearly distinguish weak traces from approved long-term memories.
+
+### Non-goals
+
+- No G4 apply mode.
+- No automatic approval from ordinary conversation.
+- No raw transcript archive.
+- No LLM-based extraction of preferences/procedures in this slice.
+- No default retrieval ranking change.
+
 ## PR G4: Add background consolidation apply mode behind explicit flag
 
 ### Objective
