@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 22:30 KST
+Last updated: 2026-05-05 11:46 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.69 Hermes dogfood release.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.71 remember-intent diagnostics and Hermes dogfood release.
 
 Use it when the user asks:
 
@@ -34,47 +34,49 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.69`
+Latest completed release: `v0.1.71`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.69`
-- npm: `@cafitac/agent-memory@0.1.69`
-- PyPI: `cafitac-agent-memory==0.1.69`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.71`
+- npm: `@cafitac/agent-memory@0.1.71`
+- PyPI: `cafitac-agent-memory==0.1.71`
 
 Local Hermes runtime:
 
-- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory`
-- Hermes config backup before v0.1.69 path update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.69`
+- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`
+- Hermes config backup before v0.1.71 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.71-20260505111920`
 - `hermes hooks doctor` reported the agent-memory hook healthy after approval.
 
 v0.1.69 fixed the v0.1.68 live-path issue where ordinary metadata-only trace recording could be skipped when the rendered memory context was empty. The trace write now happens before the empty-context return, while hook output still returns `{}` when no memory context is injected.
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-04 22:25 KST:
+Read-only live DB check at roughly 2026-05-05 11:46 KST:
 
-- `retrieval_observations`: 647, latest 2026-05-04 13:25:04 UTC
-- `memory_activations`: 552, latest 2026-05-04 13:24:55 UTC
-- `experience_traces`: 12, latest 2026-05-04 13:23:15 UTC
-- `facts`: 3, unchanged under ordinary conversation
+- `retrieval_observations`: 725, latest 2026-05-05 02:46:27 UTC
+- `memory_activations`: 630, latest 2026-05-05 02:46:27 UTC
+- `experience_traces`: 50, latest 2026-05-05 02:43:42 UTC
+- `facts`: 3, latest 2026-04-30 17:26:00 UTC
+- `procedures`: 0
+- `episodes`: 0
+- `relations`: 0
 
-Recent 30-minute window at that check:
+Recent live Hermes v0.1.71 E2E smoke:
 
-- `retrieval_observations`: 15
-- `memory_activations`: 15
-- `experience_traces`: 5
-- `facts`: 0
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool` returned `OK`.
+- The live DB advanced by +1 retrieval observation, +1 activation, and +1 metadata-only ordinary trace.
+- Approved `facts` stayed unchanged, which is expected under the conservative policy.
 
 Privacy/integrity signals:
 
 - Recent observations have `query_sha256`.
 - Recent observations keep `query_preview` empty.
+- Legacy non-empty `query_preview` rows exist from old versions: 70 rows, latest 2026-05-01 12:57:54 UTC.
 - v0.1.69-and-later non-empty `query_preview`: 0.
-- Recent activation orphan count: 0.
-- Recent activation metadata invalid JSON count: 0.
-- Recent trace metadata invalid JSON count: 0.
 - Latest ordinary traces are metadata-only: `event_kind=turn`, `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, `auto_approved=false`.
+- Latest safe explicit remember-intent traces keep sanitized summaries only.
+- Latest secret-like explicit remember-intent traces are rejected diagnostics with `summary=NULL` and `rejected_reason=secret_like_text`.
 
 Interpretation:
 
@@ -184,10 +186,11 @@ Completed:
 - G3a: saved background dry-run dogfood quality gates.
 - G3b: ordinary Hermes turns create metadata-only traces by default.
 - v0.1.69 hotfix: no-context ordinary turns still record metadata-only traces.
+- v0.1.70/v0.1.71: debuggable explicit remember-intent diagnostics, Korean prefixes, and freeform secret-like rejection hardening.
 
 Current behavior:
 
-- Explicit remember-intent remains the only path toward narrow auto-approval, and only through guarded commands.
+- Explicit remember-intent remains the only path toward narrow auto-approval, and only through guarded commands. Safe explicit requests can be reviewed through sanitized summaries; secret-like requests remain rejected diagnostics.
 - Ordinary conversation is evidence-only.
 - Background dry-runs are read-only.
 
@@ -217,7 +220,7 @@ Candidate command:
 
 ```bash
 agent-memory dogfood storage-health ~/.agent-memory/memory.db \
-  --runtime-command /Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory
+  --runtime-command /Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory
 ```
 
 Scope:
@@ -377,7 +380,7 @@ git tag --sort=-version:refname | head -5
 2. Verify runtime state:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY

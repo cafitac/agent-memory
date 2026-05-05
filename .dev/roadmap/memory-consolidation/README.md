@@ -36,7 +36,7 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `current-progress-and-next-steps.md` — latest verified progress, live dogfood state, final target, and next recommended slices after `v0.1.69`.
+- `current-progress-and-next-steps.md` — latest verified progress, live dogfood state, final target, and next recommended slices after `v0.1.71`.
 
 Use this current checkpoint together with `.dev/status/current-handoff.md` before choosing the next PR-sized task.
 

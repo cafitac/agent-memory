@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.69`, including current dogfood state and next recommended slices.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.71`, including current dogfood state and next recommended slices.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -175,20 +175,26 @@ If a later session changes direction, update both this checklist and the relevan
 
 ### Stage G: cautious automation
 
-- [ ] PR G1: Add explicit `remember this` conservative auto-candidate path
+- [x] PR G1: Add explicit `remember this` conservative auto-candidate path
   - Goal: support the safest automatic memory flow for user-directed memories.
   - Scope: detect or accept explicit remember-intent event from adapter/CLI, create candidate with high salience, still require review unless configured otherwise.
   - Acceptance: ordinary conversation does not auto-approve; explicit path is test-covered and secret-safe.
 
-- [ ] PR G2: Add opt-in auto-approval for narrow low-risk memories
+- [x] PR G2: Add opt-in auto-approval for narrow low-risk memories
   - Goal: allow advanced users to auto-approve safe preferences/procedures under strict rules.
   - Scope: config-gated policy with allowed scopes/types, confidence threshold, redaction checks, conflict preflight, audit log.
   - Acceptance: default off; every auto-approval is explainable and reversible.
 
-- [ ] PR G3: Add background consolidation job in dry-run mode
+- [x] PR G3: Add background consolidation job in dry-run mode
   - Goal: periodically compute candidates and scores without changing memory.
   - Scope: CLI job command, cron-friendly output, file lock/safety, docs.
   - Acceptance: dry-run is default; failures are non-blocking; output can be reviewed before enabling mutations.
+  - Status: completed through v0.1.66-v0.1.69, then extended with remember-intent diagnostics and ordinary trace live-path hardening through v0.1.71.
+
+- [~] PR G3c: Add read-only dogfood storage-health report
+  - Goal: make live Hermes/agent-memory storage health inspectable without ad hoc SQL or raw content exposure.
+  - Scope: one-command report for table counts, latest timestamps, runtime/config marker checks, query-preview/hash/privacy invariants, orphan/invalid-JSON checks, and trace metadata shape counts.
+  - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, works on temp fixtures and the live DB, and flags observation/activation-without-trace regressions before G4 planning.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
