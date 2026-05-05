@@ -20,9 +20,9 @@ agent-memory is currently verified through `v0.1.75`: PR #135 (read-only `dogfoo
 
 ## Current next slice
 
-Next slice: collect multiple G3e scheduled dry-run reports before G4 planning.
+Current slice: G3f read-only comparison over multiple G3e scheduled dry-run reports.
 
-Goal: run the new read-only bundle repeatedly over real dogfood data so the decision to continue dogfooding, tune thresholds, or draft a separate G4 apply-mode plan is data-backed.
+Goal: run the read-only bundle repeatedly over real dogfood data, then compare saved artifacts with `dogfood scheduled-compare` so the decision to continue dogfooding, tune thresholds, or draft a separate G4 apply-mode plan is data-backed.
 
 Recommended command shape:
 
@@ -34,9 +34,16 @@ Recommended command shape:
   --min-evidence-count 2 \
   --candidate-min 1 \
   --max-decay-risk 0
+
+agent-memory dogfood scheduled-compare \
+  --report /Users/reddit/.agent-memory/reports/scheduled-dry-run-1.json \
+  --report /Users/reddit/.agent-memory/reports/scheduled-dry-run-2.json \
+  --output /Users/reddit/.agent-memory/reports/scheduled-compare.json \
+  --min-report-count 2 \
+  --max-decay-risk 0
 ```
 
-Current live result: the first v0.1.75 live G3e smoke completed read-only with `mutated=false`, but the quality gate returned `continue_scheduled_dry_run_dogfooding_before_g4` because storage-health still sees legacy stored query excerpts, trace-quality still needs more dogfooding, decay risk is above the threshold, and background quality warnings remain. This is expected and means "keep collecting/tuning reports", not "enable apply mode".
+Current live result: the first v0.1.75 live G3e smoke completed read-only with `mutated=false`, but the quality gate returned `continue_scheduled_dry_run_dogfooding_before_g4` because storage-health still sees legacy stored query excerpts, trace-quality still needs more dogfooding, decay risk is above the threshold, and background quality warnings remain. This is expected and means "keep collecting/comparing/tuning reports", not "enable apply mode".
 
 Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 

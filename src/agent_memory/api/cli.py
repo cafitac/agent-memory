@@ -2392,6 +2392,13 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _collect_background_quality_warnings(report: dict[str, Any]) -> list[str]:
     warnings: set[str] = set()
     scan = report.get("scan")
@@ -2511,6 +2518,220 @@ def _scheduled_dry_run_quality_decision(
         ),
         "blocked_reasons": blocked_reasons,
     }
+
+
+def _scheduled_dry_run_report_summary(path: Path) -> dict[str, Any]:
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+    except Exception as exc:
+        return {
+            "path": str(path),
+            "report_sha256": None,
+            "kind": None,
+            "generated_at": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "unreadable",
+            "blocked_reasons": ["report_unreadable"],
+            "storage_health_status": "unknown",
+            "trace_quality_recommendation": "unknown",
+            "trace_coverage_ratio": 0.0,
+            "empty_retrieval_ratio": 0.0,
+            "background_status": "unknown",
+            "candidate_count": 0,
+            "reinforcement_candidate_count": 0,
+            "decay_risk_candidate_count": 0,
+            "background_quality_warnings": ["report_unreadable"],
+            "safe_remember_intent_count": 0,
+            "rejected_remember_intent_count": 0,
+            "privacy_flags": {},
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(raw, dict):
+        return {
+            "path": str(path),
+            "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "kind": None,
+            "generated_at": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "invalid",
+            "blocked_reasons": ["report_not_json_object"],
+            "storage_health_status": "unknown",
+            "trace_quality_recommendation": "unknown",
+            "trace_coverage_ratio": 0.0,
+            "empty_retrieval_ratio": 0.0,
+            "background_status": "unknown",
+            "candidate_count": 0,
+            "reinforcement_candidate_count": 0,
+            "decay_risk_candidate_count": 0,
+            "background_quality_warnings": ["report_not_json_object"],
+            "safe_remember_intent_count": 0,
+            "rejected_remember_intent_count": 0,
+            "privacy_flags": {},
+            "error": None,
+        }
+
+    reports = raw.get("reports", {}) if isinstance(raw.get("reports"), dict) else {}
+    storage_health = reports.get("storage_health", {}) if isinstance(reports.get("storage_health"), dict) else {}
+    trace_quality = reports.get("trace_quality", {}) if isinstance(reports.get("trace_quality"), dict) else {}
+    remember_intent = reports.get("remember_intent", {}) if isinstance(reports.get("remember_intent"), dict) else {}
+    background = reports.get("background_dry_run", {}) if isinstance(reports.get("background_dry_run"), dict) else {}
+    handoff = background.get("review_handoff", {}) if isinstance(background.get("review_handoff"), dict) else {}
+    scan = background.get("scan", {}) if isinstance(background.get("scan"), dict) else {}
+    quality_gate = raw.get("quality_gate", {}) if isinstance(raw.get("quality_gate"), dict) else {}
+    trace_coverage = trace_quality.get("coverage", {}) if isinstance(trace_quality.get("coverage"), dict) else {}
+    retrieval_quality = (
+        trace_quality.get("retrieval_quality", {}) if isinstance(trace_quality.get("retrieval_quality"), dict) else {}
+    )
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    blocked_reasons = quality_gate.get("blocked_reasons", []) if isinstance(quality_gate.get("blocked_reasons"), list) else []
+    background_quality_warnings = scan.get("quality_warnings", []) if isinstance(scan.get("quality_warnings"), list) else []
+
+    return {
+        "path": str(path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": raw.get("kind"),
+        "generated_at": raw.get("generated_at"),
+        "read_only": raw.get("read_only"),
+        "mutated": raw.get("mutated"),
+        "default_retrieval_unchanged": raw.get("default_retrieval_unchanged"),
+        "quality_gate_pass": quality_gate.get("pass") is True,
+        "quality_gate_decision": str(quality_gate.get("decision", "unknown")),
+        "blocked_reasons": sorted(str(reason) for reason in blocked_reasons if reason),
+        "storage_health_status": str(storage_health.get("status", "unknown")),
+        "trace_quality_recommendation": str(trace_quality.get("recommendation", "unknown")),
+        "trace_coverage_ratio": round(_safe_float(trace_coverage.get("observation_trace_coverage_ratio")), 4),
+        "empty_retrieval_ratio": round(_safe_float(retrieval_quality.get("empty_retrieval_ratio")), 4),
+        "background_status": str(background.get("status", "unknown")),
+        "candidate_count": _safe_int(handoff.get("candidate_count")),
+        "reinforcement_candidate_count": _safe_int(handoff.get("reinforcement_candidate_count")),
+        "decay_risk_candidate_count": _safe_int(handoff.get("decay_risk_candidate_count")),
+        "background_quality_warnings": sorted(str(warning) for warning in background_quality_warnings if warning),
+        "safe_remember_intent_count": _safe_int(remember_intent.get("safe_remember_intent_count")),
+        "rejected_remember_intent_count": _safe_int(remember_intent.get("rejected_remember_intent_count")),
+        "privacy_flags": {
+            "raw_conversation_content_included": privacy.get("raw_conversation_content_included") is True,
+            "sample_values_included": privacy.get("sample_values_included") is True,
+            "raw_query_text_included": privacy.get("raw_query_text_included") is True,
+        },
+        "error": None,
+    }
+
+
+def _scheduled_dry_run_comparison_report(
+    *,
+    report_paths: list[Path],
+    output_path: Path | None,
+    min_report_count: int,
+    max_decay_risk: int,
+) -> dict[str, Any]:
+    if not report_paths:
+        raise ValueError("dogfood scheduled-compare requires at least one --report path")
+    if min_report_count < 1:
+        raise ValueError("dogfood scheduled-compare min-report-count must be >= 1")
+    if max_decay_risk < 0:
+        raise ValueError("dogfood scheduled-compare max-decay-risk must be >= 0")
+
+    summaries = [_scheduled_dry_run_report_summary(path) for path in report_paths]
+    gate_counter = Counter(str(summary.get("quality_gate_decision", "unknown")) for summary in summaries)
+    trace_recommendation_counter = Counter(str(summary.get("trace_quality_recommendation", "unknown")) for summary in summaries)
+    storage_status_counter = Counter(str(summary.get("storage_health_status", "unknown")) for summary in summaries)
+    blocked_reasons = sorted({reason for summary in summaries for reason in summary.get("blocked_reasons", [])})
+    background_quality_warnings = sorted(
+        {warning for summary in summaries for warning in summary.get("background_quality_warnings", [])}
+    )
+    trace_coverage_ratios = [summary["trace_coverage_ratio"] for summary in summaries]
+    empty_retrieval_ratios = [summary["empty_retrieval_ratio"] for summary in summaries]
+    pass_count = sum(1 for summary in summaries if summary.get("quality_gate_pass") is True)
+    decay_risk_candidate_count_max = max((summary["decay_risk_candidate_count"] for summary in summaries), default=0)
+
+    comparison_blocked_reasons: list[str] = []
+    if len(summaries) < min_report_count:
+        comparison_blocked_reasons.append("not_enough_scheduled_reports")
+    if pass_count < len(summaries):
+        comparison_blocked_reasons.append("scheduled_quality_gate_not_stable")
+    if blocked_reasons:
+        comparison_blocked_reasons.append("blocked_reasons_present")
+    if decay_risk_candidate_count_max > max_decay_risk:
+        comparison_blocked_reasons.append("decay_risk_above_threshold")
+    if background_quality_warnings:
+        comparison_blocked_reasons.append("background_quality_warnings_present")
+    if any(summary.get("kind") != "dogfood_scheduled_dry_run" for summary in summaries):
+        comparison_blocked_reasons.append("non_scheduled_report_present")
+    if any(summary.get("mutated") is True for summary in summaries):
+        comparison_blocked_reasons.append("report_claims_mutation")
+    if any(summary.get("default_retrieval_unchanged") is False for summary in summaries):
+        comparison_blocked_reasons.append("default_retrieval_changed")
+    if any(any(summary.get("privacy_flags", {}).values()) for summary in summaries):
+        comparison_blocked_reasons.append("privacy_flag_claims_raw_content")
+
+    passed = not comparison_blocked_reasons
+    payload = {
+        "kind": "dogfood_scheduled_dry_run_comparison",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "report_count": len(summaries),
+        "reports": summaries,
+        "aggregate": {
+            "quality_gate_pass_count": pass_count,
+            "quality_gate_decision_counts": {key: gate_counter[key] for key in sorted(gate_counter)},
+            "trace_quality_recommendation_counts": {
+                key: trace_recommendation_counter[key] for key in sorted(trace_recommendation_counter)
+            },
+            "storage_health_status_counts": {key: storage_status_counter[key] for key in sorted(storage_status_counter)},
+            "candidate_count_max": max((summary["candidate_count"] for summary in summaries), default=0),
+            "reinforcement_candidate_count_max": max(
+                (summary["reinforcement_candidate_count"] for summary in summaries), default=0
+            ),
+            "decay_risk_candidate_count_max": decay_risk_candidate_count_max,
+            "trace_coverage_ratio_min": min(trace_coverage_ratios, default=0.0),
+            "trace_coverage_ratio_max": max(trace_coverage_ratios, default=0.0),
+            "empty_retrieval_ratio_min": min(empty_retrieval_ratios, default=0.0),
+            "empty_retrieval_ratio_max": max(empty_retrieval_ratios, default=0.0),
+            "blocked_reasons": blocked_reasons,
+            "background_quality_warnings": background_quality_warnings,
+            "safe_remember_intent_count_total": sum(summary["safe_remember_intent_count"] for summary in summaries),
+            "rejected_remember_intent_count_total": sum(summary["rejected_remember_intent_count"] for summary in summaries),
+        },
+        "thresholds": {
+            "min_report_count": min_report_count,
+            "max_decay_risk": max_decay_risk,
+        },
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "scheduled_report_collection_stable_plan_g4_only"
+                if passed
+                else "continue_scheduled_report_collection_before_g4"
+            ),
+            "blocked_reasons": comparison_blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+        },
+        "suggested_next_steps": [
+            "Keep collecting scheduled dry-run reports until the comparison gate is stable.",
+            "Treat a stable comparison only as permission to write a separate G4 apply-mode plan.",
+            "Do not infer broad preferences or change default retrieval from this comparison report.",
+        ],
+    }
+    _write_json_report(output_path, payload)
+    return payload
 
 
 def _dogfood_scheduled_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -4531,6 +4752,21 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_scheduled_parser.add_argument("--candidate-min", type=int, default=1)
     dogfood_scheduled_parser.add_argument("--max-decay-risk", type=int, default=0)
     dogfood_scheduled_parser.add_argument("--lock-path", type=Path)
+    dogfood_scheduled_compare_parser = dogfood_subparsers.add_parser(
+        "scheduled-compare",
+        help="Compare saved scheduled-dry-run JSON reports with read-only G3f stability gates before any G4 plan.",
+    )
+    dogfood_scheduled_compare_parser.add_argument(
+        "--report",
+        type=Path,
+        action="append",
+        required=True,
+        dest="reports",
+        help="Path to a JSON report produced by dogfood scheduled-dry-run; repeat for multiple runs.",
+    )
+    dogfood_scheduled_compare_parser.add_argument("--output", type=Path)
+    dogfood_scheduled_compare_parser.add_argument("--min-report-count", type=int, default=2)
+    dogfood_scheduled_compare_parser.add_argument("--max-decay-risk", type=int, default=0)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -5353,6 +5589,19 @@ def main() -> None:
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))
+            return
+        if args.dogfood_action == "scheduled-compare":
+            print(
+                json.dumps(
+                    _scheduled_dry_run_comparison_report(
+                        report_paths=args.reports,
+                        output_path=args.output,
+                        min_report_count=args.min_report_count,
+                        max_decay_risk=args.max_decay_risk,
+                    ),
+                    indent=2,
+                )
+            )
             return
         if args.dogfood_action == "background-dry-run":
             print(
