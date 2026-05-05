@@ -190,7 +190,19 @@ If the storage-health report warns about legacy stored query excerpts, run the r
 agent-memory dogfood query-preview-cleanup <db> --older-than 2030-01-01T00:00:00
 ```
 
-Verify it prints `kind: dogfood_query_preview_cleanup_preview`, `read_only: true`, `mutated: false`, aggregate affected/eligible counts, no sample values, no raw query previews, no `api key`, no token-like values, and no DB mutation. This is a diagnostic preview only; it does not expose an apply mode.
+Verify it prints `kind: dogfood_query_preview_cleanup_preview`, `read_only: true`, `mutated: false`, aggregate affected/eligible counts, `apply_command_available`, no sample values, no raw query previews, no `api key`, no token-like values, and no DB mutation.
+
+If a human operator explicitly approves cleanup, apply mode must be a separate smoke on a disposable copied DB or backup, never the only live artifact:
+
+```bash
+agent-memory dogfood query-preview-cleanup <db-copy> \
+  --older-than 2030-01-01T00:00:00 \
+  --apply \
+  --actor "operator-name" \
+  --reason "approved legacy query preview cleanup"
+```
+
+Verify it prints `kind: dogfood_query_preview_cleanup_apply`, `read_only: false`, aggregate `cleared_count` / `remaining_affected_count`, `reason_sha256`, `eligible_ids_sha256`, and `audit_trace_id`, while still omitting stored query previews, sample values, raw reason text in audit metadata, `api key`, token-like values, prompts, and transcripts.
 
 For the G3d trace-quality smoke, run the read-only aggregate trace quality gate:
 

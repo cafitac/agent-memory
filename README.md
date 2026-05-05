@@ -200,13 +200,25 @@ agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
 
 The report emits `kind: dogfood_storage_health`, table counts, latest timestamps, memory status counts, Hermes hook markers, and aggregate invariant checks for non-empty stored query excerpts, query-hash presence, JSON metadata validity, orphan activation links, ordinary metadata-only turn traces, and remember-intent safety shape. It never prints raw queries, query preview values, prompts, transcripts, user messages, secret-like rejected text, or raw metadata payloads, and it opens the DB read-only without mutating facts, traces, activations, observations, ranking, or hook config. Treat warnings as blockers before any G4 apply-mode plan.
 
-If storage-health reports legacy stored query excerpts, preview cleanup scope without mutation or raw-value output before any explicit cleanup apply path exists:
+If storage-health reports legacy stored query excerpts, first preview cleanup scope without mutation or raw-value output:
 
 ```bash
 agent-memory dogfood query-preview-cleanup "$DB" --older-than 2030-01-01T00:00:00
 ```
 
-The preview emits `kind: dogfood_query_preview_cleanup_preview`, aggregate affected/eligible counts and timestamps, `read_only: true`, `mutated: false`, and a recommended operation marker only. It never prints stored query excerpt samples, raw query values, prompts, transcripts, API keys, or token-like values.
+The preview emits `kind: dogfood_query_preview_cleanup_preview`, aggregate affected/eligible counts and timestamps, `read_only: true`, `mutated: false`, an `apply_command_available` marker, and required apply guardrails only. It never prints stored query excerpt samples, raw query values, prompts, transcripts, API keys, or token-like values.
+
+The first narrow mutation slice is explicit legacy cleanup only. It requires `--apply`, `--actor`, and `--reason`, clears only eligible `retrieval_observations.query_preview` values older than the cutoff, writes a hash-only audit trace, and still does not print raw stored excerpts or sample values:
+
+```bash
+agent-memory dogfood query-preview-cleanup "$DB" \
+  --older-than 2030-01-01T00:00:00 \
+  --apply \
+  --actor "operator-name" \
+  --reason "approved legacy query preview cleanup"
+```
+
+The apply payload emits `kind: dogfood_query_preview_cleanup_apply`, `cleared_count`, `remaining_affected_count`, `reason_sha256`, `eligible_ids_sha256`, and `audit_trace_id`; the raw reason text is not stored in the audit metadata.
 
 G3d adds a read-only trace-quality gate before any G4 apply-mode plan:
 

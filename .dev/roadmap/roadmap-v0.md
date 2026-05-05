@@ -233,10 +233,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: docs and RED-test plan only; no new apply-mode implementation.
   - Acceptance: `--apply`, `--actor`, `--reason`, and named policy are mandatory for future mutation; ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain forbidden.
 
-- [ ] PR G4a: Add first narrow mutation for legacy query-preview cleanup
+- [x] PR G4a: Add first narrow mutation for legacy query-preview cleanup
   - Goal: remove legacy privacy debt by clearing old non-empty `retrieval_observations.query_preview` values under an explicit operator command.
   - Scope: extend `dogfood query-preview-cleanup` with `--apply --actor --reason`, backup/operator instructions, and audit-safe output.
   - Acceptance: RED tests prove dry-run remains default, apply cannot run without actor/reason, only eligible legacy rows are cleared, raw previews are never printed, and default retrieval/Hermes hook behavior is unchanged.
+  - Status: implemented in PR #142; apply output is aggregate/hash-only and writes a hash-only audit trace.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
