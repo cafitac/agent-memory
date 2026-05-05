@@ -1228,6 +1228,140 @@ def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_sig
 
 
 
+def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "scheduled-dry-run.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Scheduled dry-run target phrase is SCHEDULED_DRY_RUN_OK.",
+        metadata={"project": "scheduled-dry-run"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Scheduled dry-run",
+        predicate="target_phrase",
+        object_ref_or_value="SCHEDULED_DRY_RUN_OK",
+        evidence_ids=[source.id],
+        scope="project:scheduled-dry-run",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the scheduled dry-run phrase? token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:scheduled-dry-run",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    with sqlite3.connect(db_path) as connection:
+        observation_id = int(connection.execute("SELECT id FROM retrieval_observations").fetchone()[0])
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="f" * 64,
+        summary=None,
+        scope="project:scheduled-dry-run",
+        related_memory_refs=[f"fact:{fact.id}"],
+        related_observation_ids=[observation_id],
+        retention_policy="ephemeral",
+        metadata={
+            "trace_recording": "default_metadata_only",
+            "candidate_policy": "evidence_only",
+            "auto_approved": False,
+            "raw_prompt": "token=SHOULD_NOT_LEAK",
+        },
+    )
+    before_counts["experience_traces"] += 1
+
+    output_path = tmp_path / "scheduled-dry-run-report.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-dry-run",
+            str(db_path),
+            "--output",
+            str(output_path),
+            "--since-hours",
+            "24",
+            "--min-trace-coverage",
+            "0.25",
+            "--min-evidence-count",
+            "1",
+            "--candidate-min",
+            "0",
+            "--max-decay-risk",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    saved_payload = json.loads(output_path.read_text())
+    assert saved_payload == payload
+    assert payload["kind"] == "dogfood_scheduled_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["reports"]["storage_health"]["kind"] == "dogfood_storage_health"
+    assert payload["reports"]["trace_quality"]["kind"] == "dogfood_trace_quality"
+    assert payload["reports"]["remember_intent"]["kind"] == "remember_intent_dogfood_report"
+    assert payload["reports"]["background_dry_run"]["kind"] == "memory_consolidation_background_dry_run"
+    assert payload["quality_gate"]["decision"] in {
+        "continue_scheduled_dry_run_dogfooding_before_g4",
+        "scheduled_dry_run_quality_gate_passed_plan_g4_only",
+    }
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+    }
+    assert payload["privacy"]["raw_conversation_content_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+    assert "SCHEDULED_DRY_RUN_OK" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)

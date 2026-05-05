@@ -209,6 +209,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
   - Status: completed and released in v0.1.74 via PR #132/#133.
 
+- [ ] PR G3e: Add scheduled dry-run dogfood bundle
+  - Goal: run storage-health, trace-quality, remember-intent, and background consolidation dry-run together so multiple scheduled reports can guide the G4 decision.
+  - Scope: `agent-memory dogfood scheduled-dry-run <db> --output <path>` emits one `dogfood_scheduled_dry_run` JSON payload with nested read-only reports, top-level privacy/no-mutation/default-retrieval markers, thresholds, and one conservative quality gate.
+  - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke writes a report artifact.
+
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
   - Scope: explicit `--apply` with policy file, audit trail, rollback instructions.

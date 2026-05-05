@@ -315,35 +315,41 @@ Acceptance:
 - does not create candidates or approvals;
 - does not print raw conversation content.
 
-### G3e: Run scheduled dry-run dogfood over multiple reports
+### G3e: Add cron-friendly `dogfood scheduled-dry-run` bundle
 
-Status: recommended next slice after v0.1.74. Do this before G4 apply-mode planning unless the user explicitly chooses a workflow/release hygiene fix first.
+Status: in progress in the next PR after v0.1.74.
 
 Goal:
 
-Collect several G3/G3a reports over time so the decision to continue, tune, or plan G4 is data-backed.
+Collect several G3/G3a/G3d reports over time so the decision to continue, tune, or plan G4 is data-backed without requiring ad hoc command choreography.
 
-Manual command shape:
+Command shape:
 
 ```bash
-agent-memory consolidation background dry-run ~/.agent-memory/memory.db \
-  --limit 200 \
-  --top 20 \
-  --min-evidence 2 \
-  --output ~/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
-  --lock-path ~/.agent-memory/background-consolidation.lock
-
-agent-memory dogfood background-dry-run ~/.agent-memory/memory.db \
-  --report ~/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
-  --output ~/.agent-memory/reports/background-quality-YYYYMMDD-HHMMSS.json
+agent-memory dogfood scheduled-dry-run ~/.agent-memory/memory.db \
+  --output ~/.agent-memory/reports/scheduled-dry-run-YYYYMMDD-HHMMSS.json \
+  --since-hours 24 \
+  --min-trace-coverage 0.25 \
+  --min-evidence-count 2 \
+  --candidate-min 1 \
+  --max-decay-risk 0
 ```
+
+Scope:
+
+- one cron-friendly read-only command;
+- bundle `dogfood storage-health`, `dogfood trace-quality`, `dogfood remember-intent`, and inline `consolidation background dry-run`;
+- write the same JSON to `--output` when provided;
+- expose one conservative `quality_gate` whose pass only means "write a separate G4 plan with RED tests";
+- keep privacy markers and no-mutation/default-retrieval-unchanged markers top-level.
 
 Acceptance:
 
-- multiple reports complete without lock contention or mutation;
+- multiple scheduled reports can complete without lock contention or mutation;
 - quality warnings are explainable or decreasing;
 - candidate signals become non-zero or the report explains why evidence remains sparse;
-- privacy checks stay clean.
+- privacy checks stay clean;
+- no cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking change.
 
 ### G3f: Optional legacy privacy cleanup preview
 
