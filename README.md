@@ -119,6 +119,7 @@ agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent
 agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
 agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/background-consolidation.json --candidate-min 1 --max-decay-risk 0
+agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \
@@ -187,6 +188,14 @@ agent-memory dogfood background-dry-run "$DB" \
 ```
 
 The dogfood report is read-only (`kind: background_dry_run_dogfood_report`) and emits only per-report summaries, status counts, aggregate candidate/reinforcement/decay-risk counts, thresholds, and `quality_gate.pass`. It does not include raw report payloads, raw prompts, `raw_prompt`, query text, or `query_preview`, and it does not mutate memory or enable apply mode. A passing gate means only "write a separate G4 plan with RED tests"; failures or warnings mean continue dry-run dogfooding.
+
+G3c adds a read-only storage-health gate for the live dogfood DB:
+
+```bash
+agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
+```
+
+The report emits `kind: dogfood_storage_health`, table counts, latest timestamps, memory status counts, Hermes hook markers, and aggregate invariant checks for non-empty stored query excerpts, query-hash presence, JSON metadata validity, orphan activation links, ordinary metadata-only turn traces, and remember-intent safety shape. It never prints raw queries, query preview values, prompts, transcripts, user messages, secret-like rejected text, or raw metadata payloads, and it opens the DB read-only without mutating facts, traces, activations, observations, ranking, or hook config. Treat warnings as blockers before any G4 apply-mode plan.
 
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 

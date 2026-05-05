@@ -827,6 +827,155 @@ def test_python_module_cli_dogfood_baseline_handles_empty_database_without_obser
 
 
 
+def test_python_module_cli_dogfood_storage_health_reports_safe_read_only_invariants(tmp_path: Path) -> None:
+    db_path = tmp_path / "dogfood-storage-health.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Storage health target phrase is STORAGE_HEALTH_OK.",
+        metadata={"project": "dogfood-storage-health"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Storage health",
+        predicate="target_phrase",
+        object_ref_or_value="STORAGE_HEALTH_OK",
+        evidence_ids=[source.id],
+        scope="project:dogfood-storage-health",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "What is the storage health phrase? token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:dogfood-storage-health",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary=None,
+        scope="project:dogfood-storage-health",
+        retention_policy="ephemeral",
+        metadata={
+            "trace_recording": "default_metadata_only",
+            "candidate_policy": "evidence_only",
+            "auto_approved": False,
+            "raw_prompt": "token=SHOULD_NOT_LEAK",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="b" * 64,
+        summary="User prefers storage-health reports before G4.",
+        scope="project:dogfood-storage-health",
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="c" * 64,
+        summary=None,
+        scope="project:dogfood-storage-health",
+        retention_policy="ephemeral",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "rejected",
+            "auto_approved": False,
+            "secret_scan": "rejected",
+            "rejected_reason": "secret_like_text",
+            "raw_user_message": "api key SHOULD_NOT_LEAK",
+        },
+    )
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("UPDATE retrieval_observations SET query_preview = ? WHERE id = 1", ("token=SHOULD_NOT_LEAK",))
+        connection.execute("UPDATE retrieval_observations SET metadata_json = ? WHERE id = 1", ("{not-json",))
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("cli-test", "retrieved", "fact:999", 999, 999, "project:dogfood-storage-health", 1.0, "{}"),
+        )
+
+    health_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "storage-health",
+            str(db_path),
+            "--hermes-config",
+            str(tmp_path / "missing-config.yaml"),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert health_result.returncode == 0, health_result.stderr
+    payload = json.loads(health_result.stdout)
+    assert payload["kind"] == "dogfood_storage_health"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "warning"
+    assert payload["agent_memory_version"]
+    assert payload["table_counts"]["retrieval_observations"] == 1
+    assert payload["table_counts"]["memory_activations"] == 2
+    assert payload["table_counts"]["experience_traces"] == 3
+    assert payload["memory_counts"]["facts"]["approved"] == 1
+    assert payload["invariants"]["stored_query_excerpt_empty"]["violation_count"] == 1
+    assert payload["invariants"]["query_hash_presence"]["violation_count"] == 0
+    assert payload["invariants"]["metadata_json_valid"]["invalid_counts"]["retrieval_observations"] == 1
+    assert payload["invariants"]["activation_links"]["orphan_observation_count"] == 1
+    assert payload["invariants"]["activation_links"]["orphan_trace_count"] == 1
+    ordinary = payload["invariants"]["ordinary_trace_metadata_only"]
+    assert ordinary["checked_count"] == 1
+    assert ordinary["violation_count"] == 0
+    remember = payload["invariants"]["remember_intent_safety"]
+    assert remember["checked_count"] == 2
+    assert remember["review_ready_count"] == 1
+    assert remember["rejected_secret_like_count"] == 1
+    assert remember["violation_count"] == 0
+    assert payload["hermes"]["config_exists"] is False
+    assert "query_text" not in health_result.stdout
+    assert "query_preview" not in health_result.stdout
+    assert "SHOULD_NOT_LEAK" not in health_result.stdout
+    assert "api key" not in health_result.stdout.lower()
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)
