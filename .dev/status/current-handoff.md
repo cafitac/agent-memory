@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 10:15 KST
+Last updated: 2026-05-05 18:03 KST
 
 ## Trigger for the next session
 
@@ -16,32 +16,36 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.73`: PR #129 (read-only legacy query-preview cleanup preview), release-sync PR #130, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.73/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health and query-preview cleanup preview now make live DB invariants and legacy stored-query-excerpt cleanup scope inspectable without ad hoc SQL or raw query leakage. The next recommended PR-sized slice is G3d: add a read-only `agent-memory dogfood trace-quality` report before any G4 apply-mode planning.
+agent-memory is currently verified through `v0.1.74`: PR #132 (read-only `dogfood trace-quality`), release-sync PR #133, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health, query-preview cleanup preview, and trace-quality now make live DB invariants, legacy stored-query-excerpt cleanup scope, and trace usefulness inspectable without ad hoc SQL, raw query leakage, or mutation. The live 24h trace-quality report currently recommends `continue_dogfooding`, so the next recommended PR-sized slice is G3e: collect scheduled dry-run dogfood reports over time before any G4 apply-mode planning.
 
 ## Current next slice
 
-Next slice: G3d `dogfood trace-quality`.
+Next slice: G3e scheduled dry-run dogfood reports.
 
-Goal: measure whether ordinary conversation traces are useful enough to support later consolidation work without raw content exposure or mutation.
+Goal: collect several read-only background consolidation and dogfood quality reports over time so the decision to continue, tune, or plan G4 is data-backed.
 
-Candidate command shape:
+Candidate manual command shape:
 
 ```bash
-agent-memory dogfood trace-quality /Users/reddit/.agent-memory/memory.db \
-  --since-hours 24 \
-  --min-trace-coverage 0.25 \
-  --min-evidence-count 2
+agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
+  --limit 200 \
+  --top 20 \
+  --min-evidence 2 \
+  --output /Users/reddit/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
+  --lock-path /Users/reddit/.agent-memory/background-consolidation.lock
+
+agent-memory dogfood background-dry-run /Users/reddit/.agent-memory/memory.db \
+  --report /Users/reddit/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
+  --output /Users/reddit/.agent-memory/reports/background-quality-YYYYMMDD-HHMMSS.json
 ```
 
 Expected scope:
 
-- observation-to-trace coverage by time window;
-- empty retrieval ratio;
-- retrieved evidence repetition counts;
-- trace event-kind and retention-policy distribution;
-- metadata-only invariant checks;
-- candidate-signal proxy counts;
-- quality gate recommendation.
+- run/read-only report generation with lock safety;
+- aggregate multiple report outputs over time;
+- explain whether candidate signals remain sparse/noisy or are becoming stable;
+- keep privacy checks clean;
+- optionally add a cron-ready wrapper only if it remains dry-run/no-mutation.
 
 Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 
@@ -54,8 +58,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged release-sync PR: #130 `chore: release v0.1.73 [skip release]`.
-- Latest completed release: `v0.1.73`.
+- Latest merged release-sync PR: #133 `chore: release v0.1.74 [skip release]`.
+- Latest completed release: `v0.1.74`.
 
 Expected GitHub identity:
 
@@ -66,20 +70,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.73`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.73`
-- npm package: `@cafitac/agent-memory@0.1.73`
-- PyPI package: `cafitac-agent-memory==0.1.73`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.73/.venv/bin/agent-memory`
+- `v0.1.74`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.74`
+- npm package: `@cafitac/agent-memory@0.1.74`
+- PyPI package: `cafitac-agent-memory==0.1.74`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`
 - Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.73 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.73-20260505142024`
+- Hermes config backup before v0.1.74 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.74-20260505180302`
 - `hermes hooks doctor` reports all shell hooks healthy.
 
-Latest raw-content-safe live DB snapshot, checked 2026-05-05 14:21 KST:
+Latest raw-content-safe live DB snapshot, checked 2026-05-05 18:03 KST:
 
-- `retrieval_observations`: 756, latest `2026-05-05 05:20:51` UTC
-- `memory_activations`: 661, latest `2026-05-05 05:20:51` UTC
-- `experience_traces`: 77, latest `2026-05-05 05:20:51` UTC
+- `retrieval_observations`: 772, latest `2026-05-05 09:03:31` UTC
+- `memory_activations`: 677, latest `2026-05-05 09:03:31` UTC
+- `experience_traces`: 91, latest `2026-05-05 09:03:31` UTC
 - `facts`: 3, latest `2026-04-30 17:26:00` UTC
 - `procedures`: 0
 - `episodes`: 0
@@ -96,6 +100,33 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.74 trace-quality release
+
+PR #132 `feat: add dogfood trace quality report` merged and released through release-sync PR #133.
+
+Completed behavior:
+
+- New command: `agent-memory dogfood trace-quality <db> --since-hours <hours> --min-trace-coverage <ratio> --min-evidence-count <count>`.
+- The report opens SQLite read-only and emits `kind=dogfood_trace_quality`, `read_only=true`, `mutated=false`.
+- It reports aggregate observation/trace/activation coverage, observation-to-trace coverage ratio, empty-retrieval ratio, repeated memory-ref counts, trace event-kind and retention-policy distributions, ordinary metadata-only invariants, metadata JSON validity, candidate-signal proxy counts, warnings, and recommendation.
+- It never prints raw conversation content, raw queries, raw trace summaries, prompts, transcripts, API keys, token-like values, or sample values.
+- It does not create candidates/approvals, mutate rows, alter retrieval ranking, or change hook behavior.
+- Live 24h v0.1.74 smoke returned `status=warning`, `recommendation=continue_dogfooding`, `observation_count=174`, `trace_count=87`; the warning is expected because recent observations are not linked from traces strongly enough yet.
+
+Verification completed:
+
+- Focused trace-quality test passed.
+- `tests/test_cli.py` passed.
+- Full `tests/` passed: `247 passed`.
+- Targeted ruff passed on `src/agent_memory/api/cli.py` and `tests/test_cli.py`.
+- PR #132 CI passed and merged.
+- PR #133 release-sync validation CI passed and merged.
+- GitHub Release `v0.1.74`, npm `@cafitac/agent-memory@0.1.74`, and PyPI `cafitac-agent-memory==0.1.74` verified.
+- Published install smokes passed for npm, PyPI fresh venv, and `uvx --refresh`.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
+- `hermes hooks doctor` reports all shell hooks healthy.
 
 ## Completed v0.1.70-v0.1.71 remember-intent diagnostics release
 

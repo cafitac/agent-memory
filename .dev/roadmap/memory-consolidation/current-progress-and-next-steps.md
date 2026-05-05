@@ -283,6 +283,8 @@ Acceptance:
 
 ### G3d: Add read-only `dogfood trace-quality`
 
+Status: completed and released in v0.1.74 via PR #132/#133. Published GitHub Release/npm/PyPI, installed runtime `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`, published npm/PyPI/uvx smokes, live DB smoke, Hermes E2E, and `hermes hooks doctor` passed. Live 24h report currently returns `status=warning` / `recommendation=continue_dogfooding` because recent observations are still not linked from traces strongly enough; this is an expected conservative gate before G4 planning.
+
 Goal:
 
 Measure whether ordinary conversation traces are useful enough to support later consolidation work.
@@ -314,6 +316,8 @@ Acceptance:
 - does not print raw conversation content.
 
 ### G3e: Run scheduled dry-run dogfood over multiple reports
+
+Status: recommended next slice after v0.1.74. Do this before G4 apply-mode planning unless the user explicitly chooses a workflow/release hygiene fix first.
 
 Goal:
 
