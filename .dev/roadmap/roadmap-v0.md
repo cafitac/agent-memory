@@ -243,7 +243,7 @@ If a later session changes direction, update both this checklist and the relevan
   - Goal: clear the remaining storage-health ordinary metadata-only warning when it is caused only by old ordinary `turn` traces missing conservative metadata defaults.
   - Scope: add `dogfood ordinary-trace-metadata-cleanup` preview/apply with `--apply --actor --reason`, aggregate/hash-only output, and docs/tests.
   - Acceptance: RED tests prove preview is read-only, apply cannot run without actor/reason, apply only fills `candidate_policy=evidence_only` and `auto_approved=false` for traces that already have `summary=NULL` and `retention_policy=ephemeral`, raw metadata/sample values are never printed, and default retrieval/Hermes hook behavior is unchanged.
-  - Status: in progress in `feat/ordinary-trace-metadata-cleanup`; live preview found 2 aggregate violations on 1 fixable legacy row, with read-only/no-mutation and raw-content privacy flags false.
+  - Status: implemented in PR #145, released in v0.1.78 via PR #146, and applied once to the live DB; 1 legacy ordinary turn row normalized, ordinary metadata-only preview now reports 0 violations, and storage-health is healthy. Follow-up in `fix/scheduled-dry-run-storage-health-healthy` makes scheduled-dry-run treat `healthy` storage-health status as clean.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.

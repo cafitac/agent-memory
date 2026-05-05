@@ -1609,6 +1609,8 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
     assert payload["mutated"] is False
     assert payload["default_retrieval_unchanged"] is True
     assert payload["reports"]["storage_health"]["kind"] == "dogfood_storage_health"
+    assert payload["reports"]["storage_health"]["status"] == "healthy"
+    assert "storage_health_not_clean" not in payload["quality_gate"]["blocked_reasons"]
     assert payload["reports"]["trace_quality"]["kind"] == "dogfood_trace_quality"
     assert payload["reports"]["remember_intent"]["kind"] == "remember_intent_dogfood_report"
     assert payload["reports"]["background_dry_run"]["kind"] == "memory_consolidation_background_dry_run"
