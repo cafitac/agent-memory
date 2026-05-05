@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 22:35 KST
+Last updated: 2026-05-05 23:23 KST
 
 ## Trigger for the next session
 
@@ -16,13 +16,13 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.76`: PR #138 added read-only `dogfood scheduled-compare`, release-sync PR #139, GitHub Release, npm, PyPI, published install smoke from real npm/PyPI/uvx/npm channels, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. G3f now compares multiple saved G3e scheduled dry-run reports without raw report bodies, mutation, or default retrieval changes. The active implementation slice is G4a: add the first narrow mutation for legacy `retrieval_observations.query_preview` cleanup, guarded by explicit `--apply --actor --reason`, hash-only output, and a hash-only audit trace. Broader G4 consolidation apply mode remains blocked.
+agent-memory is currently verified through `v0.1.77`: PR #142 added the first narrow G4a mutation, explicit `dogfood query-preview-cleanup --apply --actor --reason`, and PR #143 release-sync published it to GitHub Release, npm, and PyPI. Published install smoke passed from npm exec, uvx, and a fresh pip venv; the pinned local Hermes runtime is `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`; `/Users/reddit/.hermes/config.yaml` points to that runtime and the live DB at `/Users/reddit/.agent-memory/memory.db`; live Hermes E2E and `hermes hooks doctor` are healthy. The live DB legacy cleanup has been applied: before preview found 70 eligible non-empty `retrieval_observations.query_preview` rows, apply cleared 70 rows with hash-only/audit output, after preview found 0, and scheduled-dry-run stayed read-only/no-mutation with raw-content privacy flags false. Broader G4 consolidation apply mode remains blocked.
 
 ## Current next slice
 
-Current slice: G4a first narrow mutation for legacy query-preview cleanup.
+Current slice: post-G4a cleanup checkpoint and continued G4 readiness monitoring.
 
-Goal: extend `dogfood query-preview-cleanup` so preview remains the default read-only/no-mutation path, while explicitly approved cleanup can run only with `--apply --actor --reason`. The apply path clears eligible legacy `retrieval_observations.query_preview` values older than the cutoff, emits aggregate/hash-only output, records a hash-only audit trace, and does not change facts, approvals, retrieval ranking, Hermes hook behavior, or ordinary-conversation auto-approval.
+Goal: keep the just-applied live cleanup auditable and restartable. `dogfood query-preview-cleanup` preview remains the default read-only/no-mutation path. The explicit live apply ran once with `--apply --actor --reason`, cleared the 70 legacy `retrieval_observations.query_preview` rows, emitted aggregate/hash-only output, recorded hash-only audit trace id 143, and did not change facts, approvals, retrieval ranking, Hermes hook behavior, or ordinary-conversation auto-approval.
 
 Detailed plan:
 
@@ -33,7 +33,7 @@ Detailed plan:
 Recommended command shape:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
+/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
   --output /Users/reddit/.agent-memory/reports/scheduled-dry-run-YYYYMMDD-HHMMSS.json \
   --since-hours 24 \
   --min-trace-coverage 0.25 \
@@ -49,9 +49,9 @@ agent-memory dogfood scheduled-compare \
   --max-decay-risk 0
 ```
 
-Current live result: v0.1.76 live G3f smoke ran two installed-runtime `scheduled-dry-run` reports and compared them read-only; comparison emitted `kind=dogfood_scheduled_dry_run_comparison`, `read_only=true`, `mutated=false`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`. The G4-readiness kickoff also wrote `/tmp/agent-memory-g4-readiness/scheduled-compare-20260505T120412Z.json` and `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260505T120519Z.json`; both stayed read-only/no-mutation with conservative continue decisions. This is expected and means "keep collecting/comparing/tuning reports", not "enable apply mode".
+Current live result: v0.1.77 live G4a cleanup ran with a backup and before/after artifacts under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`. Before preview found 70 eligible legacy rows. Apply cleared 70 rows and recorded audit trace id 143 with reason/eligible-id hashes only. After preview and direct SQL found 0 non-empty `query_preview` rows. The after `dogfood scheduled-dry-run` remained `read_only=true`, `mutated=false`, and raw-content privacy flags false. This completes only the legacy cleanup; it does not enable broad G4 consolidation apply mode.
 
-Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. The only allowed mutation in this slice is explicit legacy query-preview cleanup apply with actor/reason and hash-only audit output.
+Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. The legacy query-preview cleanup mutation is complete; future mutation must still be separately planned, explicit, and audited.
 
 ## Current repo state
 
@@ -62,9 +62,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged feature PR: #138 `feat: add scheduled dogfood report comparison`.
-- Latest merged release-sync PR: #139 `chore: release v0.1.76 [skip release]`.
-- Latest completed release: `v0.1.76`.
+- Latest merged feature PR: #142 `feat: add query preview cleanup apply`.
+- Latest merged release-sync PR: #143 `chore: release v0.1.77 [skip release]`.
+- Latest completed release: `v0.1.77`.
 
 Expected GitHub identity:
 
@@ -75,25 +75,26 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.76`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.76`
-- npm package: `@cafitac/agent-memory@0.1.76`
-- PyPI package: `cafitac-agent-memory==0.1.76`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`
+- `v0.1.77`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.77`
+- npm package: `@cafitac/agent-memory@0.1.77`
+- PyPI package: `cafitac-agent-memory==0.1.77`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`
 - Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.76 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.76-20260505191946`
+- Hermes config backup before v0.1.77 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.77-20260505224023`
 - `hermes hooks doctor` reports all shell hooks healthy.
 
-Latest raw-content-safe live DB snapshot, checked 2026-05-05 19:24 KST:
+Latest raw-content-safe live DB snapshot, checked 2026-05-05 23:23 KST:
 
-- `retrieval_observations`: 803, latest `2026-05-05 10:20:22` UTC after the v0.1.76 live chat approval smoke
-- `memory_activations`: 708, latest `2026-05-05 10:20:22` UTC after the v0.1.76 live chat approval smoke
-- `experience_traces`: 118, latest `2026-05-05 10:20:22` UTC after the v0.1.76 live chat approval smoke
-- `facts`: 3, latest `2026-05-05 10:20:22` UTC
+- `retrieval_observations`: 838, latest `2026-05-05 14:23:14` UTC after the v0.1.77 cleanup verification and live hook smoke
+- `memory_activations`: 743, latest `2026-05-05 14:23:14` UTC after the v0.1.77 cleanup verification and live hook smoke
+- `experience_traces`: 143, latest `2026-05-05 14:21:01` UTC; cleanup audit trace id is 143
+- `facts`: 3, latest `2026-05-05 14:22:46` UTC
 - `procedures`: 0
 - `episodes`: 0
-- legacy non-empty `query_preview` rows: 70, latest `2026-05-01 12:57:54` UTC
-- non-empty `query_preview` rows since the v0.1.69 privacy-safe live path window: 0
+- legacy non-empty `query_preview` rows before v0.1.77 cleanup apply: 70
+- legacy non-empty `query_preview` rows after v0.1.77 cleanup apply: 0
+- cleanup backup/artifacts: `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`
 
 Expected local untracked artifacts to preserve in the root checkout:
 

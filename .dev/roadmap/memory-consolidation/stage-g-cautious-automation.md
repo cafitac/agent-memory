@@ -144,7 +144,7 @@ Let normal Hermes turns create local, metadata-only `turn` traces by default whi
 
 ## PR G3g: Continue scheduled collection and lock G4 readiness sequence
 
-Status: In progress as a docs/planning checkpoint after `v0.1.76`.
+Status: Complete via PR #141. Scheduled collection remains active while post-cleanup reports accumulate.
 
 ### Objective
 
@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142 as the first narrow mutation slice. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, and applied once to the live DB. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -197,6 +197,14 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - The command writes audit-safe operation metadata.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
+
+### Live dogfood result
+
+- Backup and artifacts: `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`.
+- Before preview: 70 affected/eligible legacy rows.
+- Apply: cleared 70 rows, remaining affected count 0, audit trace id 143, reason and eligible row ids recorded as hashes.
+- After preview/direct SQL: 0 non-empty `query_preview` rows.
+- After scheduled-dry-run: read-only/no-mutation with raw-content privacy flags false.
 
 ## PR G4: Add background consolidation apply mode behind explicit policy
 

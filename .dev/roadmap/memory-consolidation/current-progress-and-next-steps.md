@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 21:05 KST
+Last updated: 2026-05-05 23:23 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.76 scheduled-compare dogfood release.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.77 query-preview cleanup apply release and live cleanup.
 
 Use it when the user asks:
 
@@ -34,30 +34,30 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.76`
+Latest completed release: `v0.1.77`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.76`
-- npm: `@cafitac/agent-memory@0.1.76`
-- PyPI: `cafitac-agent-memory==0.1.76`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.77`
+- npm: `@cafitac/agent-memory@0.1.77`
+- PyPI: `cafitac-agent-memory==0.1.77`
 
 Local Hermes runtime:
 
-- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`
-- Hermes config backup before v0.1.76 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.76-20260505191946`
+- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`
+- Hermes config backup before v0.1.77 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.77-20260505224023`
 - `hermes hooks doctor` reported the agent-memory hook healthy after approval.
 
-v0.1.76 added `dogfood scheduled-compare`, a read-only comparison over repeated G3e/G3f scheduled report artifacts before any G4 apply-mode plan.
+v0.1.77 added explicit `dogfood query-preview-cleanup --apply --actor --reason`, published it to GitHub Release/npm/PyPI, and the live DB cleanup has been applied with backup, before/after artifacts, hash-only audit output, and no default retrieval/Hermes behavior change.
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-05 21:05 KST, after the v0.1.76 live chat approval smoke and a new G4-readiness baseline collection:
+Read-only live DB check at roughly 2026-05-05 23:23 KST, after the v0.1.77 published runtime update, live Hermes approval, and legacy query-preview cleanup verification:
 
-- `retrieval_observations`: 809, latest 2026-05-05 12:03:21 UTC
-- `memory_activations`: 714, latest 2026-05-05 12:03:21 UTC
-- `experience_traces`: 120, latest 2026-05-05 10:32:18 UTC
-- `facts`: 3, latest 2026-04-30 17:26:00 UTC
+- `retrieval_observations`: 838, latest 2026-05-05 14:23:14 UTC
+- `memory_activations`: 743, latest 2026-05-05 14:23:14 UTC
+- `experience_traces`: 143, latest 2026-05-05 14:21:01 UTC
+- `facts`: 3, latest 2026-05-05 14:22:46 UTC
 - `procedures`: 0
 - `episodes`: 0
 
@@ -73,8 +73,9 @@ Privacy/integrity signals:
 
 - Recent observations have `query_sha256`.
 - Recent observations keep `query_preview` empty.
-- Legacy non-empty `query_preview` rows exist from old versions: 70 rows, latest 2026-05-01 12:57:54 UTC.
-- v0.1.69-and-later non-empty `query_preview`: 0.
+- Legacy non-empty `query_preview` rows existed from old versions: 70 rows before v0.1.77 cleanup.
+- v0.1.77 live cleanup cleared all 70 eligible legacy rows; after preview and direct SQL found 0 non-empty `query_preview` rows.
+- Cleanup artifacts and DB backup are under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`; apply audit trace id is 143.
 - Ordinary traces remain metadata-only: `event_kind=turn`, `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, `auto_approved=false`.
 
 Interpretation:
@@ -190,6 +191,7 @@ Completed:
 - v0.1.74: read-only trace-quality report.
 - v0.1.75: cron-friendly `dogfood scheduled-dry-run` bundle.
 - v0.1.76: read-only `dogfood scheduled-compare` over saved scheduled report artifacts.
+- v0.1.77: explicit `dogfood query-preview-cleanup --apply --actor --reason`; live cleanup cleared 70 legacy query-preview rows and left 0 remaining.
 
 Current behavior:
 
@@ -199,16 +201,16 @@ Current behavior:
 
 ## Current decision point
 
-The next safe move is a sequenced G3g/G4-readiness path, not broad G4 apply mode.
+The first narrow mutation slice is complete: legacy `query_preview` cleanup was implemented, released, applied to the live DB, and verified. The next safe move is to keep G4 readiness monitoring and draft the broader G4 apply-mode contract before any additional mutation.
 
-The sequence is:
+The sequence from here is:
 
-1. keep collecting several scheduled dry-run artifacts over time;
-2. compare the artifacts with `dogfood scheduled-compare`;
-3. draft a separate G4 apply-mode contract before implementation;
-4. if a first mutation is approved, start with the narrow legacy `query_preview` cleanup apply slice rather than memory auto-approval.
+1. keep collecting scheduled dry-run artifacts over time;
+2. compare artifacts with `dogfood scheduled-compare`, including the post-cleanup scheduled-dry-run artifact;
+3. update thresholds/blocked reasons from aggregate evidence only;
+4. draft a separate G4 apply-mode contract before implementing broader consolidation mutation.
 
-The detailed plan is `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`.
+The detailed first-mutation plan remains `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`, now with the cleanup slice completed in practice.
 
 Why:
 
