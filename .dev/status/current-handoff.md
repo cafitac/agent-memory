@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-04 22:30 KST
+Last updated: 2026-05-05 10:15 KST
 
 ## Trigger for the next session
 
@@ -16,26 +16,38 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. v0.1.69는 v0.1.68 G3b ordinary-turn metadata-only trace capture의 empty-context hotfix다. 이제 injected memory context가 비어도 ordinary Hermes pre-LLM turn은 metadata-only `turn` trace를 남긴다. 이 trace는 hash/fingerprint, hashed session ref, safe platform/model metadata, related retrieved memory refs, low salience, ephemeral retention만 저장하며 raw prompt/query/query_preview/transcript/user_message는 저장하지 않는다. 2026-05-04 22:25 KST 기준 live DB는 observation/activation/trace가 계속 증가하고 있고, ordinary conversation에서 facts는 증가하지 않는 conservative 상태가 정상이다. 현재 진행상황과 최종 목표/다음 단계는 `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`에 정리되어 있다. 다음 추천 PR-sized slice는 read-only `dogfood storage-health` 또는 `dogfood trace-quality` 공식화다. 아직 G4 apply-mode로 바로 가지 않는다.
+agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. 현재 로컬 worktree `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates`의 `feat/remember-intent-candidates` 브랜치에서 explicit remember-intent 품질 점검 slice가 진행 중이다. 안전한 `Remember this:`/`기억해둬:` 요청은 raw prompt가 아니라 sanitized summary를 가진 review-only `remember_intent` trace로 남기고, secret-like remember 요청은 summary 없이 `candidate_policy=rejected`, `rejected_reason=secret_like_text` 메타데이터만 남겨 dogfood report에서 차단 사유를 볼 수 있게 했다. ordinary conversation은 여전히 hash-only metadata trace이며 facts/procedures/episodes 자동 생성은 없다. Focused/broader/full tests와 local smoke는 통과했고, 다음은 release-readiness checks 후 PR 생성이다.
 
 ## Current in-progress slice
 
-No feature slice is currently in progress after v0.1.69 hotfix release validation.
+Active worktree: `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates`
+Branch: `feat/remember-intent-candidates`
 
-Completed latest slice:
+Current slice goal: make explicit remember-intent dogfood debuggable without raw transcript storage.
 
-- Stage G/G3b: ordinary Hermes turns now record metadata-only lightweight `turn` traces by default before any G4 apply mode.
-- Hotfix: trace recording now happens before the empty injected-context return, so no-context turns still leave safe trace evidence.
-- PR #120 merged; v0.1.69 GitHub release/npm/PyPI/published smoke/Hermes QA completed.
-- Hermes runtime now points to `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory`.
+Implemented locally, not yet PR/released:
 
-Updated work order:
+- Korean explicit remember prefixes (`기억해둬:`, `기억해줘:` plus spaced variants) are recognized as review-ready `remember_intent` traces when the content passes secret scanning.
+- Safe explicit remember requests still store a sanitized human-readable summary so reviewers can see which explicit request is a candidate even though ordinary turns remain hash-only.
+- Secret-like explicit remember requests now store only a rejected metadata-only `remember_intent` diagnostic (`candidate_policy=rejected`, `secret_scan=blocked`, `rejected_reason=secret_like_text`) with `summary=NULL`, instead of being indistinguishable from ordinary hash-only turns.
+- `agent-memory dogfood remember-intent` now reports safe `rejection_counts` for quality checks without raw prompt/query/user-message leakage.
 
-1. Completed: G3b ordinary-turn trace capture, metadata-only/default-safe/non-blocking with RED tests.
-2. Next safest: implement read-only `dogfood storage-health` and/or `dogfood trace-quality` using `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` as the current checkpoint.
-3. Later only: write a separate RED-tested G4 apply-mode plan if reports are clean and trace quality is trusted.
+Verification completed in this worktree:
 
-Do not proceed to G4 background apply mode yet. Do not broaden ordinary-turn traces into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
+- RED confirmed first: Korean remember and rejected secret diagnostic tests failed against the old behavior.
+- Focused remember tests: `6 passed`.
+- Broader CLI/trace tests: `84 passed` for `tests/test_experience_traces.py tests/test_cli.py`.
+- Full suite: `243 passed`.
+- Manual local CLI smoke seeded one Korean safe remember and one secret-like remember request; `dogfood remember-intent` reported `remember_intent=2`, `review_ready_count=1`, `unsafe_sample_count=1`, and `rejection_counts={"secret_like_text": 1}` without leaking the secret markers.
+- `git diff --check` passed.
+- Release-readiness checks passed: `uv run python scripts/check_release_metadata.py`, `uv run python scripts/smoke_release_readiness.py`, `npm pack --dry-run`, and `node --check bin/agent-memory.js`.
+
+Next actions:
+
+1. Commit and open a PR from `feat/remember-intent-candidates`.
+2. After merge/release, install the new pinned runtime and verify live Hermes with a safe Korean `기억해둬:` smoke plus a secret-like rejected diagnostic smoke.
+
+Do not broaden ordinary-turn traces into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
 
 ## Current repo state
 
@@ -47,7 +59,7 @@ Current branch expectation:
 
 - Root checkout should be on `main`.
 - `main` and `origin/main` include v0.1.69 release-sync PR #120.
-- No active feature worktree is required after G3b cleanup.
+- Active feature worktree for this slice: `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates` on `feat/remember-intent-candidates`.
 
 Expected GitHub identity:
 

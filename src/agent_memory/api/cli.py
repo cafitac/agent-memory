@@ -153,6 +153,11 @@ def _remember_intent_dogfood_report(db_path: Path, *, limit: int = 200, sample_l
     review_ready_traces = [trace for trace in remember_traces if _remember_intent_trace_is_review_ready(trace)]
     safe_samples = review_ready_traces[:sample_limit]
     scope_counts = Counter(trace.scope or "unspecified" for trace in remember_traces)
+    rejection_counts = Counter(
+        str(trace.metadata.get("rejected_reason"))
+        for trace in remember_traces
+        if trace.metadata.get("rejected_reason")
+    )
     unsafe_sample_count = len(remember_traces) - len(review_ready_traces)
     suggested_next_steps = [
         "Review remember_intent samples and their consolidation candidate explanations before enabling G2 auto-approval.",
@@ -175,6 +180,7 @@ def _remember_intent_dogfood_report(db_path: Path, *, limit: int = 200, sample_l
         },
         "review_ready_count": len(review_ready_traces),
         "unsafe_sample_count": unsafe_sample_count,
+        "rejection_counts": dict(sorted(rejection_counts.items())),
         "scopes": dict(sorted(scope_counts.items())),
         "samples": [_remember_intent_sample_payload(trace) for trace in safe_samples],
         "suggested_next_steps": suggested_next_steps,
