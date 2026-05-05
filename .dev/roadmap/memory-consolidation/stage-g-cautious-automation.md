@@ -206,6 +206,31 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - After preview/direct SQL: 0 non-empty `query_preview` rows.
 - After scheduled-dry-run: read-only/no-mutation with raw-content privacy flags false.
 
+## PR G4b: Add second narrow mutation for ordinary trace metadata default cleanup
+
+Status: In progress in `feat/ordinary-trace-metadata-cleanup`. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+
+### Objective
+
+Normalize legacy ordinary `turn` traces that are already metadata-only but are missing the conservative defaults required by the storage-health invariant.
+
+### Acceptance
+
+- RED tests prove apply cannot run without `--apply --actor --reason`.
+- Preview remains read-only and aggregate/hash-only.
+- Apply only fills `candidate_policy=evidence_only` and `auto_approved=false`.
+- Apply is limited to ordinary `turn` traces that already have `summary=NULL` and `retention_policy=ephemeral`.
+- Raw trace metadata, prompts, transcripts, queries, sample values, and raw reason text are never printed or written to the audit trace.
+- The command writes audit-safe operation metadata.
+- Storage-health and scheduled-dry-run can verify the result afterward.
+- Retrieval/Hermes behavior is unchanged.
+
+### Current live preview
+
+- Source-checkout read-only preview against `/Users/reddit/.agent-memory/memory.db` found 2 aggregate violations on 1 fixable legacy ordinary `turn` row.
+- Violation counts: `candidate_policy_not_evidence_only=1`, `auto_approved_not_false=1`.
+- Preview emitted `read_only=true`, `mutated=false`, and raw-content privacy flags false.
+
 ## PR G4: Add background consolidation apply mode behind explicit policy
 
 ### Objective

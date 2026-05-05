@@ -1198,6 +1198,154 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert "token=" not in audit[2]
 
 
+def test_python_module_cli_dogfood_ordinary_trace_metadata_cleanup_apply_requires_actor_reason_and_fills_safe_defaults_without_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-trace-metadata-cleanup.db"
+    initialize_database(db_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary=None,
+        scope="project:ordinary-trace-metadata-cleanup",
+        retention_policy="ephemeral",
+        metadata={
+            "trace_recording": "default_metadata_only",
+            "hook_event_name": "PreToolUse",
+            "raw_prompt": "token=SHOULD_NOT_LEAK",
+        },
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    preview_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-trace-metadata-cleanup",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert preview_result.returncode == 0, preview_result.stderr
+    preview = json.loads(preview_result.stdout)
+    assert preview["kind"] == "dogfood_ordinary_trace_metadata_cleanup_preview"
+    assert preview["read_only"] is True
+    assert preview["mutated"] is False
+    assert preview["affected_count"] == 2
+    assert preview["fixable_row_count"] == 1
+    assert preview["violation_counts"] == {
+        "auto_approved_not_false": 1,
+        "candidate_policy_not_evidence_only": 1,
+    }
+    assert preview["privacy"]["raw_trace_content_included"] is False
+    assert preview["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in preview_result.stdout
+    assert "token=" not in preview_result.stdout
+
+    missing_actor_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-trace-metadata-cleanup",
+            str(db_path),
+            "--apply",
+            "--reason",
+            "normalize legacy ordinary turn trace metadata after read-only preview",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_actor_result.returncode != 0
+
+    missing_reason_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-trace-metadata-cleanup",
+            str(db_path),
+            "--apply",
+            "--actor",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_reason_result.returncode != 0
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-trace-metadata-cleanup",
+            str(db_path),
+            "--apply",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "normalize legacy ordinary turn trace metadata after read-only preview",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["kind"] == "dogfood_ordinary_trace_metadata_cleanup_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["affected_count"] == 2
+    assert payload["fixable_row_count"] == 1
+    assert payload["normalized_row_count"] == 1
+    assert payload["remaining_violation_count"] == 0
+    assert payload["apply"]["actor"] == "cli-test"
+    assert payload["apply"]["reason_sha256"]
+    assert payload["apply"]["audit_trace_id"]
+    assert payload["privacy"]["raw_trace_content_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in apply_result.stdout
+    assert "token=" not in apply_result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        trace = connection.execute(
+            "SELECT metadata_json FROM experience_traces WHERE event_kind = 'turn'"
+        ).fetchone()
+        audit = connection.execute(
+            "SELECT event_kind, summary, metadata_json FROM experience_traces ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    metadata = json.loads(trace[0])
+    assert metadata["candidate_policy"] == "evidence_only"
+    assert metadata["auto_approved"] is False
+    assert "raw_prompt" not in metadata
+    assert audit[0] == "dogfood_ordinary_trace_metadata_cleanup_apply"
+    assert audit[1] is None
+    audit_metadata = json.loads(audit[2])
+    assert audit_metadata["normalized_row_count"] == 1
+    assert audit_metadata["remaining_violation_count"] == 0
+    assert "SHOULD_NOT_LEAK" not in audit[2]
+    assert "token=" not in audit[2]
+
+
+
 def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_signals_without_leaks(
     tmp_path: Path,
 ) -> None:
