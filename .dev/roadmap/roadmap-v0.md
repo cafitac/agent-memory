@@ -197,10 +197,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, works on temp fixtures and the live DB, and flags observation/activation-without-trace regressions before G4 planning.
   - Status: completed and released in v0.1.72 via PR #127/#128.
 
-- [~] PR G3c-followup: Add read-only legacy query-preview cleanup preview
+- [x] PR G3c-followup: Add read-only legacy query-preview cleanup preview
   - Goal: make the storage-health `stored_query_excerpt` warning actionable without ad hoc SQL or raw query-preview leakage.
   - Scope: `agent-memory dogfood query-preview-cleanup <db> --older-than <timestamp>` reports aggregate affected/eligible counts, timestamps, privacy markers, and a recommended operation marker; no apply mode yet.
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, no sample values, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
+  - Status: completed and released in v0.1.73 via PR #129/#130.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
