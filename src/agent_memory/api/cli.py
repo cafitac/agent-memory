@@ -3382,6 +3382,197 @@ def _remember_intent_safety_invariant(connection: sqlite3.Connection) -> dict[st
     }
 
 
+def _safe_json_list_from_db(value: str | None) -> list[Any]:
+    try:
+        parsed = json.loads(value or "[]")
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _dogfood_trace_quality_recommendation(
+    *,
+    observation_count: int,
+    trace_count: int,
+    coverage_ratio: float,
+    empty_retrieval_ratio: float,
+    repeated_memory_ref_count: int,
+    invariant_violation_count: int,
+    min_trace_coverage: float,
+) -> str:
+    if (
+        observation_count > 0
+        and trace_count > 0
+        and coverage_ratio >= min_trace_coverage
+        and repeated_memory_ref_count > 0
+        and empty_retrieval_ratio <= 0.5
+        and invariant_violation_count == 0
+    ):
+        return "consider_g4_plan"
+    if trace_count > 0 and invariant_violation_count == 0 and coverage_ratio >= min_trace_coverage:
+        return "ready_for_more_dry_runs"
+    return "continue_dogfooding"
+
+
+def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    since_hours = args.since_hours
+    min_trace_coverage = args.min_trace_coverage
+    min_evidence_count = args.min_evidence_count
+    if not db_path.exists():
+        return {
+            "kind": "dogfood_trace_quality",
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+
+    since_modifier = f"-{since_hours} hours"
+    with _open_readonly_sqlite(db_path) as connection:
+        observation_rows = (
+            connection.execute(
+                """
+                SELECT id, retrieved_memory_refs_json
+                FROM retrieval_observations
+                WHERE created_at >= datetime('now', ?)
+                ORDER BY id ASC
+                """,
+                (since_modifier,),
+            ).fetchall()
+            if _table_exists(connection, "retrieval_observations")
+            else []
+        )
+        trace_rows = (
+            connection.execute(
+                """
+                SELECT event_kind, retention_policy, related_memory_refs_json, related_observation_ids_json
+                FROM experience_traces
+                WHERE created_at >= datetime('now', ?)
+                ORDER BY id ASC
+                """,
+                (since_modifier,),
+            ).fetchall()
+            if _table_exists(connection, "experience_traces")
+            else []
+        )
+        activation_rows = (
+            connection.execute(
+                """
+                SELECT activation_kind, memory_ref
+                FROM memory_activations
+                WHERE created_at >= datetime('now', ?)
+                ORDER BY id ASC
+                """,
+                (since_modifier,),
+            ).fetchall()
+            if _table_exists(connection, "memory_activations")
+            else []
+        )
+        ordinary_invariant = _ordinary_trace_metadata_only_invariant(connection)
+        metadata_invariant = _metadata_json_validity(connection)
+
+    observation_count = len(observation_rows)
+    trace_count = len(trace_rows)
+    activation_count = len(activation_rows)
+    empty_retrieval_count = 0
+    retrieved_memory_ref_counter: Counter[str] = Counter()
+    for row in observation_rows:
+        refs = [str(ref) for ref in _safe_json_list_from_db(row["retrieved_memory_refs_json"])]
+        if not refs:
+            empty_retrieval_count += 1
+        retrieved_memory_ref_counter.update(refs)
+
+    linked_observation_ids: set[int] = set()
+    related_memory_ref_counter: Counter[str] = Counter()
+    event_kind_counts: Counter[str] = Counter()
+    retention_policy_counts: Counter[str] = Counter()
+    for row in trace_rows:
+        event_kind_counts[str(row["event_kind"])] += 1
+        retention_policy_counts[str(row["retention_policy"])] += 1
+        for observation_id in _safe_json_list_from_db(row["related_observation_ids_json"]):
+            if isinstance(observation_id, int):
+                linked_observation_ids.add(observation_id)
+        related_memory_ref_counter.update(str(ref) for ref in _safe_json_list_from_db(row["related_memory_refs_json"]))
+
+    repeated_memory_refs = {
+        ref: count for ref, count in retrieved_memory_ref_counter.items() if count >= min_evidence_count
+    }
+    observation_trace_coverage_ratio = round(len(linked_observation_ids) / observation_count, 4) if observation_count else 0.0
+    empty_retrieval_ratio = round(empty_retrieval_count / observation_count, 4) if observation_count else 0.0
+    invariant_violation_count = int(ordinary_invariant.get("violation_count", 0)) + sum(
+        int(value) for value in metadata_invariant.get("invalid_counts", {}).values()
+    )
+    recommendation = _dogfood_trace_quality_recommendation(
+        observation_count=observation_count,
+        trace_count=trace_count,
+        coverage_ratio=observation_trace_coverage_ratio,
+        empty_retrieval_ratio=empty_retrieval_ratio,
+        repeated_memory_ref_count=len(repeated_memory_refs),
+        invariant_violation_count=invariant_violation_count,
+        min_trace_coverage=min_trace_coverage,
+    )
+    warnings: list[str] = []
+    if observation_count and observation_trace_coverage_ratio < min_trace_coverage:
+        warnings.append("low_observation_trace_coverage")
+    if invariant_violation_count:
+        warnings.append("trace_quality_invariant_warnings")
+    if not trace_count:
+        warnings.append("no_traces_in_window")
+    return {
+        "kind": "dogfood_trace_quality",
+        "read_only": True,
+        "mutated": False,
+        "status": "healthy" if not warnings else "warning",
+        "database": {"path": str(db_path), "exists": True},
+        "time_window": {
+            "since_hours": since_hours,
+            "sqlite_since_modifier": since_modifier,
+        },
+        "thresholds": {
+            "min_trace_coverage": min_trace_coverage,
+            "min_evidence_count": min_evidence_count,
+        },
+        "coverage": {
+            "observation_count": observation_count,
+            "trace_count": trace_count,
+            "activation_count": activation_count,
+            "observations_linked_from_traces": len(linked_observation_ids),
+            "observation_trace_coverage_ratio": observation_trace_coverage_ratio,
+        },
+        "retrieval_quality": {
+            "empty_retrieval_count": empty_retrieval_count,
+            "empty_retrieval_ratio": empty_retrieval_ratio,
+            "repeated_memory_ref_count": len(repeated_memory_refs),
+            "max_retrieval_repetition": max(retrieved_memory_ref_counter.values(), default=0),
+        },
+        "trace_distribution": {
+            "event_kind_counts": dict(sorted(event_kind_counts.items())),
+            "retention_policy_counts": dict(sorted(retention_policy_counts.items())),
+        },
+        "invariants": {
+            "ordinary_trace_metadata_only": ordinary_invariant,
+            "metadata_json_valid": metadata_invariant,
+        },
+        "candidate_signals": {
+            "related_memory_ref_count": len(related_memory_ref_counter),
+            "related_memory_ref_repetition_count": sum(1 for count in related_memory_ref_counter.values() if count >= min_evidence_count),
+            "retrieved_memory_ref_repetition_count": len(repeated_memory_refs),
+        },
+        "recommendation": recommendation,
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "warnings": warnings,
+    }
+
+
+
 def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     older_than = args.older_than
@@ -4175,6 +4366,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_query_preview_cleanup_parser.add_argument("db_path", type=Path)
     dogfood_query_preview_cleanup_parser.add_argument("--older-than", default="9999-12-31T23:59:59")
+    dogfood_trace_quality_parser = dogfood_subparsers.add_parser(
+        "trace-quality",
+        help="Build a read-only aggregate trace quality report before G4 automation planning.",
+    )
+    dogfood_trace_quality_parser.add_argument("db_path", type=Path)
+    dogfood_trace_quality_parser.add_argument("--since-hours", type=int, default=24)
+    dogfood_trace_quality_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
+    dogfood_trace_quality_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -4985,6 +5184,15 @@ def main() -> None:
             return
         if args.dogfood_action == "query-preview-cleanup":
             print(json.dumps(_dogfood_query_preview_cleanup_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-quality":
+            if args.since_hours < 1:
+                raise ValueError("dogfood trace-quality since-hours must be >= 1")
+            if not 0 <= args.min_trace_coverage <= 1:
+                raise ValueError("dogfood trace-quality min-trace-coverage must be between 0 and 1")
+            if args.min_evidence_count < 1:
+                raise ValueError("dogfood trace-quality min-evidence-count must be >= 1")
+            print(json.dumps(_dogfood_trace_quality_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(

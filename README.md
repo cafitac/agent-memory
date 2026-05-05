@@ -120,6 +120,7 @@ agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 
 agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/background-consolidation.json --candidate-min 1 --max-decay-risk 0
 agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
+agent-memory dogfood trace-quality "$DB" --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \
@@ -204,6 +205,14 @@ agent-memory dogfood query-preview-cleanup "$DB" --older-than 2030-01-01T00:00:0
 ```
 
 The preview emits `kind: dogfood_query_preview_cleanup_preview`, aggregate affected/eligible counts and timestamps, `read_only: true`, `mutated: false`, and a recommended operation marker only. It never prints stored query excerpt samples, raw query values, prompts, transcripts, API keys, or token-like values.
+
+G3d adds a read-only trace-quality gate before any G4 apply-mode plan:
+
+```bash
+agent-memory dogfood trace-quality "$DB" --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
+```
+
+The report emits `kind: dogfood_trace_quality`, aggregate observation/trace/activation coverage, empty-retrieval ratio, repeated memory-ref counts, trace event-kind and retention-policy distributions, ordinary metadata-only and metadata JSON invariants, candidate-signal proxy counts, and a conservative recommendation (`continue_dogfooding`, `ready_for_more_dry_runs`, or `consider_g4_plan`). It opens SQLite read-only, does not create candidates or approvals, does not change retrieval ranking, and never prints raw conversation text, trace summaries, query values, prompts, transcripts, API keys, or sample values.
 
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 
