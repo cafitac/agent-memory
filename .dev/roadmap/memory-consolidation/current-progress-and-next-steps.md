@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 19:24 KST
+Last updated: 2026-05-05 21:05 KST
 
 ## Purpose
 
@@ -52,12 +52,12 @@ v0.1.76 added `dogfood scheduled-compare`, a read-only comparison over repeated 
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-05 19:24 KST, after the v0.1.76 live chat approval smoke:
+Read-only live DB check at roughly 2026-05-05 21:05 KST, after the v0.1.76 live chat approval smoke and a new G4-readiness baseline collection:
 
-- `retrieval_observations`: 803, latest 2026-05-05 10:20:22 UTC
-- `memory_activations`: 708, latest 2026-05-05 10:20:22 UTC
-- `experience_traces`: 118, latest 2026-05-05 10:20:22 UTC
-- `facts`: 3, latest 2026-05-05 10:20:22 UTC
+- `retrieval_observations`: 809, latest 2026-05-05 12:03:21 UTC
+- `memory_activations`: 714, latest 2026-05-05 12:03:21 UTC
+- `experience_traces`: 120, latest 2026-05-05 10:32:18 UTC
+- `facts`: 3, latest 2026-04-30 17:26:00 UTC
 - `procedures`: 0
 - `episodes`: 0
 
@@ -66,6 +66,8 @@ Recent live Hermes v0.1.76 E2E smoke:
 - `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
 - `hermes hooks doctor` reports all shell hooks healthy with the v0.1.76 pinned runtime path.
 - The installed runtime's G3f live smoke wrote two scheduled reports and `/tmp/agent-memory-v0176-g3f/compare.json` with `read_only=true`, `mutated=false`, `report_count=2`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`.
+- The G4-readiness kickoff wrote `/tmp/agent-memory-g4-readiness/scheduled-compare-20260505T120412Z.json` and `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260505T120519Z.json`; both stayed read-only/no-mutation with privacy flags false and conservative continue-before-G4 decisions.
+- A local Hermes cron job `6894df1bfd4c` now collects four more read-only scheduled artifacts every 6 hours under `/Users/reddit/.agent-memory/reports/g4-readiness`.
 
 Privacy/integrity signals:
 
@@ -197,9 +199,16 @@ Current behavior:
 
 ## Current decision point
 
-The next safe move is not G4 apply mode.
+The next safe move is a sequenced G3g/G4-readiness path, not broad G4 apply mode.
 
-The next safe move is to collect several G3e scheduled dry-run reports over time, then decide whether to keep dogfooding, tune thresholds, or write a separate G4 apply-mode plan.
+The sequence is:
+
+1. keep collecting several scheduled dry-run artifacts over time;
+2. compare the artifacts with `dogfood scheduled-compare`;
+3. draft a separate G4 apply-mode contract before implementation;
+4. if a first mutation is approved, start with the narrow legacy `query_preview` cleanup apply slice rather than memory auto-approval.
+
+The detailed plan is `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`.
 
 Why:
 
@@ -405,6 +414,25 @@ Acceptance:
 - no raw previews printed;
 - cleanup is not bundled with G4 or auto-approval work;
 - user approval required before any mutation.
+
+### G3g: Continue scheduled collection and lock the G4 readiness sequence
+
+Status: in progress in this docs checkpoint. Baseline G4-readiness artifacts were created with the v0.1.76 runtime; the latest compare decision remains `continue_scheduled_report_collection_before_g4`. A local Hermes cron job `6894df1bfd4c` is scheduled to collect four more read-only reports every 6 hours under `/Users/reddit/.agent-memory/reports/g4-readiness`.
+
+Goal:
+
+Make the post-G3f path explicit while report artifacts accumulate: collect, compare, write the G4 apply-mode contract, then implement only the first narrow mutation slice.
+
+Detailed plan:
+
+- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`
+
+Acceptance:
+
+- local scheduled artifacts are not committed;
+- docs record artifact paths and cron boundary without raw report bodies;
+- the first recommended mutation is legacy `query_preview` cleanup apply, not ordinary conversation auto-approval;
+- no DB mutation, retrieval change, or Hermes config change lands in this planning slice.
 
 ### G4-plan: Draft background apply-mode plan only after G3 quality is trusted
 

@@ -35,6 +35,7 @@ Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
 - `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.76`, including current dogfood state and next recommended slices.
+- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — ordered post-G3f plan: collect scheduled artifacts, compare trends, draft apply-mode contract, then implement only the first narrow mutation slice.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -221,7 +222,23 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: no raw content, no embedded raw report bodies, no mutation, no default retrieval change; output explains whether signals are stable enough for a separate G4 plan or blocked by warnings/decay risk/legacy cleanup/noise.
   - Status: completed and released in v0.1.76 via PR #138/#139; first live comparison recommends continuing scheduled report collection before G4.
 
-- [ ] PR G4: Add background consolidation apply mode behind explicit flag
+- [~] PR G3g: Continue scheduled report collection and lock the G4 readiness sequence
+  - Goal: make the post-G3f plan explicit while scheduled artifacts accumulate over time.
+  - Scope: collect local-only scheduled artifacts, schedule repeated collection, and document the sequence: collect reports -> compare trends -> draft apply-mode contract -> implement one narrow mutation.
+  - Acceptance: docs name the artifact directory, cron/job boundary, G4 apply-mode prerequisites, and the first recommended mutation slice without adding any new DB mutation.
+  - Status: in progress in `docs/g4-readiness-apply-plan`; baseline artifacts show `read_only=true`, `mutated=false`, and decision `continue_scheduled_report_collection_before_g4`.
+
+- [ ] PR G4-plan: Draft background apply-mode contract before implementation
+  - Goal: define exact eligible actions, blocked actions, CLI flags, JSON output, audit records, and rollback rules before writing mutating code.
+  - Scope: docs and RED-test plan only; no new apply-mode implementation.
+  - Acceptance: `--apply`, `--actor`, `--reason`, and named policy are mandatory for future mutation; ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain forbidden.
+
+- [ ] PR G4a: Add first narrow mutation for legacy query-preview cleanup
+  - Goal: remove legacy privacy debt by clearing old non-empty `retrieval_observations.query_preview` values under an explicit operator command.
+  - Scope: extend `dogfood query-preview-cleanup` with `--apply --actor --reason`, backup/operator instructions, and audit-safe output.
+  - Acceptance: RED tests prove dry-run remains default, apply cannot run without actor/reason, only eligible legacy rows are cleared, raw previews are never printed, and default retrieval/Hermes hook behavior is unchanged.
+
+- [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
   - Scope: explicit `--apply` with policy file, audit trail, rollback instructions.
   - Acceptance: no apply without explicit flag; actions are reversible or at least reviewable; docs warn this is advanced.

@@ -37,8 +37,9 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 ## Current checkpoint
 
 - `current-progress-and-next-steps.md` — latest verified progress, live dogfood state, final target, and next recommended slices after `v0.1.76`.
+- `g4-readiness-and-first-mutation-plan.md` — ordered post-G3f sequence: collect scheduled reports, compare trends, draft the G4 apply-mode plan, then implement only the first narrow mutation slice.
 
-Use this current checkpoint together with `.dev/status/current-handoff.md` before choosing the next PR-sized task.
+Use these current checkpoints together with `.dev/status/current-handoff.md` before choosing the next PR-sized task.
 
 ## Stage documents
 
@@ -80,7 +81,10 @@ Use this current checkpoint together with `.dev/status/current-handoff.md` befor
 | G1 | Automation | Explicit `remember this` auto-candidate | still reviewed by default |
 | G2 | Automation | Narrow opt-in auto-approval | off by default |
 | G3 | Automation | Background consolidation dry-run | dry-run default |
-| G4 | Automation | Background consolidation apply mode | explicit flag only |
+| G3f | Automation | Scheduled report comparison | read-only trend check |
+| G4-plan | Automation | Apply-mode contract before implementation | docs/tests plan first |
+| G4a | Automation | First narrow mutation: legacy query-preview cleanup | explicit flag, actor, reason |
+| G4 | Automation | Broader background consolidation apply mode | explicit policy only |
 | H1 | Hardening | Consolidation eval fixtures/metrics | advisory CI |
 | H2 | Hardening | Graph/trace visualization export | local/redacted |
 | H3 | Hardening | Backup/import/export | safe round-trip |
