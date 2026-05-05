@@ -16,38 +16,31 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory는 v0.1.69까지 PR/CI/merge/release/npm/PyPI/published smoke/Hermes QA가 완료됐다. 현재 로컬 worktree `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates`의 `feat/remember-intent-candidates` 브랜치에서 explicit remember-intent 품질 점검 slice가 진행 중이다. 안전한 `Remember this:`/`기억해둬:` 요청은 raw prompt가 아니라 sanitized summary를 가진 review-only `remember_intent` trace로 남기고, secret-like remember 요청은 summary 없이 `candidate_policy=rejected`, `rejected_reason=secret_like_text` 메타데이터만 남겨 dogfood report에서 차단 사유를 볼 수 있게 했다. ordinary conversation은 여전히 hash-only metadata trace이며 facts/procedures/episodes 자동 생성은 없다. Focused/broader/full tests와 local smoke는 통과했고, 다음은 release-readiness checks 후 PR 생성이다.
+agent-memory is currently verified through `v0.1.71`: PR #122 (debuggable explicit remember-intent diagnostics), PR #124 (freeform secret-like remember rejection hardening), release-sync PR #125, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Safe Korean/English explicit remember-intent now creates review-only `remember_intent` traces with sanitized summaries; secret-like remember-intent creates rejected metadata-only diagnostics with `rejected_reason=secret_like_text`; ordinary turns remain hash-only metadata-only evidence. The next recommended PR-sized slice is G3c: add a read-only `agent-memory dogfood storage-health` report before any G4 apply-mode planning.
 
-## Current in-progress slice
+## Current next slice
 
-Active worktree: `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates`
-Branch: `feat/remember-intent-candidates`
+Next slice: G3c `dogfood storage-health`.
 
-Current slice goal: make explicit remember-intent dogfood debuggable without raw transcript storage.
+Goal: replace ad hoc live DB SQL checks with one raw-content-safe command that reports storage health, runtime compatibility, Hermes hook configuration, and trace/observation safety invariants.
 
-Implemented locally, not yet PR/released:
+Candidate command shape:
 
-- Korean explicit remember prefixes (`기억해둬:`, `기억해줘:` plus spaced variants) are recognized as review-ready `remember_intent` traces when the content passes secret scanning.
-- Safe explicit remember requests still store a sanitized human-readable summary so reviewers can see which explicit request is a candidate even though ordinary turns remain hash-only.
-- Secret-like explicit remember requests now store only a rejected metadata-only `remember_intent` diagnostic (`candidate_policy=rejected`, `secret_scan=blocked`, `rejected_reason=secret_like_text`) with `summary=NULL`, instead of being indistinguishable from ordinary hash-only turns.
-- `agent-memory dogfood remember-intent` now reports safe `rejection_counts` for quality checks without raw prompt/query/user-message leakage.
+```bash
+agent-memory dogfood storage-health /Users/reddit/.agent-memory/memory.db \
+  --runtime-command /Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory \
+  --config-path /Users/reddit/.hermes/config.yaml
+```
 
-Verification completed in this worktree:
+Expected scope:
 
-- RED confirmed first: Korean remember and rejected secret diagnostic tests failed against the old behavior.
-- Focused remember tests: `6 passed`.
-- Broader CLI/trace tests: `84 passed` for `tests/test_experience_traces.py tests/test_cli.py`.
-- Full suite: `243 passed`.
-- Manual local CLI smoke seeded one Korean safe remember and one secret-like remember request; `dogfood remember-intent` reported `remember_intent=2`, `review_ready_count=1`, `unsafe_sample_count=1`, and `rejection_counts={"secret_like_text": 1}` without leaking the secret markers.
-- `git diff --check` passed.
-- Release-readiness checks passed: `uv run python scripts/check_release_metadata.py`, `uv run python scripts/smoke_release_readiness.py`, `npm pack --dry-run`, and `node --check bin/agent-memory.js`.
+- table counts and latest timestamps for retrieval observations, activations, experience traces, facts, procedures, episodes, and relations;
+- runtime command existence/version and config hook marker checks;
+- recent non-empty `query_preview` counts, missing hash counts, invalid JSON counts, orphan activation counts, and trace metadata shape counts;
+- explicit status/warnings that distinguish healthy sparse data from unsafe regressions;
+- read-only output with `mutated=false` and no raw prompt/query/transcript/user-message/secret content.
 
-Next actions:
-
-1. Commit and open a PR from `feat/remember-intent-candidates`.
-2. After merge/release, install the new pinned runtime and verify live Hermes with a safe Korean `기억해둬:` smoke plus a secret-like rejected diagnostic smoke.
-
-Do not broaden ordinary-turn traces into automatic approval, inferred ordinary-conversation preferences, procedure extraction, raw transcript storage, or default retrieval ranking changes.
+Do not implement G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 
 ## Current repo state
 
@@ -57,26 +50,39 @@ Canonical repo path:
 
 Current branch expectation:
 
-- Root checkout should be on `main`.
-- `main` and `origin/main` include v0.1.69 release-sync PR #120.
-- Active feature worktree for this slice: `/Users/reddit/Project/agent-memory/.worktrees/remember-intent-candidates` on `feat/remember-intent-candidates`.
+- Root checkout should normally be on `main` unless a docs/feature branch is active.
+- Latest merged release-sync PR: #125 `chore: release v0.1.71 [skip release]`.
+- Latest completed release: `v0.1.71`.
 
 Expected GitHub identity:
 
 - GitHub account: `cafitac`
-- Use `HOME=/Users/reddit` for gh commands.
+- Use `HOME=/Users/reddit` for `gh` commands.
 - Remote: `origin` -> `https://github.com/cafitac/agent-memory.git`
 - Commit author should remain `Minwoo Kang <31237832+cafitac@users.noreply.github.com>` unless the user says otherwise.
 
 Latest completed release:
 
-- `v0.1.69`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.69`
-- npm package: `@cafitac/agent-memory@0.1.69`
-- PyPI package: `cafitac-agent-memory==0.1.69`
-- Current Hermes runtime path should be `/Users/reddit/.agent-memory/runtime/v0.1.69/.venv/bin/agent-memory`.
-- Hermes config hook command is allowlisted and points to v0.1.69.
-- Hermes config backup before this update: `/Users/reddit/.hermes/config.yaml.bak-v0.1.69`.
+- `v0.1.71`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.71`
+- npm package: `@cafitac/agent-memory@0.1.71`
+- PyPI package: `cafitac-agent-memory==0.1.71`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`
+- Hermes config path: `/Users/reddit/.hermes/config.yaml`
+- Hermes config backup before v0.1.71 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.71-20260505111920`
+- `hermes hooks doctor` reports all shell hooks healthy.
+
+Latest raw-content-safe live DB snapshot, checked 2026-05-05 11:46 KST:
+
+- `retrieval_observations`: 725, latest `2026-05-05 02:46:27` UTC
+- `memory_activations`: 630, latest `2026-05-05 02:46:27` UTC
+- `experience_traces`: 50, latest `2026-05-05 02:43:42` UTC
+- `facts`: 3, latest `2026-04-30 17:26:00` UTC
+- `procedures`: 0
+- `episodes`: 0
+- `relations`: 0
+- legacy non-empty `query_preview` rows: 70, latest `2026-05-01 12:57:54` UTC
+- non-empty `query_preview` rows since the v0.1.69 privacy-safe live path window: 0
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -84,8 +90,35 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.claude/`
 - `.dev/kb/retrieval-eval-m1-implementation-plan.md`
 - `.omc/`
+- `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.70-v0.1.71 remember-intent diagnostics release
+
+PR #122 `feat: add debuggable remember intent diagnostics` merged and released through v0.1.70. PR #124 `fix: reject freeform secret-like remember intents` then hardened the secret scanner and released through v0.1.71.
+
+Completed behavior:
+
+- Korean explicit remember prefixes (`기억해둬:`, `기억해줘:` plus spaced/full-width-colon variants) are recognized as review-ready `remember_intent` traces when content passes secret scanning.
+- Safe explicit remember requests store a sanitized human-readable summary so reviewers can see the explicit request without storing ordinary raw conversation turns.
+- Secret-like explicit remember requests store only a rejected metadata-only diagnostic: `candidate_policy=rejected`, `secret_scan=blocked`, `rejected_reason=secret_like_text`, `summary=NULL`.
+- Freeform secret labels such as `api key <value>` are rejected even without `:` or `=`.
+- `agent-memory dogfood remember-intent` reports safe `rejection_counts` without raw prompt/query/user-message leakage.
+- Ordinary conversation still records only hash/metadata evidence and does not create approved facts/procedures/episodes.
+
+Verification completed:
+
+- PR #122 CI passed and merged.
+- PR #123 release-sync merged and published v0.1.70.
+- Published smoke for v0.1.70 found the freeform secret-like scanner gap before live runtime rollout.
+- PR #124 added regression coverage for the freeform gap, CI passed, and merged.
+- PR #125 release-sync merged and published v0.1.71.
+- PyPI fresh venv smoke verified `cafitac-agent-memory==0.1.71` plus Korean safe remember and secret-like rejected diagnostics.
+- npm `npm exec --package=@cafitac/agent-memory@0.1.71` smoke verified command/help surfaces.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool` returned `OK` and advanced observations, activations, and metadata-only ordinary traces without changing facts.
+- `hermes hooks doctor` reports all hooks healthy.
 
 ## Completed v0.1.69 empty-context trace hotfix
 
