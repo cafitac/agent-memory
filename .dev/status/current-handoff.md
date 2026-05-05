@@ -16,36 +16,33 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.74`: PR #132 (read-only `dogfood trace-quality`), release-sync PR #133, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health, query-preview cleanup preview, and trace-quality now make live DB invariants, legacy stored-query-excerpt cleanup scope, and trace usefulness inspectable without ad hoc SQL, raw query leakage, or mutation. The live 24h trace-quality report currently recommends `continue_dogfooding`, so the next recommended PR-sized slice is G3e: collect scheduled dry-run dogfood reports over time before any G4 apply-mode planning.
+agent-memory is currently verified through `v0.1.74`: PR #132 (read-only `dogfood trace-quality`), release-sync PR #133, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health, query-preview cleanup preview, and trace-quality now make live DB invariants, legacy stored-query-excerpt cleanup scope, and trace usefulness inspectable without ad hoc SQL, raw query leakage, or mutation. The active next PR-sized slice is G3e: add `dogfood scheduled-dry-run`, a cron-friendly read-only bundle that runs storage-health, trace-quality, remember-intent, and background consolidation dry-run together before any G4 apply-mode planning.
 
 ## Current next slice
 
-Next slice: G3e scheduled dry-run dogfood reports.
+Next slice: G3e scheduled dry-run dogfood bundle.
 
 Goal: collect several read-only background consolidation and dogfood quality reports over time so the decision to continue, tune, or plan G4 is data-backed.
 
-Candidate manual command shape:
+Candidate command shape:
 
 ```bash
-agent-memory consolidation background dry-run /Users/reddit/.agent-memory/memory.db \
-  --limit 200 \
-  --top 20 \
-  --min-evidence 2 \
-  --output /Users/reddit/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
-  --lock-path /Users/reddit/.agent-memory/background-consolidation.lock
-
-agent-memory dogfood background-dry-run /Users/reddit/.agent-memory/memory.db \
-  --report /Users/reddit/.agent-memory/reports/background-consolidation-YYYYMMDD-HHMMSS.json \
-  --output /Users/reddit/.agent-memory/reports/background-quality-YYYYMMDD-HHMMSS.json
+agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
+  --output /Users/reddit/.agent-memory/reports/scheduled-dry-run-YYYYMMDD-HHMMSS.json \
+  --since-hours 24 \
+  --min-trace-coverage 0.25 \
+  --min-evidence-count 2 \
+  --candidate-min 1 \
+  --max-decay-risk 0
 ```
 
 Expected scope:
 
-- run/read-only report generation with lock safety;
-- aggregate multiple report outputs over time;
+- run read-only scheduled report generation with lock safety;
+- bundle storage-health, trace-quality, remember-intent, and background dry-run diagnostics;
+- write repeatable report artifacts over time;
 - explain whether candidate signals remain sparse/noisy or are becoming stable;
-- keep privacy checks clean;
-- optionally add a cron-ready wrapper only if it remains dry-run/no-mutation.
+- keep privacy checks clean.
 
 Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 

@@ -2466,6 +2466,146 @@ def _background_dry_run_report_summary(path: Path) -> dict[str, Any]:
     }
 
 
+def _scheduled_dry_run_quality_decision(
+    *,
+    storage_health: dict[str, Any],
+    trace_quality: dict[str, Any],
+    background_dry_run: dict[str, Any],
+    candidate_min: int,
+    max_decay_risk: int,
+) -> dict[str, Any]:
+    blocked_reasons: list[str] = []
+    if storage_health.get("status") not in {"ok", "pass"}:
+        blocked_reasons.append("storage_health_not_clean")
+    if trace_quality.get("recommendation") != "consider_g4_plan":
+        blocked_reasons.append("trace_quality_needs_more_dogfooding")
+    if background_dry_run.get("status") != "completed":
+        blocked_reasons.append("background_dry_run_not_completed")
+    review_handoff = background_dry_run.get("review_handoff", {}) if isinstance(background_dry_run.get("review_handoff"), dict) else {}
+    candidate_count = _safe_int(review_handoff.get("candidate_count"))
+    decay_risk_candidate_count = _safe_int(review_handoff.get("decay_risk_candidate_count"))
+    scan = background_dry_run.get("scan", {}) if isinstance(background_dry_run.get("scan"), dict) else {}
+    quality_warnings = scan.get("quality_warnings", []) if isinstance(scan.get("quality_warnings"), list) else []
+    if candidate_count < candidate_min:
+        blocked_reasons.append("candidate_signal_below_threshold")
+    if decay_risk_candidate_count > max_decay_risk:
+        blocked_reasons.append("decay_risk_above_threshold")
+    if quality_warnings:
+        blocked_reasons.append("background_quality_warnings_present")
+    if background_dry_run.get("mutated") is True or storage_health.get("mutated") is True or trace_quality.get("mutated") is True:
+        blocked_reasons.append("report_claims_mutation")
+    if (
+        background_dry_run.get("default_retrieval_unchanged") is False
+        or storage_health.get("default_retrieval_unchanged") is False
+        or trace_quality.get("default_retrieval_unchanged") is False
+    ):
+        blocked_reasons.append("default_retrieval_changed")
+
+    passed = not blocked_reasons
+    return {
+        "pass": passed,
+        "decision": (
+            "scheduled_dry_run_quality_gate_passed_plan_g4_only"
+            if passed
+            else "continue_scheduled_dry_run_dogfooding_before_g4"
+        ),
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def _dogfood_scheduled_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.since_hours < 1:
+        raise ValueError("dogfood scheduled-dry-run since-hours must be >= 1")
+    if not 0 <= args.min_trace_coverage <= 1:
+        raise ValueError("dogfood scheduled-dry-run min-trace-coverage must be between 0 and 1")
+    if args.min_evidence_count < 1:
+        raise ValueError("dogfood scheduled-dry-run min-evidence-count must be >= 1")
+    if args.limit < 1:
+        raise ValueError("dogfood scheduled-dry-run limit must be >= 1")
+    if args.top < 1:
+        raise ValueError("dogfood scheduled-dry-run top must be >= 1")
+    if args.frequent_threshold < 1:
+        raise ValueError("dogfood scheduled-dry-run frequent-threshold must be >= 1")
+    if args.candidate_min < 0:
+        raise ValueError("dogfood scheduled-dry-run candidate-min must be >= 0")
+    if args.max_decay_risk < 0:
+        raise ValueError("dogfood scheduled-dry-run max-decay-risk must be >= 0")
+
+    storage_health = _dogfood_storage_health_payload(
+        argparse.Namespace(db_path=args.db_path, hermes_config=args.hermes_config)
+    )
+    trace_quality = _dogfood_trace_quality_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            since_hours=args.since_hours,
+            min_trace_coverage=args.min_trace_coverage,
+            min_evidence_count=args.min_evidence_count,
+        )
+    )
+    remember_intent = _remember_intent_dogfood_report(
+        args.db_path,
+        limit=args.limit,
+        sample_limit=args.remember_sample_limit,
+    )
+    lock_path = args.lock_path or args.db_path.with_suffix(".scheduled-dry-run.lock")
+    background_dry_run = _consolidation_background_dry_run_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        min_evidence=args.min_evidence_count,
+        frequent_threshold=args.frequent_threshold,
+        output_path=None,
+        lock_path=lock_path,
+    )
+    quality_gate = _scheduled_dry_run_quality_decision(
+        storage_health=storage_health,
+        trace_quality=trace_quality,
+        background_dry_run=background_dry_run,
+        candidate_min=args.candidate_min,
+        max_decay_risk=args.max_decay_risk,
+    )
+    payload = {
+        "kind": "dogfood_scheduled_dry_run",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "reports_included": ["storage_health", "trace_quality", "remember_intent", "background_dry_run"],
+        "reports": {
+            "storage_health": storage_health,
+            "trace_quality": trace_quality,
+            "remember_intent": remember_intent,
+            "background_dry_run": background_dry_run,
+        },
+        "thresholds": {
+            "since_hours": args.since_hours,
+            "min_trace_coverage": args.min_trace_coverage,
+            "min_evidence_count": args.min_evidence_count,
+            "candidate_min": args.candidate_min,
+            "max_decay_risk": args.max_decay_risk,
+        },
+        "quality_gate": quality_gate,
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+        },
+        "suggested_next_steps": [
+            "Schedule this command repeatedly before planning any G4 apply mode.",
+            "Treat a passing quality gate only as permission to write a separate G4 plan with RED tests.",
+            "Keep ordinary conversation traces metadata-only and keep default retrieval approved-only.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _background_dry_run_dogfood_report(
     db_path: Path,
     *,
@@ -4374,6 +4514,23 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_quality_parser.add_argument("--since-hours", type=int, default=24)
     dogfood_trace_quality_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_trace_quality_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_scheduled_parser = dogfood_subparsers.add_parser(
+        "scheduled-dry-run",
+        help="Run a cron-friendly read-only G3e dogfood bundle before any G4 apply-mode plan.",
+    )
+    dogfood_scheduled_parser.add_argument("db_path", type=Path)
+    dogfood_scheduled_parser.add_argument("--output", type=Path)
+    dogfood_scheduled_parser.add_argument("--hermes-config", type=Path)
+    dogfood_scheduled_parser.add_argument("--since-hours", type=int, default=24)
+    dogfood_scheduled_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
+    dogfood_scheduled_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_scheduled_parser.add_argument("--limit", type=int, default=200)
+    dogfood_scheduled_parser.add_argument("--top", type=int, default=20)
+    dogfood_scheduled_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_scheduled_parser.add_argument("--remember-sample-limit", type=int, default=10)
+    dogfood_scheduled_parser.add_argument("--candidate-min", type=int, default=1)
+    dogfood_scheduled_parser.add_argument("--max-decay-risk", type=int, default=0)
+    dogfood_scheduled_parser.add_argument("--lock-path", type=Path)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -5193,6 +5350,9 @@ def main() -> None:
             if args.min_evidence_count < 1:
                 raise ValueError("dogfood trace-quality min-evidence-count must be >= 1")
             print(json.dumps(_dogfood_trace_quality_payload(args), indent=2))
+            return
+        if args.dogfood_action == "scheduled-dry-run":
+            print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(

@@ -199,3 +199,15 @@ agent-memory dogfood trace-quality <db> --since-hours 24 --min-trace-coverage 0.
 ```
 
 Verify it prints `kind: dogfood_trace_quality`, `read_only: true`, `mutated: false`, observation/trace/activation coverage, empty-retrieval ratio, trace distributions, privacy markers, and a recommendation. It must not print raw conversation content, raw queries, trace summaries, prompts, transcripts, `api key`, token-like values, or sample values; it must not create candidates, approve memories, change ranking, or mutate DB rows.
+
+For the G3e scheduled dry-run smoke, run the cron-friendly read-only bundle:
+
+```bash
+agent-memory dogfood scheduled-dry-run <db> \
+  --output <tmp-scheduled-report.json> \
+  --since-hours 24 \
+  --min-trace-coverage 0.25 \
+  --min-evidence-count 2
+```
+
+Verify it prints `kind: dogfood_scheduled_dry_run`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, a `reports` object containing `storage_health`, `trace_quality`, `remember_intent`, and `background_dry_run`, and a conservative `quality_gate`. It must write the same JSON to `--output`, must not print raw query/prompt/transcript/secret-like/sample values, and must not mutate observations, activations, traces, memories, relations, ranking, or hook config.
