@@ -142,7 +142,63 @@ Let normal Hermes turns create local, metadata-only `turn` traces by default whi
 - No LLM-based extraction of preferences/procedures in this slice.
 - No default retrieval ranking change.
 
-## PR G4: Add background consolidation apply mode behind explicit flag
+## PR G3g: Continue scheduled collection and lock G4 readiness sequence
+
+Status: In progress as a docs/planning checkpoint after `v0.1.76`.
+
+### Objective
+
+Keep collecting scheduled dry-run artifacts while making the next four-step sequence explicit: collect reports, compare trends, write the G4 apply-mode contract, then implement only the first narrow mutation slice.
+
+### Acceptance
+
+- Scheduled artifacts are local-only and not committed.
+- Repeated collection uses the installed runtime and live DB read-only.
+- The plan names the artifact directory and cron/job boundary.
+- The first recommended mutation is legacy `query_preview` cleanup, not memory auto-approval.
+- No new DB mutation, retrieval change, or Hermes config change lands in this docs slice.
+
+### Implemented planning shape
+
+- Current artifact directory: `/Users/reddit/.agent-memory/reports/g4-readiness`.
+- Current scheduled collector job id: `6894df1bfd4c`.
+- Detailed plan: `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`.
+
+## PR G4-plan: Draft background apply-mode contract before implementation
+
+Status: Planned. This must be a planning/contract slice before mutating code.
+
+### Objective
+
+Define exactly what future apply mode may mutate, what it must audit, and what remains forbidden.
+
+### Acceptance
+
+- Dry-run remains default.
+- `--apply`, `--actor`, `--reason`, and a named policy are mandatory for future mutation.
+- JSON output distinguishes no-op/dry-run from real mutation.
+- Every mutation path has audit or reviewable operation records.
+- Ordinary conversation auto-approval, raw transcript storage, broad LLM extraction, and default retrieval ranking changes remain forbidden.
+
+## PR G4a: Add first narrow mutation for legacy query-preview cleanup
+
+Status: Planned after G4-plan unless the user explicitly chooses this safer cleanup slice first.
+
+### Objective
+
+Clear legacy `retrieval_observations.query_preview` values from old versions with explicit operator approval.
+
+### Acceptance
+
+- RED tests prove apply cannot run without `--apply --actor --reason`.
+- Dry-run remains read-only.
+- Apply clears only eligible legacy rows older than the cutoff.
+- Raw query preview values are never printed.
+- The command writes audit-safe operation metadata.
+- Storage-health and cleanup preview can verify the result afterward.
+- Retrieval/Hermes behavior is unchanged.
+
+## PR G4: Add background consolidation apply mode behind explicit policy
 
 ### Objective
 

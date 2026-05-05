@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 19:24 KST
+Last updated: 2026-05-05 21:05 KST
 
 ## Trigger for the next session
 
@@ -16,13 +16,19 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.76`: PR #138 added read-only `dogfood scheduled-compare`, release-sync PR #139, GitHub Release, npm, PyPI, published install smoke from real npm/PyPI/uvx/npm channels, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. G3f now compares multiple saved G3e scheduled dry-run reports without raw report bodies, mutation, or default retrieval changes before any G4 apply-mode planning.
+agent-memory is currently verified through `v0.1.76`: PR #138 added read-only `dogfood scheduled-compare`, release-sync PR #139, GitHub Release, npm, PyPI, published install smoke from real npm/PyPI/uvx/npm channels, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. G3f now compares multiple saved G3e scheduled dry-run reports without raw report bodies, mutation, or default retrieval changes. The current active slice is G3g/G4-readiness: collect more scheduled artifacts, compare trends, draft a G4 apply-mode contract, then implement only the first narrow mutation slice.
 
 ## Current next slice
 
-Current slice: continue G3f dogfood report collection/comparison before any G4 plan.
+Current slice: G3g/G4-readiness sequence.
 
-Goal: run the read-only bundle over real dogfood data over time, then compare saved artifacts with `dogfood scheduled-compare` so the decision to continue dogfooding, tune thresholds, or draft a separate G4 apply-mode plan is data-backed.
+Goal: keep collecting the read-only bundle over real dogfood data, compare saved artifacts with `dogfood scheduled-compare`, write a G4 apply-mode contract before implementation, then implement only the first narrow mutation slice. The recommended first mutation is legacy `query_preview` cleanup apply with explicit `--apply --actor --reason`, not automatic memory approval.
+
+Detailed plan:
+
+- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`
+- Local artifact directory: `/Users/reddit/.agent-memory/reports/g4-readiness`
+- Local scheduled collector job id: `6894df1bfd4c`
 
 Recommended command shape:
 
@@ -43,7 +49,7 @@ agent-memory dogfood scheduled-compare \
   --max-decay-risk 0
 ```
 
-Current live result: v0.1.76 live G3f smoke ran two installed-runtime `scheduled-dry-run` reports and compared them read-only; comparison emitted `kind=dogfood_scheduled_dry_run_comparison`, `read_only=true`, `mutated=false`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`. This is expected and means "keep collecting/comparing/tuning reports", not "enable apply mode".
+Current live result: v0.1.76 live G3f smoke ran two installed-runtime `scheduled-dry-run` reports and compared them read-only; comparison emitted `kind=dogfood_scheduled_dry_run_comparison`, `read_only=true`, `mutated=false`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`. The G4-readiness kickoff also wrote `/tmp/agent-memory-g4-readiness/scheduled-compare-20260505T120412Z.json` and `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260505T120519Z.json`; both stayed read-only/no-mutation with conservative continue decisions. This is expected and means "keep collecting/comparing/tuning reports", not "enable apply mode".
 
 Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 
