@@ -1071,6 +1071,163 @@ def test_python_module_cli_dogfood_query_preview_cleanup_preview_reports_legacy_
 
 
 
+def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_signals_without_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "trace-quality.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Trace quality target phrase is TRACE_QUALITY_OK.",
+        metadata={"project": "trace-quality"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Trace quality",
+        predicate="target_phrase",
+        object_ref_or_value="TRACE_QUALITY_OK",
+        evidence_ids=[source.id],
+        scope="project:trace-quality",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for query in (
+        "What is the trace quality phrase? token=SHOULD_NOT_LEAK",
+        "Repeat the trace quality phrase.",
+        "No matching trace quality api key SHOULD_NOT_LEAK",
+    ):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                query,
+                "--preferred-scope",
+                "project:trace-quality",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    with sqlite3.connect(db_path) as connection:
+        observation_ids = [
+            int(row[0])
+            for row in connection.execute("SELECT id FROM retrieval_observations ORDER BY id ASC").fetchall()
+        ]
+    assert len(observation_ids) == 3
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE retrieval_observations SET retrieved_memory_refs_json = '[]', top_memory_ref = NULL WHERE id = ?",
+            (observation_ids[2],),
+        )
+        connection.execute(
+            "UPDATE memory_activations SET activation_kind = 'empty_retrieval', memory_ref = NULL, strength = 0.0 WHERE observation_id = ?",
+            (observation_ids[2],),
+        )
+
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary=None,
+        scope="project:trace-quality",
+        related_memory_refs=[f"fact:{fact.id}"],
+        related_observation_ids=[observation_ids[0]],
+        retention_policy="ephemeral",
+        metadata={
+            "trace_recording": "default_metadata_only",
+            "candidate_policy": "evidence_only",
+            "auto_approved": False,
+            "raw_user_message": "token=SHOULD_NOT_LEAK",
+        },
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="e" * 64,
+        summary="User explicitly asked to remember a trace-quality preference.",
+        scope="project:trace-quality",
+        retention_policy="review",
+        metadata={
+            "remember_intent": "explicit",
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    with sqlite3.connect(db_path) as connection:
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-quality",
+            str(db_path),
+            "--since-hours",
+            "24",
+            "--min-trace-coverage",
+            "0.25",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_trace_quality"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["time_window"]["since_hours"] == 24
+    assert payload["coverage"]["observation_count"] == 3
+    assert payload["coverage"]["trace_count"] == 2
+    assert payload["coverage"]["observations_linked_from_traces"] == 1
+    assert payload["coverage"]["observation_trace_coverage_ratio"] == 0.3333
+    assert payload["retrieval_quality"]["empty_retrieval_count"] == 1
+    assert payload["retrieval_quality"]["empty_retrieval_ratio"] == 0.3333
+    assert payload["retrieval_quality"]["repeated_memory_ref_count"] == 1
+    assert payload["trace_distribution"]["event_kind_counts"] == {"remember_intent": 1, "turn": 1}
+    assert payload["trace_distribution"]["retention_policy_counts"] == {"ephemeral": 1, "review": 1}
+    assert payload["invariants"]["ordinary_trace_metadata_only"]["violation_count"] == 0
+    assert payload["candidate_signals"]["related_memory_ref_count"] == 1
+    assert payload["recommendation"] in {"continue_dogfooding", "ready_for_more_dry_runs", "consider_g4_plan"}
+    assert payload["privacy"]["raw_conversation_content_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "api key" not in result.stdout.lower()
+    assert "token=" not in result.stdout
+    assert "TRACE_QUALITY_OK" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)

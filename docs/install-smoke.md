@@ -191,3 +191,11 @@ agent-memory dogfood query-preview-cleanup <db> --older-than 2030-01-01T00:00:00
 ```
 
 Verify it prints `kind: dogfood_query_preview_cleanup_preview`, `read_only: true`, `mutated: false`, aggregate affected/eligible counts, no sample values, no raw query previews, no `api key`, no token-like values, and no DB mutation. This is a diagnostic preview only; it does not expose an apply mode.
+
+For the G3d trace-quality smoke, run the read-only aggregate trace quality gate:
+
+```bash
+agent-memory dogfood trace-quality <db> --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
+```
+
+Verify it prints `kind: dogfood_trace_quality`, `read_only: true`, `mutated: false`, observation/trace/activation coverage, empty-retrieval ratio, trace distributions, privacy markers, and a recommendation. It must not print raw conversation content, raw queries, trace summaries, prompts, transcripts, `api key`, token-like values, or sample values; it must not create candidates, approve memories, change ranking, or mutate DB rows.
