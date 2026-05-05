@@ -4350,6 +4350,39 @@ def test_hermes_pre_llm_hook_records_secret_like_remember_intent_as_rejected_dia
 
 
 
+def test_hermes_pre_llm_hook_rejects_freeform_api_key_remember_intent_without_raw_text(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-freeform-secret-skip.db"
+    initialize_database(db_path)
+    secret_prompt = "Remember this: api key sk-test-1234567890abcdef belongs to the smoke test"
+
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="freeform-secret-remember-session",
+            cwd=str(tmp_path),
+            extra={"user_message": secret_prompt, "platform": "cli"},
+        ),
+        HermesPreLlmHookOptions(db_path=db_path, preferred_scope="project:g1", record_trace=True),
+    )
+
+    assert "context" in response
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.event_kind == "remember_intent"
+    assert trace.retention_policy == "ephemeral"
+    assert trace.summary is None
+    assert trace.metadata["candidate_policy"] == "rejected"
+    assert trace.metadata["secret_scan"] == "blocked"
+    assert trace.metadata["rejected_reason"] == "secret_like_text"
+    trace_json = trace.model_dump_json()
+    assert "sk-test-1234567890abcdef" not in trace_json
+    assert "api key" not in trace_json
+
+
+
 def test_consolidation_auto_approve_remember_preferences_is_default_dry_run_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-dry-run.db"
     initialize_database(db_path)
