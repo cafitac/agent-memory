@@ -3382,6 +3382,99 @@ def _remember_intent_safety_invariant(connection: sqlite3.Connection) -> dict[st
     }
 
 
+def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    older_than = args.older_than
+    if not db_path.exists():
+        return {
+            "kind": "dogfood_query_preview_cleanup_preview",
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+    with _open_readonly_sqlite(db_path) as connection:
+        if not _table_exists(connection, "retrieval_observations"):
+            return {
+                "kind": "dogfood_query_preview_cleanup_preview",
+                "read_only": True,
+                "mutated": False,
+                "status": "warning",
+                "database": {"path": str(db_path), "exists": True},
+                "affected_count": 0,
+                "eligible_count": 0,
+                "latest_affected_at": None,
+                "latest_eligible_at": None,
+                "cleanup_preview": {
+                    "mutation_required": False,
+                    "recommended_operation": "clear_stored_query_excerpts",
+                    "parameters": {"older_than": older_than},
+                },
+                "privacy": {
+                    "raw_query_preview_included": False,
+                    "sample_values_included": False,
+                    "hash_only": True,
+                },
+                "warnings": ["retrieval_observations_missing"],
+            }
+        affected = connection.execute(
+            """
+            SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
+            FROM retrieval_observations
+            WHERE COALESCE(query_preview, '') <> ''
+            """
+        ).fetchone()
+        eligible = connection.execute(
+            """
+            SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
+            FROM retrieval_observations
+            WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+            """,
+            (older_than,),
+        ).fetchone()
+    affected_count = int(affected["count"])
+    eligible_count = int(eligible["count"])
+    warnings: list[str] = []
+    if affected_count:
+        warnings.append("legacy_stored_query_excerpts_present")
+    if eligible_count:
+        warnings.append("legacy_stored_query_excerpts_eligible_for_cleanup")
+    return {
+        "kind": "dogfood_query_preview_cleanup_preview",
+        "read_only": True,
+        "mutated": False,
+        "status": "healthy" if not warnings else "warning",
+        "database": {"path": str(db_path), "exists": True},
+        "affected_count": affected_count,
+        "eligible_count": eligible_count,
+        "earliest_affected_at": affected["earliest"],
+        "latest_affected_at": affected["latest"],
+        "earliest_eligible_at": eligible["earliest"],
+        "latest_eligible_at": eligible["latest"],
+        "cleanup_preview": {
+            "mutation_required": eligible_count > 0,
+            "recommended_operation": "clear_stored_query_excerpts",
+            "parameters": {"older_than": older_than},
+            "apply_command_available": False,
+            "reason": "diagnostic_only_until_live_DB_cleanup_is_explicitly_approved",
+        },
+        "privacy": {
+            "raw_query_preview_included": False,
+            "sample_values_included": False,
+            "hash_only": True,
+        },
+        "warnings": warnings,
+        "suggested_next_steps": [
+            "Review this read-only preview before any explicit cleanup apply command exists.",
+            "Keep cleanup output aggregate-only; never print stored query excerpt values.",
+        ]
+        if warnings
+        else [],
+    }
+
+
+
 def _storage_health_hermes_payload(*, hermes_config: Path | None, db_path: Path) -> dict[str, Any]:
     if hermes_config is None:
         return {"config_checked": False, "config_exists": None, "agent_memory_hook_present": None}
@@ -4076,6 +4169,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_storage_health_parser.add_argument("db_path", type=Path)
     dogfood_storage_health_parser.add_argument("--hermes-config", type=Path)
+    dogfood_query_preview_cleanup_parser = dogfood_subparsers.add_parser(
+        "query-preview-cleanup",
+        help="Preview read-only aggregate cleanup for legacy stored query excerpts without printing raw values.",
+    )
+    dogfood_query_preview_cleanup_parser.add_argument("db_path", type=Path)
+    dogfood_query_preview_cleanup_parser.add_argument("--older-than", default="9999-12-31T23:59:59")
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -4883,6 +4982,9 @@ def main() -> None:
             return
         if args.dogfood_action == "storage-health":
             print(json.dumps(_dogfood_storage_health_payload(args), indent=2))
+            return
+        if args.dogfood_action == "query-preview-cleanup":
+            print(json.dumps(_dogfood_query_preview_cleanup_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(

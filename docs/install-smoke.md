@@ -183,3 +183,11 @@ agent-memory dogfood storage-health <db> --hermes-config ~/.hermes/config.yaml
 ```
 
 Verify it prints `kind: dogfood_storage_health`, `read_only: true`, `mutated: false`, table counts, latest timestamps, memory status counts, Hermes hook markers, and aggregate invariant checks without raw query values, query preview values, prompts, transcripts, user messages, rejected secret-like text, or raw metadata payloads. Any `status: warning` should be investigated before G4 planning; the command itself must not mutate observations, activations, traces, facts, procedures, episodes, relations, retrieval ranking, or hook config.
+
+If the storage-health report warns about legacy stored query excerpts, run the read-only cleanup preview:
+
+```bash
+agent-memory dogfood query-preview-cleanup <db> --older-than 2030-01-01T00:00:00
+```
+
+Verify it prints `kind: dogfood_query_preview_cleanup_preview`, `read_only: true`, `mutated: false`, aggregate affected/eligible counts, no sample values, no raw query previews, no `api key`, no token-like values, and no DB mutation. This is a diagnostic preview only; it does not expose an apply mode.

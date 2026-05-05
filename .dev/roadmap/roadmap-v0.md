@@ -191,10 +191,16 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: dry-run is default; failures are non-blocking; output can be reviewed before enabling mutations.
   - Status: completed through v0.1.66-v0.1.69, then extended with remember-intent diagnostics and ordinary trace live-path hardening through v0.1.71.
 
-- [~] PR G3c: Add read-only dogfood storage-health report
+- [x] PR G3c: Add read-only dogfood storage-health report
   - Goal: make live Hermes/agent-memory storage health inspectable without ad hoc SQL or raw content exposure.
   - Scope: one-command report for table counts, latest timestamps, runtime/config marker checks, query-preview/hash/privacy invariants, orphan/invalid-JSON checks, and trace metadata shape counts.
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, works on temp fixtures and the live DB, and flags observation/activation-without-trace regressions before G4 planning.
+  - Status: completed and released in v0.1.72 via PR #127/#128.
+
+- [~] PR G3c-followup: Add read-only legacy query-preview cleanup preview
+  - Goal: make the storage-health `stored_query_excerpt` warning actionable without ad hoc SQL or raw query-preview leakage.
+  - Scope: `agent-memory dogfood query-preview-cleanup <db> --older-than <timestamp>` reports aggregate affected/eligible counts, timestamps, privacy markers, and a recommended operation marker; no apply mode yet.
+  - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, no sample values, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
