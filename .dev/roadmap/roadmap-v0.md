@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.75`, including current dogfood state and next recommended slices.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.76`, including current dogfood state and next recommended slices.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -215,10 +215,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke writes a report artifact.
   - Status: completed and released in v0.1.75 via PR #135/#136; first live quality gate recommends continuing scheduled dogfood before G4.
 
-- [ ] PR G3f: Collect scheduled dry-run trend reports
+- [x] PR G3f: Collect scheduled dry-run trend reports
   - Goal: compare multiple G3e report artifacts over time before drafting apply-mode behavior.
   - Scope: `agent-memory dogfood scheduled-compare --report <path> --report <path> --output <path>` emits a read-only `dogfood_scheduled_dry_run_comparison` payload over saved scheduled reports, including per-report hashes and aggregate counts/ratios/warning names only.
   - Acceptance: no raw content, no embedded raw report bodies, no mutation, no default retrieval change; output explains whether signals are stable enough for a separate G4 plan or blocked by warnings/decay risk/legacy cleanup/noise.
+  - Status: completed and released in v0.1.76 via PR #138/#139; first live comparison recommends continuing scheduled report collection before G4.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.

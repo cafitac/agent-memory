@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 18:40 KST
+Last updated: 2026-05-05 19:24 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.75 scheduled-dry-run dogfood release.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.76 scheduled-compare dogfood release.
 
 Use it when the user asks:
 
@@ -34,38 +34,38 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.75`
+Latest completed release: `v0.1.76`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.75`
-- npm: `@cafitac/agent-memory@0.1.75`
-- PyPI: `cafitac-agent-memory==0.1.75`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.76`
+- npm: `@cafitac/agent-memory@0.1.76`
+- PyPI: `cafitac-agent-memory==0.1.76`
 
 Local Hermes runtime:
 
-- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`
-- Hermes config backup before v0.1.75 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.75-20260505183834`
+- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`
+- Hermes config backup before v0.1.76 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.76-20260505191946`
 - `hermes hooks doctor` reported the agent-memory hook healthy after approval.
 
-v0.1.75 added `dogfood scheduled-dry-run`, a cron-friendly read-only bundle for repeated G3e dogfood reporting before any G4 apply-mode plan.
+v0.1.76 added `dogfood scheduled-compare`, a read-only comparison over repeated G3e/G3f scheduled report artifacts before any G4 apply-mode plan.
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-05 18:37 KST, before the v0.1.75 live chat approval smoke:
+Read-only live DB check at roughly 2026-05-05 19:24 KST, after the v0.1.76 live chat approval smoke:
 
-- `retrieval_observations`: 784, latest 2026-05-05 09:37:01 UTC
-- `memory_activations`: 689, latest 2026-05-05 09:37:01 UTC
-- `experience_traces`: 101, latest 2026-05-05 09:37:01 UTC
-- `facts`: 3, latest 2026-04-30 17:26:00 UTC
+- `retrieval_observations`: 803, latest 2026-05-05 10:20:22 UTC
+- `memory_activations`: 708, latest 2026-05-05 10:20:22 UTC
+- `experience_traces`: 118, latest 2026-05-05 10:20:22 UTC
+- `facts`: 3, latest 2026-05-05 10:20:22 UTC
 - `procedures`: 0
 - `episodes`: 0
 
-Recent live Hermes v0.1.75 E2E smoke:
+Recent live Hermes v0.1.76 E2E smoke:
 
 - `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
-- `hermes hooks doctor` reports all shell hooks healthy with the v0.1.75 pinned runtime path.
-- The installed runtime's `dogfood scheduled-dry-run` live smoke wrote `/tmp/agent-memory-v0175-scheduled-live.json` and stdout JSON with `read_only=true`, `mutated=false`, and no raw-content/sample privacy flags.
+- `hermes hooks doctor` reports all shell hooks healthy with the v0.1.76 pinned runtime path.
+- The installed runtime's G3f live smoke wrote two scheduled reports and `/tmp/agent-memory-v0176-g3f/compare.json` with `read_only=true`, `mutated=false`, `report_count=2`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`.
 
 Privacy/integrity signals:
 
@@ -187,6 +187,7 @@ Completed:
 - v0.1.72/v0.1.73: read-only storage-health and legacy query-preview cleanup preview reports.
 - v0.1.74: read-only trace-quality report.
 - v0.1.75: cron-friendly `dogfood scheduled-dry-run` bundle.
+- v0.1.76: read-only `dogfood scheduled-compare` over saved scheduled report artifacts.
 
 Current behavior:
 
@@ -353,6 +354,8 @@ Acceptance:
 
 ### G3f: Collect and compare scheduled dry-run reports
 
+Status: completed and released in v0.1.76 via PR #138/#139. Published GitHub Release/npm/PyPI, installed runtime `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`, published npm/PyPI/uvx/npm smokes, live DB scheduled-compare smoke, Hermes E2E, and `hermes hooks doctor` passed. The first comparison decision remains `continue_scheduled_report_collection_before_g4`, so G4 apply-mode is still not the next implementation step.
+
 Goal:
 
 Run the new G3e bundle repeatedly from the live Hermes DB and compare the aggregate quality gate, warning set, candidate counts, trace coverage, and decay-risk signals over time before any G4 apply-mode plan.
@@ -460,7 +463,7 @@ git tag --sort=-version:refname | head -5
 2. Verify runtime state:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY
@@ -469,7 +472,7 @@ HOME=/Users/reddit hermes hooks doctor
 
 3. Do a raw-content-safe live DB health check if the user asks whether data is still accumulating.
 
-4. If implementing, start by collecting or summarizing G3e `dogfood scheduled-dry-run` reports unless the user explicitly chooses another next slice.
+4. If implementing, keep collecting/comparing G3f scheduled reports or draft a separate G4 plan only after the report trend justifies it; do not implement apply mode directly from this checkpoint.
 
 5. Preserve local-only untracked artifacts:
 
