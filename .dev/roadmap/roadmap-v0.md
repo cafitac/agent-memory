@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.71`, including current dogfood state and next recommended slices.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.75`, including current dogfood state and next recommended slices.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -209,10 +209,16 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
   - Status: completed and released in v0.1.74 via PR #132/#133.
 
-- [ ] PR G3e: Add scheduled dry-run dogfood bundle
+- [x] PR G3e: Add scheduled dry-run dogfood bundle
   - Goal: run storage-health, trace-quality, remember-intent, and background consolidation dry-run together so multiple scheduled reports can guide the G4 decision.
   - Scope: `agent-memory dogfood scheduled-dry-run <db> --output <path>` emits one `dogfood_scheduled_dry_run` JSON payload with nested read-only reports, top-level privacy/no-mutation/default-retrieval markers, thresholds, and one conservative quality gate.
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke writes a report artifact.
+  - Status: completed and released in v0.1.75 via PR #135/#136; first live quality gate recommends continuing scheduled dogfood before G4.
+
+- [ ] PR G3f: Collect scheduled dry-run trend reports
+  - Goal: compare multiple G3e report artifacts over time before drafting apply-mode behavior.
+  - Scope: timestamped report artifacts and optional read-only trend summary over counts/ratios/warnings only.
+  - Acceptance: no raw content, no mutation, no default retrieval change; output explains whether signals are improving, flat, or blocked by legacy cleanup/noise.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.

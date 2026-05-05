@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 18:03 KST
+Last updated: 2026-05-05 18:40 KST
 
 ## Trigger for the next session
 
@@ -16,18 +16,18 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.74`: PR #132 (read-only `dogfood trace-quality`), release-sync PR #133, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health, query-preview cleanup preview, and trace-quality now make live DB invariants, legacy stored-query-excerpt cleanup scope, and trace usefulness inspectable without ad hoc SQL, raw query leakage, or mutation. The active next PR-sized slice is G3e: add `dogfood scheduled-dry-run`, a cron-friendly read-only bundle that runs storage-health, trace-quality, remember-intent, and background consolidation dry-run together before any G4 apply-mode planning.
+agent-memory is currently verified through `v0.1.75`: PR #135 (read-only `dogfood scheduled-dry-run` bundle), release-sync PR #136, GitHub Release, npm, PyPI, published install smoke from real npm/PyPI/uvx channels, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. G3e now provides a cron-friendly read-only bundle over storage-health, trace-quality, remember-intent, and background consolidation dry-run before any G4 apply-mode planning.
 
 ## Current next slice
 
-Next slice: G3e scheduled dry-run dogfood bundle.
+Next slice: collect multiple G3e scheduled dry-run reports before G4 planning.
 
-Goal: collect several read-only background consolidation and dogfood quality reports over time so the decision to continue, tune, or plan G4 is data-backed.
+Goal: run the new read-only bundle repeatedly over real dogfood data so the decision to continue dogfooding, tune thresholds, or draft a separate G4 apply-mode plan is data-backed.
 
-Candidate command shape:
+Recommended command shape:
 
 ```bash
-agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
+/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
   --output /Users/reddit/.agent-memory/reports/scheduled-dry-run-YYYYMMDD-HHMMSS.json \
   --since-hours 24 \
   --min-trace-coverage 0.25 \
@@ -36,13 +36,7 @@ agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
   --max-decay-risk 0
 ```
 
-Expected scope:
-
-- run read-only scheduled report generation with lock safety;
-- bundle storage-health, trace-quality, remember-intent, and background dry-run diagnostics;
-- write repeatable report artifacts over time;
-- explain whether candidate signals remain sparse/noisy or are becoming stable;
-- keep privacy checks clean.
+Current live result: the first v0.1.75 live G3e smoke completed read-only with `mutated=false`, but the quality gate returned `continue_scheduled_dry_run_dogfooding_before_g4` because storage-health still sees legacy stored query excerpts, trace-quality still needs more dogfooding, decay risk is above the threshold, and background quality warnings remain. This is expected and means "keep collecting/tuning reports", not "enable apply mode".
 
 Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 
@@ -55,8 +49,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged release-sync PR: #133 `chore: release v0.1.74 [skip release]`.
-- Latest completed release: `v0.1.74`.
+- Latest merged feature PR: #135 `feat: add dogfood scheduled dry-run bundle`.
+- Latest merged release-sync PR: #136 `chore: release v0.1.75 [skip release]`.
+- Latest completed release: `v0.1.75`.
 
 Expected GitHub identity:
 
@@ -67,24 +62,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.74`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.74`
-- npm package: `@cafitac/agent-memory@0.1.74`
-- PyPI package: `cafitac-agent-memory==0.1.74`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.74/.venv/bin/agent-memory`
+- `v0.1.75`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.75`
+- npm package: `@cafitac/agent-memory@0.1.75`
+- PyPI package: `cafitac-agent-memory==0.1.75`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`
 - Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.74 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.74-20260505180302`
+- Hermes config backup before v0.1.75 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.75-20260505183834`
 - `hermes hooks doctor` reports all shell hooks healthy.
 
-Latest raw-content-safe live DB snapshot, checked 2026-05-05 18:03 KST:
+Latest raw-content-safe live DB snapshot, checked 2026-05-05 18:37 KST:
 
-- `retrieval_observations`: 772, latest `2026-05-05 09:03:31` UTC
-- `memory_activations`: 677, latest `2026-05-05 09:03:31` UTC
-- `experience_traces`: 91, latest `2026-05-05 09:03:31` UTC
+- `retrieval_observations`: 784, latest `2026-05-05 09:37:01` UTC before the v0.1.75 live chat approval smoke
+- `memory_activations`: 689, latest `2026-05-05 09:37:01` UTC before the v0.1.75 live chat approval smoke
+- `experience_traces`: 101, latest `2026-05-05 09:37:01` UTC before the v0.1.75 live chat approval smoke
 - `facts`: 3, latest `2026-04-30 17:26:00` UTC
 - `procedures`: 0
 - `episodes`: 0
-- `relations`: 0
 - legacy non-empty `query_preview` rows: 70, latest `2026-05-01 12:57:54` UTC
 - non-empty `query_preview` rows since the v0.1.69 privacy-safe live path window: 0
 
@@ -97,6 +91,34 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.75 scheduled-dry-run release
+
+PR #135 `feat: add dogfood scheduled dry-run bundle` merged and released through release-sync PR #136.
+
+Completed behavior:
+
+- New command: `agent-memory dogfood scheduled-dry-run <db> --output <path> --since-hours <hours>`.
+- The report opens SQLite read-only and emits `kind=dogfood_scheduled_dry_run`, `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`.
+- It bundles `storage_health`, `trace_quality`, `remember_intent`, and inline `memory_consolidation_background_dry_run` reports under one top-level `quality_gate`.
+- It writes the same JSON to `--output` when provided, making it cron-friendly.
+- It never prints raw conversation content, raw queries, raw trace summaries, prompts, transcripts, API keys, token-like values, or sample values.
+- It does not create candidates/approvals, mutate rows, alter retrieval ranking, clean legacy query previews, or enable apply mode.
+
+Verification completed:
+
+- Focused scheduled-dry-run test passed.
+- `tests/test_cli.py` passed.
+- Full `tests/` passed locally before PR merge.
+- Targeted ruff and `git diff --check` passed.
+- PR #135 CI passed and merged.
+- PR #136 release-sync validation CI passed and merged.
+- Main CI after PR #135 and after PR #136 passed.
+- GitHub Release `v0.1.75`, npm `@cafitac/agent-memory@0.1.75`, and PyPI `cafitac-agent-memory==0.1.75` verified.
+- Published install smokes passed locally for npm, PyPI fresh venv, and `uvx --refresh`; GitHub workflow dispatch for `published-install-smoke.yml` returned HTTP 403 with the current token, so local real-channel smoke was used.
+- Hermes runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
+- `hermes hooks doctor` reports all shell hooks healthy.
 
 ## Completed v0.1.74 trace-quality release
 

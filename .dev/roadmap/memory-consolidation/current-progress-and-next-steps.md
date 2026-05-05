@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 11:46 KST
+Last updated: 2026-05-05 18:40 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.71 remember-intent diagnostics and Hermes dogfood release.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.75 scheduled-dry-run dogfood release.
 
 Use it when the user asks:
 
@@ -34,39 +34,38 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.71`
+Latest completed release: `v0.1.75`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.71`
-- npm: `@cafitac/agent-memory@0.1.71`
-- PyPI: `cafitac-agent-memory==0.1.71`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.75`
+- npm: `@cafitac/agent-memory@0.1.75`
+- PyPI: `cafitac-agent-memory==0.1.75`
 
 Local Hermes runtime:
 
-- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`
-- Hermes config backup before v0.1.71 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.71-20260505111920`
+- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`
+- Hermes config backup before v0.1.75 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.75-20260505183834`
 - `hermes hooks doctor` reported the agent-memory hook healthy after approval.
 
-v0.1.69 fixed the v0.1.68 live-path issue where ordinary metadata-only trace recording could be skipped when the rendered memory context was empty. The trace write now happens before the empty-context return, while hook output still returns `{}` when no memory context is injected.
+v0.1.75 added `dogfood scheduled-dry-run`, a cron-friendly read-only bundle for repeated G3e dogfood reporting before any G4 apply-mode plan.
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-05 11:46 KST:
+Read-only live DB check at roughly 2026-05-05 18:37 KST, before the v0.1.75 live chat approval smoke:
 
-- `retrieval_observations`: 725, latest 2026-05-05 02:46:27 UTC
-- `memory_activations`: 630, latest 2026-05-05 02:46:27 UTC
-- `experience_traces`: 50, latest 2026-05-05 02:43:42 UTC
+- `retrieval_observations`: 784, latest 2026-05-05 09:37:01 UTC
+- `memory_activations`: 689, latest 2026-05-05 09:37:01 UTC
+- `experience_traces`: 101, latest 2026-05-05 09:37:01 UTC
 - `facts`: 3, latest 2026-04-30 17:26:00 UTC
 - `procedures`: 0
 - `episodes`: 0
-- `relations`: 0
 
-Recent live Hermes v0.1.71 E2E smoke:
+Recent live Hermes v0.1.75 E2E smoke:
 
-- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool` returned `OK`.
-- The live DB advanced by +1 retrieval observation, +1 activation, and +1 metadata-only ordinary trace.
-- Approved `facts` stayed unchanged, which is expected under the conservative policy.
+- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
+- `hermes hooks doctor` reports all shell hooks healthy with the v0.1.75 pinned runtime path.
+- The installed runtime's `dogfood scheduled-dry-run` live smoke wrote `/tmp/agent-memory-v0175-scheduled-live.json` and stdout JSON with `read_only=true`, `mutated=false`, and no raw-content/sample privacy flags.
 
 Privacy/integrity signals:
 
@@ -74,9 +73,7 @@ Privacy/integrity signals:
 - Recent observations keep `query_preview` empty.
 - Legacy non-empty `query_preview` rows exist from old versions: 70 rows, latest 2026-05-01 12:57:54 UTC.
 - v0.1.69-and-later non-empty `query_preview`: 0.
-- Latest ordinary traces are metadata-only: `event_kind=turn`, `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, `auto_approved=false`.
-- Latest safe explicit remember-intent traces keep sanitized summaries only.
-- Latest secret-like explicit remember-intent traces are rejected diagnostics with `summary=NULL` and `rejected_reason=secret_like_text`.
+- Ordinary traces remain metadata-only: `event_kind=turn`, `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, `auto_approved=false`.
 
 Interpretation:
 
@@ -84,7 +81,7 @@ Interpretation:
 - Observation/activation evidence is advancing.
 - Ordinary metadata-only traces are advancing.
 - Approved long-term facts are not changing during ordinary conversation, which is expected under the conservative policy.
-- The system is not yet doing automatic long-term memory approval from ordinary conversation.
+- The first G3e quality gate did not pass: it recommends continuing scheduled dry-run dogfooding before any G4 plan because storage-health, trace-quality, decay-risk, and background quality warnings still need more evidence or cleanup planning.
 
 ## What is intentionally not happening yet
 
@@ -187,6 +184,9 @@ Completed:
 - G3b: ordinary Hermes turns create metadata-only traces by default.
 - v0.1.69 hotfix: no-context ordinary turns still record metadata-only traces.
 - v0.1.70/v0.1.71: debuggable explicit remember-intent diagnostics, Korean prefixes, and freeform secret-like rejection hardening.
+- v0.1.72/v0.1.73: read-only storage-health and legacy query-preview cleanup preview reports.
+- v0.1.74: read-only trace-quality report.
+- v0.1.75: cron-friendly `dogfood scheduled-dry-run` bundle.
 
 Current behavior:
 
@@ -198,7 +198,7 @@ Current behavior:
 
 The next safe move is not G4 apply mode.
 
-The next safe move is to measure live trace/evidence quality in a reusable, one-command, read-only way.
+The next safe move is to collect several G3e scheduled dry-run reports over time, then decide whether to keep dogfooding, tune thresholds, or write a separate G4 apply-mode plan.
 
 Why:
 
@@ -226,7 +226,7 @@ agent-memory dogfood storage-health ~/.agent-memory/memory.db \
 Current implementation status:
 
 - Completed and released in v0.1.72 via PR #127/#128.
-- Live Hermes runtime points to `/Users/reddit/.agent-memory/runtime/v0.1.72/.venv/bin/agent-memory`.
+- At release time, the Hermes runtime was updated to `/Users/reddit/.agent-memory/runtime/v0.1.72/.venv/bin/agent-memory`; the current runtime is recorded in the top-level verified state above.
 - Live DB smoke reported `kind: dogfood_storage_health`, `read_only=true`, `mutated=false`, Hermes hook present, configured DB path present, and no raw-content marker leakage. The live DB status was `warning` because legacy non-empty stored query excerpts still exist and some old ordinary turn traces predate the final metadata-only shape.
 
 Scope:
@@ -317,7 +317,7 @@ Acceptance:
 
 ### G3e: Add cron-friendly `dogfood scheduled-dry-run` bundle
 
-Status: in progress in the next PR after v0.1.74.
+Status: completed and released in v0.1.75 via PR #135/#136. Published GitHub Release/npm/PyPI, installed runtime `/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/agent-memory`, published npm/PyPI/uvx smokes, live DB smoke, Hermes E2E, and `hermes hooks doctor` passed. The first live quality gate returned `continue_scheduled_dry_run_dogfooding_before_g4`, so G4 apply-mode is still not the next implementation step.
 
 Goal:
 
@@ -351,7 +351,28 @@ Acceptance:
 - privacy checks stay clean;
 - no cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking change.
 
-### G3f: Optional legacy privacy cleanup preview
+### G3f: Collect and compare scheduled dry-run reports
+
+Goal:
+
+Run the new G3e bundle repeatedly from the live Hermes DB and compare the aggregate quality gate, warning set, candidate counts, trace coverage, and decay-risk signals over time before any G4 apply-mode plan.
+
+Scope:
+
+- save timestamped `dogfood scheduled-dry-run` JSON artifacts;
+- compare only counts, timestamps, booleans, ratios, hashes, IDs, and warning names;
+- no raw content samples;
+- no cleanup/apply mutation;
+- optionally add a read-only trend-summary command if manual comparison becomes repetitive.
+
+Acceptance:
+
+- multiple reports complete read-only with `mutated=false`;
+- warning trends are explainable;
+- decision remains conservative unless quality signals improve;
+- any G4 plan is a separate RED-tested PR, not bundled into reporting.
+
+### G3g: Optional legacy privacy cleanup apply plan
 
 Goal:
 
@@ -427,7 +448,7 @@ git tag --sort=-version:refname | head -5
 2. Verify runtime state:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.75/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY
@@ -436,7 +457,7 @@ HOME=/Users/reddit hermes hooks doctor
 
 3. Do a raw-content-safe live DB health check if the user asks whether data is still accumulating.
 
-4. If implementing, start with G3d `dogfood trace-quality` unless the user explicitly chooses another next slice.
+4. If implementing, start by collecting or summarizing G3e `dogfood scheduled-dry-run` reports unless the user explicitly chooses another next slice.
 
 5. Preserve local-only untracked artifacts:
 
