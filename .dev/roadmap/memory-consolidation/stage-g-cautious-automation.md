@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Planned after G4-plan unless the user explicitly chooses this safer cleanup slice first.
+Status: Implemented in PR #142 as the first narrow mutation slice. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 

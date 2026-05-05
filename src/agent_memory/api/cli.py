@@ -3934,22 +3934,175 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 
+def _query_preview_cleanup_privacy_payload() -> dict[str, bool]:
+    return {
+        "raw_query_preview_included": False,
+        "sample_values_included": False,
+        "hash_only": True,
+    }
+
+
+def _query_preview_cleanup_counts(connection: sqlite3.Connection, *, older_than: str) -> tuple[sqlite3.Row, sqlite3.Row]:
+    affected = connection.execute(
+        """
+        SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
+        FROM retrieval_observations
+        WHERE COALESCE(query_preview, '') <> ''
+        """
+    ).fetchone()
+    eligible = connection.execute(
+        """
+        SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
+        FROM retrieval_observations
+        WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+        """,
+        (older_than,),
+    ).fetchone()
+    return affected, eligible
+
+
 def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     older_than = args.older_than
+    apply_cleanup = bool(getattr(args, "apply", False))
+    actor = getattr(args, "actor", None)
+    reason = getattr(args, "reason", None)
+    kind = "dogfood_query_preview_cleanup_apply" if apply_cleanup else "dogfood_query_preview_cleanup_preview"
+    if apply_cleanup and not actor:
+        raise ValueError("dogfood query-preview-cleanup --apply requires --actor")
+    if apply_cleanup and not reason:
+        raise ValueError("dogfood query-preview-cleanup --apply requires --reason")
     if not db_path.exists():
         return {
-            "kind": "dogfood_query_preview_cleanup_preview",
-            "read_only": True,
+            "kind": kind,
+            "read_only": not apply_cleanup,
             "mutated": False,
             "status": "error",
             "database": {"path": str(db_path), "exists": False},
             "warnings": ["database_missing"],
         }
+    if apply_cleanup:
+        with connect(db_path) as connection:
+            if not _table_exists(connection, "retrieval_observations"):
+                return {
+                    "kind": kind,
+                    "read_only": False,
+                    "mutated": False,
+                    "status": "warning",
+                    "database": {"path": str(db_path), "exists": True},
+                    "eligible_count": 0,
+                    "cleared_count": 0,
+                    "remaining_affected_count": 0,
+                    "latest_eligible_at": None,
+                    "apply": {"actor": actor, "reason_sha256": hashlib.sha256(reason.encode()).hexdigest()},
+                    "privacy": _query_preview_cleanup_privacy_payload(),
+                    "warnings": ["retrieval_observations_missing"],
+                }
+            affected_before, eligible_before = _query_preview_cleanup_counts(connection, older_than=older_than)
+            eligible_ids = [
+                int(row["id"])
+                for row in connection.execute(
+                    """
+                    SELECT id
+                    FROM retrieval_observations
+                    WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+                    ORDER BY id
+                    """,
+                    (older_than,),
+                ).fetchall()
+            ]
+            if eligible_ids:
+                connection.execute(
+                    """
+                    UPDATE retrieval_observations
+                    SET query_preview = NULL
+                    WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+                    """,
+                    (older_than,),
+                )
+            affected_after, _eligible_after = _query_preview_cleanup_counts(connection, older_than=older_than)
+            reason_sha256 = hashlib.sha256(reason.encode()).hexdigest()
+            eligible_ids_sha256 = hashlib.sha256(",".join(str(value) for value in eligible_ids).encode()).hexdigest()
+            audit_metadata = {
+                "operation": "clear_stored_query_excerpts",
+                "actor": actor,
+                "reason_sha256": reason_sha256,
+                "older_than": older_than,
+                "eligible_count": int(eligible_before["count"]),
+                "cleared_count": len(eligible_ids),
+                "affected_before_count": int(affected_before["count"]),
+                "remaining_affected_count": int(affected_after["count"]),
+                "eligible_ids_sha256": eligible_ids_sha256,
+                "raw_query_preview_included": False,
+                "sample_values_included": False,
+            }
+            audit_content_sha256 = hashlib.sha256(json.dumps(audit_metadata, sort_keys=True).encode()).hexdigest()
+            cursor = connection.execute(
+                """
+                INSERT INTO experience_traces (
+                    surface,
+                    event_kind,
+                    content_sha256,
+                    summary,
+                    salience,
+                    user_emphasis,
+                    related_memory_refs_json,
+                    related_observation_ids_json,
+                    retention_policy,
+                    metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "dogfood",
+                    "dogfood_query_preview_cleanup_apply",
+                    audit_content_sha256,
+                    None,
+                    0.0,
+                    0.0,
+                    json.dumps([]),
+                    json.dumps([]),
+                    "review",
+                    json.dumps(audit_metadata, sort_keys=True),
+                ),
+            )
+            audit_trace_id = int(cursor.lastrowid)
+        cleared_count = len(eligible_ids)
+        remaining_affected_count = int(affected_after["count"])
+        warnings: list[str] = []
+        if remaining_affected_count:
+            warnings.append("legacy_stored_query_excerpts_remain_after_cleanup_window")
+        return {
+            "kind": kind,
+            "read_only": False,
+            "mutated": cleared_count > 0,
+            "status": "healthy" if not warnings else "warning",
+            "database": {"path": str(db_path), "exists": True},
+            "affected_count": int(affected_before["count"]),
+            "eligible_count": int(eligible_before["count"]),
+            "cleared_count": cleared_count,
+            "remaining_affected_count": remaining_affected_count,
+            "earliest_eligible_at": eligible_before["earliest"],
+            "latest_eligible_at": eligible_before["latest"],
+            "apply": {
+                "actor": actor,
+                "reason_sha256": reason_sha256,
+                "audit_trace_id": audit_trace_id,
+                "eligible_ids_sha256": eligible_ids_sha256,
+                "operation": "clear_stored_query_excerpts",
+                "parameters": {"older_than": older_than},
+            },
+            "privacy": _query_preview_cleanup_privacy_payload(),
+            "warnings": warnings,
+            "suggested_next_steps": [
+                "Run dogfood storage-health and query-preview-cleanup preview after apply to confirm only intended legacy rows remain.",
+                "Keep cleanup output aggregate-only; never print stored query excerpt values.",
+            ],
+        }
     with _open_readonly_sqlite(db_path) as connection:
         if not _table_exists(connection, "retrieval_observations"):
             return {
-                "kind": "dogfood_query_preview_cleanup_preview",
+                "kind": kind,
                 "read_only": True,
                 "mutated": False,
                 "status": "warning",
@@ -3963,28 +4116,10 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                     "recommended_operation": "clear_stored_query_excerpts",
                     "parameters": {"older_than": older_than},
                 },
-                "privacy": {
-                    "raw_query_preview_included": False,
-                    "sample_values_included": False,
-                    "hash_only": True,
-                },
+                "privacy": _query_preview_cleanup_privacy_payload(),
                 "warnings": ["retrieval_observations_missing"],
             }
-        affected = connection.execute(
-            """
-            SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
-            FROM retrieval_observations
-            WHERE COALESCE(query_preview, '') <> ''
-            """
-        ).fetchone()
-        eligible = connection.execute(
-            """
-            SELECT COUNT(*) AS count, MIN(created_at) AS earliest, MAX(created_at) AS latest
-            FROM retrieval_observations
-            WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
-            """,
-            (older_than,),
-        ).fetchone()
+        affected, eligible = _query_preview_cleanup_counts(connection, older_than=older_than)
     affected_count = int(affected["count"])
     eligible_count = int(eligible["count"])
     warnings: list[str] = []
@@ -3993,7 +4128,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
     if eligible_count:
         warnings.append("legacy_stored_query_excerpts_eligible_for_cleanup")
     return {
-        "kind": "dogfood_query_preview_cleanup_preview",
+        "kind": kind,
         "read_only": True,
         "mutated": False,
         "status": "healthy" if not warnings else "warning",
@@ -4008,17 +4143,13 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
             "mutation_required": eligible_count > 0,
             "recommended_operation": "clear_stored_query_excerpts",
             "parameters": {"older_than": older_than},
-            "apply_command_available": False,
-            "reason": "diagnostic_only_until_live_DB_cleanup_is_explicitly_approved",
+            "apply_command_available": True,
+            "apply_guardrails": ["--apply", "--actor", "--reason"],
         },
-        "privacy": {
-            "raw_query_preview_included": False,
-            "sample_values_included": False,
-            "hash_only": True,
-        },
+        "privacy": _query_preview_cleanup_privacy_payload(),
         "warnings": warnings,
         "suggested_next_steps": [
-            "Review this read-only preview before any explicit cleanup apply command exists.",
+            "Review this read-only preview before running the explicit cleanup apply command.",
             "Keep cleanup output aggregate-only; never print stored query excerpt values.",
         ]
         if warnings
@@ -4727,6 +4858,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_query_preview_cleanup_parser.add_argument("db_path", type=Path)
     dogfood_query_preview_cleanup_parser.add_argument("--older-than", default="9999-12-31T23:59:59")
+    dogfood_query_preview_cleanup_parser.add_argument("--apply", action="store_true")
+    dogfood_query_preview_cleanup_parser.add_argument("--actor")
+    dogfood_query_preview_cleanup_parser.add_argument("--reason")
     dogfood_trace_quality_parser = dogfood_subparsers.add_parser(
         "trace-quality",
         help="Build a read-only aggregate trace quality report before G4 automation planning.",

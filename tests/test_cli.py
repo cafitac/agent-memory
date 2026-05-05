@@ -1071,6 +1071,133 @@ def test_python_module_cli_dogfood_query_preview_cleanup_preview_reports_legacy_
 
 
 
+def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_reason_and_clears_eligible_rows_without_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "query-preview-cleanup-apply.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Query preview cleanup apply target phrase is CLEANUP_APPLY_OK.",
+        metadata={"project": "query-preview-cleanup-apply"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Query preview cleanup apply",
+        predicate="target_phrase",
+        object_ref_or_value="CLEANUP_APPLY_OK",
+        evidence_ids=[source.id],
+        scope="project:query-preview-cleanup-apply",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    for query in ("first token=SHOULD_NOT_LEAK", "second api key SHOULD_NOT_LEAK"):
+        retrieve_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "retrieve",
+                str(db_path),
+                query,
+                "--preferred-scope",
+                "project:query-preview-cleanup-apply",
+                "--observe",
+                "cli-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("UPDATE retrieval_observations SET query_preview = ?, created_at = ? WHERE id = 1", ("token=SHOULD_NOT_LEAK", "2026-01-01 00:00:00"))
+        connection.execute("UPDATE retrieval_observations SET query_preview = ?, created_at = ? WHERE id = 2", ("api key SHOULD_NOT_LEAK", "2026-01-03 00:00:00"))
+
+    missing_reason_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--actor",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_reason_result.returncode != 0
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "remove legacy query preview values after read-only preview",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["kind"] == "dogfood_query_preview_cleanup_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["eligible_count"] == 1
+    assert payload["cleared_count"] == 1
+    assert payload["remaining_affected_count"] == 1
+    assert payload["apply"]["actor"] == "cli-test"
+    assert payload["apply"]["reason_sha256"]
+    assert payload["apply"]["audit_trace_id"]
+    assert payload["privacy"]["raw_query_preview_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in apply_result.stdout
+    assert "api key" not in apply_result.stdout.lower()
+    assert "token=" not in apply_result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT id, query_preview FROM retrieval_observations ORDER BY id"
+        ).fetchall()
+        audit = connection.execute(
+            "SELECT event_kind, summary, metadata_json FROM experience_traces ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert rows == [(1, None), (2, "api key SHOULD_NOT_LEAK")]
+    assert audit[0] == "dogfood_query_preview_cleanup_apply"
+    assert audit[1] is None
+    audit_metadata = json.loads(audit[2])
+    assert audit_metadata["cleared_count"] == 1
+    assert audit_metadata["eligible_count"] == 1
+    assert audit_metadata["reason_sha256"] == payload["apply"]["reason_sha256"]
+    assert "SHOULD_NOT_LEAK" not in audit[2]
+    assert "api key" not in audit[2].lower()
+    assert "token=" not in audit[2]
+
+
 def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_signals_without_leaks(
     tmp_path: Path,
 ) -> None:
