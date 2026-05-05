@@ -2482,7 +2482,7 @@ def _scheduled_dry_run_quality_decision(
     max_decay_risk: int,
 ) -> dict[str, Any]:
     blocked_reasons: list[str] = []
-    if storage_health.get("status") not in {"ok", "pass"}:
+    if storage_health.get("status") not in {"ok", "pass", "healthy"}:
         blocked_reasons.append("storage_health_not_clean")
     if trace_quality.get("recommendation") != "consider_g4_plan":
         blocked_reasons.append("trace_quality_needs_more_dogfooding")

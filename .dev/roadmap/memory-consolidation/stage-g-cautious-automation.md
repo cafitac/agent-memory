@@ -208,7 +208,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 
 ## PR G4b: Add second narrow mutation for ordinary trace metadata default cleanup
 
-Status: In progress in `feat/ordinary-trace-metadata-cleanup`. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #145, released in `v0.1.78` via PR #146, and applied once to the live DB. Follow-up branch `fix/scheduled-dry-run-storage-health-healthy` fixes the scheduled-dry-run quality gate to treat storage-health status `healthy` as clean. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -228,8 +228,9 @@ Normalize legacy ordinary `turn` traces that are already metadata-only but are m
 ### Current live preview
 
 - Source-checkout read-only preview against `/Users/reddit/.agent-memory/memory.db` found 2 aggregate violations on 1 fixable legacy ordinary `turn` row.
-- Violation counts: `candidate_policy_not_evidence_only=1`, `auto_approved_not_false=1`.
-- Preview emitted `read_only=true`, `mutated=false`, and raw-content privacy flags false.
+- Live v0.1.78 apply normalized 1 fixable row with audit trace id 150.
+- After preview reports 0 ordinary metadata-only violations and storage-health reports `status=healthy` with no warnings.
+- The follow-up quality-gate fix removes stale `storage_health_not_clean` blocked reasons when storage-health reports `healthy`.
 
 ## PR G4: Add background consolidation apply mode behind explicit policy
 
