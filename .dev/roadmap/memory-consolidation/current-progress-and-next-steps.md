@@ -252,6 +252,8 @@ Acceptance:
 
 ### G3c-followup: Add read-only legacy query-preview cleanup preview
 
+Status: completed and released in v0.1.73 via PR #129/#130. Published npm/PyPI, installed runtime `/Users/reddit/.agent-memory/runtime/v0.1.73/.venv/bin/agent-memory`, live DB smoke, Hermes E2E, and `hermes hooks doctor` passed.
+
 Goal:
 
 Make the storage-health legacy stored-query-excerpt warning actionable without printing raw stored excerpts or adding an apply mode.
@@ -424,7 +426,7 @@ HOME=/Users/reddit hermes hooks doctor
 
 3. Do a raw-content-safe live DB health check if the user asks whether data is still accumulating.
 
-4. If implementing, start with G3c-followup `dogfood query-preview-cleanup` unless the user explicitly chooses another next slice.
+4. If implementing, start with G3d `dogfood trace-quality` unless the user explicitly chooses another next slice.
 
 5. Preserve local-only untracked artifacts:
 
