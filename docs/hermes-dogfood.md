@@ -68,6 +68,7 @@ agent-memory consolidation promote fact ~/.agent-memory/memory.db <candidate-id>
 agent-memory consolidation promotions report ~/.agent-memory/memory.db --limit 50
 agent-memory dogfood baseline ~/.agent-memory/memory.db --output-json
 agent-memory dogfood remember-intent ~/.agent-memory/memory.db --limit 200 --sample-limit 10
+agent-memory dogfood storage-health ~/.agent-memory/memory.db --hermes-config ~/.hermes/config.yaml
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
 agent-memory traces retention-report ~/.agent-memory/memory.db --max-trace-count 10000
@@ -122,6 +123,8 @@ agent-memory dogfood background-dry-run ~/.agent-memory/memory.db \
 The report emits `kind: memory_consolidation_background_dry_run`, takes a non-blocking file lock, writes the same JSON to `--output` when provided, and returns success with `status: skipped_lock_busy` if another run is already active. It bundles `consolidation candidates`, `activations summary`, `activations reinforcement-report`, and `activations decay-risk-report` for human review. It is intentionally read-only: no facts, sources, relations, status transitions, traces, retrieval observations, default retrieval ranking, or Hermes hook behavior are changed, and there is no apply mode in this command.
 
 `dogfood background-dry-run` is the read-only G3 quality gate over one or more saved background reports. It summarizes status counts, candidate/reinforcement/decay-risk maxima, quality warnings, and a conservative `quality_gate.pass` without embedding raw report payloads or any `raw_prompt`/query fields. Passing means only that a separate G4 plan can be written and RED-tested; warnings, lock skips, failures, missing candidate signal, or excessive decay risk keep the recommendation at continued dry-run dogfooding.
+
+`dogfood storage-health` is the G3c read-only live-DB health gate before any G4 apply-mode planning. It opens SQLite read-only and emits `kind: dogfood_storage_health`, table counts, latest timestamps, status counts, Hermes config markers, and aggregate invariant checks for stored query excerpts, query-hash presence, metadata JSON validity, orphan activation links, ordinary metadata-only turn traces, and remember-intent review/rejection shape. It does not print raw query values, query preview values, prompts, transcripts, user messages, rejected secret-like text, or raw metadata payloads, and it does not mutate observations, activations, traces, memories, relations, ranking, or hook config. Treat any warning as a prompt to inspect a focused diagnostic before proceeding toward automation.
 
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 

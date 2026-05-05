@@ -220,8 +220,14 @@ Candidate command:
 
 ```bash
 agent-memory dogfood storage-health ~/.agent-memory/memory.db \
-  --runtime-command /Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory
+  --hermes-config ~/.hermes/config.yaml
 ```
+
+Current implementation status:
+
+- Branch `feat/dogfood-storage-health` adds the read-only JSON command and docs.
+- Focused and related tests passed locally; full suite passed locally.
+- Live DB smoke reported `kind: dogfood_storage_health`, `read_only=true`, `mutated=false`, Hermes hook present, configured DB path present, and no raw-content marker leakage. The live DB status was `warning` because legacy non-empty stored query excerpts still exist and some old ordinary turn traces predate the final metadata-only shape.
 
 Scope:
 

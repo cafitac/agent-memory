@@ -175,3 +175,11 @@ agent-memory dogfood background-dry-run <db> \
 ```
 
 Verify it prints `kind: background_dry_run_dogfood_report`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, per-report summaries only, and no raw report payloads or `raw_prompt`/query fields. `quality_gate.pass: true` only means a separate G4 plan may be drafted; it does not apply, approve, or change retrieval.
+
+For the G3c storage-health smoke, run the read-only live-DB health gate:
+
+```bash
+agent-memory dogfood storage-health <db> --hermes-config ~/.hermes/config.yaml
+```
+
+Verify it prints `kind: dogfood_storage_health`, `read_only: true`, `mutated: false`, table counts, latest timestamps, memory status counts, Hermes hook markers, and aggregate invariant checks without raw query values, query preview values, prompts, transcripts, user messages, rejected secret-like text, or raw metadata payloads. Any `status: warning` should be investigated before G4 planning; the command itself must not mutate observations, activations, traces, facts, procedures, episodes, relations, retrieval ranking, or hook config.

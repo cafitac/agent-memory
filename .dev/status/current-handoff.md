@@ -28,8 +28,7 @@ Candidate command shape:
 
 ```bash
 agent-memory dogfood storage-health /Users/reddit/.agent-memory/memory.db \
-  --runtime-command /Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory \
-  --config-path /Users/reddit/.hermes/config.yaml
+  --hermes-config /Users/reddit/.hermes/config.yaml
 ```
 
 Expected scope:

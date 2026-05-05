@@ -4,6 +4,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import sqlite3
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -3135,6 +3136,337 @@ def _dogfood_baseline_payload(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _open_readonly_sqlite(db_path: Path) -> sqlite3.Connection:
+    resolved = db_path.expanduser().resolve(strict=False)
+    connection = sqlite3.connect(f"file:{resolved}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _readonly_table_count(connection: sqlite3.Connection, table_name: str) -> int:
+    if not _table_exists(connection, table_name):
+        return 0
+    return int(connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+
+
+def _readonly_latest_created_at(connection: sqlite3.Connection, table_name: str) -> str | None:
+    if not _table_exists(connection, table_name):
+        return None
+    row = connection.execute(f"SELECT MAX(created_at) FROM {table_name}").fetchone()
+    return row[0]
+
+
+def _readonly_memory_status_counts(connection: sqlite3.Connection) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
+    for payload_name, table_name in (
+        ("facts", "facts"),
+        ("procedures", "procedures"),
+        ("episodes", "episodes"),
+    ):
+        if not _table_exists(connection, table_name):
+            counts[payload_name] = {}
+            continue
+        rows = connection.execute(
+            f"SELECT status, COUNT(*) AS count FROM {table_name} GROUP BY status ORDER BY status"
+        ).fetchall()
+        counts[payload_name] = {str(row["status"]): int(row["count"]) for row in rows}
+    return counts
+
+
+def _metadata_json_validity(connection: sqlite3.Connection) -> dict[str, Any]:
+    invalid_counts: dict[str, int] = {}
+    checked_counts: dict[str, int] = {}
+    for table_name in ("retrieval_observations", "memory_activations", "experience_traces"):
+        invalid_counts[table_name] = 0
+        checked_counts[table_name] = 0
+        if not _table_exists(connection, table_name):
+            continue
+        rows = connection.execute(f"SELECT metadata_json FROM {table_name}").fetchall()
+        checked_counts[table_name] = len(rows)
+        for row in rows:
+            try:
+                parsed = json.loads(row["metadata_json"] or "{}")
+            except json.JSONDecodeError:
+                invalid_counts[table_name] += 1
+                continue
+            if not isinstance(parsed, dict):
+                invalid_counts[table_name] += 1
+    return {
+        "status": "pass" if sum(invalid_counts.values()) == 0 else "warning",
+        "checked_counts": checked_counts,
+        "invalid_counts": invalid_counts,
+    }
+
+
+def _stored_query_excerpt_invariant(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "retrieval_observations"):
+        return {"status": "warning", "checked_count": 0, "violation_count": 0, "latest_violation_at": None}
+    row = connection.execute(
+        """
+        SELECT COUNT(*) AS count, MAX(created_at) AS latest
+        FROM retrieval_observations
+        WHERE COALESCE(query_preview, '') <> ''
+        """
+    ).fetchone()
+    checked = _readonly_table_count(connection, "retrieval_observations")
+    violation_count = int(row["count"])
+    return {
+        "status": "pass" if violation_count == 0 else "warning",
+        "checked_count": checked,
+        "violation_count": violation_count,
+        "latest_violation_at": row["latest"],
+    }
+
+
+def _query_hash_presence_invariant(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "retrieval_observations"):
+        return {"status": "warning", "checked_count": 0, "violation_count": 0, "latest_violation_at": None}
+    row = connection.execute(
+        """
+        SELECT COUNT(*) AS count, MAX(created_at) AS latest
+        FROM retrieval_observations
+        WHERE COALESCE(query_sha256, '') = ''
+        """
+    ).fetchone()
+    checked = _readonly_table_count(connection, "retrieval_observations")
+    violation_count = int(row["count"])
+    return {
+        "status": "pass" if violation_count == 0 else "warning",
+        "checked_count": checked,
+        "violation_count": violation_count,
+        "latest_violation_at": row["latest"],
+    }
+
+
+def _activation_link_invariant(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "memory_activations"):
+        return {
+            "status": "warning",
+            "checked_count": 0,
+            "orphan_observation_count": 0,
+            "orphan_trace_count": 0,
+        }
+    checked = _readonly_table_count(connection, "memory_activations")
+    orphan_observations = 0
+    orphan_traces = 0
+    if _table_exists(connection, "retrieval_observations"):
+        orphan_observations = int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM memory_activations AS activation
+                LEFT JOIN retrieval_observations AS observation ON observation.id = activation.observation_id
+                WHERE activation.observation_id IS NOT NULL AND observation.id IS NULL
+                """
+            ).fetchone()[0]
+        )
+    if _table_exists(connection, "experience_traces"):
+        orphan_traces = int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM memory_activations AS activation
+                LEFT JOIN experience_traces AS trace ON trace.id = activation.trace_id
+                WHERE activation.trace_id IS NOT NULL AND trace.id IS NULL
+                """
+            ).fetchone()[0]
+        )
+    violation_count = orphan_observations + orphan_traces
+    return {
+        "status": "pass" if violation_count == 0 else "warning",
+        "checked_count": checked,
+        "orphan_observation_count": orphan_observations,
+        "orphan_trace_count": orphan_traces,
+    }
+
+
+def _safe_metadata_from_json(metadata_json: str | None) -> dict[str, Any]:
+    try:
+        parsed = json.loads(metadata_json or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _ordinary_trace_metadata_only_invariant(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "experience_traces"):
+        return {"status": "warning", "checked_count": 0, "violation_count": 0, "violations": {}}
+    rows = connection.execute(
+        """
+        SELECT summary, retention_policy, metadata_json
+        FROM experience_traces
+        WHERE event_kind = 'turn'
+        """
+    ).fetchall()
+    violations: Counter[str] = Counter()
+    for row in rows:
+        metadata = _safe_metadata_from_json(row["metadata_json"])
+        if row["summary"] is not None:
+            violations["summary_present"] += 1
+        if row["retention_policy"] != "ephemeral":
+            violations["retention_not_ephemeral"] += 1
+        if metadata.get("candidate_policy") != "evidence_only":
+            violations["candidate_policy_not_evidence_only"] += 1
+        if metadata.get("auto_approved") is not False:
+            violations["auto_approved_not_false"] += 1
+    violation_count = sum(violations.values())
+    return {
+        "status": "pass" if violation_count == 0 else "warning",
+        "checked_count": len(rows),
+        "violation_count": violation_count,
+        "violations": dict(sorted(violations.items())),
+    }
+
+
+def _remember_intent_safety_invariant(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "experience_traces"):
+        return {
+            "status": "warning",
+            "checked_count": 0,
+            "review_ready_count": 0,
+            "rejected_secret_like_count": 0,
+            "violation_count": 0,
+            "violations": {},
+        }
+    rows = connection.execute(
+        """
+        SELECT summary, retention_policy, metadata_json
+        FROM experience_traces
+        WHERE event_kind = 'remember_intent'
+        """
+    ).fetchall()
+    violations: Counter[str] = Counter()
+    review_ready_count = 0
+    rejected_secret_like_count = 0
+    for row in rows:
+        metadata = _safe_metadata_from_json(row["metadata_json"])
+        candidate_policy = metadata.get("candidate_policy")
+        if candidate_policy == "review_required":
+            if (
+                row["summary"] is not None
+                and row["retention_policy"] == "review"
+                and metadata.get("auto_approved") is False
+                and metadata.get("secret_scan") == "passed"
+                and not _contains_secret_like_report_text(row["summary"])
+            ):
+                review_ready_count += 1
+            else:
+                violations["review_required_shape"] += 1
+        elif candidate_policy == "rejected":
+            if (
+                row["summary"] is None
+                and metadata.get("auto_approved") is False
+                and metadata.get("rejected_reason") == "secret_like_text"
+            ):
+                rejected_secret_like_count += 1
+            else:
+                violations["rejected_shape"] += 1
+        else:
+            violations["unknown_candidate_policy"] += 1
+    violation_count = sum(violations.values())
+    return {
+        "status": "pass" if violation_count == 0 else "warning",
+        "checked_count": len(rows),
+        "review_ready_count": review_ready_count,
+        "rejected_secret_like_count": rejected_secret_like_count,
+        "violation_count": violation_count,
+        "violations": dict(sorted(violations.items())),
+    }
+
+
+def _storage_health_hermes_payload(*, hermes_config: Path | None, db_path: Path) -> dict[str, Any]:
+    if hermes_config is None:
+        return {"config_checked": False, "config_exists": None, "agent_memory_hook_present": None}
+    resolved_config = hermes_config.expanduser().resolve(strict=False)
+    payload: dict[str, Any] = {
+        "config_checked": True,
+        "config_path": str(resolved_config),
+        "config_exists": resolved_config.exists(),
+        "agent_memory_hook_present": False,
+        "configured_db_path_present": False,
+    }
+    if not resolved_config.exists():
+        return payload
+    text = resolved_config.read_text()
+    payload["agent_memory_hook_present"] = "agent-memory" in text and "hermes-pre-llm-hook" in text
+    payload["configured_db_path_present"] = str(db_path.expanduser().resolve(strict=False)) in text
+    return payload
+
+
+def _dogfood_storage_health_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        return {
+            "kind": "dogfood_storage_health",
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "agent_memory_version": __version__,
+            "database": {"path": str(db_path), "path_exists": False, "schema_user_version": None},
+            "warnings": ["database_missing"],
+        }
+
+    with _open_readonly_sqlite(db_path) as connection:
+        database = {"path": str(db_path), "path_exists": True, "schema_user_version": connection.execute("PRAGMA user_version").fetchone()[0]}
+        table_names = (
+            "retrieval_observations",
+            "memory_activations",
+            "experience_traces",
+            "facts",
+            "procedures",
+            "episodes",
+        )
+        table_counts = {table_name: _readonly_table_count(connection, table_name) for table_name in table_names}
+        latest_records = {table_name: _readonly_latest_created_at(connection, table_name) for table_name in table_names}
+        invariants = {
+            "stored_query_excerpt_empty": _stored_query_excerpt_invariant(connection),
+            "query_hash_presence": _query_hash_presence_invariant(connection),
+            "metadata_json_valid": _metadata_json_validity(connection),
+            "activation_links": _activation_link_invariant(connection),
+            "ordinary_trace_metadata_only": _ordinary_trace_metadata_only_invariant(connection),
+            "remember_intent_safety": _remember_intent_safety_invariant(connection),
+        }
+        memory_counts = _readonly_memory_status_counts(connection)
+
+    warnings: list[str] = []
+    for invariant_name, invariant in invariants.items():
+        if invariant.get("status") != "pass":
+            warnings.append(f"{invariant_name}:{invariant.get('status')}")
+    if table_counts["retrieval_observations"] == 0:
+        warnings.append("no_retrieval_observations")
+    if table_counts["experience_traces"] == 0:
+        warnings.append("no_experience_traces")
+
+    return {
+        "kind": "dogfood_storage_health",
+        "read_only": True,
+        "mutated": False,
+        "status": "healthy" if not warnings else "warning",
+        "agent_memory_version": __version__,
+        "database": database,
+        "table_counts": table_counts,
+        "latest_records": latest_records,
+        "memory_counts": memory_counts,
+        "invariants": invariants,
+        "hermes": _storage_health_hermes_payload(hermes_config=args.hermes_config, db_path=db_path),
+        "warnings": warnings,
+        "suggested_next_steps": [
+            "Fix storage-health warnings before enabling broader background consolidation automation.",
+            "Keep this report read-only and raw-content-free; use focused diagnostics for deeper investigation.",
+        ]
+        if warnings
+        else ["Storage health invariants are clean; continue G3c dogfooding before G4 apply-mode planning."],
+    }
+
+
 def _inspect_relation_graph(db_path: Path, *, start_ref: str, depth: int, limit: int) -> dict[str, Any]:
     if depth < 0:
         raise ValueError("graph inspect depth must be >= 0")
@@ -3738,6 +4070,12 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_remember_parser.add_argument("db_path", type=Path)
     dogfood_remember_parser.add_argument("--limit", type=int, default=200)
     dogfood_remember_parser.add_argument("--sample-limit", type=int, default=10)
+    dogfood_storage_health_parser = dogfood_subparsers.add_parser(
+        "storage-health",
+        help="Build a read-only raw-content-safe storage health report for dogfood DB invariants before G4 automation.",
+    )
+    dogfood_storage_health_parser.add_argument("db_path", type=Path)
+    dogfood_storage_health_parser.add_argument("--hermes-config", type=Path)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -4542,6 +4880,9 @@ def main() -> None:
                     indent=2,
                 )
             )
+            return
+        if args.dogfood_action == "storage-health":
+            print(json.dumps(_dogfood_storage_health_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(
