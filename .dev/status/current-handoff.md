@@ -16,30 +16,31 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.71`: PR #122 (debuggable explicit remember-intent diagnostics), PR #124 (freeform secret-like remember rejection hardening), release-sync PR #125, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Safe Korean/English explicit remember-intent now creates review-only `remember_intent` traces with sanitized summaries; secret-like remember-intent creates rejected metadata-only diagnostics with `rejected_reason=secret_like_text`; ordinary turns remain hash-only metadata-only evidence. The next recommended PR-sized slice is G3c: add a read-only `agent-memory dogfood storage-health` report before any G4 apply-mode planning.
+agent-memory is currently verified through `v0.1.72`: PR #127 (read-only dogfood storage-health), release-sync PR #128, GitHub Release, npm, PyPI, published install smoke, pinned local Hermes runtime install, live Hermes E2E, and `hermes hooks doctor` are complete. The active runtime is `/Users/reddit/.agent-memory/runtime/v0.1.72/.venv/bin/agent-memory`, and `/Users/reddit/.hermes/config.yaml` points to the live DB at `/Users/reddit/.agent-memory/memory.db`. Storage-health now makes live DB invariants inspectable without ad hoc SQL, and its current warning points at legacy non-empty stored query excerpts. The next recommended PR-sized slice is G3c-followup: add a read-only `agent-memory dogfood query-preview-cleanup` preview before any explicit cleanup apply path or G4 apply-mode planning.
 
 ## Current next slice
 
-Next slice: G3c `dogfood storage-health`.
+Next slice: G3c-followup `dogfood query-preview-cleanup`.
 
-Goal: replace ad hoc live DB SQL checks with one raw-content-safe command that reports storage health, runtime compatibility, Hermes hook configuration, and trace/observation safety invariants.
+Goal: make the storage-health legacy stored-query-excerpt warning actionable without ad hoc SQL, raw query-preview leakage, or mutation.
 
 Candidate command shape:
 
 ```bash
-agent-memory dogfood storage-health /Users/reddit/.agent-memory/memory.db \
-  --hermes-config /Users/reddit/.hermes/config.yaml
+agent-memory dogfood query-preview-cleanup /Users/reddit/.agent-memory/memory.db \
+  --older-than 2030-01-01T00:00:00
 ```
 
 Expected scope:
 
-- table counts and latest timestamps for retrieval observations, activations, experience traces, facts, procedures, episodes, and relations;
-- runtime command existence/version and config hook marker checks;
-- recent non-empty `query_preview` counts, missing hash counts, invalid JSON counts, orphan activation counts, and trace metadata shape counts;
-- explicit status/warnings that distinguish healthy sparse data from unsafe regressions;
-- read-only output with `mutated=false` and no raw prompt/query/transcript/user-message/secret content.
+- aggregate count of observations with non-empty stored query excerpts;
+- aggregate count eligible for cleanup before the supplied cutoff;
+- earliest/latest affected and eligible timestamps only;
+- explicit read-only output with `mutated=false`;
+- privacy markers showing raw query previews and sample values are omitted;
+- no apply mode yet.
 
-Do not implement G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
+Do not implement cleanup apply mode, G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet.
 
 ## Current repo state
 
@@ -50,8 +51,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged release-sync PR: #125 `chore: release v0.1.71 [skip release]`.
-- Latest completed release: `v0.1.71`.
+- Latest merged release-sync PR: #128 `chore: release v0.1.72 [skip release]`.
+- Latest completed release: `v0.1.72`.
 
 Expected GitHub identity:
 
@@ -62,13 +63,13 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.71`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.71`
-- npm package: `@cafitac/agent-memory@0.1.71`
-- PyPI package: `cafitac-agent-memory==0.1.71`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.71/.venv/bin/agent-memory`
+- `v0.1.72`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.72`
+- npm package: `@cafitac/agent-memory@0.1.72`
+- PyPI package: `cafitac-agent-memory==0.1.72`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.72/.venv/bin/agent-memory`
 - Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.71 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.71-20260505111920`
+- Hermes config backup before v0.1.72 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.72-20260505130559`
 - `hermes hooks doctor` reports all shell hooks healthy.
 
 Latest raw-content-safe live DB snapshot, checked 2026-05-05 11:46 KST:

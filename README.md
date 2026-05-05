@@ -197,6 +197,14 @@ agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
 
 The report emits `kind: dogfood_storage_health`, table counts, latest timestamps, memory status counts, Hermes hook markers, and aggregate invariant checks for non-empty stored query excerpts, query-hash presence, JSON metadata validity, orphan activation links, ordinary metadata-only turn traces, and remember-intent safety shape. It never prints raw queries, query preview values, prompts, transcripts, user messages, secret-like rejected text, or raw metadata payloads, and it opens the DB read-only without mutating facts, traces, activations, observations, ranking, or hook config. Treat warnings as blockers before any G4 apply-mode plan.
 
+If storage-health reports legacy stored query excerpts, preview cleanup scope without mutation or raw-value output before any explicit cleanup apply path exists:
+
+```bash
+agent-memory dogfood query-preview-cleanup "$DB" --older-than 2030-01-01T00:00:00
+```
+
+The preview emits `kind: dogfood_query_preview_cleanup_preview`, aggregate affected/eligible counts and timestamps, `read_only: true`, `mutated: false`, and a recommended operation marker only. It never prints stored query excerpt samples, raw query values, prompts, transcripts, API keys, or token-like values.
+
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 
 `agent-memory activations summary "$DB" --limit 200 --top 20 --frequent-threshold 3` is the first read-only Stage C reporting surface. It summarizes activation counts, activation windows, surfaces/scopes, status counts for top refs, empty-retrieval negative evidence, and top memory refs with advisory signals such as `frequently_activated`, `likely_reinforcement_candidate`, or `current_status_not_approved`. It remains local-only and read-only: no raw queries, no prompt previews, no ranker changes, no memory status mutation, and no automatic long-term promotion.

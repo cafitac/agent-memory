@@ -225,8 +225,8 @@ agent-memory dogfood storage-health ~/.agent-memory/memory.db \
 
 Current implementation status:
 
-- Branch `feat/dogfood-storage-health` adds the read-only JSON command and docs.
-- Focused and related tests passed locally; full suite passed locally.
+- Completed and released in v0.1.72 via PR #127/#128.
+- Live Hermes runtime points to `/Users/reddit/.agent-memory/runtime/v0.1.72/.venv/bin/agent-memory`.
 - Live DB smoke reported `kind: dogfood_storage_health`, `read_only=true`, `mutated=false`, Hermes hook present, configured DB path present, and no raw-content marker leakage. The live DB status was `warning` because legacy non-empty stored query excerpts still exist and some old ordinary turn traces predate the final metadata-only shape.
 
 Scope:
@@ -249,6 +249,35 @@ Acceptance:
 - works on the live DB and on temp DB fixtures;
 - flags the v0.1.68-style pattern where observations/activations advance but traces do not;
 - docs explain that sparse facts are normal unless explicit remember/apply commands ran.
+
+### G3c-followup: Add read-only legacy query-preview cleanup preview
+
+Goal:
+
+Make the storage-health legacy stored-query-excerpt warning actionable without printing raw stored excerpts or adding an apply mode.
+
+Command shape:
+
+```bash
+agent-memory dogfood query-preview-cleanup ~/.agent-memory/memory.db \
+  --older-than 2030-01-01T00:00:00
+```
+
+Scope:
+
+- aggregate non-empty stored query excerpt counts;
+- aggregate cleanup-eligible counts before the supplied cutoff;
+- earliest/latest timestamps only;
+- explicit privacy markers proving samples/raw values are omitted;
+- recommended operation marker for future manual cleanup planning.
+
+Acceptance:
+
+- read-only, `mutated=false`;
+- no raw prompts, query text, query previews, transcripts, full memory content, tokens, API keys, or secrets;
+- no sample values;
+- works on the live DB and on temp DB fixtures;
+- no apply mode until explicitly planned and approved.
 
 ### G3d: Add read-only `dogfood trace-quality`
 
@@ -395,7 +424,7 @@ HOME=/Users/reddit hermes hooks doctor
 
 3. Do a raw-content-safe live DB health check if the user asks whether data is still accumulating.
 
-4. If implementing, start with G3c `dogfood storage-health` unless the user explicitly chooses another next slice.
+4. If implementing, start with G3c-followup `dogfood query-preview-cleanup` unless the user explicitly chooses another next slice.
 
 5. Preserve local-only untracked artifacts:
 
