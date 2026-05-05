@@ -239,6 +239,12 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: RED tests prove dry-run remains default, apply cannot run without actor/reason, only eligible legacy rows are cleared, raw previews are never printed, and default retrieval/Hermes hook behavior is unchanged.
   - Status: implemented in PR #142, released in v0.1.77 via PR #143, and applied once to the live DB; 70 legacy rows cleared, 0 non-empty `query_preview` rows remain, backup/artifacts under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`.
 
+- [ ] PR G4b: Add second narrow mutation for ordinary trace metadata default cleanup
+  - Goal: clear the remaining storage-health ordinary metadata-only warning when it is caused only by old ordinary `turn` traces missing conservative metadata defaults.
+  - Scope: add `dogfood ordinary-trace-metadata-cleanup` preview/apply with `--apply --actor --reason`, aggregate/hash-only output, and docs/tests.
+  - Acceptance: RED tests prove preview is read-only, apply cannot run without actor/reason, apply only fills `candidate_policy=evidence_only` and `auto_approved=false` for traces that already have `summary=NULL` and `retention_policy=ephemeral`, raw metadata/sample values are never printed, and default retrieval/Hermes hook behavior is unchanged.
+  - Status: in progress in `feat/ordinary-trace-metadata-cleanup`; live preview found 2 aggregate violations on 1 fixable legacy row, with read-only/no-mutation and raw-content privacy flags false.
+
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
   - Scope: explicit `--apply` with policy file, audit trail, rollback instructions.

@@ -20,9 +20,9 @@ agent-memory is currently verified through `v0.1.77`: PR #142 added the first na
 
 ## Current next slice
 
-Current slice: post-G4a cleanup checkpoint and continued G4 readiness monitoring.
+Current slice: G4b ordinary trace metadata default cleanup plus continued G4 readiness monitoring.
 
-Goal: keep the just-applied live cleanup auditable and restartable. `dogfood query-preview-cleanup` preview remains the default read-only/no-mutation path. The explicit live apply ran once with `--apply --actor --reason`, cleared the 70 legacy `retrieval_observations.query_preview` rows, emitted aggregate/hash-only output, recorded hash-only audit trace id 143, and did not change facts, approvals, retrieval ranking, Hermes hook behavior, or ordinary-conversation auto-approval.
+Goal: keep the just-applied live query-preview cleanup auditable and remove the next narrow storage-health blocker without broad memory mutation. `dogfood query-preview-cleanup` remains complete. The new G4b candidate is `dogfood ordinary-trace-metadata-cleanup`, which previews/applies only conservative metadata defaults (`candidate_policy=evidence_only`, `auto_approved=false`) for legacy ordinary `turn` traces that already have `summary=NULL` and `retention_policy=ephemeral`. It must stay aggregate/hash-only and require `--apply --actor --reason` for mutation.
 
 Detailed plan:
 
@@ -51,7 +51,9 @@ agent-memory dogfood scheduled-compare \
 
 Current live result: v0.1.77 live G4a cleanup ran with a backup and before/after artifacts under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`. Before preview found 70 eligible legacy rows. Apply cleared 70 rows and recorded audit trace id 143 with reason/eligible-id hashes only. After preview and direct SQL found 0 non-empty `query_preview` rows. The after `dogfood scheduled-dry-run` remained `read_only=true`, `mutated=false`, and raw-content privacy flags false. This completes only the legacy cleanup; it does not enable broad G4 consolidation apply mode.
 
-Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. The legacy query-preview cleanup mutation is complete; future mutation must still be separately planned, explicit, and audited.
+Current G4b source-checkout preview/smoke result: `dogfood ordinary-trace-metadata-cleanup` preview against `/Users/reddit/.agent-memory/memory.db` found 2 aggregate ordinary metadata-only violations on 1 fixable legacy ordinary `turn` row (`candidate_policy_not_evidence_only=1`, `auto_approved_not_false=1`) with `read_only=true`, `mutated=false`, and no raw sample values. A live-copy smoke under `/tmp/agent-memory-ordinary-trace-metadata-cleanup-smoke` normalized 1 copied row and left 0 remaining violations. Do not apply this to the live DB until the PR is merged, released, published install smoke passes, and the pinned Hermes runtime is updated.
+
+Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. The legacy query-preview cleanup mutation is complete; the ordinary trace metadata cleanup is a separate narrow mutation candidate and must remain explicit/audited.
 
 ## Current repo state
 

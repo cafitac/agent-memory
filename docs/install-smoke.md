@@ -204,6 +204,23 @@ agent-memory dogfood query-preview-cleanup <db-copy> \
 
 Verify it prints `kind: dogfood_query_preview_cleanup_apply`, `read_only: false`, aggregate `cleared_count` / `remaining_affected_count`, `reason_sha256`, `eligible_ids_sha256`, and `audit_trace_id`, while still omitting stored query previews, sample values, raw reason text in audit metadata, `api key`, token-like values, prompts, and transcripts.
 
+If storage-health reports only legacy missing ordinary-turn metadata defaults, run the second narrow cleanup preview:
+
+```bash
+agent-memory dogfood ordinary-trace-metadata-cleanup <db>
+```
+
+Verify it prints `kind: dogfood_ordinary_trace_metadata_cleanup_preview`, `read_only: true`, `mutated: false`, aggregate violation counts, `fixable_row_count`, apply guardrails, no raw metadata values, no prompts/transcripts/query values, no sample values, and no DB mutation. If a human operator explicitly approves normalization, apply mode must again be a separate smoke on a disposable copied DB or backup:
+
+```bash
+agent-memory dogfood ordinary-trace-metadata-cleanup <db-copy> \
+  --apply \
+  --actor "operator-name" \
+  --reason "approved ordinary trace metadata normalization"
+```
+
+Verify it prints `kind: dogfood_ordinary_trace_metadata_cleanup_apply`, `read_only: false`, aggregate `normalized_row_count` / `remaining_violation_count`, `reason_sha256`, `fixable_ids_sha256`, and `audit_trace_id`, while still omitting raw reason text in audit metadata and raw trace metadata values. The command only fills `candidate_policy: evidence_only` and `auto_approved: false` on ordinary `turn` traces that already have `summary: null` and `retention_policy: ephemeral`.
+
 For the G3d trace-quality smoke, run the read-only aggregate trace quality gate:
 
 ```bash

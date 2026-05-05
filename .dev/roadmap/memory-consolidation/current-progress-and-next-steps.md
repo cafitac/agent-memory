@@ -201,14 +201,15 @@ Current behavior:
 
 ## Current decision point
 
-The first narrow mutation slice is complete: legacy `query_preview` cleanup was implemented, released, applied to the live DB, and verified. The next safe move is to keep G4 readiness monitoring and draft the broader G4 apply-mode contract before any additional mutation.
+The first narrow mutation slice is complete: legacy `query_preview` cleanup was implemented, released, applied to the live DB, and verified. Post-cleanup monitoring found one remaining storage-health warning that is narrower than broad consolidation apply: one legacy ordinary `turn` trace is already metadata-only but is missing the conservative metadata defaults. The next safe move is therefore G4b, a second narrow cleanup command, before any broader G4 apply-mode contract or mutation.
 
 The sequence from here is:
 
 1. keep collecting scheduled dry-run artifacts over time;
-2. compare artifacts with `dogfood scheduled-compare`, including the post-cleanup scheduled-dry-run artifact;
-3. update thresholds/blocked reasons from aggregate evidence only;
-4. draft a separate G4 apply-mode contract before implementing broader consolidation mutation.
+2. compare artifacts with `dogfood scheduled-compare`, including post-cleanup scheduled-dry-run artifacts;
+3. implement/release/apply only the narrow ordinary-trace metadata default cleanup if tests, live-copy smoke, and release/runtime QA pass;
+4. update thresholds/blocked reasons from aggregate evidence only;
+5. draft a separate G4 apply-mode contract before implementing broader consolidation mutation.
 
 The detailed first-mutation plan remains `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`, now with the cleanup slice completed in practice.
 

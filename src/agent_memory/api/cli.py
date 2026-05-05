@@ -3934,6 +3934,223 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 
+def _ordinary_trace_metadata_cleanup_privacy_payload() -> dict[str, bool]:
+    return {
+        "raw_trace_content_included": False,
+        "sample_values_included": False,
+        "hash_only": True,
+    }
+
+
+def _ordinary_trace_metadata_cleanup_scan(connection: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(connection, "experience_traces"):
+        return {
+            "checked_count": 0,
+            "affected_count": 0,
+            "fixable_row_count": 0,
+            "violation_counts": {},
+            "fixable_ids": [],
+            "earliest_fixable_at": None,
+            "latest_fixable_at": None,
+        }
+    rows = connection.execute(
+        """
+        SELECT id, summary, retention_policy, metadata_json, created_at
+        FROM experience_traces
+        WHERE event_kind = 'turn'
+        ORDER BY id
+        """
+    ).fetchall()
+    violations: Counter[str] = Counter()
+    fixable_ids: list[int] = []
+    fixable_created_at: list[str] = []
+    for row in rows:
+        metadata = _safe_metadata_from_json(row["metadata_json"])
+        row_reasons: list[str] = []
+        if row["summary"] is not None:
+            row_reasons.append("summary_present")
+        if row["retention_policy"] != "ephemeral":
+            row_reasons.append("retention_not_ephemeral")
+        if metadata.get("candidate_policy") != "evidence_only":
+            row_reasons.append("candidate_policy_not_evidence_only")
+        if metadata.get("auto_approved") is not False:
+            row_reasons.append("auto_approved_not_false")
+        for reason in row_reasons:
+            violations[reason] += 1
+        metadata_only_fixable = (
+            row["summary"] is None
+            and row["retention_policy"] == "ephemeral"
+            and any(reason in row_reasons for reason in {"candidate_policy_not_evidence_only", "auto_approved_not_false"})
+            and not any(reason in row_reasons for reason in {"summary_present", "retention_not_ephemeral"})
+        )
+        if metadata_only_fixable:
+            fixable_ids.append(int(row["id"]))
+            if row["created_at"]:
+                fixable_created_at.append(str(row["created_at"]))
+    affected_count = sum(violations.values())
+    return {
+        "checked_count": len(rows),
+        "affected_count": affected_count,
+        "fixable_row_count": len(fixable_ids),
+        "violation_counts": dict(sorted(violations.items())),
+        "fixable_ids": fixable_ids,
+        "earliest_fixable_at": min(fixable_created_at) if fixable_created_at else None,
+        "latest_fixable_at": max(fixable_created_at) if fixable_created_at else None,
+    }
+
+
+def _dogfood_ordinary_trace_metadata_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    apply_cleanup = bool(getattr(args, "apply", False))
+    actor = getattr(args, "actor", None)
+    reason = getattr(args, "reason", None)
+    kind = (
+        "dogfood_ordinary_trace_metadata_cleanup_apply"
+        if apply_cleanup
+        else "dogfood_ordinary_trace_metadata_cleanup_preview"
+    )
+    if apply_cleanup and not actor:
+        raise ValueError("dogfood ordinary-trace-metadata-cleanup --apply requires --actor")
+    if apply_cleanup and not reason:
+        raise ValueError("dogfood ordinary-trace-metadata-cleanup --apply requires --reason")
+    if not db_path.exists():
+        return {
+            "kind": kind,
+            "read_only": not apply_cleanup,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+    if not apply_cleanup:
+        with _open_readonly_sqlite(db_path) as connection:
+            scan = _ordinary_trace_metadata_cleanup_scan(connection)
+        warnings: list[str] = []
+        if scan["affected_count"]:
+            warnings.append("ordinary_trace_metadata_only_violations_present")
+        if scan["fixable_row_count"]:
+            warnings.append("ordinary_trace_metadata_only_rows_eligible_for_cleanup")
+        return {
+            "kind": kind,
+            "read_only": True,
+            "mutated": False,
+            "status": "healthy" if not warnings else "warning",
+            "database": {"path": str(db_path), "exists": True},
+            "checked_count": scan["checked_count"],
+            "affected_count": scan["affected_count"],
+            "fixable_row_count": scan["fixable_row_count"],
+            "violation_counts": scan["violation_counts"],
+            "earliest_fixable_at": scan["earliest_fixable_at"],
+            "latest_fixable_at": scan["latest_fixable_at"],
+            "cleanup_preview": {
+                "mutation_required": scan["fixable_row_count"] > 0,
+                "recommended_operation": "fill_ordinary_turn_trace_metadata_defaults",
+                "apply_command_available": True,
+                "apply_guardrails": ["--apply", "--actor", "--reason"],
+            },
+            "privacy": _ordinary_trace_metadata_cleanup_privacy_payload(),
+            "warnings": warnings,
+            "suggested_next_steps": [
+                "Review this read-only preview before running the explicit cleanup apply command.",
+                "Only metadata-only ordinary turn traces with summary=None and retention_policy=ephemeral are eligible.",
+            ],
+        }
+
+    with connect(db_path) as connection:
+        before = _ordinary_trace_metadata_cleanup_scan(connection)
+        fixable_ids = list(before["fixable_ids"])
+        for trace_id in fixable_ids:
+            row = connection.execute(
+                "SELECT metadata_json FROM experience_traces WHERE id = ? AND event_kind = 'turn'",
+                (trace_id,),
+            ).fetchone()
+            if row is None:
+                continue
+            metadata = _safe_metadata_from_json(row["metadata_json"])
+            metadata["candidate_policy"] = "evidence_only"
+            metadata["auto_approved"] = False
+            connection.execute(
+                "UPDATE experience_traces SET metadata_json = ? WHERE id = ?",
+                (json.dumps(metadata, sort_keys=True), trace_id),
+            )
+        after = _ordinary_trace_metadata_cleanup_scan(connection)
+        reason_sha256 = hashlib.sha256(reason.encode()).hexdigest()
+        fixable_ids_sha256 = hashlib.sha256(",".join(str(value) for value in fixable_ids).encode()).hexdigest()
+        audit_metadata = {
+            "operation": "fill_ordinary_turn_trace_metadata_defaults",
+            "actor": actor,
+            "reason_sha256": reason_sha256,
+            "checked_count": before["checked_count"],
+            "affected_before_count": before["affected_count"],
+            "fixable_row_count": before["fixable_row_count"],
+            "normalized_row_count": len(fixable_ids),
+            "remaining_violation_count": after["affected_count"],
+            "fixable_ids_sha256": fixable_ids_sha256,
+            "raw_trace_content_included": False,
+            "sample_values_included": False,
+        }
+        audit_content_sha256 = hashlib.sha256(json.dumps(audit_metadata, sort_keys=True).encode()).hexdigest()
+        cursor = connection.execute(
+            """
+            INSERT INTO experience_traces (
+                surface,
+                event_kind,
+                content_sha256,
+                summary,
+                salience,
+                user_emphasis,
+                related_memory_refs_json,
+                related_observation_ids_json,
+                retention_policy,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "dogfood",
+                "dogfood_ordinary_trace_metadata_cleanup_apply",
+                audit_content_sha256,
+                None,
+                0.0,
+                0.0,
+                json.dumps([]),
+                json.dumps([]),
+                "review",
+                json.dumps(audit_metadata, sort_keys=True),
+            ),
+        )
+        audit_trace_id = int(cursor.lastrowid)
+    warnings = []
+    if after["affected_count"]:
+        warnings.append("ordinary_trace_metadata_only_violations_remain_after_cleanup")
+    return {
+        "kind": kind,
+        "read_only": False,
+        "mutated": bool(fixable_ids),
+        "status": "healthy" if not warnings else "warning",
+        "database": {"path": str(db_path), "exists": True},
+        "checked_count": before["checked_count"],
+        "affected_count": before["affected_count"],
+        "fixable_row_count": before["fixable_row_count"],
+        "normalized_row_count": len(fixable_ids),
+        "remaining_violation_count": after["affected_count"],
+        "violation_counts": before["violation_counts"],
+        "apply": {
+            "actor": actor,
+            "reason_sha256": reason_sha256,
+            "audit_trace_id": audit_trace_id,
+            "fixable_ids_sha256": fixable_ids_sha256,
+            "operation": "fill_ordinary_turn_trace_metadata_defaults",
+        },
+        "privacy": _ordinary_trace_metadata_cleanup_privacy_payload(),
+        "warnings": warnings,
+        "suggested_next_steps": [
+            "Run dogfood storage-health and scheduled-dry-run after apply to confirm ordinary trace metadata warnings are cleared.",
+            "Keep cleanup output aggregate-only; never print trace content or metadata sample values.",
+        ],
+    }
+
+
 def _query_preview_cleanup_privacy_payload() -> dict[str, bool]:
     return {
         "raw_query_preview_included": False,
@@ -4861,6 +5078,14 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_parser.add_argument("--apply", action="store_true")
     dogfood_query_preview_cleanup_parser.add_argument("--actor")
     dogfood_query_preview_cleanup_parser.add_argument("--reason")
+    dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(
+        "ordinary-trace-metadata-cleanup",
+        help="Preview/apply raw-content-safe normalization for legacy ordinary turn trace metadata defaults.",
+    )
+    dogfood_ordinary_trace_metadata_cleanup_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_trace_metadata_cleanup_parser.add_argument("--apply", action="store_true")
+    dogfood_ordinary_trace_metadata_cleanup_parser.add_argument("--actor")
+    dogfood_ordinary_trace_metadata_cleanup_parser.add_argument("--reason")
     dogfood_trace_quality_parser = dogfood_subparsers.add_parser(
         "trace-quality",
         help="Build a read-only aggregate trace quality report before G4 automation planning.",
@@ -5711,6 +5936,9 @@ def main() -> None:
             return
         if args.dogfood_action == "query-preview-cleanup":
             print(json.dumps(_dogfood_query_preview_cleanup_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-trace-metadata-cleanup":
+            print(json.dumps(_dogfood_ordinary_trace_metadata_cleanup_payload(args), indent=2))
             return
         if args.dogfood_action == "trace-quality":
             if args.since_hours < 1:

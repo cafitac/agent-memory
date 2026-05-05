@@ -120,6 +120,7 @@ agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 
 agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/background-consolidation.json --candidate-min 1 --max-decay-risk 0
 agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
+agent-memory dogfood ordinary-trace-metadata-cleanup "$DB"
 agent-memory dogfood trace-quality "$DB" --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
 agent-memory dogfood scheduled-dry-run "$DB" --output ~/.agent-memory/reports/scheduled-dry-run.json --since-hours 24
 agent-memory dogfood scheduled-compare --report ~/.agent-memory/reports/scheduled-dry-run-1.json --report ~/.agent-memory/reports/scheduled-dry-run-2.json --output ~/.agent-memory/reports/scheduled-compare.json
@@ -219,6 +220,23 @@ agent-memory dogfood query-preview-cleanup "$DB" \
 ```
 
 The apply payload emits `kind: dogfood_query_preview_cleanup_apply`, `cleared_count`, `remaining_affected_count`, `reason_sha256`, `eligible_ids_sha256`, and `audit_trace_id`; the raw reason text is not stored in the audit metadata.
+
+If storage-health reports ordinary metadata-only trace invariant warnings caused only by legacy missing ordinary-turn metadata defaults, preview the second narrow cleanup without mutation:
+
+```bash
+agent-memory dogfood ordinary-trace-metadata-cleanup "$DB"
+```
+
+The preview emits `kind: dogfood_ordinary_trace_metadata_cleanup_preview`, aggregate violation counts, `fixable_row_count`, `read_only: true`, `mutated: false`, and required apply guardrails only. It never prints raw trace metadata, prompts, transcripts, query values, or sample values. Apply mode is intentionally narrow: it requires `--apply`, `--actor`, and `--reason`, and only fills `candidate_policy: evidence_only` plus `auto_approved: false` for ordinary `turn` traces that already have `summary: null` and `retention_policy: ephemeral`:
+
+```bash
+agent-memory dogfood ordinary-trace-metadata-cleanup "$DB" \
+  --apply \
+  --actor "operator-name" \
+  --reason "approved ordinary trace metadata normalization"
+```
+
+The apply payload emits `kind: dogfood_ordinary_trace_metadata_cleanup_apply`, `normalized_row_count`, `remaining_violation_count`, `reason_sha256`, `fixable_ids_sha256`, and `audit_trace_id`; the raw reason text and raw metadata values are not stored in the audit metadata.
 
 G3d adds a read-only trace-quality gate before any G4 apply-mode plan:
 
