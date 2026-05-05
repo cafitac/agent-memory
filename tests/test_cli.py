@@ -4264,7 +4264,37 @@ def test_hermes_pre_llm_hook_does_not_create_remember_candidate_for_ordinary_tur
         assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
 
 
-def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_raw_text(tmp_path: Path) -> None:
+def test_hermes_pre_llm_hook_records_korean_explicit_remember_intent_as_review_trace(tmp_path: Path) -> None:
+    db_path = tmp_path / "remember-korean-intent-trace.db"
+    initialize_database(db_path)
+
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="korean-remember-session",
+            cwd=str(tmp_path),
+            extra={
+                "user_message": "기억해둬: User prefers memory quality checks alongside consolidation.",
+                "platform": "cli",
+            },
+        ),
+        HermesPreLlmHookOptions(db_path=db_path, preferred_scope="project:g1", record_trace=True),
+    )
+
+    assert "context" in response
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.event_kind == "remember_intent"
+    assert trace.retention_policy == "review"
+    assert trace.summary == "User prefers memory quality checks alongside consolidation."
+    assert trace.metadata["candidate_policy"] == "review_required"
+    assert trace.metadata["secret_scan"] == "passed"
+
+
+def test_hermes_pre_llm_hook_records_secret_like_remember_intent_as_rejected_diagnostic_without_raw_text(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "remember-secret-skip.db"
     initialize_database(db_path)
     secret_prompt = "remember this: api_key=SUPERSECRET should never be stored"
@@ -4282,9 +4312,14 @@ def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_r
     assert "context" in response
     traces = list_experience_traces(db_path)
     assert len(traces) == 1
-    assert traces[0].event_kind == "turn"
-    assert traces[0].retention_policy == "ephemeral"
-    trace_json = traces[0].model_dump_json()
+    trace = traces[0]
+    assert trace.event_kind == "remember_intent"
+    assert trace.retention_policy == "ephemeral"
+    assert trace.summary is None
+    assert trace.metadata["candidate_policy"] == "rejected"
+    assert trace.metadata["secret_scan"] == "blocked"
+    assert trace.metadata["rejected_reason"] == "secret_like_text"
+    trace_json = trace.model_dump_json()
     assert "SUPERSECRET" not in trace_json
     assert "api_key" not in trace_json
     env = {**os.environ, "PYTHONPATH": "src"}
@@ -4293,11 +4328,11 @@ def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_r
             sys.executable,
             "-m",
             "agent_memory.api.cli",
-            "consolidation",
-            "candidates",
+            "dogfood",
+            "remember-intent",
             str(db_path),
-            "--min-evidence",
-            "1",
+            "--limit",
+            "10",
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
@@ -4307,8 +4342,11 @@ def test_hermes_pre_llm_hook_skips_secret_like_remember_intent_without_leaking_r
     assert result.returncode == 0, result.stderr
     assert "SUPERSECRET" not in result.stdout
     assert "api_key" not in result.stdout
-    candidates = json.loads(result.stdout)["candidates"]
-    assert all(candidate["event_kind_counts"] != {"remember_intent": 1} for candidate in candidates)
+    payload = json.loads(result.stdout)
+    assert payload["trace_counts"]["remember_intent"] == 1
+    assert payload["review_ready_count"] == 0
+    assert payload["unsafe_sample_count"] == 1
+    assert payload["rejection_counts"] == {"secret_like_text": 1}
 
 
 
@@ -4660,6 +4698,7 @@ def test_dogfood_remember_intent_report_summarizes_review_ready_traces_without_m
     }
     assert payload["review_ready_count"] == 1
     assert payload["unsafe_sample_count"] == 1
+    assert payload["rejection_counts"] == {}
     assert payload["scopes"] == {"project:g1": 2}
     assert payload["samples"] == [
         {

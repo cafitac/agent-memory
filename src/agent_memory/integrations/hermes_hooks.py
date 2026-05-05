@@ -416,6 +416,10 @@ def _safe_hermes_trace_metadata(payload: HermesShellHookPayload) -> dict[str, An
 _EXPLICIT_REMEMBER_PATTERNS = [
     re.compile(r"^\s*remember\s+this\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
     re.compile(r"^\s*please\s+remember\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*기억해\s*둬\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*기억해둬\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*기억해\s*줘\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\s*기억해줘\s*:\s*(?P<summary>.+)\s*$", re.IGNORECASE | re.DOTALL),
 ]
 
 _SECRET_LIKE_PATTERNS = [
@@ -450,7 +454,33 @@ def _record_pre_llm_experience_trace(
         return
 
     remember_summary = _explicit_remember_summary(user_message)
-    if remember_summary and not _contains_secret_like_text(user_message):
+    if remember_summary and _contains_secret_like_text(user_message):
+        metadata = _safe_hermes_trace_metadata(payload)
+        metadata.update(
+            {
+                "remember_intent": "explicit",
+                "candidate_policy": "rejected",
+                "auto_approved": False,
+                "secret_scan": "blocked",
+                "rejected_reason": "secret_like_text",
+            }
+        )
+        insert_experience_trace(
+            options.db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=hashlib.sha256(user_message.encode("utf-8")).hexdigest(),
+            summary=None,
+            scope=effective_preferred_scope,
+            session_ref=_hashed_ref("session", payload.session_id),
+            salience=0.0,
+            user_emphasis=1.0,
+            related_memory_refs=_memory_refs_from_packet(packet),
+            retention_policy="ephemeral",
+            metadata=metadata,
+        )
+        return
+    if remember_summary:
         metadata = _safe_hermes_trace_metadata(payload)
         metadata.update(
             {
