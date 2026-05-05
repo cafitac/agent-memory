@@ -237,7 +237,7 @@ If a later session changes direction, update both this checklist and the relevan
   - Goal: remove legacy privacy debt by clearing old non-empty `retrieval_observations.query_preview` values under an explicit operator command.
   - Scope: extend `dogfood query-preview-cleanup` with `--apply --actor --reason`, backup/operator instructions, and audit-safe output.
   - Acceptance: RED tests prove dry-run remains default, apply cannot run without actor/reason, only eligible legacy rows are cleared, raw previews are never printed, and default retrieval/Hermes hook behavior is unchanged.
-  - Status: implemented in PR #142; apply output is aggregate/hash-only and writes a hash-only audit trace.
+  - Status: implemented in PR #142, released in v0.1.77 via PR #143, and applied once to the live DB; 70 legacy rows cleared, 0 non-empty `query_preview` rows remain, backup/artifacts under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
