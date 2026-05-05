@@ -203,10 +203,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/transcript/user-message/secret output, no sample values, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
   - Status: completed and released in v0.1.73 via PR #129/#130.
 
-- [~] PR G3d: Add read-only dogfood trace-quality report
+- [x] PR G3d: Add read-only dogfood trace-quality report
   - Goal: measure whether ordinary metadata-only traces are useful enough to support later consolidation work before any G4 apply-mode plan.
   - Scope: `agent-memory dogfood trace-quality <db> --since-hours <hours> --min-trace-coverage <ratio> --min-evidence-count <count>` reports aggregate observation-to-trace coverage, empty retrieval ratio, repeated memory-ref counts, trace distributions, metadata-only invariants, candidate-signal proxies, and a conservative recommendation.
   - Acceptance: read-only with `mutated=false`, no raw prompt/query/trace-summary/transcript/user-message/secret/sample output, no candidates or approvals created, default retrieval unchanged, focused tests prove no DB mutation, and live DB smoke verifies aggregate-only output.
+  - Status: completed and released in v0.1.74 via PR #132/#133.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
