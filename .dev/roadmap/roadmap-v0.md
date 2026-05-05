@@ -217,8 +217,8 @@ If a later session changes direction, update both this checklist and the relevan
 
 - [ ] PR G3f: Collect scheduled dry-run trend reports
   - Goal: compare multiple G3e report artifacts over time before drafting apply-mode behavior.
-  - Scope: timestamped report artifacts and optional read-only trend summary over counts/ratios/warnings only.
-  - Acceptance: no raw content, no mutation, no default retrieval change; output explains whether signals are improving, flat, or blocked by legacy cleanup/noise.
+  - Scope: `agent-memory dogfood scheduled-compare --report <path> --report <path> --output <path>` emits a read-only `dogfood_scheduled_dry_run_comparison` payload over saved scheduled reports, including per-report hashes and aggregate counts/ratios/warning names only.
+  - Acceptance: no raw content, no embedded raw report bodies, no mutation, no default retrieval change; output explains whether signals are stable enough for a separate G4 plan or blocked by warnings/decay risk/legacy cleanup/noise.
 
 - [ ] PR G4: Add background consolidation apply mode behind explicit flag
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.

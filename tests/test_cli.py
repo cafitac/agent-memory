@@ -1362,6 +1362,146 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
 
 
 
+def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_raw_content(
+    tmp_path: Path,
+) -> None:
+    report_a = tmp_path / "scheduled-a.json"
+    report_b = tmp_path / "scheduled-b.json"
+    output_path = tmp_path / "scheduled-compare.json"
+    base_payload = {
+        "kind": "dogfood_scheduled_dry_run",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": "/tmp/safe.db",
+        "reports": {
+            "storage_health": {"status": "warning", "mutated": False, "default_retrieval_unchanged": True},
+            "trace_quality": {
+                "recommendation": "continue_dogfooding",
+                "coverage": {"observation_trace_coverage_ratio": 0.25},
+                "retrieval_quality": {"empty_retrieval_ratio": 0.5},
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+            },
+            "remember_intent": {
+                "safe_remember_intent_count": 1,
+                "rejected_remember_intent_count": 1,
+                "raw_sample": "token=SHOULD_NOT_LEAK",
+            },
+            "background_dry_run": {
+                "status": "completed",
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "review_handoff": {
+                    "candidate_count": 1,
+                    "reinforcement_candidate_count": 1,
+                    "decay_risk_candidate_count": 0,
+                },
+                "scan": {"quality_warnings": ["low_activation_count"]},
+            },
+        },
+        "quality_gate": {
+            "pass": False,
+            "decision": "continue_scheduled_dry_run_dogfooding_before_g4",
+            "blocked_reasons": ["trace_quality_needs_more_dogfooding"],
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+        },
+    }
+    report_a.write_text(json.dumps(base_payload | {"generated_at": "2026-05-05T10:00:00Z"}))
+    report_b.write_text(
+        json.dumps(
+            base_payload
+            | {
+                "generated_at": "2026-05-05T11:00:00Z",
+                "reports": {
+                    **base_payload["reports"],
+                    "trace_quality": {
+                        **base_payload["reports"]["trace_quality"],
+                        "recommendation": "ready_for_more_dry_runs",
+                        "coverage": {"observation_trace_coverage_ratio": 0.5},
+                    },
+                    "background_dry_run": {
+                        **base_payload["reports"]["background_dry_run"],
+                        "review_handoff": {
+                            "candidate_count": 2,
+                            "reinforcement_candidate_count": 2,
+                            "decay_risk_candidate_count": 1,
+                        },
+                        "scan": {"quality_warnings": []},
+                    },
+                },
+                "quality_gate": {
+                    "pass": False,
+                    "decision": "continue_scheduled_dry_run_dogfooding_before_g4",
+                    "blocked_reasons": ["decay_risk_above_threshold"],
+                },
+            }
+        )
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-compare",
+            "--report",
+            str(report_a),
+            "--report",
+            str(report_b),
+            "--output",
+            str(output_path),
+            "--min-report-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    saved_payload = json.loads(output_path.read_text())
+    assert saved_payload == payload
+    assert payload["kind"] == "dogfood_scheduled_dry_run_comparison"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["report_count"] == 2
+    assert payload["aggregate"]["quality_gate_pass_count"] == 0
+    assert payload["aggregate"]["candidate_count_max"] == 2
+    assert payload["aggregate"]["decay_risk_candidate_count_max"] == 1
+    assert payload["aggregate"]["trace_coverage_ratio_min"] == 0.25
+    assert payload["aggregate"]["trace_coverage_ratio_max"] == 0.5
+    assert payload["aggregate"]["blocked_reasons"] == [
+        "decay_risk_above_threshold",
+        "trace_quality_needs_more_dogfooding",
+    ]
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "continue_scheduled_report_collection_before_g4",
+        "blocked_reasons": [
+            "scheduled_quality_gate_not_stable",
+            "blocked_reasons_present",
+            "decay_risk_above_threshold",
+            "background_quality_warnings_present",
+        ],
+    }
+    assert payload["privacy"]["raw_conversation_content_included"] is False
+    assert payload["privacy"]["raw_query_text_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+
+
+
 def test_python_module_cli_observations_audit_reports_low_signal_empty_retrievals(tmp_path: Path) -> None:
     db_path = tmp_path / "observation-audit-empty.db"
     initialize_database(db_path)

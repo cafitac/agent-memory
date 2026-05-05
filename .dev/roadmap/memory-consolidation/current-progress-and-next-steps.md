@@ -360,10 +360,22 @@ Run the new G3e bundle repeatedly from the live Hermes DB and compare the aggreg
 Scope:
 
 - save timestamped `dogfood scheduled-dry-run` JSON artifacts;
+- add `dogfood scheduled-compare` as a read-only comparison over repeated saved artifacts;
 - compare only counts, timestamps, booleans, ratios, hashes, IDs, and warning names;
-- no raw content samples;
+- no raw content samples or embedded raw report bodies;
 - no cleanup/apply mutation;
-- optionally add a read-only trend-summary command if manual comparison becomes repetitive.
+- no default retrieval or hook config changes.
+
+Command shape:
+
+```bash
+agent-memory dogfood scheduled-compare \
+  --report ~/.agent-memory/reports/scheduled-dry-run-1.json \
+  --report ~/.agent-memory/reports/scheduled-dry-run-2.json \
+  --output ~/.agent-memory/reports/scheduled-compare.json \
+  --min-report-count 2 \
+  --max-decay-risk 0
+```
 
 Acceptance:
 

@@ -211,3 +211,16 @@ agent-memory dogfood scheduled-dry-run <db> \
 ```
 
 Verify it prints `kind: dogfood_scheduled_dry_run`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, a `reports` object containing `storage_health`, `trace_quality`, `remember_intent`, and `background_dry_run`, and a conservative `quality_gate`. It must write the same JSON to `--output`, must not print raw query/prompt/transcript/secret-like/sample values, and must not mutate observations, activations, traces, memories, relations, ranking, or hook config.
+
+For the G3f scheduled comparison smoke, compare at least two saved scheduled reports:
+
+```bash
+agent-memory dogfood scheduled-compare \
+  --report <tmp-scheduled-report-1.json> \
+  --report <tmp-scheduled-report-2.json> \
+  --output <tmp-scheduled-compare.json> \
+  --min-report-count 2 \
+  --max-decay-risk 0
+```
+
+Verify it prints `kind: dogfood_scheduled_dry_run_comparison`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, per-report hashes and safe aggregate fields only, and no raw report bodies, raw query/prompt/transcript/secret-like/sample values. A passing comparison only permits a separate G4 planning PR; it must not mutate DB rows, ranking, hook config, or any report artifact except the requested `--output` file.

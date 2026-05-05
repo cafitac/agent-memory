@@ -122,6 +122,7 @@ agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/b
 agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml
 agent-memory dogfood trace-quality "$DB" --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
 agent-memory dogfood scheduled-dry-run "$DB" --output ~/.agent-memory/reports/scheduled-dry-run.json --since-hours 24
+agent-memory dogfood scheduled-compare --report ~/.agent-memory/reports/scheduled-dry-run-1.json --report ~/.agent-memory/reports/scheduled-dry-run-2.json --output ~/.agent-memory/reports/scheduled-compare.json
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \
@@ -228,6 +229,19 @@ agent-memory dogfood scheduled-dry-run "$DB" \
 ```
 
 The bundle emits `kind: dogfood_scheduled_dry_run` and includes `storage_health`, `trace_quality`, `remember_intent`, and an inline `memory_consolidation_background_dry_run` report in one JSON payload. It remains read-only and no-apply: it does not mutate traces, observations, activations, facts, relations, approvals, retrieval ranking, or hook config. Its `quality_gate.pass` can only justify writing a separate G4 plan with RED tests; warnings mean keep collecting scheduled dry-run evidence.
+
+G3f compares saved scheduled dry-run reports without embedding raw report bodies:
+
+```bash
+agent-memory dogfood scheduled-compare \
+  --report ~/.agent-memory/reports/scheduled-dry-run-1.json \
+  --report ~/.agent-memory/reports/scheduled-dry-run-2.json \
+  --output ~/.agent-memory/reports/scheduled-compare.json \
+  --min-report-count 2 \
+  --max-decay-risk 0
+```
+
+The comparison emits `kind: dogfood_scheduled_dry_run_comparison`, per-report hashes and safe aggregate fields only: gate decisions, blocked reason names, storage/trace recommendations, trace coverage and empty retrieval ratios, candidate maxima, decay-risk maxima, remember-intent counts, and background warning names. It remains read-only and no-apply, never prints raw queries/prompts/transcripts/sample values, and a passing comparison only means a separate G4 plan may be drafted.
 
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 
