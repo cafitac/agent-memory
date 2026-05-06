@@ -72,12 +72,15 @@ agent-memory dogfood storage-health ~/.agent-memory/memory.db --hermes-config ~/
 agent-memory dogfood trace-quality ~/.agent-memory/memory.db --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
 agent-memory dogfood scheduled-dry-run ~/.agent-memory/memory.db --output ~/.agent-memory/reports/scheduled-dry-run.json --since-hours 24
 agent-memory dogfood scheduled-compare --report ~/.agent-memory/reports/scheduled-dry-run-1.json --report ~/.agent-memory/reports/scheduled-dry-run-2.json --output ~/.agent-memory/reports/scheduled-compare.json
+agent-memory graph export-html ~/.agent-memory/memory.db --output ~/.agent-memory/reports/memory-graph.html --limit 200
 agent-memory traces record ~/.agent-memory/memory.db --surface cli --event-kind user_correction --summary "sanitized trace summary" --scope project:agent-memory
 agent-memory traces list ~/.agent-memory/memory.db --surface cli --limit 20
 agent-memory traces retention-report ~/.agent-memory/memory.db --max-trace-count 10000
 ```
 
 Use this before tuning ranking or adding broader graph traversal: first confirm which memories are frequently injected, which scopes are active, whether retrieval is often empty, and whether any frequently injected refs are now deprecated/disputed/missing. The audit command is read-only and summarizes local observation rows without emitting raw query text or query previews. Keep this data local unless you intentionally export it.
+
+`graph export-html` is a local browser view for the graph substrate. It writes a standalone, force-directed neural-style HTML file and returns a small JSON receipt with `read_only: true` and `mutated: false`. By default it uses ref-only labels and excludes raw source content, raw query text, trace summaries, prompts, transcripts, and samples. `--include-memory-labels` is an explicit local-only opt-in for curated fact/procedure/episode labels; it still does not embed raw source/query/trace text.
 
 `dogfood baseline` is the preferred one-command snapshot before trace/consolidation work. It is read-only JSON that includes the package version, DB path/schema metadata, memory status counts, observation audit, empty diagnostics, signal-bearing review candidates, sanitized Hermes doctor metadata, and a local E2E marker set to `not_executed`. It intentionally does not include raw queries, query previews, prompt text, full Hermes config, environment secrets, or the bootstrap command.
 
