@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.86 state and next recommended slice.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.87 state and next recommended slice.
 - `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — ordered post-G3f plan: collect scheduled artifacts, compare trends, draft apply-mode contract, then implement only the first narrow mutation slice.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
@@ -254,7 +254,7 @@ If a later session changes direction, update both this checklist and the relevan
 
 - [x] PR H1: Add retrieval/consolidation evaluation fixtures and metrics
   - Done across the retrieval-eval M1/M1+ line before v0.1.83: `agent-memory eval retrieval <db> <fixtures>` now exercises the real retrieval path, supports baseline modes (`lexical`, `lexical-global`, `source-lexical`, `source-global`), text/JSON output, advisory reports, and regression flags.
-  - Acceptance: covered by `tests/test_retrieval_evaluation.py`, `tests/test_cli.py`, README docs, and the full local suite; follow-up PR #162 / v0.1.85 raised checked-in retrieval tasks to 12 and full local suite to `257 passed` on 2026-05-06.
+  - Acceptance: covered by `tests/test_retrieval_evaluation.py`, `tests/test_cli.py`, README docs, and the full local suite; follow-up PR #162 / v0.1.85 raised checked-in retrieval tasks to 12, PR #165 / v0.1.86 raised them to 13 with noisy global fact coverage, and PR #168 / v0.1.87 raised them to 14 with same-slot conflicting fact coverage.
 
 - [x] PR H2: Add graph/trace visualization export
   - First completed in PR #149 / v0.1.80 with `graph export-html`: local standalone HTML, typed memory/trace/observation/activation graph, ref-only labels by default, explicit `--include-memory-labels` opt-in.

@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 21:36 KST
+Last updated: 2026-05-06 23:15 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.86`: PR #158 added local backup/import/export commands and released `v0.1.84`, PR #161 promoted public privacy/safety docs, PR #162 added a cross-scope procedure retrieval-eval guardrail, PR #163 release-sync published `v0.1.85`, PR #165 added a noisy global fact retrieval-eval guardrail, and PR #166 release-sync published `v0.1.86`. GitHub Release, npm, and PyPI all report `v0.1.86`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.86/.venv/bin/agent-memory`; `hermes hooks doctor` is healthy for all three configs after allowlisting, and one real Hermes `OK` smoke passed per profile.
+agent-memory is currently verified through `v0.1.87`: PR #158 added local backup/import/export commands and released `v0.1.84`, PR #161 promoted public privacy/safety docs, PR #162 added a cross-scope procedure retrieval-eval guardrail, PR #163 release-sync published `v0.1.85`, PR #165 added a noisy global fact retrieval-eval guardrail, PR #166 release-sync published `v0.1.86`, PR #168 added a same-slot conflicting fact retrieval-eval guardrail, and PR #169 release-sync published `v0.1.87`. GitHub Release, npm, and PyPI all report `v0.1.87`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.87/.venv/bin/agent-memory`; `hermes hooks doctor` is healthy for all three configs after allowlisting, and one real Hermes `OK` smoke passed per profile.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` status `healthy`, `read_only=true`, `mutated=false`; scheduled dry-run remains read-only and recommends `continue_scheduled_dry_run_dogfooding_before_g4` rather than enabling broad mutation.
 
 ## Current next slice
 
-Current slice: v0.1.86 release/runtime checkpoint is complete locally and should be kept durable via this docs checkpoint PR. After this checkpoint is merged, the safest next implementation slice is another retrieval-quality fixture (stale procedure, conflicting facts, prompt-budget pressure) or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
+Current slice: v0.1.87 release/runtime checkpoint is complete locally and should be kept durable via this docs checkpoint PR. After this checkpoint is merged, the safest next implementation slice is another retrieval-quality fixture (stale procedure, prompt-budget pressure, noisy irrelevant procedure/episode) or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
 
-Why this is the best next move: v0.1.86 adds another published retrieval-eval guardrail, so the release is not done until the published artifact is installed into the live Hermes hook runtime and the result is recorded. That has now been verified. The remaining product risk is quality/automation maturity, not packaging availability.
+Why this is the best next move: v0.1.87 adds another published retrieval-eval guardrail, so the release is not done until the published artifact is installed into the live Hermes hook runtime and the result is recorded. That has now been verified. The remaining product risk is quality/automation maturity, not packaging availability.
 
 Recommended local backup commands:
 
@@ -57,9 +57,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged retrieval-quality PR: #165 `test: add noisy fact retrieval fixture`.
-- Latest merged release-sync PR: #166 `chore: release v0.1.86 [skip release]`.
-- Latest completed release: `v0.1.86`.
+- Latest merged retrieval-quality PR: #168 `test: add conflicting fact retrieval fixture`.
+- Latest merged release-sync PR: #169 `chore: release v0.1.87 [skip release]`.
+- Latest completed release: `v0.1.87`.
 
 Expected GitHub identity:
 
@@ -70,21 +70,22 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.86`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.86`
-- npm package: `@cafitac/agent-memory@0.1.86`
-- PyPI package: `cafitac-agent-memory==0.1.86`
+- `v0.1.87`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.87`
+- npm package: `@cafitac/agent-memory@0.1.87`
+- PyPI package: `cafitac-agent-memory==0.1.87`
 
-Latest verified source checkout snapshot, checked 2026-05-06 21:36 KST:
+Latest verified source checkout snapshot, checked 2026-05-06 23:15 KST:
 
 - branch: `main`, synced with `origin/main` before this docs checkpoint branch
-- latest release-sync commit: `fdfd50e chore: release v0.1.86 [skip release]`
-- latest retrieval fixture merge commit: `cfb39de test: add noisy fact retrieval fixture`
+- latest release-sync commit: `b03633f chore: release v0.1.87 [skip release]`
+- latest retrieval fixture merge commit: `9e6b0ed test: add conflicting fact retrieval fixture`
 - open PRs: none observed before this checkpoint branch
-- GitHub Release, npm, and PyPI all report `v0.1.86`
-- published-install QA passed from fresh PyPI venv; npm reports `0.1.86`
-- live Hermes `default`, `personal-oss`, and `earlypay` profiles use the pinned v0.1.86 runtime and `hooks doctor` is healthy after allowlisting
-- local full tests for PR #165: `.venv/bin/python -m pytest tests/ -q` -> `258 passed`
+- GitHub Release, npm, and PyPI all report `v0.1.87`
+- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.87"`
+- live Hermes `default`, `personal-oss`, and `earlypay` profiles use the pinned v0.1.87 runtime and `hooks doctor` is healthy after allowlisting
+- local full tests for PR #168: `.venv/bin/python -m pytest tests/ -q` passed
+- checked-in retrieval-eval fixtures now include 14 tasks; the conflicting fact focused suite passed with `4 passed`
 - installed runtime dogfood storage-health: `healthy`, `read_only=true`, `mutated=false`
 - installed runtime scheduled dry-run: `read_only=true`, `mutated=false`, quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`
 
@@ -98,6 +99,59 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
+
+
+## v0.1.87 conflicting fact retrieval-eval release completed
+
+PR #168 `test: add conflicting fact retrieval fixture` merged and released through release-sync PR #169.
+
+Completed behavior:
+
+- Checked-in retrieval-eval coverage now includes a same-slot current-vs-stale fact conflict.
+- `Project M1 latest release version` retrieval must prefer the current Project M1 latest-release fact over an older same subject/predicate value.
+- Checked-in retrieval task count is now 14; the lexical baseline remains intentionally weaker than current retrieval.
+- No production retrieval code changed in this slice; it is fixture/test coverage only.
+
+Verification completed:
+
+- RED: the new fixture contract test failed before the fixture was added.
+- Focused conflicting-fact suite passed with `4 passed`.
+- `uv run pytest tests/test_retrieval_evaluation.py -q` passed.
+- `uv run ruff check tests/test_retrieval_evaluation.py` passed.
+- `git diff --check` and release metadata check passed.
+- Full local suite `.venv/bin/python -m pytest tests/ -q` passed.
+- CLI retrieval-eval smoke over checked-in fixtures passed.
+- PR #168 CI and main CI passed.
+- PR #169 release-sync CI passed and published `v0.1.87`.
+- GitHub Release, PyPI, and npm all report `0.1.87`.
+- Fresh PyPI and npm smoke commands passed for `0.1.87`.
+
+## v0.1.87 live Hermes runtime QA completed
+
+Installed runtime:
+
+- `/Users/reddit/.agent-memory/runtime/v0.1.87/.venv/bin/agent-memory`
+- Installed from PyPI with Python 3.11 and `cafitac-agent-memory==0.1.87`.
+
+Updated Hermes configs:
+
+- `/Users/reddit/.hermes/config.yaml`
+- `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`
+- `/Users/reddit/.hermes/profiles/earlypay/config.yaml`
+
+Timestamped backups were created next to each config with suffix `.bak-agent-memory-v0.1.87-20260506T231435`.
+
+Verification completed:
+
+- `agent_memory.__version__ == "0.1.87"` from the pinned runtime.
+- `agent-memory hermes-doctor` reports `status=ok` for all three configs.
+- Direct `hermes-pre-llm-hook` stdin smoke with `hook_event_name=pre_llm_call` produced valid hook JSON.
+- `hermes chat --accept-hooks ... 'Reply with OK only.'` returned `OK` for default, `personal-oss`, and `earlypay` profiles.
+- `hermes hooks doctor`, `hermes --profile personal-oss hooks doctor`, and `hermes --profile earlypay hooks doctor` all report healthy hooks after allowlisting.
+- Installed runtime `dogfood storage-health` against `/Users/reddit/.agent-memory/memory.db` reports `healthy`, `read_only=true`, `mutated=false`.
+- Installed runtime `dogfood scheduled-dry-run` reports `read_only=true`, `mutated=false`, privacy flags false for raw conversation/query/sample output, and quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`.
+- Installed runtime live DB backup export/inspect/restore round-trip passed.
+- QA artifacts are under `/Users/reddit/.agent-memory/reports/v0.1.87-runtime-qa-20260506T231505`.
 
 ## v0.1.86 noisy global fact retrieval-eval release completed
 
