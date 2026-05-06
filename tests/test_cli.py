@@ -22,6 +22,55 @@ from agent_memory.storage.sqlite import (
 )
 
 
+def test_python_module_cli_backup_export_inspect_restore_round_trip(tmp_path: Path) -> None:
+    db_path = tmp_path / "cli-backup.db"
+    bundle_path = tmp_path / "cli-backup.zip"
+    restored_path = tmp_path / "cli-restored.db"
+    initialize_database(db_path)
+    source = ingest_source_text(db_path=db_path, source_type="note", content="CLI backup preserves memory state.")
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="CLI backup",
+        predicate="preserves",
+        object_ref_or_value="memory state",
+        evidence_ids=[source.id],
+        scope="project:backup-cli",
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    export_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "backup", "export", str(db_path), str(bundle_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert export_result.returncode == 0, export_result.stderr
+    assert json.loads(export_result.stdout)["kind"] == "agent_memory_backup_export"
+
+    inspect_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "backup", "inspect", str(bundle_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert inspect_result.returncode == 0, inspect_result.stderr
+    assert json.loads(inspect_result.stdout)["manifest"]["table_counts"]["facts"] == 1
+
+    restore_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "backup", "restore", str(bundle_path), str(restored_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert restore_result.returncode == 0, restore_result.stderr
+    packet = retrieve_memory_packet(restored_path, query="memory state", preferred_scope="project:backup-cli")
+    assert [item.id for item in packet.semantic_facts] == [fact.id]
+
+
 def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood(tmp_path: Path) -> None:
     db_path = tmp_path / "graph-inspect.db"
     initialize_database(db_path)

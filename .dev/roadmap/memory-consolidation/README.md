@@ -36,10 +36,11 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `current-progress-and-next-steps.md` — latest verified progress, live dogfood state, final target, and next recommended slices after `v0.1.76`.
+- `.dev/status/current-handoff.md` — latest verified v0.1.83 repo/release state and immediate next recommended slice.
+- `current-progress-and-next-steps.md` — historical verified progress and dogfood context after `v0.1.76`; still useful for G4 background but no longer the latest release checkpoint.
 - `g4-readiness-and-first-mutation-plan.md` — ordered post-G3f sequence: collect scheduled reports, compare trends, draft the G4 apply-mode plan, then implement only the first narrow mutation slice.
 
-Use these current checkpoints together with `.dev/status/current-handoff.md` before choosing the next PR-sized task.
+Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
 
 ## Stage documents
 

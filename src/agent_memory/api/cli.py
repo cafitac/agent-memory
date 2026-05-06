@@ -27,6 +27,7 @@ from agent_memory.integrations.hermes_hooks import (
     install_hermes_hook_config,
     load_hermes_shell_hook_payload,
 )
+from agent_memory.core.backup import export_backup, inspect_backup, restore_backup
 from agent_memory.core.curation import (
     approve_fact,
     approve_memory,
@@ -5126,6 +5127,18 @@ def _build_parser() -> argparse.ArgumentParser:
     kb_export_parser.add_argument("output_dir", type=Path)
     kb_export_parser.add_argument("--scope")
 
+    backup_parser = subparsers.add_parser("backup", help="Export, inspect, and restore local agent-memory SQLite backups.")
+    backup_subparsers = backup_parser.add_subparsers(dest="backup_action", required=True)
+    backup_export_parser = backup_subparsers.add_parser("export")
+    backup_export_parser.add_argument("db_path", type=Path)
+    backup_export_parser.add_argument("output_path", type=Path)
+    backup_inspect_parser = backup_subparsers.add_parser("inspect")
+    backup_inspect_parser.add_argument("bundle_path", type=Path)
+    backup_restore_parser = backup_subparsers.add_parser("restore")
+    backup_restore_parser.add_argument("bundle_path", type=Path)
+    backup_restore_parser.add_argument("output_db_path", type=Path)
+    backup_restore_parser.add_argument("--overwrite", action="store_true")
+
     review_parser = subparsers.add_parser("review")
     review_subparsers = review_parser.add_subparsers(dest="review_action", required=True)
     for action_name in ["approve", "dispute", "deprecate"]:
@@ -5885,6 +5898,24 @@ def main() -> None:
             print(result.model_dump_json(indent=2))
             return
         raise ValueError(f"Unsupported kb action: {args.kb_action}")
+
+    if args.command == "backup":
+        if args.backup_action == "export":
+            print(export_backup(db_path=args.db_path, output_path=args.output_path).model_dump_json(indent=2))
+            return
+        if args.backup_action == "inspect":
+            print(inspect_backup(args.bundle_path).model_dump_json(indent=2))
+            return
+        if args.backup_action == "restore":
+            print(
+                restore_backup(
+                    bundle_path=args.bundle_path,
+                    output_db_path=args.output_db_path,
+                    overwrite=args.overwrite,
+                ).model_dump_json(indent=2)
+            )
+            return
+        raise ValueError(f"Unsupported backup action: {args.backup_action}")
 
     if args.command == "review":
         if args.review_action in {"approve", "dispute", "deprecate"}:

@@ -113,6 +113,16 @@ agent-memory graph export-html "$DB" --output ~/.agent-memory/reports/memory-gra
 
 The default HTML uses ref-only labels and embeds an event-driven, brain-like canvas graph of memories, relations, traces, observations, and activations. The visible operator UI is Korean-localized and includes filters, search, a dominant-hub explanation panel, render stats, and quality controls (`auto`, `performance`, `sharp`). `auto` caps Retina/high-DPR rendering at 1.5x by default, `performance` uses DPR 1 with reduced blur/glow/labels, and `sharp` opts back into higher-DPR drawing up to 2x. The layout remains deterministic instead of browser force simulation. It is read-only (`mutated: false`) and does not embed raw source content, raw query text, or trace summaries. If you want curated memory text in the local-only HTML, opt in explicitly with `--include-memory-labels`; raw source/query/trace text still stays out of the export.
 
+For local backup and migration between machines, create a portable backup bundle and restore it into a new SQLite path:
+
+```bash
+agent-memory backup export "$DB" ~/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup inspect ~/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup restore ~/.agent-memory/backups/memory.agent-memory-backup.zip ~/.agent-memory/restored-memory.db
+```
+
+The backup bundle contains a metadata-only `manifest.json` plus a SQLite database copy made through SQLite's backup API. Inspecting a bundle reports format/package version, SQLite `user_version`, and table counts without printing source content, raw queries, trace summaries, prompts, transcripts, or secret-like values. Restore refuses unsupported backup format versions, unsafe database entry names, and existing output databases unless `--overwrite` is explicitly provided.
+
 For local dogfood and noise monitoring, retrievals can leave a secret-safe observation log. Normal `retrieve` only records an observation when explicitly asked; the Hermes pre-LLM hook records one automatically in the local SQLite DB for real turns. Observations store a query hash, selected memory refs, top memory ref, response mode, scope, and surface. They do not store the raw query text or a query preview. Deterministic `hermes hooks doctor/test` pre-LLM payloads exercise context injection but are skipped as dogfood observations so synthetic weather prompts do not pollute the audit.
 
 ```bash
