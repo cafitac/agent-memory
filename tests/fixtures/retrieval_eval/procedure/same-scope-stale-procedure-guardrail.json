@@ -1,0 +1,39 @@
+{
+  "references": {
+    "current_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests",
+      "trigger_context": "Before opening a PR"
+    },
+    "stale_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run legacy pre-PR checks",
+      "trigger_context": "Before opening a PR"
+    }
+  },
+  "tasks": [
+    {
+      "id": "same-scope-current-pre-pr-procedure",
+      "query": "What local tests should I run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "rationale": "Keep stale same-scope procedures hidden behind the current pre-PR procedure.",
+      "notes": [
+        "The current procedure should remain the surfaced pre-PR guidance.",
+        "A same-scope stale procedure with overlapping trigger wording should not appear alongside the current one."
+      ],
+      "expected": {
+        "facts": [],
+        "procedures": ["current_pre_pr_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": ["stale_pre_pr_procedure"],
+        "episodes": []
+      }
+    }
+  ]
+}
