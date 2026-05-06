@@ -257,10 +257,9 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: fixtures for repeated corrections, preferences, stale facts, supersession, and procedural reuse.
   - Acceptance: CI produces advisory metrics; no flaky external services.
 
-- [ ] PR H2: Add graph/trace visualization export
-  - Goal: let users inspect memory consolidation paths visually.
-  - Scope: JSON/Graphviz/HTML export for trace clusters, relations, activation counts, and status history.
-  - Acceptance: export is local-only and redacted; examples do not include secrets.
+- [x] PR H2: Add graph/trace visualization export
+  - Done in PR #149 / v0.1.80 with `graph export-html`: local standalone HTML, typed memory/trace/observation/activation graph, ref-only labels by default, explicit `--include-memory-labels` opt-in.
+  - Acceptance: export is local-only/read-only/redacted by default and examples do not include secrets. Layout is MVP-quality; richer web UI/filtering remains future polish.
 
 - [ ] PR H3: Add backup/import/export for trace and consolidation state
   - Goal: make the richer memory DB operationally safe.

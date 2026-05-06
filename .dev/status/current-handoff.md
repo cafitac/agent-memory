@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 23:23 KST
+Last updated: 2026-05-06 10:45 KST
 
 ## Trigger for the next session
 
@@ -16,44 +16,32 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.77`: PR #142 added the first narrow G4a mutation, explicit `dogfood query-preview-cleanup --apply --actor --reason`, and PR #143 release-sync published it to GitHub Release, npm, and PyPI. Published install smoke passed from npm exec, uvx, and a fresh pip venv; the pinned local Hermes runtime is `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`; `/Users/reddit/.hermes/config.yaml` points to that runtime and the live DB at `/Users/reddit/.agent-memory/memory.db`; live Hermes E2E and `hermes hooks doctor` are healthy. The live DB legacy cleanup has been applied: before preview found 70 eligible non-empty `retrieval_observations.query_preview` rows, apply cleared 70 rows with hash-only/audit output, after preview found 0, and scheduled-dry-run stayed read-only/no-mutation with raw-content privacy flags false. Broader G4 consolidation apply mode remains blocked.
+agent-memory is currently verified through `v0.1.80`: PR #149 added the first local browser visualization surface, `agent-memory graph export-html`, and PR #150 release-sync published it to GitHub Release, npm, and PyPI. The pinned local Hermes runtime is `/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory`; `/Users/reddit/.hermes/config.yaml` points to that runtime and `hermes hooks doctor` is healthy after hook approval. The export writes a standalone neural-style HTML graph with ref-only labels by default, `read_only=true`, `mutated=false`, and privacy markers showing raw source content, raw query text, and trace summaries are not embedded. A live source/runtime visual smoke wrote `/Users/reddit/.agent-memory/reports/memory-graph-v0180-runtime-20260506T014406Z.html` with 668 nodes and 240 edges. The UI is an MVP: useful and browser-based, not yet a polished brain-like clustering interface.
+
+Storage/privacy cleanup status is still clean: legacy `retrieval_observations.query_preview` rows are 0, ordinary trace metadata-only violations are 0, storage-health is `healthy` with no warnings. Broader G4 consolidation apply mode remains blocked by trace/decay/background quality signals, not storage privacy debt.
 
 ## Current next slice
 
-Current slice: G4b ordinary trace metadata default cleanup plus continued G4 readiness monitoring.
+Current slice: continued G4 readiness monitoring plus optional visualization polish/readiness monitor follow-up.
 
-Goal: keep the just-applied live query-preview cleanup auditable and remove the next narrow storage-health blocker without broad memory mutation. `dogfood query-preview-cleanup` remains complete. The new G4b candidate is `dogfood ordinary-trace-metadata-cleanup`, which previews/applies only conservative metadata defaults (`candidate_policy=evidence_only`, `auto_approved=false`) for legacy ordinary `turn` traces that already have `summary=NULL` and `retention_policy=ephemeral`. It must stay aggregate/hash-only and require `--apply --actor --reason` for mutation.
+Goal: keep G4 evidence collection continuous, avoid asking the user to manually remember to check, and make the system easier to inspect outside pure CLI. The continuous cron jobs now run forever every 6h using the v0.1.80 runtime:
 
-Detailed plan:
+- Collector: `ab0381974719`, `agent-memory continuous G4 readiness report collection`, local delivery, writes raw-content-safe scheduled-dry-run artifacts.
+- Monitor: `ed86714cd0e6`, `agent-memory continuous G4 readiness comparison monitor`, origin delivery, compares latest scheduled-dry-run artifacts and reports only aggregate status changes.
 
-- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`
-- Local artifact directory: `/Users/reddit/.agent-memory/reports/g4-readiness`
-- Local scheduled collector job id: `6894df1bfd4c`
-
-Recommended command shape:
+Recommended local graph command:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db \
-  --output /Users/reddit/.agent-memory/reports/scheduled-dry-run-YYYYMMDD-HHMMSS.json \
-  --since-hours 24 \
-  --min-trace-coverage 0.25 \
-  --min-evidence-count 2 \
-  --candidate-min 1 \
-  --max-decay-risk 0
-
-agent-memory dogfood scheduled-compare \
-  --report /Users/reddit/.agent-memory/reports/scheduled-dry-run-1.json \
-  --report /Users/reddit/.agent-memory/reports/scheduled-dry-run-2.json \
-  --output /Users/reddit/.agent-memory/reports/scheduled-compare.json \
-  --min-report-count 2 \
-  --max-decay-risk 0
+/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory graph export-html /Users/reddit/.agent-memory/memory.db \
+  --output /Users/reddit/.agent-memory/reports/memory-graph.html \
+  --limit 240
 ```
 
-Current live result: v0.1.77 live G4a cleanup ran with a backup and before/after artifacts under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`. Before preview found 70 eligible legacy rows. Apply cleared 70 rows and recorded audit trace id 143 with reason/eligible-id hashes only. After preview and direct SQL found 0 non-empty `query_preview` rows. The after `dogfood scheduled-dry-run` remained `read_only=true`, `mutated=false`, and raw-content privacy flags false. This completes only the legacy cleanup; it does not enable broad G4 consolidation apply mode.
+Use `--include-memory-labels` only when intentionally creating a local-only artifact with curated memory labels. Raw source/query/trace text remains excluded.
 
-Current G4b live result: `dogfood ordinary-trace-metadata-cleanup` was implemented in PR #145, released in v0.1.78 via PR #146, installed as the pinned Hermes runtime at `/Users/reddit/.agent-memory/runtime/v0.1.78/.venv/bin/agent-memory`, and applied once to the live DB. Before preview found 2 aggregate ordinary metadata-only violations on 1 fixable legacy ordinary `turn` row (`candidate_policy_not_evidence_only=1`, `auto_approved_not_false=1`). Apply normalized 1 row and recorded audit trace id 150. After preview found 0 violations, storage-health is `healthy` with no warnings, and scheduled-dry-run remains read-only/no-mutation. Follow-up branch `fix/scheduled-dry-run-storage-health-healthy` fixes the quality gate so `healthy` storage-health no longer yields a stale `storage_health_not_clean` blocked reason.
+Current G4 live result: latest v0.1.80 manual scheduled-dry-run remains `read_only=true`, `mutated=false`, storage `healthy`, warnings `[]`, quality gate `pass=false`, blocked reasons `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`. This confirms storage/privacy is clean but broad consolidation apply should still wait.
 
-Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. The legacy query-preview cleanup and ordinary trace metadata cleanup mutations are complete; any future mutation must remain separately planned, explicit, and audited.
+Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, and audited.
 
 ## Current repo state
 
@@ -64,9 +52,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged feature PR: #142 `feat: add query preview cleanup apply`.
-- Latest merged release-sync PR: #143 `chore: release v0.1.77 [skip release]`.
-- Latest completed release: `v0.1.77`.
+- Latest merged feature PR: #149 `feat: add local memory graph html export`.
+- Latest merged release-sync PR: #150 `chore: release v0.1.80 [skip release]`.
+- Latest completed release: `v0.1.80`.
 
 Expected GitHub identity:
 
@@ -77,26 +65,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.77`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.77`
-- npm package: `@cafitac/agent-memory@0.1.77`
-- PyPI package: `cafitac-agent-memory==0.1.77`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`
+- `v0.1.80`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.80`
+- npm package: `@cafitac/agent-memory@0.1.80`
+- PyPI package: `cafitac-agent-memory==0.1.80`
+- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory`
 - Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.77 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.77-20260505224023`
+- Hermes config backup before v0.1.80 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.80-20260506T014247Z`
 - `hermes hooks doctor` reports all shell hooks healthy.
 
-Latest raw-content-safe live DB snapshot, checked 2026-05-05 23:23 KST:
+Latest raw-content-safe live DB snapshot, checked 2026-05-06 10:44 KST:
 
-- `retrieval_observations`: 838, latest `2026-05-05 14:23:14` UTC after the v0.1.77 cleanup verification and live hook smoke
-- `memory_activations`: 743, latest `2026-05-05 14:23:14` UTC after the v0.1.77 cleanup verification and live hook smoke
-- `experience_traces`: 143, latest `2026-05-05 14:21:01` UTC; cleanup audit trace id is 143
-- `facts`: 3, latest `2026-05-05 14:22:46` UTC
-- `procedures`: 0
-- `episodes`: 0
-- legacy non-empty `query_preview` rows before v0.1.77 cleanup apply: 70
+- storage-health: `healthy`, warnings `[]`
 - legacy non-empty `query_preview` rows after v0.1.77 cleanup apply: 0
-- cleanup backup/artifacts: `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`
+- ordinary trace metadata-only violations after v0.1.78 cleanup apply: 0
+- latest v0.1.80 graph export artifact: `/Users/reddit/.agent-memory/reports/memory-graph-v0180-runtime-20260506T014406Z.html`
+- latest v0.1.80 manual scheduled-dry-run artifact: `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260506T014407Z-v0180-runtime-manual.json`
+- latest v0.1.80 manual scheduled-compare artifact: `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-compare-20260506T014420Z-v0180-runtime-manual.json`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
