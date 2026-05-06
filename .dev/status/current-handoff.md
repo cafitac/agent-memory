@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 13:38 KST
+Last updated: 2026-05-06 14:18 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.83` plus a local H3 backup/import/export implementation slice: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), and PR #157 release-sync published `v0.1.83`. The public README now documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) and local backup commands (`agent-memory backup export|inspect|restore`). Local tests on the current checkout pass: `.venv/bin/python -m pytest tests/ -q` returned `256 passed`.
+agent-memory is currently verified through `v0.1.84`: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), PR #158 added local backup/import/export commands, and PR #159 release-sync published `v0.1.84`. The public README documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) and local backup commands (`agent-memory backup export|inspect|restore`). Local and published-install QA passed for the v0.1.84 PyPI/npm artifacts, and the live Hermes `personal-oss` plus `earlypay` hook runtimes were pinned to `/Users/reddit/.agent-memory/runtime/v0.1.84/.venv/bin/agent-memory` with `hermes hooks doctor` healthy after allowlisting.
 
 Storage/privacy cleanup status remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations were already normalized by the v0.1.78 cleanup, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked until trace/decay/background quality evidence is stronger and a separate apply-mode contract is drafted.
 
 ## Current next slice
 
-Current slice: H3 backup/import/export implementation completed locally; next safe slice is H4 public docs promotion/release prep after verification/release decisions.
+Current slice: H3 backup/import/export is merged, released, and locally QAed in `v0.1.84`; next safe slice is H4 public docs promotion.
 
-Why this is the best next move: H3 adds a local backup bundle path for richer trace/consolidation state without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+Why this is the best next move: H4 should promote only the stable, verified surfaces from `.dev` into public docs now that H3 shipped, without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
 
 Recommended local backup commands:
 
@@ -57,9 +57,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged feature PR: #156 `perf: localize graph UI and add quality modes`.
-- Latest merged release-sync PR: #157 `chore: release v0.1.83 [skip release]`.
-- Latest completed release: `v0.1.83`.
+- Latest merged feature PR: #158 `feat: add local memory backup commands`.
+- Latest merged release-sync PR: #159 `chore: release v0.1.84 [skip release]`.
+- Latest completed release: `v0.1.84`.
 
 Expected GitHub identity:
 
@@ -70,20 +70,22 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.83`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.83`
-- npm package: `@cafitac/agent-memory@0.1.83`
-- PyPI package: `cafitac-agent-memory==0.1.83`
+- `v0.1.84`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.84`
+- npm package: `@cafitac/agent-memory@0.1.84`
+- PyPI package: `cafitac-agent-memory==0.1.84`
 
-Latest verified source checkout snapshot, checked 2026-05-06 13:38 KST:
+Latest verified source checkout snapshot, checked 2026-05-06 14:18 KST:
 
-- branch: `main`, local H3 work is ahead of `origin/main` until pushed/PR'd
-- latest release commit: `23d9fec chore: release v0.1.83 [skip release] (#157)`
-- latest local docs/status checkpoint commit before H3: `209a094 docs: checkpoint agent-memory v0.1.83 status`
+- branch: `main`, synced with `origin/main` before this docs checkpoint branch
+- latest release-sync commit: `47eef53 chore: release v0.1.84 [skip release]`
+- latest H3 feature merge commit: `075c27f feat: add local memory backup commands`
 - open PRs: none observed with `gh pr list --state open`
-- main CI and auto-release for `v0.1.83`: success
-- local full tests after H3: `.venv/bin/python -m pytest tests/ -q` -> `256 passed`
-- `agent-memory eval retrieval --help` works and shows baseline/regression options.
+- GitHub Release, npm, and PyPI all report `v0.1.84`
+- published-install QA passed from fresh PyPI venv and npm wrapper paths
+- live Hermes `personal-oss` and `earlypay` profiles use the pinned v0.1.84 runtime and `hooks doctor` is healthy
+- local full tests after H3 before release: `.venv/bin/python -m pytest tests/ -q` -> `256 passed`
+- `agent-memory eval retrieval --help` and `agent-memory backup --help` work.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -94,6 +96,29 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.84 backup/import/export release
+
+PR #158 `feat: add local memory backup commands` merged and released through release-sync PR #159.
+
+Completed behavior:
+
+- `agent-memory backup export <db_path> <output_path>` writes a private local backup bundle.
+- `agent-memory backup inspect <bundle_path>` reads only metadata-safe manifest details.
+- `agent-memory backup restore <bundle_path> <output_db_path> [--overwrite]` restores with overwrite protection.
+- Backup bundles contain a metadata-only `manifest.json` plus a SQLite DB copy; the DB copy itself contains private local memory state.
+- Restore/inspect reject unsupported manifest versions and unsafe database entry names.
+
+Verification completed:
+
+- PR #158 checks passed and merged.
+- PR #159 release-sync validation passed and merged.
+- GitHub Release `v0.1.84`, npm `@cafitac/agent-memory@0.1.84`, and PyPI `cafitac-agent-memory==0.1.84` verified.
+- Fresh PyPI venv QA installed `cafitac-agent-memory==0.1.84` and passed init/backup export/inspect/restore plus retrieve-after-restore smoke.
+- Fresh npm wrapper QA passed init/backup export/inspect/restore using `@cafitac/agent-memory@0.1.84` with a clean `UV_CACHE_DIR`.
+- Live runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.84/.venv/bin/agent-memory`.
+- Live DB backup export/inspect/restore smoke passed against `/Users/reddit/.agent-memory/memory.db`.
+- `hermes hooks doctor` reports healthy hooks for the default/personal profile and the `earlypay` profile after v0.1.84 allowlisting.
 
 ## Completed v0.1.83 graph quality release
 

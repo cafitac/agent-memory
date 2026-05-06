@@ -265,7 +265,7 @@ If a later session changes direction, update both this checklist and the relevan
   - Goal: make the richer memory DB operationally safe.
   - Scope: `agent-memory backup export|inspect|restore`, metadata-only manifest, SQLite backup API copy, restore overwrite guard, version and database-entry validation, README privacy docs.
   - Acceptance: backup round-trip works in tests; incompatible versions and unsafe database entries fail safely; existing output DBs are protected unless `--overwrite` is explicit.
-  - Status: implemented locally in the H3 slice; release/PR pending.
+  - Status: complete and released in v0.1.84 via PR #158/#159; published PyPI/npm install smokes and live Hermes pinned-runtime QA passed.
 
 - [ ] PR H4: Promote reviewed docs from `.dev` into public docs
   - Goal: explain the memory consolidation model to external users only after enough behavior exists.

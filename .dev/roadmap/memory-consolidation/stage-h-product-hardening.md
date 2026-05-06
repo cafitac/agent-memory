@@ -59,7 +59,7 @@ Let users inspect memory consolidation paths visually.
 
 ## PR H3: Add backup/import/export for trace and consolidation state
 
-Status: implemented locally in this H3 slice; release/PR pending.
+Status: complete and released in `v0.1.84` via PR #158/#159.
 
 ### Objective
 
@@ -67,10 +67,11 @@ Make the richer DB operationally safe without changing retrieval ranking, defaul
 
 ### Acceptance
 
-- Backup round-trip works in tests through `agent-memory backup export`, `backup inspect`, and `backup restore`.
+- Backup round-trip works in tests and published-install smokes through `agent-memory backup export`, `backup inspect`, and `backup restore`.
 - Version compatibility is checked through the backup manifest `format_version`.
 - Restore/import fails safely on incompatible manifest versions, unsafe database entry names, and existing output DBs unless `--overwrite` is explicit.
 - Privacy docs explain that `manifest.json` is metadata-only while the bundled SQLite database contains the local memory state.
+- v0.1.84 was verified from GitHub Release, npm, PyPI, fresh PyPI venv, fresh npm wrapper, and the live Hermes pinned runtime.
 
 ## PR H4: Promote reviewed docs from `.dev` into public docs
 
