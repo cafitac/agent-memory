@@ -172,10 +172,19 @@ def test_python_module_cli_graph_export_html_writes_read_only_private_neural_vie
     assert payload["performance"]["layout_mode"] == "interactive_brain_static"
     assert payload["performance"]["continuous_physics_enabled"] is False
     assert payload["performance"]["rendering"] == "dirty_rect_event_driven_canvas"
-    assert "Brain-like memory graph" in html
-    assert "dominant memory hub" in html
-    assert "Fact = approved or reviewed declarative memory" in html
-    assert "Procedure = reviewed how-to memory" in html
+    assert payload["performance"]["device_pixel_ratio_cap"] == 1.5
+    assert payload["performance"]["quality_modes"] == ["auto", "performance", "sharp"]
+    assert "agent-memory 기억 그래프" in html
+    assert "뇌형 기억 그래프" in html
+    assert "주요 기억 허브" in html
+    assert "Fact = 검토/승인된 사실형 장기 기억" in html
+    assert "Procedure = 검토된 절차형 기억" in html
+    assert "품질: 자동" in html
+    assert "성능 우선" in html
+    assert "선명도 우선" in html
+    assert "setQualityMode" in html
+    assert "effectiveDpr" in html
+    assert "CSS_CLASS_LOW_POWER" in html
     assert "graph-data-summary" in html
     assert "requestDraw" in html
     assert "for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++)" not in html
