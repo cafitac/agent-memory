@@ -4725,89 +4725,175 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
 
 
 def _render_memory_graph_html(graph_data: dict[str, Any], *, title: str) -> str:
+    nodes = list(graph_data.get("nodes", []))
+    edges = list(graph_data.get("edges", []))
+    nodes_by_type = Counter(str(node.get("type", "memory")) for node in nodes)
+    edges_by_type = Counter(str(edge.get("type", "related")) for edge in edges)
+    degree_by_ref: Counter[str] = Counter()
+    for edge in edges:
+        from_ref = str(edge.get("from", ""))
+        to_ref = str(edge.get("to", ""))
+        if from_ref:
+            degree_by_ref[from_ref] += 1
+        if to_ref:
+            degree_by_ref[to_ref] += 1
+    by_id = {str(node.get("id")): node for node in nodes}
+    memory_types = {"fact", "procedure", "episode", "memory"}
+    dominant_hubs = [
+        {
+            "id": node_id,
+            "type": str(by_id[node_id].get("type", "memory")),
+            "label": str(by_id[node_id].get("label") or node_id),
+            "degree": degree,
+            "status": by_id[node_id].get("status"),
+            "strength": by_id[node_id].get("strength", 0),
+        }
+        for node_id, degree in degree_by_ref.most_common(8)
+        if node_id in by_id and str(by_id[node_id].get("type")) in memory_types
+    ]
+    isolated_memory_refs = sorted(
+        str(node.get("id"))
+        for node in nodes
+        if str(node.get("type")) in memory_types and degree_by_ref[str(node.get("id"))] == 0
+    )[:12]
+    graph_summary = {
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "nodes_by_type": dict(sorted(nodes_by_type.items())),
+        "edges_by_type": dict(sorted(edges_by_type.items())),
+        "dominant_hubs": dominant_hubs,
+        "isolated_memory_refs": isolated_memory_refs,
+        "definitions": {
+            "Fact": "approved or reviewed declarative memory: a stable statement the runtime may retrieve by default when approved.",
+            "Procedure": "reviewed how-to memory: trigger context plus steps; absent if no procedures have been created or approved yet.",
+            "Trace": "lightweight event footprint from a turn or diagnostic; ordinary traces avoid raw transcript text.",
+            "Observation": "secret-safe record that a retrieval happened: hashes/counts/refs, not raw query text.",
+            "Activation": "runtime signal that a memory was retrieved, empty, or reinforced during use.",
+        },
+    }
     graph_json = html.escape(json.dumps(graph_data, sort_keys=True), quote=False)
+    summary_json = html.escape(json.dumps(graph_summary, sort_keys=True), quote=False)
     escaped_title = html.escape(title)
-    return f"""<!doctype html>
-<html lang=\"en\">
+    template = """<!doctype html>
+<html lang="en">
 <head>
-<meta charset=\"utf-8\" />
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-<title>{escaped_title}</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>__TITLE__</title>
 <style>
-:root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}
-body {{ margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% 20%, #20356f 0, #0a1020 45%, #03050d 100%); color: #e8edff; overflow: hidden; }}
-#app {{ position: fixed; inset: 0; }}
-.header {{ position: fixed; left: 24px; top: 20px; z-index: 2; max-width: 560px; }}
-h1 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: 0.03em; }}
-.meta {{ color: #9eb0ff; font-size: 13px; line-height: 1.5; }}
-canvas {{ width: 100vw; height: 100vh; display: block; }}
-.legend {{ position: fixed; right: 24px; top: 20px; z-index: 2; background: rgba(7, 12, 28, 0.72); border: 1px solid rgba(125, 153, 255, 0.24); border-radius: 16px; padding: 14px 16px; backdrop-filter: blur(14px); }}
-.legend div {{ margin: 6px 0; font-size: 12px; color: #c9d4ff; }}
-.dot {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }}
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 52% 30%, #263a73 0, #0a1020 42%, #02040b 100%); color: #e8edff; overflow: hidden; }
+canvas { width: 100vw; height: 100vh; display: block; }
+.panel { position: fixed; z-index: 2; background: rgba(6, 10, 24, 0.78); border: 1px solid rgba(125, 153, 255, 0.23); border-radius: 18px; padding: 14px 16px; backdrop-filter: blur(16px); box-shadow: 0 20px 70px rgba(0,0,0,.32); }
+.header { left: 22px; top: 18px; max-width: 620px; }
+h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .03em; }
+.meta { color: #aebcff; font-size: 13px; line-height: 1.45; }
+.controls { right: 22px; top: 18px; width: 320px; }
+.controls h2, .inspector h2 { margin: 0 0 10px; font-size: 14px; color: #f2f5ff; }
+.row { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+.chip { display: inline-flex; gap: 6px; align-items: center; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.065); color: #cdd7ff; font-size: 12px; user-select: none; }
+.chip input { accent-color: #7cf7c8; }
+.search { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(160,180,255,.25); background: rgba(3,6,16,.8); color: #eaf0ff; }
+.stats { color: #aebcff; font-size: 12px; line-height: 1.55; margin-top: 8px; }
+.inspector { left: 22px; bottom: 18px; width: min(640px, calc(100vw - 44px)); max-height: min(260px, 28vh); overflow: auto; }
+.inspector p { margin: 6px 0; color: #c9d4ff; font-size: 12px; line-height: 1.42; }
+.kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; color: #c9d4ff; font-size: 12px; }
+.warn { color: #ffd166; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+button { border: 1px solid rgba(160,180,255,.24); background: rgba(124,247,200,.12); color: #e8edff; border-radius: 10px; padding: 7px 10px; cursor: pointer; }
+button:hover { background: rgba(124,247,200,.2); }
 </style>
 </head>
 <body>
-<div class=\"header\"><h1>agent-memory neural graph</h1><div class=\"meta\">Read-only local visualization. Static clustered layout avoids continuous force simulation; raw source content, raw query text, and trace summaries are not embedded.</div></div>
-<div class=\"legend\" id=\"legend\"></div>
-<canvas id=\"graph\"></canvas>
-<script id=\"graph-data\" type=\"application/json\">{graph_json}</script>
+<div class="panel header">
+  <h1>agent-memory neural graph</h1>
+  <div class="meta"><strong>Brain-like memory graph</strong>. Read-only local visualization. Uses deterministic organic lobes, event-driven canvas redraws, viewport culling, and no browser force simulation. Raw source content, raw query text, and trace summaries are not embedded.</div>
+</div>
+<div class="panel controls">
+  <h2>filters & live render</h2>
+  <input id="search" class="search" placeholder="search ref, e.g. fact:1 or trace:196" />
+  <div id="typeFilters" class="row"></div>
+  <div class="row"><button id="resetView">reset view</button><button id="fitHub">focus dominant hub</button></div>
+  <div id="stats" class="stats"></div>
+</div>
+<div class="panel inspector" id="inspector"></div>
+<canvas id="graph"></canvas>
+<script id="graph-data" type="application/json">__GRAPH_JSON__</script>
+<script id="graph-data-summary" type="application/json">__SUMMARY_JSON__</script>
 <script>
 const data = JSON.parse(document.getElementById('graph-data').textContent);
+const summary = JSON.parse(document.getElementById('graph-data-summary').textContent);
 const canvas = document.getElementById('graph');
-const ctx = canvas.getContext('2d');
-const palette = {{ fact:'#7cf7c8', procedure:'#ffd166', episode:'#9ad1ff', trace:'#f78cbe', observation:'#a78bfa', activation:'#ff8f70', memory:'#d7e0ff' }};
-const anchors = {{ fact:[0.50,0.34], procedure:[0.34,0.48], episode:[0.66,0.48], trace:[0.50,0.66], observation:[0.25,0.74], activation:[0.75,0.74], memory:[0.50,0.50] }};
-const nodesByType = data.nodes.reduce((acc, node) => {{ (acc[node.type] ||= []).push(node); return acc; }}, {{}});
-function resize() {{
-  const scale = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(window.innerWidth * scale);
-  canvas.height = Math.floor(window.innerHeight * scale);
-  ctx.setTransform(scale,0,0,scale,0,0);
-}}
-function layoutNodes() {{
-  for (const [type, typedNodes] of Object.entries(nodesByType)) {{
-    const anchor = anchors[type] || anchors.memory;
-    const cx = innerWidth * anchor[0], cy = innerHeight * anchor[1];
-    const spread = Math.max(42, Math.min(innerWidth, innerHeight) * 0.11);
-    typedNodes.forEach((n, i) => {{
-      const angle = i * 2.399963229728653;
-      const ring = Math.floor(Math.sqrt(i));
-      const radius = 18 + ring * Math.max(12, spread / Math.max(3, Math.sqrt(typedNodes.length)));
-      n.x = Math.max(24, Math.min(innerWidth - 24, cx + Math.cos(angle) * radius));
-      n.y = Math.max(24, Math.min(innerHeight - 24, cy + Math.sin(angle) * radius));
-    }});
-  }}
-}}
-const nodes = data.nodes;
+const ctx = canvas.getContext('2d', { alpha: false });
+const palette = { fact:'#7cf7c8', procedure:'#ffd166', episode:'#9ad1ff', trace:'#f78cbe', observation:'#a78bfa', activation:'#ff8f70', memory:'#d7e0ff' };
+const nodes = data.nodes.map((n, index) => ({...n, index, x:0, y:0, hidden:false, hover:false}));
 const byId = new Map(nodes.map(n => [n.id, n]));
-const edges = data.edges.map(e => ({{...e, source: byId.get(e.from), target: byId.get(e.to)}})).filter(e => e.source && e.target);
-const legend = document.getElementById('legend');
-legend.innerHTML = Object.entries(palette).map(([k,v]) => `<div><span class=\"dot\" style=\"background:${{v}}\"></span>${{k}}</div>`).join('') + `<div>${{nodes.length}} nodes · ${{edges.length}} edges</div><div>static clustered layout</div>`;
-function draw() {{
-  ctx.clearRect(0,0,innerWidth,innerHeight);
-  ctx.globalCompositeOperation='lighter';
-  for (const e of edges) {{
-    const c=palette[e.source.type] || '#8994c7';
-    ctx.strokeStyle=c+'55';
-    ctx.lineWidth=Math.max(0.5, Math.min(2.5, e.weight || 1));
-    ctx.beginPath(); ctx.moveTo(e.source.x,e.source.y); ctx.lineTo(e.target.x,e.target.y); ctx.stroke();
-  }}
-  for (const n of nodes) {{
-    const r=Math.max(4, Math.min(14, 5 + Math.sqrt(n.strength || 1)*2.6));
-    ctx.fillStyle=palette[n.type] || palette.memory;
-    ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=14;
-    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
-    const showLabel = nodes.length <= 250 || ['fact','procedure','episode','memory'].includes(n.type);
-    if (showLabel) {{ ctx.fillStyle='#dfe7ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, n.x+r+4, n.y+4); }}
-  }}
-  ctx.globalCompositeOperation='source-over';
-}}
-function render() {{ resize(); layoutNodes(); draw(); }}
-render(); window.addEventListener('resize', render);
+const edges = data.edges.map(e => ({...e, source: byId.get(e.from), target: byId.get(e.to)})).filter(e => e.source && e.target);
+const degree = new Map();
+for (const n of nodes) degree.set(n.id, 0);
+for (const e of edges) { degree.set(e.source.id, (degree.get(e.source.id)||0)+1); degree.set(e.target.id, (degree.get(e.target.id)||0)+1); }
+const memoryTypes = new Set(['fact','procedure','episode','memory']);
+const enabledTypes = new Set(Object.keys(summary.nodes_by_type));
+const state = { scale:1, ox:0, oy:0, selected:null, hovered:null, search:'', dirty:false, drawMs:0, visibleNodes:0, visibleEdges:0 };
+function hash01(value) { let h=2166136261; for (let i=0;i<value.length;i++) { h ^= value.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; }
+function resize() { const scale = Math.min(window.devicePixelRatio || 1, 2); canvas.width = Math.floor(innerWidth * scale); canvas.height = Math.floor(innerHeight * scale); ctx.setTransform(scale,0,0,scale,0,0); }
+function layoutBrain() {
+  const cx = innerWidth * .52, cy = innerHeight * .52;
+  const rx = Math.max(260, innerWidth * .31), ry = Math.max(170, innerHeight * .23);
+  const hubs = nodes.filter(n => memoryTypes.has(n.type)).sort((a,b)=>(degree.get(b.id)||0)-(degree.get(a.id)||0));
+  const hubById = new Map(hubs.map(h => [h.id, h]));
+  hubs.forEach((h, i) => { const t = hubs.length <= 1 ? .5 : i / Math.max(1, hubs.length - 1); const a = Math.PI * (1.12 + .76 * t); h.x = cx + Math.cos(a) * rx * .42; h.y = cy + Math.sin(a) * ry * .35; if (i === 0) { h.x = cx; h.y = cy - ry*.08; } });
+  const parentOf = new Map();
+  for (const e of edges) {
+    if (hubById.has(e.source.id) && !hubById.has(e.target.id)) parentOf.set(e.target.id, e.source);
+    if (hubById.has(e.target.id) && !hubById.has(e.source.id)) parentOf.set(e.source.id, e.target);
+  }
+  const childrenByHub = new Map();
+  for (const n of nodes) if (!memoryTypes.has(n.type)) { const p = parentOf.get(n.id); if (p) (childrenByHub.get(p.id) || childrenByHub.set(p.id, []).get(p.id)).push(n); }
+  for (const [hubId, children] of childrenByHub) {
+    const hub = byId.get(hubId); const base = hash01(hubId) * Math.PI * 2;
+    children.forEach((n, i) => { const local = i / Math.max(1, children.length); const shell = n.type === 'trace' ? 1.05 : n.type === 'observation' ? 1.45 : 1.78; const a = base + local * Math.PI * 2.0 + hash01(n.id)*.35; const r = Math.min(rx, ry) * (.34 + shell*.16) + Math.sqrt(i)*1.8; n.x = hub.x + Math.cos(a) * r; n.y = hub.y + Math.sin(a) * r * .72; });
+  }
+  const orphans = nodes.filter(n => !memoryTypes.has(n.type) && !parentOf.has(n.id));
+  orphans.forEach((n, i) => { const a = i * 2.399963229728653; const r = Math.min(rx, ry) * (.9 + .18*Math.sqrt(i)); n.x = cx + Math.cos(a)*r; n.y = cy + Math.sin(a)*r*.72 + ry*.30; });
+  for (const n of nodes) { n.x = Math.max(40, Math.min(innerWidth-40, n.x)); n.y = Math.max(44, Math.min(innerHeight-44, n.y)); }
+}
+function screen(n) { return { x: n.x * state.scale + state.ox, y: n.y * state.scale + state.oy }; }
+function visible(n) { if (!enabledTypes.has(n.type)) return false; if (state.search && !String(n.id+' '+(n.label||'')).toLowerCase().includes(state.search)) return false; const p = screen(n); return p.x > -80 && p.x < innerWidth+80 && p.y > -80 && p.y < innerHeight+80; }
+function nodeRadius(n) { return Math.max(4, Math.min(18, 4 + Math.sqrt(Math.max(1, n.strength || degree.get(n.id) || 1))*2.3)); }
+function drawScene() {
+  const t0 = performance.now(); state.dirty = false; ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#03050d'; ctx.fillRect(0,0,innerWidth,innerHeight);
+  const grad = ctx.createRadialGradient(innerWidth*.52, innerHeight*.38, 20, innerWidth*.52, innerHeight*.48, Math.max(innerWidth, innerHeight)*.7); grad.addColorStop(0,'#17295a'); grad.addColorStop(.52,'#081020'); grad.addColorStop(1,'#02040b'); ctx.fillStyle=grad; ctx.fillRect(0,0,innerWidth,innerHeight);
+  state.visibleEdges = 0; state.visibleNodes = 0; ctx.globalCompositeOperation='lighter';
+  for (const e of edges) { if (!enabledTypes.has(e.source.type) || !enabledTypes.has(e.target.type)) continue; if (state.search && !visible(e.source) && !visible(e.target)) continue; const a=screen(e.source), b=screen(e.target); if ((a.x<-120&&b.x<-120)||(a.x>innerWidth+120&&b.x>innerWidth+120)||(a.y<-120&&b.y<-120)||(a.y>innerHeight+120&&b.y>innerHeight+120)) continue; const color = palette[e.source.type] || '#8994c7'; ctx.strokeStyle = color + (e.type === 'top_retrieval' ? '88' : '42'); ctx.lineWidth = Math.max(.45, Math.min(2.2, (e.weight || 1) * state.scale)); ctx.beginPath(); const mx=(a.x+b.x)/2, my=(a.y+b.y)/2 - 24*state.scale; ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(mx,my,b.x,b.y); ctx.stroke(); state.visibleEdges++; }
+  const showLabels = state.scale > .95 || nodes.length <= 260;
+  for (const n of nodes) { if (!visible(n)) continue; const p=screen(n); const r=nodeRadius(n)*Math.sqrt(state.scale); const c=palette[n.type] || palette.memory; ctx.fillStyle=c; ctx.shadowColor=c; ctx.shadowBlur = n === state.hovered || n === state.selected ? 22 : 9; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; if (memoryTypes.has(n.type)) { ctx.strokeStyle='#ffffffaa'; ctx.lineWidth=1.2; ctx.stroke(); } if (showLabels && (memoryTypes.has(n.type) || n === state.hovered || n === state.selected)) { ctx.fillStyle='#eef3ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, p.x+r+5, p.y+4); } state.visibleNodes++; }
+  ctx.globalCompositeOperation='source-over'; state.drawMs = Math.round((performance.now()-t0)*10)/10; renderStats();
+}
+function requestDraw() { if (state.dirty) return; state.dirty = true; requestAnimationFrame(drawScene); }
+function renderStats() { const hubs = summary.dominant_hubs || []; const top = hubs[0]; document.getElementById('stats').innerHTML = `${state.visibleNodes}/${nodes.length} visible nodes · ${state.visibleEdges}/${edges.length} visible edges<br>draw ${state.drawMs}ms · event-driven canvas<br>${top ? 'dominant memory hub: '+top.id+' degree '+top.degree : 'no dominant memory hub'}<br>${(summary.isolated_memory_refs||[]).length ? '<span class="warn">isolated memory refs: '+summary.isolated_memory_refs.join(', ')+'</span>' : ''}`; }
+function renderInspector(n) { const def = summary.definitions; const top = (summary.dominant_hubs||[])[0]; document.getElementById('inspector').innerHTML = `<h2>what this graph means</h2><p><strong>Fact = approved or reviewed declarative memory</strong>. Procedure = reviewed how-to memory. Trace = lightweight event footprint. Observation = secret-safe retrieval record. Activation = retrieval/reinforcement signal.</p><p>${top ? `Current shape: <strong>${top.id}</strong> is the dominant memory hub, so many traces/observations point there. That means the live DB currently has one approved/highly reinforced fact receiving most retrieval/support signals; deprecated facts or absent procedures may appear isolated.` : 'Current shape: no memory hub dominates yet.'}</p>${n ? `<div class="kv"><div>selected</div><div>${n.id}</div><div>type</div><div>${n.type}</div><div>status</div><div>${n.status ?? ''}</div><div>degree</div><div>${degree.get(n.id)||0}</div><div>strength</div><div>${n.strength ?? ''}</div></div>` : '<p>Click a node to inspect its ref-only metadata. Raw source/query/trace text is intentionally unavailable in this artifact.</p>'}<p class="warn">Procedure count: ${summary.nodes_by_type.procedure || 0}. If this is zero, there are no procedure rows included in the exported graph, so procedures cannot be connected yet.</p>`; }
+function installControls() { const wrap=document.getElementById('typeFilters'); for (const [type,count] of Object.entries(summary.nodes_by_type)) { const label=document.createElement('label'); label.className='chip'; label.innerHTML=`<input type="checkbox" checked data-type="${type}"><span class="dot" style="background:${palette[type]||palette.memory}"></span>${type} ${count}`; wrap.appendChild(label); } wrap.addEventListener('change', e => { const t=e.target.dataset.type; if (!t) return; e.target.checked ? enabledTypes.add(t) : enabledTypes.delete(t); requestDraw(); }); document.getElementById('search').addEventListener('input', e => { state.search = e.target.value.trim().toLowerCase(); requestDraw(); }); document.getElementById('resetView').onclick = () => { state.scale=1; state.ox=0; state.oy=0; requestDraw(); }; document.getElementById('fitHub').onclick = () => { const h=(summary.dominant_hubs||[])[0]; const n=h && byId.get(h.id); if (!n) return; state.scale=1.35; state.ox=innerWidth*.5-n.x*state.scale; state.oy=innerHeight*.45-n.y*state.scale; state.selected=n; renderInspector(n); requestDraw(); }; }
+function pick(x,y) { let best=null, bestD=Infinity; for (const n of nodes) { if (!enabledTypes.has(n.type)) continue; const p=screen(n); const dx=p.x-x, dy=p.y-y; const d=dx*dx+dy*dy; const r=nodeRadius(n)+10; if (d<r*r && d<bestD) { best=n; bestD=d; } } return best; }
+let dragging=false, lastX=0, lastY=0;
+canvas.addEventListener('mousemove', e => { if (dragging) { state.ox += e.clientX-lastX; state.oy += e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; requestDraw(); return; } const h=pick(e.clientX,e.clientY); if (h !== state.hovered) { state.hovered=h; requestDraw(); } });
+canvas.addEventListener('mousedown', e => { dragging=true; lastX=e.clientX; lastY=e.clientY; });
+window.addEventListener('mouseup', () => { dragging=false; });
+canvas.addEventListener('click', e => { const n=pick(e.clientX,e.clientY); state.selected=n; renderInspector(n); requestDraw(); });
+canvas.addEventListener('wheel', e => { e.preventDefault(); const before={x:(e.clientX-state.ox)/state.scale, y:(e.clientY-state.oy)/state.scale}; const factor = Math.exp(-e.deltaY * .001); state.scale = Math.max(.35, Math.min(4, state.scale * factor)); state.ox = e.clientX - before.x * state.scale; state.oy = e.clientY - before.y * state.scale; requestDraw(); }, { passive:false });
+function boot() { resize(); layoutBrain(); installControls(); renderInspector(null); requestDraw(); }
+window.addEventListener('resize', () => { resize(); layoutBrain(); requestDraw(); });
+boot();
 </script>
 </body>
 </html>
 """
+    return (
+        template.replace("__TITLE__", escaped_title)
+        .replace("__GRAPH_JSON__", graph_json)
+        .replace("__SUMMARY_JSON__", summary_json)
+    )
 
 
 def _export_memory_graph_html(
@@ -4839,8 +4925,9 @@ def _export_memory_graph_html(
             "memory_labels_included": include_memory_labels,
         },
         "performance": {
-            "layout_mode": "static_clustered",
+            "layout_mode": "interactive_brain_static",
             "continuous_physics_enabled": False,
+            "rendering": "dirty_rect_event_driven_canvas",
             "device_pixel_ratio_cap": 2,
         },
     }

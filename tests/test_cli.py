@@ -169,9 +169,17 @@ def test_python_module_cli_graph_export_html_writes_read_only_private_neural_vie
     assert "token=SHOULD_NOT_LEAK" not in result.stdout
     assert "token=SHOULD_NOT_LEAK" not in html
     assert "GRAPH_EXPORT_OK" not in html
-    assert payload["performance"]["layout_mode"] == "static_clustered"
+    assert payload["performance"]["layout_mode"] == "interactive_brain_static"
     assert payload["performance"]["continuous_physics_enabled"] is False
+    assert payload["performance"]["rendering"] == "dirty_rect_event_driven_canvas"
+    assert "Brain-like memory graph" in html
+    assert "dominant memory hub" in html
+    assert "Fact = approved or reviewed declarative memory" in html
+    assert "Procedure = reviewed how-to memory" in html
+    assert "graph-data-summary" in html
+    assert "requestDraw" in html
     assert "for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++)" not in html
+    assert "continuous physics" not in html.lower()
     assert "requestAnimationFrame(draw)" not in html
 
     with sqlite3.connect(db_path) as connection:
