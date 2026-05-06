@@ -207,6 +207,16 @@ def _seed_checked_in_fixture_eval_db(db_path: Path) -> dict[str, int]:
         scope="project:m1",
         success_rate=1.0,
     )
+    drift_procedure = create_candidate_procedure(
+        db_path=db_path,
+        name="Run drift project checks",
+        trigger_context="Before opening a PR",
+        preconditions=["Project Drift checkout"],
+        steps=["Run ZZ-999 drift checks before opening a PR"],
+        evidence_ids=[source.id],
+        scope="project:drift",
+        success_rate=0.8,
+    )
     current_branch_fact = create_candidate_fact(
         db_path=db_path,
         subject_ref="Project M1",
@@ -241,11 +251,13 @@ def _seed_checked_in_fixture_eval_db(db_path: Path) -> dict[str, int]:
     approve_memory(db_path=db_path, memory_type="fact", memory_id=current_branch_fact.id)
     approve_memory(db_path=db_path, memory_type="fact", memory_id=stale_branch_fact.id)
     approve_memory(db_path=db_path, memory_type="procedure", memory_id=procedure.id)
+    approve_memory(db_path=db_path, memory_type="procedure", memory_id=drift_procedure.id)
 
     return {
         "project_scope_fact": fact.id,
         "drift_fact": drift_fact.id,
         "procedure": procedure.id,
+        "drift_procedure": drift_procedure.id,
         "current_branch_fact": current_branch_fact.id,
         "stale_branch_fact": stale_branch_fact.id,
         "episode": episode.id,
@@ -463,6 +475,23 @@ def test_checked_in_retrieval_eval_examples_include_source_global_stale_source_g
     assert payload["tasks"][0]["notes"] == [
         "Current retrieval should keep only the active branch fact surfaced.",
         "A source-global baseline can resurface the stale branch fact because all approved memories share one source note in the seeded fixture DB.",
+    ]
+
+
+
+def test_checked_in_retrieval_eval_examples_include_cross_scope_procedure_guardrail() -> None:
+    fixture_dir = _checked_in_fixture_dir()
+    payload = json.loads((fixture_dir / "procedure" / "cross-scope-procedure-guardrail.json").read_text())
+
+    assert payload["references"]["project_scope_procedure"]["memory_type"] == "procedure"
+    assert payload["references"]["drift_scope_procedure"]["scope"] == "project:drift"
+    assert payload["tasks"][0]["id"] == "project-scope-procedure-cross-scope-guardrail"
+    assert payload["tasks"][0]["expected"]["procedures"] == ["project_scope_procedure"]
+    assert payload["tasks"][0]["avoid"]["procedures"] == ["drift_scope_procedure"]
+    assert payload["tasks"][0]["rationale"] == "Keep same-wording cross-scope procedure guidance out of Project M1 pre-PR queries."
+    assert payload["tasks"][0]["notes"] == [
+        "The current retrieval path should use the preferred Project M1 scope for procedure guidance.",
+        "A source-global baseline can resurface same-source Project Drift procedure guidance when provenance wording overlaps.",
     ]
 
 
@@ -1013,18 +1042,18 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
 
     result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixtures_dir, baseline_mode="lexical")
 
-    assert result.summary.total_tasks == 11
-    assert result.summary.passed_tasks == 11
+    assert result.summary.total_tasks == 12
+    assert result.summary.passed_tasks == 12
     assert result.summary.failed_tasks == 0
     assert result.summary.by_memory_type["facts"].total_tasks == 6
     assert result.summary.by_memory_type["facts"].passed_tasks == 6
     assert result.summary.by_memory_type["facts"].failed_tasks == 0
     assert result.summary.by_memory_type["facts"].total_expected_hits == 6
     assert result.summary.by_memory_type["facts"].total_avoid_hits == 0
-    assert result.summary.by_memory_type["procedures"].total_tasks == 3
-    assert result.summary.by_memory_type["procedures"].passed_tasks == 3
+    assert result.summary.by_memory_type["procedures"].total_tasks == 4
+    assert result.summary.by_memory_type["procedures"].passed_tasks == 4
     assert result.summary.by_memory_type["procedures"].failed_tasks == 0
-    assert result.summary.by_memory_type["procedures"].total_expected_hits == 3
+    assert result.summary.by_memory_type["procedures"].total_expected_hits == 4
     assert result.summary.by_memory_type["procedures"].total_avoid_hits == 0
     assert result.summary.by_memory_type["episodes"].total_tasks == 2
     assert result.summary.by_memory_type["episodes"].passed_tasks == 2
@@ -1034,15 +1063,15 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
     assert result.summary.by_primary_task_type["facts"].total_tasks == 6
     assert result.summary.by_primary_task_type["facts"].passed_tasks == 6
     assert result.summary.by_primary_task_type["facts"].failed_tasks == 0
-    assert result.summary.by_primary_task_type["procedures"].total_tasks == 3
-    assert result.summary.by_primary_task_type["procedures"].passed_tasks == 3
+    assert result.summary.by_primary_task_type["procedures"].total_tasks == 4
+    assert result.summary.by_primary_task_type["procedures"].passed_tasks == 4
     assert result.summary.by_primary_task_type["procedures"].failed_tasks == 0
     assert result.summary.by_primary_task_type["episodes"].total_tasks == 2
     assert result.summary.by_primary_task_type["episodes"].passed_tasks == 2
     assert result.summary.by_primary_task_type["episodes"].failed_tasks == 0
     assert result.baseline_summary is not None
-    assert result.baseline_summary.total_tasks == 11
-    assert result.baseline_summary.passed_tasks == 6
+    assert result.baseline_summary.total_tasks == 12
+    assert result.baseline_summary.passed_tasks == 7
     assert result.baseline_summary.failed_tasks == 5
     assert result.baseline_summary.tasks_with_avoid_hits == 5
     assert result.baseline_summary.by_memory_type["facts"].total_tasks == 8
@@ -1051,10 +1080,10 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
     assert result.baseline_summary.by_memory_type["facts"].total_expected_hits == 6
     assert result.baseline_summary.by_memory_type["facts"].total_avoid_hits == 5
     assert result.baseline_summary.by_memory_type["facts"].tasks_with_avoid_hits == 5
-    assert result.baseline_summary.by_memory_type["procedures"].total_tasks == 3
-    assert result.baseline_summary.by_memory_type["procedures"].passed_tasks == 3
+    assert result.baseline_summary.by_memory_type["procedures"].total_tasks == 4
+    assert result.baseline_summary.by_memory_type["procedures"].passed_tasks == 4
     assert result.baseline_summary.by_memory_type["procedures"].failed_tasks == 0
-    assert result.baseline_summary.by_memory_type["procedures"].total_expected_hits == 3
+    assert result.baseline_summary.by_memory_type["procedures"].total_expected_hits == 4
     assert result.baseline_summary.by_memory_type["episodes"].total_tasks == 2
     assert result.baseline_summary.by_memory_type["episodes"].passed_tasks == 2
     assert result.baseline_summary.by_memory_type["episodes"].failed_tasks == 0
@@ -1062,8 +1091,8 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
     assert result.baseline_summary.by_primary_task_type["facts"].total_tasks == 6
     assert result.baseline_summary.by_primary_task_type["facts"].passed_tasks == 3
     assert result.baseline_summary.by_primary_task_type["facts"].failed_tasks == 3
-    assert result.baseline_summary.by_primary_task_type["procedures"].total_tasks == 3
-    assert result.baseline_summary.by_primary_task_type["procedures"].passed_tasks == 2
+    assert result.baseline_summary.by_primary_task_type["procedures"].total_tasks == 4
+    assert result.baseline_summary.by_primary_task_type["procedures"].passed_tasks == 3
     assert result.baseline_summary.by_primary_task_type["procedures"].failed_tasks == 1
     assert result.baseline_summary.by_primary_task_type["episodes"].total_tasks == 2
     assert result.baseline_summary.by_primary_task_type["episodes"].passed_tasks == 1
@@ -1096,6 +1125,7 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
         "project-scope-fact",
         "project-scope-procedure",
         "project-scope-procedure-stale-fact-guardrail",
+        "project-scope-procedure-cross-scope-guardrail",
         "cross-scope-drift-check",
         "current-vs-stale-fact",
         "branch-only-current-policy",
@@ -1111,6 +1141,7 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
     assert current_by_task["branch-only-current-policy"] is True
     assert current_by_task["source-global-stale-source-guardrail"] is True
     assert current_by_task["project-scope-procedure-stale-fact-guardrail"] is True
+    assert current_by_task["project-scope-procedure-cross-scope-guardrail"] is True
     assert current_by_task["cross-scope-drift-check"] is True
     assert baseline_by_task["episode-recall"] is True
     assert baseline_by_task["cross-scope-drift-check"] is True
@@ -1119,6 +1150,7 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
     assert baseline_by_task["branch-only-current-policy"] is False
     assert baseline_by_task["source-global-stale-source-guardrail"] is False
     assert baseline_by_task["project-scope-procedure-stale-fact-guardrail"] is False
+    assert baseline_by_task["project-scope-procedure-cross-scope-guardrail"] is True
 
 
 
@@ -1148,26 +1180,26 @@ def test_cli_eval_retrieval_runs_checked_in_symbolic_fixture_directory(tmp_path:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["summary"]["total_tasks"] == 11
-    assert payload["summary"]["passed_tasks"] == 11
+    assert payload["summary"]["total_tasks"] == 12
+    assert payload["summary"]["passed_tasks"] == 12
     assert payload["summary"]["failed_tasks"] == 0
     assert payload["summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 6
     assert payload["summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 6
     assert payload["summary"]["by_primary_task_type"]["facts"]["failed_tasks"] == 0
-    assert payload["summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 3
-    assert payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 3
+    assert payload["summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 4
+    assert payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 4
     assert payload["summary"]["by_primary_task_type"]["procedures"]["failed_tasks"] == 0
     assert payload["summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 2
     assert payload["summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 2
     assert payload["summary"]["by_primary_task_type"]["episodes"]["failed_tasks"] == 0
-    assert payload["baseline_summary"]["total_tasks"] == 11
-    assert payload["baseline_summary"]["passed_tasks"] == 6
+    assert payload["baseline_summary"]["total_tasks"] == 12
+    assert payload["baseline_summary"]["passed_tasks"] == 7
     assert payload["baseline_summary"]["failed_tasks"] == 5
     assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 6
     assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 3
     assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["failed_tasks"] == 3
-    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 3
-    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 2
+    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 4
+    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 3
     assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["failed_tasks"] == 1
     assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 2
     assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 1
@@ -1176,8 +1208,8 @@ def test_cli_eval_retrieval_runs_checked_in_symbolic_fixture_directory(tmp_path:
     assert payload["baseline_summary"]["by_memory_type"]["facts"]["total_tasks"] == 8
     assert payload["baseline_summary"]["by_memory_type"]["facts"]["passed_tasks"] == 3
     assert payload["baseline_summary"]["by_memory_type"]["facts"]["failed_tasks"] == 5
-    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["total_tasks"] == 3
-    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["passed_tasks"] == 3
+    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["total_tasks"] == 4
+    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["passed_tasks"] == 4
     assert payload["baseline_summary"]["by_memory_type"]["procedures"]["failed_tasks"] == 0
     assert payload["baseline_summary"]["by_memory_type"]["episodes"]["total_tasks"] == 2
     assert payload["baseline_summary"]["by_memory_type"]["episodes"]["passed_tasks"] == 2
@@ -1369,7 +1401,7 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
 
     expected = {
         "lexical": {
-            "baseline_passed": 6,
+            "baseline_passed": 7,
             "baseline_failed": 5,
             "baseline_avoid": 5,
             "delta_avoid": -5,
@@ -1377,7 +1409,7 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
             "facts_primary": (6, 3, 3),
         },
         "source-lexical": {
-            "baseline_passed": 6,
+            "baseline_passed": 7,
             "baseline_failed": 5,
             "baseline_avoid": 5,
             "delta_avoid": -5,
@@ -1386,18 +1418,18 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
         },
         "lexical-global": {
             "baseline_passed": 1,
-            "baseline_failed": 10,
-            "baseline_avoid": 10,
-            "delta_avoid": -10,
-            "delta_pass": 10,
-            "facts_primary": (6, 0, 6),
-        },
-        "source-global": {
-            "baseline_passed": 0,
             "baseline_failed": 11,
             "baseline_avoid": 11,
             "delta_avoid": -11,
             "delta_pass": 11,
+            "facts_primary": (6, 0, 6),
+        },
+        "source-global": {
+            "baseline_passed": 0,
+            "baseline_failed": 12,
+            "baseline_avoid": 12,
+            "delta_avoid": -12,
+            "delta_pass": 12,
             "facts_primary": (6, 0, 6),
         },
     }
@@ -1405,13 +1437,14 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
     for mode, expectation in expected.items():
         result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixtures_dir, baseline_mode=mode)
 
-        assert result.summary.total_tasks == 11
-        assert result.summary.passed_tasks == 11
+        assert result.summary.total_tasks == 12
+        assert result.summary.passed_tasks == 12
         assert result.summary.failed_tasks == 0
         assert result.summary.by_primary_task_type["facts"].total_tasks == 6
+        assert result.summary.by_primary_task_type["procedures"].total_tasks == 4
         assert result.baseline_summary is not None
         assert result.baseline_summary.mode == mode
-        assert result.baseline_summary.total_tasks == 11
+        assert result.baseline_summary.total_tasks == 12
         assert result.baseline_summary.passed_tasks == expectation["baseline_passed"]
         assert result.baseline_summary.failed_tasks == expectation["baseline_failed"]
         assert result.baseline_summary.tasks_with_avoid_hits == expectation["baseline_avoid"]

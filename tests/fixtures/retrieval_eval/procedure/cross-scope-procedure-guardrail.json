@@ -1,0 +1,39 @@
+{
+  "references": {
+    "project_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests",
+      "step_contains": "uv run pytest tests/ -q"
+    },
+    "drift_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:drift",
+      "name": "Run drift project checks",
+      "step_contains": "ZZ-999 drift checks"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure-cross-scope-guardrail",
+      "query": "What should run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "rationale": "Keep same-wording cross-scope procedure guidance out of Project M1 pre-PR queries.",
+      "notes": [
+        "The current retrieval path should use the preferred Project M1 scope for procedure guidance.",
+        "A source-global baseline can resurface same-source Project Drift procedure guidance when provenance wording overlaps."
+      ],
+      "expected": {
+        "facts": [],
+        "procedures": ["project_scope_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": ["drift_scope_procedure"],
+        "episodes": []
+      }
+    }
+  ]
+}

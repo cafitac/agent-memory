@@ -1422,10 +1422,15 @@ def _search_model_rows_with_trace(
 
     scored_rows.sort(key=lambda item: item[0])
 
-    if table_name == "facts" and statuses == ("approved",):
-        if preferred_scope and any(trace.scope_priority == 0 for _score, _model, trace in scored_rows):
-            scored_rows = [item for item in scored_rows if item[2].scope_priority == 0]
+    if (
+        table_name in {"facts", "procedures"}
+        and statuses == ("approved",)
+        and preferred_scope
+        and any(trace.scope_priority == 0 for _score, _model, trace in scored_rows)
+    ):
+        scored_rows = [item for item in scored_rows if item[2].scope_priority == 0]
 
+    if table_name == "facts" and statuses == ("approved",):
         deduplicated_rows: list[tuple[tuple[Any, ...], T, RetrievalTraceEntry]] = []
         seen_claim_slots: set[tuple[str, str, str]] = set()
         for item in scored_rows:

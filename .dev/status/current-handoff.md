@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 14:32 KST
+Last updated: 2026-05-06 15:25 KST
 
 ## Trigger for the next session
 
@@ -22,9 +22,9 @@ Storage/privacy cleanup status remains clean: legacy `retrieval_observations.que
 
 ## Current next slice
 
-Current slice: H4 public docs promotion is implemented locally in a docs-only slice; next step is PR/CI/merge, then resume with either retrieval-eval fixture expansion or a G4 apply-mode contract plan.
+Current slice: retrieval-eval fixture expansion is implemented locally in `feat/retrieval-eval-cross-scope-procedure-fixture`; next step is focused/full verification, PR/CI/merge, then resume with either a G4 apply-mode contract plan or another retrieval quality fixture slice.
 
-Why this is the best next move: this H4 docs slice promotes only stable, verified surfaces from `.dev` into public docs now that H3 shipped, without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+Why this is the best next move: H4 docs promotion has already landed in PR #161, so the safest next code slice is small retrieval-quality coverage. This slice adds a same-query, cross-scope procedure fixture and a conservative retrieval guardrail: when a preferred scope has approved hits, current retrieval surfaces only that scope across memory types. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
 
 Recommended local backup commands:
 
@@ -97,9 +97,9 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
-## H4 public docs promotion in progress
+## H4 public docs promotion completed
 
-This docs-only slice promotes verified behavior from `.dev` into public docs without code changes.
+This docs-only slice promoted verified behavior from `.dev` into public docs without code changes. It landed in PR #161 (`docs: promote public memory safety guidance`) and did not create a new release.
 
 Changed docs:
 
@@ -109,7 +109,24 @@ Changed docs:
 - `docs/hermes-dogfood.md`: clarifies dogfood/consolidation commands are diagnostics, not broad automatic memory saving.
 - `docs/install-smoke.md`: updates the validated release note to `v0.1.84`, fixes npm/uvx command shapes, and adds backup/restore to the trust matrix.
 
-Expected verification: docs validation, `git diff --check`, release metadata check, and CI after PR. Docs-only merge should not create a new release.
+Verification completed: docs validation, `git diff --check`, release metadata check, PR CI, and main CI passed. Docs-only merge did not create a new release.
+
+## Retrieval-eval cross-scope procedure fixture in progress
+
+This local slice expands checked-in retrieval evaluation coverage with a procedure-oriented cross-scope guardrail.
+
+Local changes:
+
+- `tests/fixtures/retrieval_eval/procedure/cross-scope-procedure-guardrail.json`: new fixture where Project M1 procedure guidance must not surface a same-wording Project Drift procedure.
+- `tests/test_retrieval_evaluation.py`: seeds the drift procedure, validates the new fixture contract, and updates checked-in aggregate/comparator expectations from 11 to 12 tasks.
+- `src/agent_memory/storage/sqlite.py`: applies the existing preferred-scope exact-match narrowing to approved procedures and episodes as well as facts when exact-scope hits exist.
+
+RED/GREEN evidence so far:
+
+- RED: new fixture contract test first failed with missing fixture file.
+- GREEN: after fixture/seed/guardrail updates, checked-in retrieval aggregate, CLI, and comparator-matrix focused tests passed.
+
+Remaining before PR: run full retrieval-eval tests, ruff, `git diff --check`, release metadata check, then PR/CI/merge.
 
 ## Completed v0.1.84 backup/import/export release
 
