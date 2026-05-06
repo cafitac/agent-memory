@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — latest verified checkpoint after `v0.1.76`, including current dogfood state and next recommended slices.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.83 state and next recommended slice.
 - `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — ordered post-G3f plan: collect scheduled artifacts, compare trends, draft apply-mode contract, then implement only the first narrow mutation slice.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
@@ -252,14 +252,14 @@ If a later session changes direction, update both this checklist and the relevan
 
 ### Stage H: product hardening and public readiness
 
-- [ ] PR H1: Add consolidation evaluation fixtures and metrics
-  - Goal: measure whether trace/consolidation improves memory quality.
-  - Scope: fixtures for repeated corrections, preferences, stale facts, supersession, and procedural reuse.
-  - Acceptance: CI produces advisory metrics; no flaky external services.
+- [x] PR H1: Add retrieval/consolidation evaluation fixtures and metrics
+  - Done across the retrieval-eval M1/M1+ line before v0.1.83: `agent-memory eval retrieval <db> <fixtures>` now exercises the real retrieval path, supports baseline modes (`lexical`, `lexical-global`, `source-lexical`, `source-global`), text/JSON output, advisory reports, and regression flags.
+  - Acceptance: covered by `tests/test_retrieval_evaluation.py`, `tests/test_cli.py`, README docs, and the full local suite (`252 passed` on 2026-05-06).
 
 - [x] PR H2: Add graph/trace visualization export
-  - Done in PR #149 / v0.1.80 with `graph export-html`: local standalone HTML, typed memory/trace/observation/activation graph, ref-only labels by default, explicit `--include-memory-labels` opt-in.
-  - Acceptance: export is local-only/read-only/redacted by default and examples do not include secrets. Layout is MVP-quality; richer web UI/filtering remains future polish.
+  - First completed in PR #149 / v0.1.80 with `graph export-html`: local standalone HTML, typed memory/trace/observation/activation graph, ref-only labels by default, explicit `--include-memory-labels` opt-in.
+  - Continued through PR #154 / v0.1.82 and PR #156 / v0.1.83: event-driven brain-like Canvas UI, filters/search, zoom/pan, dominant-hub explanation, node inspector, Korean-localized visible UI, and quality modes (`auto`, `performance`, `sharp`).
+  - Acceptance: export is local-only/read-only/redacted by default and examples do not include raw source content, raw query text, trace summaries, or secrets.
 
 - [ ] PR H3: Add backup/import/export for trace and consolidation state
   - Goal: make the richer memory DB operationally safe.

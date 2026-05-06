@@ -13,30 +13,32 @@ Turn the consolidation system into something external users can trust: measurabl
 - Richer state can be backed up and restored.
 - Public docs describe only stable behavior as stable.
 
-## PR H1: Add consolidation evaluation fixtures and metrics
+## PR H1: Add retrieval/consolidation evaluation fixtures and metrics
+
+Status: complete for the first retrieval-eval hardening slice before `v0.1.83`.
 
 ### Objective
 
-Measure whether trace/consolidation improves memory quality.
+Measure retrieval quality before adding embeddings, reranking, broader graph expansion, or consolidation automation.
 
-### Fixtures should cover
+### Implemented format
 
-- repeated user corrections
-- preference formation
-- stale/superseded facts
-- procedural reuse
-- no-match/empty retrieval cases
-- explicit remember-intent
+- `agent-memory eval retrieval <db_path> <fixtures_path>` runs deterministic file-based fixtures against the real retrieval path.
+- Baseline modes: `lexical`, `lexical-global`, `source-lexical`, and `source-global`.
+- Output formats: stable JSON plus terminal-friendly text.
+- Regression gates: `--fail-on-regression`, baseline regression flags, warning thresholds, and advisory reports.
+- Evaluations suppress retrieval bookkeeping side effects while they run.
 
 ### Acceptance
 
-- CI produces advisory metrics.
-- No external flaky services required.
-- Metrics compare against a baseline.
+- Covered by `tests/test_retrieval_evaluation.py` and CLI tests.
+- Public README documents the command and current stable options.
+- No external flaky services are required.
+- Local verification on 2026-05-06: `.venv/bin/python -m pytest tests/ -q` -> `252 passed`.
 
 ## PR H2: Add graph/trace visualization export
 
-Status: complete in PR #149 / v0.1.80 for the first MVP slice.
+Status: complete through PR #149 / v0.1.80, PR #154 / v0.1.82, and PR #156 / v0.1.83.
 
 ### Objective
 
@@ -46,19 +48,22 @@ Let users inspect memory consolidation paths visually.
 
 - `agent-memory graph export-html <db> --output <html> --limit <n>` writes a standalone local HTML canvas visualization.
 - Default labels are ref-only; `--include-memory-labels` is an explicit local-only opt-in for curated memory labels.
+- The current UI is an event-driven brain-like Canvas graph with filters/search, zoom/pan, dominant-hub explanation, node inspector, Korean-localized operator labels, and quality modes (`auto`, `performance`, `sharp`).
 
 ### Acceptance
 
 - Local-only, read-only, and redacted by default.
 - Shows typed facts/procedures/episodes, traces, observations, activations, relations, and retrieval/activation edges.
 - Example/live smoke contains no raw source content, raw query text, or trace summaries.
-- Remaining polish: clustering/filtering/search/hover UX and more brain-like layout tuning.
+- Remaining polish is incremental UX tuning only; the first interactive/localized graph hardening path is complete.
 
 ## PR H3: Add backup/import/export for trace and consolidation state
 
+Status: next recommended PR-sized implementation slice after the v0.1.83 docs/status checkpoint.
+
 ### Objective
 
-Make the richer DB operationally safe.
+Make the richer DB operationally safe without changing retrieval ranking, default memory approval, or G4 apply-mode behavior.
 
 ### Acceptance
 

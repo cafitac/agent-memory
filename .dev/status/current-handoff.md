@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 10:45 KST
+Last updated: 2026-05-06 13:01 KST
 
 ## Trigger for the next session
 
@@ -16,32 +16,25 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.80`: PR #149 added the first local browser visualization surface, `agent-memory graph export-html`, and PR #150 release-sync published it to GitHub Release, npm, and PyPI. The pinned local Hermes runtime is `/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory`; `/Users/reddit/.hermes/config.yaml` points to that runtime and `hermes hooks doctor` is healthy after hook approval. The export writes a standalone neural-style HTML graph with ref-only labels by default, `read_only=true`, `mutated=false`, and privacy markers showing raw source content, raw query text, and trace summaries are not embedded. A live source/runtime visual smoke wrote `/Users/reddit/.agent-memory/reports/memory-graph-v0180-runtime-20260506T014406Z.html` with 668 nodes and 240 edges. The UI is an MVP: useful and browser-based, not yet a polished brain-like clustering interface.
+agent-memory is currently verified through `v0.1.83`: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), and PR #157 release-sync published `v0.1.83`. The public README now documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) with baseline modes, text/JSON output, and regression flags. Local tests on the current checkout pass: `.venv/bin/python -m pytest tests/ -q` returned `252 passed`.
 
-Storage/privacy cleanup status is still clean: legacy `retrieval_observations.query_preview` rows are 0, ordinary trace metadata-only violations are 0, storage-health is `healthy` with no warnings. Broader G4 consolidation apply mode remains blocked by trace/decay/background quality signals, not storage privacy debt.
+Storage/privacy cleanup status remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations were already normalized by the v0.1.78 cleanup, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked until trace/decay/background quality evidence is stronger and a separate apply-mode contract is drafted.
 
 ## Current next slice
 
-Current slice: continued G4 readiness monitoring plus optional visualization polish/readiness monitor follow-up.
+Current slice: Stage H product hardening docs/status checkpoint, then H3 backup/import/export planning/implementation.
 
-Goal: keep G4 evidence collection continuous, avoid asking the user to manually remember to check, and make the system easier to inspect outside pure CLI. The continuous cron jobs now run forever every 6h using the v0.1.80 runtime:
-
-- Collector: `ab0381974719`, `agent-memory continuous G4 readiness report collection`, local delivery, writes raw-content-safe scheduled-dry-run artifacts.
-- Monitor: `ed86714cd0e6`, `agent-memory continuous G4 readiness comparison monitor`, origin delivery, compares latest scheduled-dry-run artifacts and reports only aggregate status changes.
+Why this is the best next move: the code and releases have moved from v0.1.80 to v0.1.83, but the durable handoff/roadmap docs still lagged behind. First keep fresh sessions aligned with the real released state; then the next safest PR-sized product hardening slice is H3, backup/import/export for richer trace/consolidation state. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
 
 Recommended local graph command:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory graph export-html /Users/reddit/.agent-memory/memory.db \
+agent-memory graph export-html /Users/reddit/.agent-memory/memory.db \
   --output /Users/reddit/.agent-memory/reports/memory-graph.html \
   --limit 240
 ```
 
 Use `--include-memory-labels` only when intentionally creating a local-only artifact with curated memory labels. Raw source/query/trace text remains excluded.
-
-Current G4 live result: latest v0.1.80 manual scheduled-dry-run remains `read_only=true`, `mutated=false`, storage `healthy`, warnings `[]`, quality gate `pass=false`, blocked reasons `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`. This confirms storage/privacy is clean but broad consolidation apply should still wait.
-
-Do not implement broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, and audited.
 
 ## Current repo state
 
@@ -52,9 +45,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged feature PR: #149 `feat: add local memory graph html export`.
-- Latest merged release-sync PR: #150 `chore: release v0.1.80 [skip release]`.
-- Latest completed release: `v0.1.80`.
+- Latest merged feature PR: #156 `perf: localize graph UI and add quality modes`.
+- Latest merged release-sync PR: #157 `chore: release v0.1.83 [skip release]`.
+- Latest completed release: `v0.1.83`.
 
 Expected GitHub identity:
 
@@ -65,23 +58,19 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.80`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.80`
-- npm package: `@cafitac/agent-memory@0.1.80`
-- PyPI package: `cafitac-agent-memory==0.1.80`
-- Current Hermes runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/agent-memory`
-- Hermes config path: `/Users/reddit/.hermes/config.yaml`
-- Hermes config backup before v0.1.80 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.80-20260506T014247Z`
-- `hermes hooks doctor` reports all shell hooks healthy.
+- `v0.1.83`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.83`
+- npm package: `@cafitac/agent-memory@0.1.83`
+- PyPI package: `cafitac-agent-memory==0.1.83`
 
-Latest raw-content-safe live DB snapshot, checked 2026-05-06 10:44 KST:
+Latest verified source checkout snapshot, checked 2026-05-06 13:01 KST:
 
-- storage-health: `healthy`, warnings `[]`
-- legacy non-empty `query_preview` rows after v0.1.77 cleanup apply: 0
-- ordinary trace metadata-only violations after v0.1.78 cleanup apply: 0
-- latest v0.1.80 graph export artifact: `/Users/reddit/.agent-memory/reports/memory-graph-v0180-runtime-20260506T014406Z.html`
-- latest v0.1.80 manual scheduled-dry-run artifact: `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260506T014407Z-v0180-runtime-manual.json`
-- latest v0.1.80 manual scheduled-compare artifact: `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-compare-20260506T014420Z-v0180-runtime-manual.json`
+- branch: `main`, aligned with `origin/main`
+- latest commit: `23d9fec chore: release v0.1.83 [skip release] (#157)`
+- open PRs: none observed with `gh pr list --state open`
+- main CI and auto-release for `v0.1.83`: success
+- local full tests: `.venv/bin/python -m pytest tests/ -q` -> `252 passed`
+- `agent-memory eval retrieval --help` works and shows baseline/regression options.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -92,6 +81,48 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## Completed v0.1.83 graph quality release
+
+PR #156 `perf: localize graph UI and add quality modes` merged and released through release-sync PR #157.
+
+Completed behavior:
+
+- The graph export's visible operator UI is Korean-localized.
+- Render quality controls are available: `auto`, `performance`, and `sharp`.
+- Default high-DPI/Retina drawing is capped at DPR 1.5; performance mode uses DPR 1 with reduced blur/glow/labels.
+- The renderer remains event-driven Canvas with no browser force simulation.
+
+Verification completed upstream:
+
+- `uv run ruff check src/agent_memory/api/cli.py tests/test_cli.py`
+- focused graph export test
+- `uv run pytest tests/test_cli.py -q`
+- `uv run pytest tests/ -q`
+- `git diff --check`
+- release metadata/readiness checks
+- `npm pack --dry-run`
+- `node --check bin/agent-memory.js`
+- browser smoke of generated local file with Korean UI and performance mode.
+
+## Completed v0.1.82 interactive graph release
+
+PR #154 `feat: add interactive brain graph export` merged and released through release-sync PR #155.
+
+Completed behavior:
+
+- `graph export-html` now emits an event-driven, brain-like Canvas layout.
+- UI includes filters/search, zoom/pan, dominant-hub explanation, node inspector, and privacy-safe graph summary metadata.
+- Rendering remains non-blocking through dirty redraws and viewport culling rather than browser force simulation.
+- Documentation and smoke expectations were updated.
+
+Verification completed upstream:
+
+- ruff on graph-related CLI/tests
+- focused graph export test
+- full `tests/`
+- live export smoke against `/Users/reddit/.agent-memory/memory.db`
+- browser `file://` smoke with no console errors.
 
 ## Completed v0.1.76 scheduled-compare release
 
