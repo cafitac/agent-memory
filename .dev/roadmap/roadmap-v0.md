@@ -254,7 +254,7 @@ If a later session changes direction, update both this checklist and the relevan
 
 - [x] PR H1: Add retrieval/consolidation evaluation fixtures and metrics
   - Done across the retrieval-eval M1/M1+ line before v0.1.83: `agent-memory eval retrieval <db> <fixtures>` now exercises the real retrieval path, supports baseline modes (`lexical`, `lexical-global`, `source-lexical`, `source-global`), text/JSON output, advisory reports, and regression flags.
-  - Acceptance: covered by `tests/test_retrieval_evaluation.py`, `tests/test_cli.py`, README docs, and the full local suite (`252 passed` on 2026-05-06).
+  - Acceptance: covered by `tests/test_retrieval_evaluation.py`, `tests/test_cli.py`, README docs, and the full local suite; follow-up PR #162 / v0.1.85 raised checked-in retrieval tasks to 12 and full local suite to `257 passed` on 2026-05-06.
 
 - [x] PR H2: Add graph/trace visualization export
   - First completed in PR #149 / v0.1.80 with `graph export-html`: local standalone HTML, typed memory/trace/observation/activation graph, ref-only labels by default, explicit `--include-memory-labels` opt-in.
@@ -270,7 +270,7 @@ If a later session changes direction, update both this checklist and the relevan
 - [x] PR H4: Promote reviewed docs from `.dev` into public docs
   - Goal: explain the memory consolidation model to external users only after enough behavior exists.
   - Scope: README/docs stable-vs-experimental framing, first-run backup guidance, Hermes dogfood guardrails, install-smoke command refresh, and a public privacy/safety model.
-  - Acceptance: docs accurately distinguish stable/default behavior from experimental opt-in features; private local artifacts and backup bundles are called out; H4 docs slice implemented locally with PR/merge pending.
+  - Acceptance: docs accurately distinguish stable/default behavior from experimental opt-in features; private local artifacts and backup bundles are called out; H4 landed in PR #161 and was followed by v0.1.85 runtime QA.
 
 ### Sequence guardrails
 
