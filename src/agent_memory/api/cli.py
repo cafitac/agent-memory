@@ -4764,11 +4764,11 @@ def _render_memory_graph_html(graph_data: dict[str, Any], *, title: str) -> str:
         "dominant_hubs": dominant_hubs,
         "isolated_memory_refs": isolated_memory_refs,
         "definitions": {
-            "Fact": "approved or reviewed declarative memory: a stable statement the runtime may retrieve by default when approved.",
-            "Procedure": "reviewed how-to memory: trigger context plus steps; absent if no procedures have been created or approved yet.",
-            "Trace": "lightweight event footprint from a turn or diagnostic; ordinary traces avoid raw transcript text.",
-            "Observation": "secret-safe record that a retrieval happened: hashes/counts/refs, not raw query text.",
-            "Activation": "runtime signal that a memory was retrieved, empty, or reinforced during use.",
+            "Fact": "검토/승인된 사실형 장기 기억: 승인되면 기본 retrieval에 들어갈 수 있는 안정적인 사실/상태/선호/환경 정보입니다.",
+            "Procedure": "검토된 절차형 기억: 특정 상황에서 따라야 하는 how-to 단계 기억입니다. 현재 row가 없으면 그래프에 연결될 procedure 노드도 없습니다.",
+            "Trace": "대화/진단/훅 이벤트의 lightweight 흔적입니다. 일반 trace는 raw transcript 없이 metadata/hash/ref 중심으로 저장됩니다.",
+            "Observation": "retrieval이 일어났다는 secret-safe 관찰 기록입니다. raw query text가 아니라 hash/count/ref 중심입니다.",
+            "Activation": "어떤 memory가 조회/강화/empty retrieval 등에서 활성화된 런타임 신호입니다.",
         },
     }
     graph_json = html.escape(json.dumps(graph_data, sort_keys=True), quote=False)
@@ -4784,12 +4784,14 @@ def _render_memory_graph_html(graph_data: dict[str, Any], *, title: str) -> str:
 :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 52% 30%, #263a73 0, #0a1020 42%, #02040b 100%); color: #e8edff; overflow: hidden; }
+body.low-power { background: #03050d; }
 canvas { width: 100vw; height: 100vh; display: block; }
 .panel { position: fixed; z-index: 2; background: rgba(6, 10, 24, 0.78); border: 1px solid rgba(125, 153, 255, 0.23); border-radius: 18px; padding: 14px 16px; backdrop-filter: blur(16px); box-shadow: 0 20px 70px rgba(0,0,0,.32); }
+.low-power .panel { backdrop-filter: none; box-shadow: 0 8px 24px rgba(0,0,0,.22); background: rgba(6, 10, 24, 0.9); }
 .header { left: 22px; top: 18px; max-width: 620px; }
 h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .03em; }
 .meta { color: #aebcff; font-size: 13px; line-height: 1.45; }
-.controls { right: 22px; top: 18px; width: 320px; }
+.controls { right: 22px; top: 18px; width: 340px; }
 .controls h2, .inspector h2 { margin: 0 0 10px; font-size: 14px; color: #f2f5ff; }
 .row { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
 .chip { display: inline-flex; gap: 6px; align-items: center; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.065); color: #cdd7ff; font-size: 12px; user-select: none; }
@@ -4802,19 +4804,25 @@ h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .03em; }
 .warn { color: #ffd166; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
 button { border: 1px solid rgba(160,180,255,.24); background: rgba(124,247,200,.12); color: #e8edff; border-radius: 10px; padding: 7px 10px; cursor: pointer; }
-button:hover { background: rgba(124,247,200,.2); }
+button:hover, button.active { background: rgba(124,247,200,.24); border-color: rgba(124,247,200,.5); }
+.quality button { font-size: 12px; padding: 6px 8px; }
 </style>
 </head>
 <body>
 <div class="panel header">
-  <h1>agent-memory neural graph</h1>
-  <div class="meta"><strong>Brain-like memory graph</strong>. Read-only local visualization. Uses deterministic organic lobes, event-driven canvas redraws, viewport culling, and no browser force simulation. Raw source content, raw query text, and trace summaries are not embedded.</div>
+  <h1>agent-memory 기억 그래프</h1>
+  <div class="meta"><strong>뇌형 기억 그래프</strong>. 읽기 전용 local visualization입니다. deterministic organic lobes, event-driven canvas redraw, viewport culling을 사용하고 browser force simulation은 실행하지 않습니다. raw source content, raw query text, trace summary는 HTML에 넣지 않습니다.</div>
 </div>
 <div class="panel controls">
-  <h2>filters & live render</h2>
-  <input id="search" class="search" placeholder="search ref, e.g. fact:1 or trace:196" />
+  <h2>필터 & 실시간 렌더</h2>
+  <input id="search" class="search" placeholder="ref 검색, 예: fact:1 또는 trace:196" />
   <div id="typeFilters" class="row"></div>
-  <div class="row"><button id="resetView">reset view</button><button id="fitHub">focus dominant hub</button></div>
+  <div class="row"><button id="resetView">화면 초기화</button><button id="fitHub">주요 기억 허브 보기</button></div>
+  <div class="row quality" aria-label="render quality">
+    <button id="qualityAuto" data-quality="auto" class="active">품질: 자동</button>
+    <button id="qualityPerformance" data-quality="performance">성능 우선</button>
+    <button id="qualitySharp" data-quality="sharp">선명도 우선</button>
+  </div>
   <div id="stats" class="stats"></div>
 </div>
 <div class="panel inspector" id="inspector"></div>
@@ -4835,9 +4843,17 @@ for (const n of nodes) degree.set(n.id, 0);
 for (const e of edges) { degree.set(e.source.id, (degree.get(e.source.id)||0)+1); degree.set(e.target.id, (degree.get(e.target.id)||0)+1); }
 const memoryTypes = new Set(['fact','procedure','episode','memory']);
 const enabledTypes = new Set(Object.keys(summary.nodes_by_type));
-const state = { scale:1, ox:0, oy:0, selected:null, hovered:null, search:'', dirty:false, drawMs:0, visibleNodes:0, visibleEdges:0 };
+const CSS_CLASS_LOW_POWER = 'low-power';
+const QUALITY = {
+  auto: { label: '자동', dpr: Math.min(window.devicePixelRatio || 1, 1.5), lowPower: (window.devicePixelRatio || 1) > 1.5, glow: 5, selectedGlow: 12, labels: 'memory' },
+  performance: { label: '성능 우선', dpr: 1, lowPower: true, glow: 0, selectedGlow: 6, labels: 'selected' },
+  sharp: { label: '선명도 우선', dpr: Math.min(window.devicePixelRatio || 1, 2), lowPower: false, glow: 9, selectedGlow: 22, labels: 'memory' },
+};
+const state = { scale:1, ox:0, oy:0, selected:null, hovered:null, search:'', dirty:false, drawMs:0, visibleNodes:0, visibleEdges:0, quality:'auto', effectiveDpr:1, interacting:false };
 function hash01(value) { let h=2166136261; for (let i=0;i<value.length;i++) { h ^= value.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; }
-function resize() { const scale = Math.min(window.devicePixelRatio || 1, 2); canvas.width = Math.floor(innerWidth * scale); canvas.height = Math.floor(innerHeight * scale); ctx.setTransform(scale,0,0,scale,0,0); }
+function effectiveDpr() { return Math.max(1, Math.min(QUALITY[state.quality].dpr, 2)); }
+function resize() { const scale = effectiveDpr(); state.effectiveDpr = scale; canvas.width = Math.floor(innerWidth * scale); canvas.height = Math.floor(innerHeight * scale); ctx.setTransform(scale,0,0,scale,0,0); document.body.classList.toggle(CSS_CLASS_LOW_POWER, QUALITY[state.quality].lowPower); }
+function setQualityMode(mode) { if (!QUALITY[mode]) return; state.quality = mode; for (const button of document.querySelectorAll('[data-quality]')) button.classList.toggle('active', button.dataset.quality === mode); resize(); requestDraw(); }
 function layoutBrain() {
   const cx = innerWidth * .52, cy = innerHeight * .52;
   const rx = Math.max(260, innerWidth * .31), ry = Math.max(170, innerHeight * .23);
@@ -4864,24 +4880,26 @@ function visible(n) { if (!enabledTypes.has(n.type)) return false; if (state.sea
 function nodeRadius(n) { return Math.max(4, Math.min(18, 4 + Math.sqrt(Math.max(1, n.strength || degree.get(n.id) || 1))*2.3)); }
 function drawScene() {
   const t0 = performance.now(); state.dirty = false; ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#03050d'; ctx.fillRect(0,0,innerWidth,innerHeight);
-  const grad = ctx.createRadialGradient(innerWidth*.52, innerHeight*.38, 20, innerWidth*.52, innerHeight*.48, Math.max(innerWidth, innerHeight)*.7); grad.addColorStop(0,'#17295a'); grad.addColorStop(.52,'#081020'); grad.addColorStop(1,'#02040b'); ctx.fillStyle=grad; ctx.fillRect(0,0,innerWidth,innerHeight);
+  const quality = QUALITY[state.quality];
+  if (!quality.lowPower) { const grad = ctx.createRadialGradient(innerWidth*.52, innerHeight*.38, 20, innerWidth*.52, innerHeight*.48, Math.max(innerWidth, innerHeight)*.7); grad.addColorStop(0,'#17295a'); grad.addColorStop(.52,'#081020'); grad.addColorStop(1,'#02040b'); ctx.fillStyle=grad; ctx.fillRect(0,0,innerWidth,innerHeight); }
   state.visibleEdges = 0; state.visibleNodes = 0; ctx.globalCompositeOperation='lighter';
   for (const e of edges) { if (!enabledTypes.has(e.source.type) || !enabledTypes.has(e.target.type)) continue; if (state.search && !visible(e.source) && !visible(e.target)) continue; const a=screen(e.source), b=screen(e.target); if ((a.x<-120&&b.x<-120)||(a.x>innerWidth+120&&b.x>innerWidth+120)||(a.y<-120&&b.y<-120)||(a.y>innerHeight+120&&b.y>innerHeight+120)) continue; const color = palette[e.source.type] || '#8994c7'; ctx.strokeStyle = color + (e.type === 'top_retrieval' ? '88' : '42'); ctx.lineWidth = Math.max(.45, Math.min(2.2, (e.weight || 1) * state.scale)); ctx.beginPath(); const mx=(a.x+b.x)/2, my=(a.y+b.y)/2 - 24*state.scale; ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(mx,my,b.x,b.y); ctx.stroke(); state.visibleEdges++; }
-  const showLabels = state.scale > .95 || nodes.length <= 260;
-  for (const n of nodes) { if (!visible(n)) continue; const p=screen(n); const r=nodeRadius(n)*Math.sqrt(state.scale); const c=palette[n.type] || palette.memory; ctx.fillStyle=c; ctx.shadowColor=c; ctx.shadowBlur = n === state.hovered || n === state.selected ? 22 : 9; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; if (memoryTypes.has(n.type)) { ctx.strokeStyle='#ffffffaa'; ctx.lineWidth=1.2; ctx.stroke(); } if (showLabels && (memoryTypes.has(n.type) || n === state.hovered || n === state.selected)) { ctx.fillStyle='#eef3ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, p.x+r+5, p.y+4); } state.visibleNodes++; }
+  const showLabels = !state.interacting && (quality.labels === 'memory' ? state.scale > .95 || nodes.length <= 260 : Boolean(state.selected || state.hovered));
+  for (const n of nodes) { if (!visible(n)) continue; const p=screen(n); const r=nodeRadius(n)*Math.sqrt(state.scale); const c=palette[n.type] || palette.memory; ctx.fillStyle=c; ctx.shadowColor=c; ctx.shadowBlur = n === state.hovered || n === state.selected ? quality.selectedGlow : quality.glow; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; if (memoryTypes.has(n.type)) { ctx.strokeStyle='#ffffffaa'; ctx.lineWidth=1.2; ctx.stroke(); } if (showLabels && (quality.labels === 'memory' ? memoryTypes.has(n.type) || n === state.hovered || n === state.selected : n === state.hovered || n === state.selected)) { ctx.fillStyle='#eef3ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, p.x+r+5, p.y+4); } state.visibleNodes++; }
   ctx.globalCompositeOperation='source-over'; state.drawMs = Math.round((performance.now()-t0)*10)/10; renderStats();
 }
 function requestDraw() { if (state.dirty) return; state.dirty = true; requestAnimationFrame(drawScene); }
-function renderStats() { const hubs = summary.dominant_hubs || []; const top = hubs[0]; document.getElementById('stats').innerHTML = `${state.visibleNodes}/${nodes.length} visible nodes · ${state.visibleEdges}/${edges.length} visible edges<br>draw ${state.drawMs}ms · event-driven canvas<br>${top ? 'dominant memory hub: '+top.id+' degree '+top.degree : 'no dominant memory hub'}<br>${(summary.isolated_memory_refs||[]).length ? '<span class="warn">isolated memory refs: '+summary.isolated_memory_refs.join(', ')+'</span>' : ''}`; }
-function renderInspector(n) { const def = summary.definitions; const top = (summary.dominant_hubs||[])[0]; document.getElementById('inspector').innerHTML = `<h2>what this graph means</h2><p><strong>Fact = approved or reviewed declarative memory</strong>. Procedure = reviewed how-to memory. Trace = lightweight event footprint. Observation = secret-safe retrieval record. Activation = retrieval/reinforcement signal.</p><p>${top ? `Current shape: <strong>${top.id}</strong> is the dominant memory hub, so many traces/observations point there. That means the live DB currently has one approved/highly reinforced fact receiving most retrieval/support signals; deprecated facts or absent procedures may appear isolated.` : 'Current shape: no memory hub dominates yet.'}</p>${n ? `<div class="kv"><div>selected</div><div>${n.id}</div><div>type</div><div>${n.type}</div><div>status</div><div>${n.status ?? ''}</div><div>degree</div><div>${degree.get(n.id)||0}</div><div>strength</div><div>${n.strength ?? ''}</div></div>` : '<p>Click a node to inspect its ref-only metadata. Raw source/query/trace text is intentionally unavailable in this artifact.</p>'}<p class="warn">Procedure count: ${summary.nodes_by_type.procedure || 0}. If this is zero, there are no procedure rows included in the exported graph, so procedures cannot be connected yet.</p>`; }
-function installControls() { const wrap=document.getElementById('typeFilters'); for (const [type,count] of Object.entries(summary.nodes_by_type)) { const label=document.createElement('label'); label.className='chip'; label.innerHTML=`<input type="checkbox" checked data-type="${type}"><span class="dot" style="background:${palette[type]||palette.memory}"></span>${type} ${count}`; wrap.appendChild(label); } wrap.addEventListener('change', e => { const t=e.target.dataset.type; if (!t) return; e.target.checked ? enabledTypes.add(t) : enabledTypes.delete(t); requestDraw(); }); document.getElementById('search').addEventListener('input', e => { state.search = e.target.value.trim().toLowerCase(); requestDraw(); }); document.getElementById('resetView').onclick = () => { state.scale=1; state.ox=0; state.oy=0; requestDraw(); }; document.getElementById('fitHub').onclick = () => { const h=(summary.dominant_hubs||[])[0]; const n=h && byId.get(h.id); if (!n) return; state.scale=1.35; state.ox=innerWidth*.5-n.x*state.scale; state.oy=innerHeight*.45-n.y*state.scale; state.selected=n; renderInspector(n); requestDraw(); }; }
+function renderStats() { const hubs = summary.dominant_hubs || []; const top = hubs[0]; document.getElementById('stats').innerHTML = `${state.visibleNodes}/${nodes.length} 표시 노드 · ${state.visibleEdges}/${edges.length} 표시 엣지<br>렌더 ${state.drawMs}ms · event-driven canvas · DPR ${state.effectiveDpr}<br>${top ? '주요 기억 허브: '+top.id+' 연결수 '+top.degree : '주요 기억 허브 없음'}<br>${(summary.isolated_memory_refs||[]).length ? '<span class="warn">고립된 기억 ref: '+summary.isolated_memory_refs.join(', ')+'</span>' : ''}`; }
+function renderInspector(n) { const top = (summary.dominant_hubs||[])[0]; document.getElementById('inspector').innerHTML = `<h2>이 그래프를 읽는 법</h2><p><strong>Fact = 검토/승인된 사실형 장기 기억</strong>. Procedure = 검토된 절차형 기억. Trace = lightweight 이벤트 흔적. Observation = secret-safe retrieval 관찰 기록. Activation = retrieval/reinforcement 신호.</p><p>${top ? `현재 구조: <strong>${top.id}</strong>가 주요 기억 허브입니다. 많은 trace/observation이 이 ref를 가리킨다는 뜻이고, 현재 live DB에서 이 fact가 대부분의 retrieval/support 신호를 받고 있다는 의미입니다. deprecated fact나 아직 생성되지 않은 procedure는 고립되어 보일 수 있습니다.` : '현재 구조: 아직 지배적인 기억 허브가 없습니다.'}</p>${n ? `<div class="kv"><div>선택</div><div>${n.id}</div><div>유형</div><div>${n.type}</div><div>상태</div><div>${n.status ?? ''}</div><div>연결수</div><div>${degree.get(n.id)||0}</div><div>강도</div><div>${n.strength ?? ''}</div></div>` : '<p>노드를 클릭하면 ref-only metadata를 볼 수 있습니다. raw source/query/trace text는 이 artifact에 포함하지 않습니다.</p>'}<p class="warn">Procedure count: ${summary.nodes_by_type.procedure || 0}. 0이면 export된 그래프에 procedure row가 없으므로 연결될 procedure node도 없습니다.</p>`; }
+function installControls() { const wrap=document.getElementById('typeFilters'); for (const [type,count] of Object.entries(summary.nodes_by_type)) { const label=document.createElement('label'); label.className='chip'; label.innerHTML=`<input type="checkbox" checked data-type="${type}"><span class="dot" style="background:${palette[type]||palette.memory}"></span>${type} ${count}`; wrap.appendChild(label); } wrap.addEventListener('change', e => { const t=e.target.dataset.type; if (!t) return; e.target.checked ? enabledTypes.add(t) : enabledTypes.delete(t); requestDraw(); }); document.getElementById('search').addEventListener('input', e => { state.search = e.target.value.trim().toLowerCase(); requestDraw(); }); document.getElementById('resetView').onclick = () => { state.scale=1; state.ox=0; state.oy=0; requestDraw(); }; document.getElementById('fitHub').onclick = () => { const h=(summary.dominant_hubs||[])[0]; const n=h && byId.get(h.id); if (!n) return; state.scale=1.35; state.ox=innerWidth*.5-n.x*state.scale; state.oy=innerHeight*.45-n.y*state.scale; state.selected=n; renderInspector(n); requestDraw(); }; for (const button of document.querySelectorAll('[data-quality]')) button.addEventListener('click', () => setQualityMode(button.dataset.quality)); }
 function pick(x,y) { let best=null, bestD=Infinity; for (const n of nodes) { if (!enabledTypes.has(n.type)) continue; const p=screen(n); const dx=p.x-x, dy=p.y-y; const d=dx*dx+dy*dy; const r=nodeRadius(n)+10; if (d<r*r && d<bestD) { best=n; bestD=d; } } return best; }
-let dragging=false, lastX=0, lastY=0;
-canvas.addEventListener('mousemove', e => { if (dragging) { state.ox += e.clientX-lastX; state.oy += e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; requestDraw(); return; } const h=pick(e.clientX,e.clientY); if (h !== state.hovered) { state.hovered=h; requestDraw(); } });
-canvas.addEventListener('mousedown', e => { dragging=true; lastX=e.clientX; lastY=e.clientY; });
+let dragging=false, lastX=0, lastY=0, interactionTimer=null;
+function markInteracting() { state.interacting = true; if (interactionTimer) clearTimeout(interactionTimer); interactionTimer = setTimeout(() => { state.interacting = false; requestDraw(); }, 120); }
+canvas.addEventListener('mousemove', e => { if (dragging) { markInteracting(); state.ox += e.clientX-lastX; state.oy += e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; requestDraw(); return; } const h=pick(e.clientX,e.clientY); if (h !== state.hovered) { state.hovered=h; requestDraw(); } });
+canvas.addEventListener('mousedown', e => { dragging=true; markInteracting(); lastX=e.clientX; lastY=e.clientY; });
 window.addEventListener('mouseup', () => { dragging=false; });
 canvas.addEventListener('click', e => { const n=pick(e.clientX,e.clientY); state.selected=n; renderInspector(n); requestDraw(); });
-canvas.addEventListener('wheel', e => { e.preventDefault(); const before={x:(e.clientX-state.ox)/state.scale, y:(e.clientY-state.oy)/state.scale}; const factor = Math.exp(-e.deltaY * .001); state.scale = Math.max(.35, Math.min(4, state.scale * factor)); state.ox = e.clientX - before.x * state.scale; state.oy = e.clientY - before.y * state.scale; requestDraw(); }, { passive:false });
+canvas.addEventListener('wheel', e => { e.preventDefault(); markInteracting(); const before={x:(e.clientX-state.ox)/state.scale, y:(e.clientY-state.oy)/state.scale}; const factor = Math.exp(-e.deltaY * .001); state.scale = Math.max(.35, Math.min(4, state.scale * factor)); state.ox = e.clientX - before.x * state.scale; state.oy = e.clientY - before.y * state.scale; requestDraw(); }, { passive:false });
 function boot() { resize(); layoutBrain(); installControls(); renderInspector(null); requestDraw(); }
 window.addEventListener('resize', () => { resize(); layoutBrain(); requestDraw(); });
 boot();
@@ -4928,7 +4946,9 @@ def _export_memory_graph_html(
             "layout_mode": "interactive_brain_static",
             "continuous_physics_enabled": False,
             "rendering": "dirty_rect_event_driven_canvas",
-            "device_pixel_ratio_cap": 2,
+            "device_pixel_ratio_cap": 1.5,
+            "sharp_device_pixel_ratio_cap": 2,
+            "quality_modes": ["auto", "performance", "sharp"],
         },
     }
 
