@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 15:25 KST
+Last updated: 2026-05-06 16:15 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.84`: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), PR #158 added local backup/import/export commands, and PR #159 release-sync published `v0.1.84`. The public README documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) and local backup commands (`agent-memory backup export|inspect|restore`). Local and published-install QA passed for the v0.1.84 PyPI/npm artifacts, and the live Hermes `personal-oss` plus `earlypay` hook runtimes were pinned to `/Users/reddit/.agent-memory/runtime/v0.1.84/.venv/bin/agent-memory` with `hermes hooks doctor` healthy after allowlisting.
+agent-memory is currently verified through `v0.1.85`: PR #158 added local backup/import/export commands and released `v0.1.84`, PR #161 promoted the public privacy/safety docs, PR #162 added a cross-scope procedure retrieval-eval guardrail, and PR #163 release-sync published `v0.1.85`. GitHub Release, npm, and PyPI all report `v0.1.85`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.85/.venv/bin/agent-memory`; `hermes hooks doctor` is healthy for all three configs after allowlisting, and one real Hermes `OK` smoke passed per profile.
 
-Storage/privacy cleanup status remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations were already normalized by the v0.1.78 cleanup, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked until trace/decay/background quality evidence is stronger and a separate apply-mode contract is drafted.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` status `healthy`, `read_only=true`, `mutated=false`; scheduled dry-run remains read-only and recommends `continue_scheduled_dry_run_dogfooding_before_g4` rather than enabling broad mutation.
 
 ## Current next slice
 
-Current slice: retrieval-eval fixture expansion is implemented locally in `feat/retrieval-eval-cross-scope-procedure-fixture`; next step is focused/full verification, PR/CI/merge, then resume with either a G4 apply-mode contract plan or another retrieval quality fixture slice.
+Current slice: v0.1.85 release/runtime checkpoint is complete locally and should be kept durable via this docs checkpoint PR. After this checkpoint is merged, the safest next implementation slice is another retrieval-quality fixture or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
 
-Why this is the best next move: H4 docs promotion has already landed in PR #161, so the safest next code slice is small retrieval-quality coverage. This slice adds a same-query, cross-scope procedure fixture and a conservative retrieval guardrail: when a preferred scope has approved hits, current retrieval surfaces only that scope across memory types. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+Why this is the best next move: v0.1.85 changed runtime-facing retrieval scope behavior, so the release is not done until the published artifact is installed into the live Hermes hook runtime and the result is recorded. That has now been verified. The remaining product risk is quality/automation maturity, not packaging availability.
 
 Recommended local backup commands:
 
@@ -57,9 +57,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged feature PR: #158 `feat: add local memory backup commands`.
-- Latest merged release-sync PR: #159 `chore: release v0.1.84 [skip release]`.
-- Latest completed release: `v0.1.84`.
+- Latest merged retrieval-quality PR: #162 `test: add cross-scope procedure retrieval fixture`.
+- Latest merged release-sync PR: #163 `chore: release v0.1.85 [skip release]`.
+- Latest completed release: `v0.1.85`.
 
 Expected GitHub identity:
 
@@ -70,22 +70,23 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.84`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.84`
-- npm package: `@cafitac/agent-memory@0.1.84`
-- PyPI package: `cafitac-agent-memory==0.1.84`
+- `v0.1.85`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.85`
+- npm package: `@cafitac/agent-memory@0.1.85`
+- PyPI package: `cafitac-agent-memory==0.1.85`
 
-Latest verified source checkout snapshot, checked 2026-05-06 14:18 KST:
+Latest verified source checkout snapshot, checked 2026-05-06 16:15 KST:
 
 - branch: `main`, synced with `origin/main` before this docs checkpoint branch
-- latest release-sync commit: `47eef53 chore: release v0.1.84 [skip release]`
-- latest H3 feature merge commit: `075c27f feat: add local memory backup commands`
-- open PRs: none observed with `gh pr list --state open`
-- GitHub Release, npm, and PyPI all report `v0.1.84`
-- published-install QA passed from fresh PyPI venv and npm wrapper paths
-- live Hermes `personal-oss` and `earlypay` profiles use the pinned v0.1.84 runtime and `hooks doctor` is healthy
-- local full tests after H3 before release: `.venv/bin/python -m pytest tests/ -q` -> `256 passed`
-- `agent-memory eval retrieval --help` and `agent-memory backup --help` work.
+- latest release-sync commit: `f2bf0a4 chore: release v0.1.85 [skip release]`
+- latest retrieval fixture merge commit: `661d61c test: add cross-scope procedure retrieval fixture`
+- open PRs: none observed before this checkpoint branch
+- GitHub Release, npm, and PyPI all report `v0.1.85`
+- published-install QA passed from fresh PyPI venv; npm reports `0.1.85`
+- live Hermes `default`, `personal-oss`, and `earlypay` profiles use the pinned v0.1.85 runtime and `hooks doctor` is healthy after allowlisting
+- local full tests for PR #162: `.venv/bin/python -m pytest tests/ -q` -> `257 passed`
+- installed runtime dogfood storage-health: `healthy`, `read_only=true`, `mutated=false`
+- installed runtime scheduled dry-run: `read_only=true`, `mutated=false`, quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -96,6 +97,53 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## v0.1.85 retrieval-eval/runtime release completed
+
+PR #162 `test: add cross-scope procedure retrieval fixture` merged and released through release-sync PR #163.
+
+Completed behavior:
+
+- Checked-in retrieval-eval coverage now includes a procedure-oriented cross-scope fixture.
+- Project M1 procedure queries must not surface same-wording Project Drift procedure guidance.
+- Preferred-scope exact-match narrowing applies to approved facts and procedures while episodes keep the broader hierarchy behavior.
+- Checked-in retrieval task count is now 12.
+
+Verification completed:
+
+- RED: the new fixture contract test failed before the fixture was added.
+- Focused retrieval/scope tests passed.
+- Ruff passed for touched retrieval/storage files.
+- `git diff --check` and release metadata check passed.
+- Full local suite passed with `257 passed`.
+- PR #162 CI and main CI passed.
+- PR #163 release-sync CI passed and published `v0.1.85`.
+- Fresh PyPI install smoke verified `agent_memory.__version__ == "0.1.85"` and the Project M1 procedure retrieval smoke excludes the Project Drift procedure.
+
+## v0.1.85 live Hermes runtime QA completed
+
+Installed runtime:
+
+- `/Users/reddit/.agent-memory/runtime/v0.1.85/.venv/bin/agent-memory`
+- Installed from PyPI with Python 3.11 and `cafitac-agent-memory==0.1.85`.
+
+Updated Hermes configs:
+
+- `/Users/reddit/.hermes/config.yaml`
+- `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`
+- `/Users/reddit/.hermes/profiles/earlypay/config.yaml`
+
+Timestamped backups were created next to each config with suffix `.bak-agent-memory-v0.1.85-20260506T160835`.
+
+Verification completed:
+
+- `agent_memory.__version__ == "0.1.85"` from the pinned runtime.
+- `agent-memory hermes-doctor` reports `status=ok` for all three configs.
+- Direct `hermes-pre-llm-hook` stdin smoke with `hook_event_name=pre_llm_call` produced valid hook JSON.
+- `hermes chat --accept-hooks ... 'Reply with OK only.'` returned `OK` for default, `personal-oss`, and `earlypay` profiles.
+- `hermes hooks doctor`, `hermes --profile personal-oss hooks doctor`, and `hermes --profile earlypay hooks doctor` all report healthy hooks after allowlisting.
+- Installed runtime `dogfood storage-health` against `/Users/reddit/.agent-memory/memory.db` reports `healthy`, `read_only=true`, `mutated=false`.
+- Installed runtime `dogfood scheduled-dry-run` reports `read_only=true`, `mutated=false`, privacy flags false for raw conversation/query/sample output, and quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`.
 
 ## H4 public docs promotion completed
 
@@ -110,23 +158,6 @@ Changed docs:
 - `docs/install-smoke.md`: updates the validated release note to `v0.1.84`, fixes npm/uvx command shapes, and adds backup/restore to the trust matrix.
 
 Verification completed: docs validation, `git diff --check`, release metadata check, PR CI, and main CI passed. Docs-only merge did not create a new release.
-
-## Retrieval-eval cross-scope procedure fixture in progress
-
-This local slice expands checked-in retrieval evaluation coverage with a procedure-oriented cross-scope guardrail.
-
-Local changes:
-
-- `tests/fixtures/retrieval_eval/procedure/cross-scope-procedure-guardrail.json`: new fixture where Project M1 procedure guidance must not surface a same-wording Project Drift procedure.
-- `tests/test_retrieval_evaluation.py`: seeds the drift procedure, validates the new fixture contract, and updates checked-in aggregate/comparator expectations from 11 to 12 tasks.
-- `src/agent_memory/storage/sqlite.py`: applies the existing preferred-scope exact-match narrowing to approved procedures and episodes as well as facts when exact-scope hits exist.
-
-RED/GREEN evidence so far:
-
-- RED: new fixture contract test first failed with missing fixture file.
-- GREEN: after fixture/seed/guardrail updates, checked-in retrieval aggregate, CLI, and comparator-matrix focused tests passed.
-
-Remaining before PR: run full retrieval-eval tests, ruff, `git diff --check`, release metadata check, then PR/CI/merge.
 
 ## Completed v0.1.84 backup/import/export release
 
