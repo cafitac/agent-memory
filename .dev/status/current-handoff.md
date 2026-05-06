@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 13:01 KST
+Last updated: 2026-05-06 13:38 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,27 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.83`: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), and PR #157 release-sync published `v0.1.83`. The public README now documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) with baseline modes, text/JSON output, and regression flags. Local tests on the current checkout pass: `.venv/bin/python -m pytest tests/ -q` returned `252 passed`.
+agent-memory is currently verified through `v0.1.83` plus a local H3 backup/import/export implementation slice: PR #154 replaced `agent-memory graph export-html` with an event-driven, brain-like Canvas graph, PR #156 localized the visible operator UI into Korean and added quality modes (`auto`, `performance`, `sharp`), and PR #157 release-sync published `v0.1.83`. The public README now documents retrieval evaluation/regression gates (`agent-memory eval retrieval`) and local backup commands (`agent-memory backup export|inspect|restore`). Local tests on the current checkout pass: `.venv/bin/python -m pytest tests/ -q` returned `256 passed`.
 
 Storage/privacy cleanup status remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations were already normalized by the v0.1.78 cleanup, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked until trace/decay/background quality evidence is stronger and a separate apply-mode contract is drafted.
 
 ## Current next slice
 
-Current slice: Stage H product hardening docs/status checkpoint, then H3 backup/import/export planning/implementation.
+Current slice: H3 backup/import/export implementation completed locally; next safe slice is H4 public docs promotion/release prep after verification/release decisions.
 
-Why this is the best next move: the code and releases have moved from v0.1.80 to v0.1.83, but the durable handoff/roadmap docs still lagged behind. First keep fresh sessions aligned with the real released state; then the next safest PR-sized product hardening slice is H3, backup/import/export for richer trace/consolidation state. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+Why this is the best next move: H3 adds a local backup bundle path for richer trace/consolidation state without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+
+Recommended local backup commands:
+
+```bash
+agent-memory backup export /Users/reddit/.agent-memory/memory.db \
+  /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup inspect /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup restore /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip \
+  /Users/reddit/.agent-memory/restored-memory.db
+```
+
+The backup manifest is metadata-only, but the bundled SQLite database contains local memory state and should be treated as private local data.
 
 Recommended local graph command:
 
@@ -63,13 +75,14 @@ Latest completed release:
 - npm package: `@cafitac/agent-memory@0.1.83`
 - PyPI package: `cafitac-agent-memory==0.1.83`
 
-Latest verified source checkout snapshot, checked 2026-05-06 13:01 KST:
+Latest verified source checkout snapshot, checked 2026-05-06 13:38 KST:
 
-- branch: `main`, aligned with `origin/main`
-- latest commit: `23d9fec chore: release v0.1.83 [skip release] (#157)`
+- branch: `main`, local H3 work is ahead of `origin/main` until pushed/PR'd
+- latest release commit: `23d9fec chore: release v0.1.83 [skip release] (#157)`
+- latest local docs/status checkpoint commit before H3: `209a094 docs: checkpoint agent-memory v0.1.83 status`
 - open PRs: none observed with `gh pr list --state open`
 - main CI and auto-release for `v0.1.83`: success
-- local full tests: `.venv/bin/python -m pytest tests/ -q` -> `252 passed`
+- local full tests after H3: `.venv/bin/python -m pytest tests/ -q` -> `256 passed`
 - `agent-memory eval retrieval --help` works and shows baseline/regression options.
 
 Expected local untracked artifacts to preserve in the root checkout:

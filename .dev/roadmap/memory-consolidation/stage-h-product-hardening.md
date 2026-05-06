@@ -59,7 +59,7 @@ Let users inspect memory consolidation paths visually.
 
 ## PR H3: Add backup/import/export for trace and consolidation state
 
-Status: next recommended PR-sized implementation slice after the v0.1.83 docs/status checkpoint.
+Status: implemented locally in this H3 slice; release/PR pending.
 
 ### Objective
 
@@ -67,10 +67,10 @@ Make the richer DB operationally safe without changing retrieval ranking, defaul
 
 ### Acceptance
 
-- Backup round-trip works in tests.
-- Version compatibility is checked.
-- Import fails safely on incompatible schemas.
-- Privacy docs explain what is included.
+- Backup round-trip works in tests through `agent-memory backup export`, `backup inspect`, and `backup restore`.
+- Version compatibility is checked through the backup manifest `format_version`.
+- Restore/import fails safely on incompatible manifest versions, unsafe database entry names, and existing output DBs unless `--overwrite` is explicit.
+- Privacy docs explain that `manifest.json` is metadata-only while the bundled SQLite database contains the local memory state.
 
 ## PR H4: Promote reviewed docs from `.dev` into public docs
 

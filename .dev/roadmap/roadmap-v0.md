@@ -261,10 +261,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Continued through PR #154 / v0.1.82 and PR #156 / v0.1.83: event-driven brain-like Canvas UI, filters/search, zoom/pan, dominant-hub explanation, node inspector, Korean-localized visible UI, and quality modes (`auto`, `performance`, `sharp`).
   - Acceptance: export is local-only/read-only/redacted by default and examples do not include raw source content, raw query text, trace summaries, or secrets.
 
-- [ ] PR H3: Add backup/import/export for trace and consolidation state
+- [x] PR H3: Add backup/import/export for trace and consolidation state
   - Goal: make the richer memory DB operationally safe.
-  - Scope: export schema, import validation, version checks, privacy docs.
-  - Acceptance: backup round-trip works in tests; incompatible versions fail safely.
+  - Scope: `agent-memory backup export|inspect|restore`, metadata-only manifest, SQLite backup API copy, restore overwrite guard, version and database-entry validation, README privacy docs.
+  - Acceptance: backup round-trip works in tests; incompatible versions and unsafe database entries fail safely; existing output DBs are protected unless `--overwrite` is explicit.
+  - Status: implemented locally in the H3 slice; release/PR pending.
 
 - [ ] PR H4: Promote reviewed docs from `.dev` into public docs
   - Goal: explain the memory consolidation model to external users only after enough behavior exists.
