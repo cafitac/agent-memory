@@ -468,7 +468,7 @@ Build fixture suites that measure whether consolidation improves memory quality 
 
 ### Stage H2: graph/trace visualization export
 
-Export local redacted graph/trace lineage for inspection.
+First MVP complete in PR #149 / v0.1.80. `graph export-html` exports a standalone local neural-style HTML graph over memory refs, relations, traces, observations, and activations. The default is read-only/redacted/ref-only; curated memory labels require explicit `--include-memory-labels`. Visual QA confirms it renders and is useful as an MVP, but richer filtering/search/clustering remains future polish.
 
 ### Stage H3: backup/import/export
 
@@ -494,7 +494,7 @@ git tag --sort=-version:refname | head -5
 2. Verify runtime state:
 
 ```bash
-/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.80/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY

@@ -36,21 +36,23 @@ Measure whether trace/consolidation improves memory quality.
 
 ## PR H2: Add graph/trace visualization export
 
+Status: complete in PR #149 / v0.1.80 for the first MVP slice.
+
 ### Objective
 
 Let users inspect memory consolidation paths visually.
 
-### Candidate formats
+### Implemented format
 
-- JSON graph export
-- Graphviz dot export
-- small static HTML export
+- `agent-memory graph export-html <db> --output <html> --limit <n>` writes a standalone local HTML canvas visualization.
+- Default labels are ref-only; `--include-memory-labels` is an explicit local-only opt-in for curated memory labels.
 
 ### Acceptance
 
-- Local-only and redacted.
-- Shows traces, candidates, durable memories, relations, activation counts, status history.
-- Example data contains no secrets.
+- Local-only, read-only, and redacted by default.
+- Shows typed facts/procedures/episodes, traces, observations, activations, relations, and retrieval/activation edges.
+- Example/live smoke contains no raw source content, raw query text, or trace summaries.
+- Remaining polish: clustering/filtering/search/hover UX and more brain-like layout tuning.
 
 ## PR H3: Add backup/import/export for trace and consolidation state
 
