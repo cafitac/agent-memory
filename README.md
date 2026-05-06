@@ -29,8 +29,17 @@ Use it when you want:
 Docs for first-run and operational validation:
 
 - [First-run memory layer setup](docs/first-run-memory-layer.md)
+- [Privacy and safety model](docs/privacy-and-safety.md)
 - [Hermes dogfood and operations guide](docs/hermes-dogfood.md)
 - [Install smoke recipes](docs/install-smoke.md)
+
+## Stable defaults vs experimental surfaces
+
+Stable public defaults are conservative: local SQLite storage, approved-only normal retrieval, bounded Hermes/Codex/Claude prompt rendering, fail-closed hook behavior, local backup/restore, local graph export, and retrieval regression evaluation.
+
+Experimental and operator-only surfaces are clearly opt-in. Dogfood reports, consolidation candidates, remember-intent review traces, retrieval preview rankers, and scheduled dry-runs are diagnostics or manual-review aids; they do not change default retrieval ranking or approve ordinary conversation as long-term memory. Mutating cleanup or narrow auto-approval commands require explicit `--apply` plus audit metadata such as `--actor` and `--reason`.
+
+See [Privacy and safety model](docs/privacy-and-safety.md) before sharing DBs, backup bundles, graph exports, or dogfood report artifacts.
 
 ## 30-second install
 

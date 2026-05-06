@@ -267,10 +267,10 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: backup round-trip works in tests; incompatible versions and unsafe database entries fail safely; existing output DBs are protected unless `--overwrite` is explicit.
   - Status: complete and released in v0.1.84 via PR #158/#159; published PyPI/npm install smokes and live Hermes pinned-runtime QA passed.
 
-- [ ] PR H4: Promote reviewed docs from `.dev` into public docs
+- [x] PR H4: Promote reviewed docs from `.dev` into public docs
   - Goal: explain the memory consolidation model to external users only after enough behavior exists.
-  - Scope: README/docs architecture, first-run guide, Hermes dogfood guide, privacy/security notes.
-  - Acceptance: docs accurately distinguish stable/default behavior from experimental opt-in features.
+  - Scope: README/docs stable-vs-experimental framing, first-run backup guidance, Hermes dogfood guardrails, install-smoke command refresh, and a public privacy/safety model.
+  - Acceptance: docs accurately distinguish stable/default behavior from experimental opt-in features; private local artifacts and backup bundles are called out; H4 docs slice implemented locally with PR/merge pending.
 
 ### Sequence guardrails
 

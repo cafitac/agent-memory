@@ -2,6 +2,8 @@
 
 Use this dogfood checklist before claiming the Hermes integration is safe for always-on use.
 
+Dogfood and consolidation commands are local operator diagnostics, not broad automatic memory saving. Normal prompt context remains approved-only, and preview/dry-run reports must not change default retrieval ranking or Hermes hook behavior.
+
 ## Baseline dogfood smoke
 
 Run from a normal user shell, not the source checkout:
