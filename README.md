@@ -111,7 +111,7 @@ For a browser-based local visualization, export a standalone HTML file:
 agent-memory graph export-html "$DB" --output ~/.agent-memory/reports/memory-graph.html --limit 200
 ```
 
-The default HTML uses ref-only labels and embeds a force-directed, neural-style canvas graph of memories, relations, traces, observations, and activations. It is read-only (`mutated: false`) and does not embed raw source content, raw query text, or trace summaries. If you want curated memory text in the local-only HTML, opt in explicitly with `--include-memory-labels`; raw source/query/trace text remains excluded.
+The default HTML uses ref-only labels and embeds an event-driven, brain-like canvas graph of memories, relations, traces, observations, and activations. It includes filters, search, a dominant-hub explanation panel, and deterministic layout instead of browser force simulation. It is read-only (`mutated: false`) and does not embed raw source content, raw query text, or trace summaries. If you want curated memory text in the local-only HTML, opt in explicitly with `--include-memory-labels`; raw source/query/trace text remains excluded.
 
 For local dogfood and noise monitoring, retrievals can leave a secret-safe observation log. Normal `retrieve` only records an observation when explicitly asked; the Hermes pre-LLM hook records one automatically in the local SQLite DB for real turns. Observations store a query hash, selected memory refs, top memory ref, response mode, scope, and surface. They do not store the raw query text or a query preview. Deterministic `hermes hooks doctor/test` pre-LLM payloads exercise context injection but are skipped as dogfood observations so synthetic weather prompts do not pollute the audit.
 

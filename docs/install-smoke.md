@@ -260,4 +260,4 @@ For the graph visualization smoke, export a local standalone HTML file:
 agent-memory graph export-html <db> --output <tmp-memory-graph.html> --limit 200
 ```
 
-Verify it prints `kind: memory_graph_html_export`, `read_only: true`, `mutated: false`, node/edge counts, the output path, and privacy markers. The default export uses ref-only labels and must not embed raw source content, raw query text, trace summaries, prompt/transcript strings, secret-like values, or sample values. `--include-memory-labels` is an explicit local-only opt-in for curated memory labels; raw source/query/trace text remains excluded.
+Verify it prints `kind: memory_graph_html_export`, `performance.layout_mode: interactive_brain_static`, `performance.continuous_physics_enabled: false`, `read_only: true`, `mutated: false`, node/edge counts, the output path, and privacy markers. The default export uses ref-only labels and must not embed raw source content, raw query text, trace summaries, prompt/transcript strings, secret-like values, or sample values. `--include-memory-labels` is an explicit local-only opt-in for curated memory labels; raw source/query/trace text remains excluded.
