@@ -2704,7 +2704,7 @@ def test_retrieve_memory_packet_filters_cross_scope_fact_drift_when_exact_scope_
 
     packet = retrieve_memory_packet(
         db_path=db_path,
-        query="What branch pattern does Project M1 use?",
+        query="What EP-123 branch pattern does Project M1 use?",
         preferred_scope="project:m1",
     )
 
