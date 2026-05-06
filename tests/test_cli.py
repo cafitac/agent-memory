@@ -169,6 +169,10 @@ def test_python_module_cli_graph_export_html_writes_read_only_private_neural_vie
     assert "token=SHOULD_NOT_LEAK" not in result.stdout
     assert "token=SHOULD_NOT_LEAK" not in html
     assert "GRAPH_EXPORT_OK" not in html
+    assert payload["performance"]["layout_mode"] == "static_clustered"
+    assert payload["performance"]["continuous_physics_enabled"] is False
+    assert "for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++)" not in html
+    assert "requestAnimationFrame(draw)" not in html
 
     with sqlite3.connect(db_path) as connection:
         after_counts = {

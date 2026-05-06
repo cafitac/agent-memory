@@ -4737,7 +4737,7 @@ def _render_memory_graph_html(graph_data: dict[str, Any], *, title: str) -> str:
 :root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}
 body {{ margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% 20%, #20356f 0, #0a1020 45%, #03050d 100%); color: #e8edff; overflow: hidden; }}
 #app {{ position: fixed; inset: 0; }}
-.header {{ position: fixed; left: 24px; top: 20px; z-index: 2; max-width: 520px; }}
+.header {{ position: fixed; left: 24px; top: 20px; z-index: 2; max-width: 560px; }}
 h1 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: 0.03em; }}
 .meta {{ color: #9eb0ff; font-size: 13px; line-height: 1.5; }}
 canvas {{ width: 100vw; height: 100vh; display: block; }}
@@ -4747,7 +4747,7 @@ canvas {{ width: 100vw; height: 100vh; display: block; }}
 </style>
 </head>
 <body>
-<div class=\"header\"><h1>agent-memory neural graph</h1><div class=\"meta\">Read-only local visualization. Default labels use refs only; raw source content, raw query text, and trace summaries are not embedded.</div></div>
+<div class=\"header\"><h1>agent-memory neural graph</h1><div class=\"meta\">Read-only local visualization. Static clustered layout avoids continuous force simulation; raw source content, raw query text, and trace summaries are not embedded.</div></div>
 <div class=\"legend\" id=\"legend\"></div>
 <canvas id=\"graph\"></canvas>
 <script id=\"graph-data\" type=\"application/json\">{graph_json}</script>
@@ -4756,54 +4756,54 @@ const data = JSON.parse(document.getElementById('graph-data').textContent);
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
 const palette = {{ fact:'#7cf7c8', procedure:'#ffd166', episode:'#9ad1ff', trace:'#f78cbe', observation:'#a78bfa', activation:'#ff8f70', memory:'#d7e0ff' }};
-function resize() {{ canvas.width = window.innerWidth * devicePixelRatio; canvas.height = window.innerHeight * devicePixelRatio; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }}
-resize(); window.addEventListener('resize', resize);
-const nodes = data.nodes.map((n, i) => {{
-  const angle = i * 2.399963229728653;
-  const radius = 40 + Math.sqrt(i + 1) * 18;
-  return {{...n, x: innerWidth/2 + Math.cos(angle)*radius, y: innerHeight/2 + Math.sin(angle)*radius, vx:0, vy:0}};
-}});
+const anchors = {{ fact:[0.50,0.34], procedure:[0.34,0.48], episode:[0.66,0.48], trace:[0.50,0.66], observation:[0.25,0.74], activation:[0.75,0.74], memory:[0.50,0.50] }};
+const nodesByType = data.nodes.reduce((acc, node) => {{ (acc[node.type] ||= []).push(node); return acc; }}, {{}});
+function resize() {{
+  const scale = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(window.innerWidth * scale);
+  canvas.height = Math.floor(window.innerHeight * scale);
+  ctx.setTransform(scale,0,0,scale,0,0);
+}}
+function layoutNodes() {{
+  for (const [type, typedNodes] of Object.entries(nodesByType)) {{
+    const anchor = anchors[type] || anchors.memory;
+    const cx = innerWidth * anchor[0], cy = innerHeight * anchor[1];
+    const spread = Math.max(42, Math.min(innerWidth, innerHeight) * 0.11);
+    typedNodes.forEach((n, i) => {{
+      const angle = i * 2.399963229728653;
+      const ring = Math.floor(Math.sqrt(i));
+      const radius = 18 + ring * Math.max(12, spread / Math.max(3, Math.sqrt(typedNodes.length)));
+      n.x = Math.max(24, Math.min(innerWidth - 24, cx + Math.cos(angle) * radius));
+      n.y = Math.max(24, Math.min(innerHeight - 24, cy + Math.sin(angle) * radius));
+    }});
+  }}
+}}
+const nodes = data.nodes;
 const byId = new Map(nodes.map(n => [n.id, n]));
 const edges = data.edges.map(e => ({{...e, source: byId.get(e.from), target: byId.get(e.to)}})).filter(e => e.source && e.target);
 const legend = document.getElementById('legend');
-legend.innerHTML = Object.entries(palette).map(([k,v]) => `<div><span class=\"dot\" style=\"background:${{v}}\"></span>${{k}}</div>`).join('') + `<div>${{nodes.length}} nodes · ${{edges.length}} edges</div>`;
-const anchors = {{ fact:[0.50,0.36], procedure:[0.37,0.50], episode:[0.63,0.50], trace:[0.50,0.65], observation:[0.25,0.73], activation:[0.75,0.73], memory:[0.50,0.50] }};
-function tick() {{
-  for (const n of nodes) {{
-    const anchor = anchors[n.type] || anchors.memory;
-    const ax = innerWidth * anchor[0], ay = innerHeight * anchor[1];
-    n.vx += (ax - n.x) * 0.0018;
-    n.vy += (ay - n.y) * 0.0018;
-    n.vx += (innerWidth/2 - n.x) * 0.00025;
-    n.vy += (innerHeight/2 - n.y) * 0.00025;
-  }}
-  for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++) {{
-    const a=nodes[i], b=nodes[j], dx=a.x-b.x, dy=a.y-b.y, d2=Math.max(dx*dx+dy*dy, 80);
-    const f=90/d2; a.vx += dx*f; a.vy += dy*f; b.vx -= dx*f; b.vy -= dy*f;
-  }}
-  for (const e of edges) {{
-    const a=e.source, b=e.target, dx=b.x-a.x, dy=b.y-a.y, d=Math.max(Math.hypot(dx,dy),1), target=130;
-    const f=(d-target)*0.006*(e.weight || 1); a.vx += dx/d*f; a.vy += dy/d*f; b.vx -= dx/d*f; b.vy -= dy/d*f;
-  }}
-  for (const n of nodes) {{
-    n.vx*=0.86; n.vy*=0.86; n.x+=n.vx; n.y+=n.vy;
-    n.x=Math.max(24, Math.min(innerWidth-24, n.x));
-    n.y=Math.max(24, Math.min(innerHeight-24, n.y));
-  }}
-}}
+legend.innerHTML = Object.entries(palette).map(([k,v]) => `<div><span class=\"dot\" style=\"background:${{v}}\"></span>${{k}}</div>`).join('') + `<div>${{nodes.length}} nodes · ${{edges.length}} edges</div><div>static clustered layout</div>`;
 function draw() {{
-  tick(); ctx.clearRect(0,0,innerWidth,innerHeight);
+  ctx.clearRect(0,0,innerWidth,innerHeight);
   ctx.globalCompositeOperation='lighter';
-  for (const e of edges) {{ const c=palette[e.source.type] || '#8994c7'; ctx.strokeStyle=c+'66'; ctx.lineWidth=Math.max(0.6, Math.min(3, e.weight || 1)); ctx.beginPath(); ctx.moveTo(e.source.x,e.source.y); ctx.lineTo(e.target.x,e.target.y); ctx.stroke(); }}
+  for (const e of edges) {{
+    const c=palette[e.source.type] || '#8994c7';
+    ctx.strokeStyle=c+'55';
+    ctx.lineWidth=Math.max(0.5, Math.min(2.5, e.weight || 1));
+    ctx.beginPath(); ctx.moveTo(e.source.x,e.source.y); ctx.lineTo(e.target.x,e.target.y); ctx.stroke();
+  }}
   for (const n of nodes) {{
-    const r=Math.max(4, Math.min(16, 5 + Math.sqrt(n.strength || 1)*3));
-    ctx.fillStyle=palette[n.type] || palette.memory; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=18; ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+    const r=Math.max(4, Math.min(14, 5 + Math.sqrt(n.strength || 1)*2.6));
+    ctx.fillStyle=palette[n.type] || palette.memory;
+    ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
     const showLabel = nodes.length <= 250 || ['fact','procedure','episode','memory'].includes(n.type);
     if (showLabel) {{ ctx.fillStyle='#dfe7ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, n.x+r+4, n.y+4); }}
   }}
-  ctx.globalCompositeOperation='source-over'; requestAnimationFrame(draw);
+  ctx.globalCompositeOperation='source-over';
 }}
-draw();
+function render() {{ resize(); layoutNodes(); draw(); }}
+render(); window.addEventListener('resize', render);
 </script>
 </body>
 </html>
@@ -4837,6 +4837,11 @@ def _export_memory_graph_html(
             "raw_query_text_included": False,
             "raw_trace_summary_included": False,
             "memory_labels_included": include_memory_labels,
+        },
+        "performance": {
+            "layout_mode": "static_clustered",
+            "continuous_physics_enabled": False,
+            "device_pixel_ratio_cap": 2,
         },
     }
 
