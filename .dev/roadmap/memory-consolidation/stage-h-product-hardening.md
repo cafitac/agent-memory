@@ -15,7 +15,7 @@ Turn the consolidation system into something external users can trust: measurabl
 
 ## PR H1: Add retrieval/consolidation evaluation fixtures and metrics
 
-Status: complete for the first retrieval-eval hardening slice before `v0.1.83`, with follow-up cross-scope procedure coverage released in `v0.1.85`, noisy global fact coverage released in `v0.1.86`, and same-slot conflicting fact coverage released in `v0.1.87`.
+Status: complete for the first retrieval-eval hardening slice before `v0.1.83`, with follow-up cross-scope procedure coverage released in `v0.1.85`, noisy global fact coverage released in `v0.1.86`, same-slot conflicting fact coverage released in `v0.1.87`, and same-scope stale procedure coverage released in `v0.1.88`.
 
 ### Objective
 
@@ -34,7 +34,7 @@ Measure retrieval quality before adding embeddings, reranking, broader graph exp
 - Covered by `tests/test_retrieval_evaluation.py` and CLI tests.
 - Public README documents the command and current stable options.
 - No external flaky services are required.
-- Local verification on 2026-05-06: `.venv/bin/python -m pytest tests/ -q` passed after the v0.1.87 same-slot conflicting fact fixture; checked-in retrieval-eval coverage is now 14 tasks.
+- Local verification on 2026-05-07: `uv run pytest tests/ -q` passed after the v0.1.88 same-scope stale procedure fixture and stabilization follow-up; checked-in retrieval-eval coverage is now 15 tasks.
 
 ## PR H2: Add graph/trace visualization export
 
@@ -87,7 +87,7 @@ Expose the consolidation model to users only after implementation and dogfood ar
 - `docs/privacy-and-safety.md` documents local-first storage, private artifacts, backup/restore privacy, read-only diagnostics, opt-in mutation guardrails, and sharing guidance.
 - `docs/first-run-memory-layer.md` now tells new users to create and inspect a backup before experiments.
 - `docs/hermes-dogfood.md` clarifies that dogfood/consolidation commands are diagnostics, not broad automatic memory saving.
-- `docs/install-smoke.md` reflects the v0.1.84 validated release, current npm/uvx command shapes, and backup/restore smoke coverage; v0.1.85, v0.1.86, and v0.1.87 runtime QA were recorded in the handoff after PR #162/#163, PR #165/#166, and PR #168/#169.
+- `docs/install-smoke.md` reflects the v0.1.84 validated release, current npm/uvx command shapes, and backup/restore smoke coverage; v0.1.85, v0.1.86, v0.1.87, and v0.1.88 runtime QA were recorded in the handoff after PR #162/#163, PR #165/#166, PR #168/#169, and PR #171/#173.
 
 ### Acceptance
 
