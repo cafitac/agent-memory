@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-06 14:18 KST
+Last updated: 2026-05-06 14:32 KST
 
 ## Trigger for the next session
 
@@ -22,9 +22,9 @@ Storage/privacy cleanup status remains clean: legacy `retrieval_observations.que
 
 ## Current next slice
 
-Current slice: H3 backup/import/export is merged, released, and locally QAed in `v0.1.84`; next safe slice is H4 public docs promotion.
+Current slice: H4 public docs promotion is implemented locally in a docs-only slice; next step is PR/CI/merge, then resume with either retrieval-eval fixture expansion or a G4 apply-mode contract plan.
 
-Why this is the best next move: H4 should promote only the stable, verified surfaces from `.dev` into public docs now that H3 shipped, without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
+Why this is the best next move: this H4 docs slice promotes only stable, verified surfaces from `.dev` into public docs now that H3 shipped, without changing retrieval ranking, default memory approval, or G4 apply-mode behavior. Do not jump to broad G4 apply mode, ordinary-conversation auto-approval, raw transcript storage, broad preference inference, or default retrieval ranking changes yet. Any future mutation must remain separately planned, explicit, audited, and covered by tests.
 
 Recommended local backup commands:
 
@@ -96,6 +96,20 @@ Expected local untracked artifacts to preserve in the root checkout:
 - `.worktrees/`
 
 Do not delete or commit these unless the user explicitly asks.
+
+## H4 public docs promotion in progress
+
+This docs-only slice promotes verified behavior from `.dev` into public docs without code changes.
+
+Changed docs:
+
+- `README.md`: links the public privacy/safety model and distinguishes stable defaults from experimental/operator-only surfaces.
+- `docs/privacy-and-safety.md`: new public privacy/safety model for local DBs, backup bundles, graph/report artifacts, read-only diagnostics, opt-in mutation guardrails, and sharing guidance.
+- `docs/first-run-memory-layer.md`: tells new users to back up and inspect before experiments.
+- `docs/hermes-dogfood.md`: clarifies dogfood/consolidation commands are diagnostics, not broad automatic memory saving.
+- `docs/install-smoke.md`: updates the validated release note to `v0.1.84`, fixes npm/uvx command shapes, and adds backup/restore to the trust matrix.
+
+Expected verification: docs validation, `git diff --check`, release metadata check, and CI after PR. Docs-only merge should not create a new release.
 
 ## Completed v0.1.84 backup/import/export release
 

@@ -75,9 +75,19 @@ Make the richer DB operationally safe without changing retrieval ranking, defaul
 
 ## PR H4: Promote reviewed docs from `.dev` into public docs
 
+Status: implemented in this docs slice; PR/merge pending.
+
 ### Objective
 
 Expose the consolidation model to users only after implementation and dogfood are mature enough.
+
+### Implemented format
+
+- README links the public privacy/safety model and states stable defaults versus experimental/operator-only surfaces.
+- `docs/privacy-and-safety.md` documents local-first storage, private artifacts, backup/restore privacy, read-only diagnostics, opt-in mutation guardrails, and sharing guidance.
+- `docs/first-run-memory-layer.md` now tells new users to create and inspect a backup before experiments.
+- `docs/hermes-dogfood.md` clarifies that dogfood/consolidation commands are diagnostics, not broad automatic memory saving.
+- `docs/install-smoke.md` reflects the v0.1.84 validated release, current npm/uvx command shapes, and backup/restore smoke coverage.
 
 ### Acceptance
 

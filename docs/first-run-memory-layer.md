@@ -54,6 +54,18 @@ Expected result:
 - the hook is installed
 - Hermes hook diagnostics are healthy or show a clear local policy action such as accepting hooks
 
+## Back up before experiments
+
+Before trying dogfood, graph, or consolidation commands on a real memory DB, create a local backup bundle:
+
+```bash
+DB=~/.agent-memory/memory.db
+agent-memory backup export "$DB" ~/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup inspect ~/.agent-memory/backups/memory.agent-memory-backup.zip
+```
+
+The manifest printed by `backup inspect` is metadata-only, but the bundle also contains a SQLite copy of your local memory DB. Treat backup bundles as private local data.
+
 ## Disable or delete
 
 To disable the hook without deleting memory, edit `~/.hermes/config.yaml` and remove the `agent-memory hermes-pre-llm-hook ...` entry from `hooks.pre_llm_call`.
