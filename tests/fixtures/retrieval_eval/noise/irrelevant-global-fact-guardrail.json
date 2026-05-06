@@ -1,0 +1,40 @@
+{
+  "references": {
+    "project_scope_kb_export": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "kb_export_command",
+      "object_ref_or_value": "agent-memory kb export"
+    },
+    "global_noise_kb_export": {
+      "memory_type": "fact",
+      "scope": "global",
+      "subject_ref": "Generic docs",
+      "predicate": "kb_export_command",
+      "object_ref_or_value": "agent-memory kb export archive example"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-fact-noisy-global-guardrail",
+      "query": "What command should Project M1 use for agent-memory KB export? Ignore generic archive examples.",
+      "preferred_scope": "project:m1",
+      "expected": {
+        "facts": ["project_scope_kb_export"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["global_noise_kb_export"],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Keep globally scoped archival examples out of project-scoped fact lookups when an exact project fact exists.",
+      "notes": [
+        "The noisy global fact intentionally repeats the key KB export terms from the expected fact.",
+        "Current retrieval should prefer the exact project scope and avoid surfacing the global archive example."
+      ]
+    }
+  ]
+}
