@@ -105,6 +105,14 @@ agent-memory graph inspect "$DB" fact:1 --depth 2 --limit 50
 
 The JSON output includes the start ref, visited node refs, relation edges, traversal depth per edge, and a `read_only: true` marker. It is intended as a safe graph-foundation slice before enabling any broader graph traversal in default retrieval.
 
+For a browser-based local visualization, export a standalone HTML file:
+
+```bash
+agent-memory graph export-html "$DB" --output ~/.agent-memory/reports/memory-graph.html --limit 200
+```
+
+The default HTML uses ref-only labels and embeds a force-directed, neural-style canvas graph of memories, relations, traces, observations, and activations. It is read-only (`mutated: false`) and does not embed raw source content, raw query text, or trace summaries. If you want curated memory text in the local-only HTML, opt in explicitly with `--include-memory-labels`; raw source/query/trace text remains excluded.
+
 For local dogfood and noise monitoring, retrievals can leave a secret-safe observation log. Normal `retrieve` only records an observation when explicitly asked; the Hermes pre-LLM hook records one automatically in the local SQLite DB for real turns. Observations store a query hash, selected memory refs, top memory ref, response mode, scope, and surface. They do not store the raw query text or a query preview. Deterministic `hermes hooks doctor/test` pre-LLM payloads exercise context injection but are skipped as dogfood observations so synthetic weather prompts do not pollute the audit.
 
 ```bash
@@ -117,6 +125,7 @@ agent-memory activations summary "$DB" --limit 200 --top 20 --frequent-threshold
 agent-memory activations reinforcement-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory activations decay-risk-report "$DB" --limit 200 --top 20 --frequent-threshold 3
 agent-memory consolidation candidates "$DB" --limit 200 --top 20 --min-evidence 2
+agent-memory graph export-html "$DB" --output ~/.agent-memory/reports/memory-graph.html --limit 200
 agent-memory consolidation background dry-run "$DB" --limit 200 --top 20 --min-evidence 2 --output ~/.agent-memory/reports/background-consolidation.json
 agent-memory dogfood background-dry-run "$DB" --report ~/.agent-memory/reports/background-consolidation.json --candidate-min 1 --max-decay-risk 0
 agent-memory dogfood storage-health "$DB" --hermes-config ~/.hermes/config.yaml

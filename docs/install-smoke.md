@@ -253,3 +253,11 @@ agent-memory dogfood scheduled-compare \
 ```
 
 Verify it prints `kind: dogfood_scheduled_dry_run_comparison`, `read_only: true`, `mutated: false`, `default_retrieval_unchanged: true`, per-report hashes and safe aggregate fields only, and no raw report bodies, raw query/prompt/transcript/secret-like/sample values. A passing comparison only permits a separate G4 planning PR; it must not mutate DB rows, ranking, hook config, or any report artifact except the requested `--output` file.
+
+For the graph visualization smoke, export a local standalone HTML file:
+
+```bash
+agent-memory graph export-html <db> --output <tmp-memory-graph.html> --limit 200
+```
+
+Verify it prints `kind: memory_graph_html_export`, `read_only: true`, `mutated: false`, node/edge counts, the output path, and privacy markers. The default export uses ref-only labels and must not embed raw source content, raw query text, trace summaries, prompt/transcript strings, secret-like values, or sample values. `--include-memory-labels` is an explicit local-only opt-in for curated memory labels; raw source/query/trace text remains excluded.

@@ -81,6 +81,104 @@ def test_python_module_cli_graph_inspect_returns_read_only_relation_neighborhood
     assert payload["truncated"] is False
 
 
+def test_python_module_cli_graph_export_html_writes_read_only_private_neural_view(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-export-html.db"
+    output_path = tmp_path / "memory-graph.html"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Graph visualization source contains token=SHOULD_NOT_LEAK.",
+        metadata={"project": "graph-export"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Graph visualization",
+        predicate="target_phrase",
+        object_ref_or_value="GRAPH_EXPORT_OK",
+        evidence_ids=[source.id],
+        scope="project:graph-export",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{fact.id}",
+        relation_type="supports",
+        to_ref="procedure:7",
+        evidence_ids=[source.id],
+        confidence=0.8,
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary=None,
+        scope="project:graph-export",
+        related_memory_refs=[f"fact:{fact.id}"],
+        related_observation_ids=[],
+        retention_policy="ephemeral",
+        metadata={"candidate_policy": "evidence_only", "auto_approved": False},
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("source_records", "facts", "relations", "experience_traces")
+        }
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "graph",
+            "export-html",
+            str(db_path),
+            "--output",
+            str(output_path),
+            "--limit",
+            "100",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "memory_graph_html_export"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["output_path"] == str(output_path)
+    assert payload["node_count"] >= 3
+    assert payload["edge_count"] >= 2
+    assert payload["privacy"] == {
+        "raw_source_content_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "memory_labels_included": False,
+    }
+    html = output_path.read_text()
+    assert "agent-memory neural graph" in html
+    assert "application/json" in html
+    assert f"fact:{fact.id}" in html
+    assert "token=SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=SHOULD_NOT_LEAK" not in html
+    assert "GRAPH_EXPORT_OK" not in html
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("source_records", "facts", "relations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_cli_init_creates_database(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "cli-memory.db"
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import hashlib
+import html
 import json
 import sqlite3
 import sys
@@ -4514,6 +4515,333 @@ def _inspect_relation_graph(db_path: Path, *, start_ref: str, depth: int, limit:
     }
 
 
+def _node_type_from_ref(ref: str) -> str:
+    prefix, _, _identifier = ref.partition(":")
+    return prefix or "memory"
+
+
+def _add_graph_node(
+    nodes: dict[str, dict[str, Any]],
+    *,
+    node_id: str,
+    node_type: str,
+    label: str | None = None,
+    status: str | None = None,
+    scope: str | None = None,
+    strength: float = 1.0,
+) -> None:
+    existing = nodes.get(node_id)
+    if existing is None:
+        nodes[node_id] = {
+            "id": node_id,
+            "type": node_type,
+            "label": label or node_id,
+            "status": status,
+            "scope": scope,
+            "strength": strength,
+        }
+        return
+    existing["strength"] = max(float(existing.get("strength", 0.0)), strength)
+    if existing.get("status") is None and status is not None:
+        existing["status"] = status
+    if existing.get("scope") is None and scope is not None:
+        existing["scope"] = scope
+    if existing.get("label") == node_id and label is not None:
+        existing["label"] = label
+
+
+def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: bool) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("graph export limit must be >= 1")
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: list[dict[str, Any]] = []
+    seen_edges: set[tuple[str, str, str]] = set()
+    skipped_empty_retrieval_edges = 0
+    truncated = False
+
+    def should_skip_ref(memory_ref: str) -> bool:
+        return memory_ref in {"empty_retrieval", "memory:empty_retrieval"}
+
+    def edge(from_id: str, to_id: str, edge_type: str, *, weight: float = 1.0) -> None:
+        nonlocal truncated
+        key = (from_id, to_id, edge_type)
+        if key in seen_edges:
+            return
+        if len(edges) >= limit:
+            truncated = True
+            return
+        seen_edges.add(key)
+        edges.append({"from": from_id, "to": to_id, "type": edge_type, "weight": weight})
+
+    with connect(db_path) as connection:
+        for table_name, memory_type, label_sql in (
+            ("facts", "fact", "subject_ref || ' ' || predicate || ' ' || object_ref_or_value"),
+            ("procedures", "procedure", "name"),
+            ("episodes", "episode", "title"),
+        ):
+            rows = connection.execute(
+                f"""
+                SELECT id, status, scope, reinforcement_count, retrieval_count, {label_sql} AS memory_label
+                FROM {table_name}
+                ORDER BY status = 'approved' DESC, reinforcement_count DESC, retrieval_count DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            for row in rows:
+                ref = f"{memory_type}:{row['id']}"
+                label = str(row["memory_label"]) if include_memory_labels else ref
+                strength = 1.0 + float(row["reinforcement_count"] or 0.0) + float(row["retrieval_count"] or 0) * 0.25
+                _add_graph_node(
+                    nodes,
+                    node_id=ref,
+                    node_type=memory_type,
+                    label=label,
+                    status=str(row["status"]),
+                    scope=str(row["scope"]),
+                    strength=strength,
+                )
+
+        for row in connection.execute(
+            """
+            SELECT from_ref, relation_type, to_ref, weight
+            FROM relations
+            ORDER BY weight DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall():
+            from_ref = str(row["from_ref"])
+            to_ref = str(row["to_ref"])
+            _add_graph_node(nodes, node_id=from_ref, node_type=_node_type_from_ref(from_ref))
+            _add_graph_node(nodes, node_id=to_ref, node_type=_node_type_from_ref(to_ref))
+            edge(from_ref, to_ref, str(row["relation_type"]), weight=float(row["weight"] or 1.0))
+
+        for row in connection.execute(
+            """
+            SELECT id, event_kind, scope, salience, user_emphasis, related_memory_refs_json, related_observation_ids_json
+            FROM experience_traces
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall():
+            trace_ref = f"trace:{row['id']}"
+            _add_graph_node(
+                nodes,
+                node_id=trace_ref,
+                node_type="trace",
+                label=f"trace:{row['id']} {row['event_kind']}",
+                scope=row["scope"],
+                strength=1.0 + float(row["salience"] or 0.0) + float(row["user_emphasis"] or 0.0),
+            )
+            try:
+                related_memory_refs = json.loads(row["related_memory_refs_json"] or "[]")
+            except json.JSONDecodeError:
+                related_memory_refs = []
+            for memory_ref in related_memory_refs:
+                memory_ref = str(memory_ref)
+                _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
+                edge(trace_ref, memory_ref, "trace_supports")
+            try:
+                related_observation_ids = json.loads(row["related_observation_ids_json"] or "[]")
+            except json.JSONDecodeError:
+                related_observation_ids = []
+            for observation_id in related_observation_ids:
+                observation_ref = f"observation:{int(observation_id)}"
+                _add_graph_node(nodes, node_id=observation_ref, node_type="observation")
+                edge(trace_ref, observation_ref, "trace_observed")
+
+        for row in connection.execute(
+            """
+            SELECT id, retrieved_memory_refs_json, top_memory_ref
+            FROM retrieval_observations
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall():
+            observation_ref = f"observation:{row['id']}"
+            _add_graph_node(nodes, node_id=observation_ref, node_type="observation", label=observation_ref)
+            try:
+                memory_refs = json.loads(row["retrieved_memory_refs_json"] or "[]")
+            except json.JSONDecodeError:
+                memory_refs = []
+            for memory_ref in memory_refs:
+                memory_ref = str(memory_ref)
+                if should_skip_ref(memory_ref):
+                    skipped_empty_retrieval_edges += 1
+                    continue
+                _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
+                edge(observation_ref, memory_ref, "retrieved")
+            top_ref = row["top_memory_ref"]
+            if top_ref:
+                top_ref = str(top_ref)
+                if should_skip_ref(top_ref):
+                    skipped_empty_retrieval_edges += 1
+                    continue
+                _add_graph_node(nodes, node_id=top_ref, node_type=_node_type_from_ref(top_ref))
+                edge(observation_ref, top_ref, "top_retrieval", weight=1.5)
+
+        for row in connection.execute(
+            """
+            SELECT id, activation_kind, memory_ref, observation_id, trace_id, strength
+            FROM memory_activations
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall():
+            activation_ref = f"activation:{row['id']}"
+            _add_graph_node(
+                nodes,
+                node_id=activation_ref,
+                node_type="activation",
+                label=f"activation:{row['id']} {row['activation_kind']}",
+                strength=float(row["strength"] or 0.0) + 0.5,
+            )
+            if row["memory_ref"]:
+                memory_ref = str(row["memory_ref"])
+                if should_skip_ref(memory_ref):
+                    skipped_empty_retrieval_edges += 1
+                else:
+                    _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
+                    edge(activation_ref, memory_ref, str(row["activation_kind"]), weight=float(row["strength"] or 1.0))
+            if row["observation_id"] is not None:
+                observation_ref = f"observation:{row['observation_id']}"
+                _add_graph_node(nodes, node_id=observation_ref, node_type="observation")
+                edge(activation_ref, observation_ref, "activation_observed")
+            if row["trace_id"] is not None:
+                trace_ref = f"trace:{row['trace_id']}"
+                _add_graph_node(nodes, node_id=trace_ref, node_type="trace")
+                edge(activation_ref, trace_ref, "activation_traced")
+
+    return {
+        "nodes": list(nodes.values()),
+        "edges": edges,
+        "truncated": truncated,
+        "skipped_empty_retrieval_edges": skipped_empty_retrieval_edges,
+    }
+
+
+def _render_memory_graph_html(graph_data: dict[str, Any], *, title: str) -> str:
+    graph_json = html.escape(json.dumps(graph_data, sort_keys=True), quote=False)
+    escaped_title = html.escape(title)
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+<meta charset=\"utf-8\" />
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+<title>{escaped_title}</title>
+<style>
+:root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}
+body {{ margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% 20%, #20356f 0, #0a1020 45%, #03050d 100%); color: #e8edff; overflow: hidden; }}
+#app {{ position: fixed; inset: 0; }}
+.header {{ position: fixed; left: 24px; top: 20px; z-index: 2; max-width: 520px; }}
+h1 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: 0.03em; }}
+.meta {{ color: #9eb0ff; font-size: 13px; line-height: 1.5; }}
+canvas {{ width: 100vw; height: 100vh; display: block; }}
+.legend {{ position: fixed; right: 24px; top: 20px; z-index: 2; background: rgba(7, 12, 28, 0.72); border: 1px solid rgba(125, 153, 255, 0.24); border-radius: 16px; padding: 14px 16px; backdrop-filter: blur(14px); }}
+.legend div {{ margin: 6px 0; font-size: 12px; color: #c9d4ff; }}
+.dot {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }}
+</style>
+</head>
+<body>
+<div class=\"header\"><h1>agent-memory neural graph</h1><div class=\"meta\">Read-only local visualization. Default labels use refs only; raw source content, raw query text, and trace summaries are not embedded.</div></div>
+<div class=\"legend\" id=\"legend\"></div>
+<canvas id=\"graph\"></canvas>
+<script id=\"graph-data\" type=\"application/json\">{graph_json}</script>
+<script>
+const data = JSON.parse(document.getElementById('graph-data').textContent);
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+const palette = {{ fact:'#7cf7c8', procedure:'#ffd166', episode:'#9ad1ff', trace:'#f78cbe', observation:'#a78bfa', activation:'#ff8f70', memory:'#d7e0ff' }};
+function resize() {{ canvas.width = window.innerWidth * devicePixelRatio; canvas.height = window.innerHeight * devicePixelRatio; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }}
+resize(); window.addEventListener('resize', resize);
+const nodes = data.nodes.map((n, i) => {{
+  const angle = i * 2.399963229728653;
+  const radius = 40 + Math.sqrt(i + 1) * 18;
+  return {{...n, x: innerWidth/2 + Math.cos(angle)*radius, y: innerHeight/2 + Math.sin(angle)*radius, vx:0, vy:0}};
+}});
+const byId = new Map(nodes.map(n => [n.id, n]));
+const edges = data.edges.map(e => ({{...e, source: byId.get(e.from), target: byId.get(e.to)}})).filter(e => e.source && e.target);
+const legend = document.getElementById('legend');
+legend.innerHTML = Object.entries(palette).map(([k,v]) => `<div><span class=\"dot\" style=\"background:${{v}}\"></span>${{k}}</div>`).join('') + `<div>${{nodes.length}} nodes · ${{edges.length}} edges</div>`;
+const anchors = {{ fact:[0.50,0.36], procedure:[0.37,0.50], episode:[0.63,0.50], trace:[0.50,0.65], observation:[0.25,0.73], activation:[0.75,0.73], memory:[0.50,0.50] }};
+function tick() {{
+  for (const n of nodes) {{
+    const anchor = anchors[n.type] || anchors.memory;
+    const ax = innerWidth * anchor[0], ay = innerHeight * anchor[1];
+    n.vx += (ax - n.x) * 0.0018;
+    n.vy += (ay - n.y) * 0.0018;
+    n.vx += (innerWidth/2 - n.x) * 0.00025;
+    n.vy += (innerHeight/2 - n.y) * 0.00025;
+  }}
+  for (let i=0;i<nodes.length;i++) for (let j=i+1;j<nodes.length;j++) {{
+    const a=nodes[i], b=nodes[j], dx=a.x-b.x, dy=a.y-b.y, d2=Math.max(dx*dx+dy*dy, 80);
+    const f=90/d2; a.vx += dx*f; a.vy += dy*f; b.vx -= dx*f; b.vy -= dy*f;
+  }}
+  for (const e of edges) {{
+    const a=e.source, b=e.target, dx=b.x-a.x, dy=b.y-a.y, d=Math.max(Math.hypot(dx,dy),1), target=130;
+    const f=(d-target)*0.006*(e.weight || 1); a.vx += dx/d*f; a.vy += dy/d*f; b.vx -= dx/d*f; b.vy -= dy/d*f;
+  }}
+  for (const n of nodes) {{
+    n.vx*=0.86; n.vy*=0.86; n.x+=n.vx; n.y+=n.vy;
+    n.x=Math.max(24, Math.min(innerWidth-24, n.x));
+    n.y=Math.max(24, Math.min(innerHeight-24, n.y));
+  }}
+}}
+function draw() {{
+  tick(); ctx.clearRect(0,0,innerWidth,innerHeight);
+  ctx.globalCompositeOperation='lighter';
+  for (const e of edges) {{ const c=palette[e.source.type] || '#8994c7'; ctx.strokeStyle=c+'66'; ctx.lineWidth=Math.max(0.6, Math.min(3, e.weight || 1)); ctx.beginPath(); ctx.moveTo(e.source.x,e.source.y); ctx.lineTo(e.target.x,e.target.y); ctx.stroke(); }}
+  for (const n of nodes) {{
+    const r=Math.max(4, Math.min(16, 5 + Math.sqrt(n.strength || 1)*3));
+    ctx.fillStyle=palette[n.type] || palette.memory; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=18; ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+    const showLabel = nodes.length <= 250 || ['fact','procedure','episode','memory'].includes(n.type);
+    if (showLabel) {{ ctx.fillStyle='#dfe7ff'; ctx.font='11px ui-sans-serif, system-ui'; ctx.fillText(n.label || n.id, n.x+r+4, n.y+4); }}
+  }}
+  ctx.globalCompositeOperation='source-over'; requestAnimationFrame(draw);
+}}
+draw();
+</script>
+</body>
+</html>
+"""
+
+
+def _export_memory_graph_html(
+    db_path: Path,
+    *,
+    output_path: Path,
+    limit: int,
+    include_memory_labels: bool,
+) -> dict[str, Any]:
+    graph_data = _memory_graph_snapshot(db_path, limit=limit, include_memory_labels=include_memory_labels)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    html_text = _render_memory_graph_html(graph_data, title="agent-memory neural graph")
+    output_path.write_text(html_text)
+    return {
+        "kind": "memory_graph_html_export",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(db_path),
+        "output_path": str(output_path),
+        "node_count": len(graph_data["nodes"]),
+        "edge_count": len(graph_data["edges"]),
+        "truncated": graph_data["truncated"],
+        "skipped_empty_retrieval_edges": graph_data.get("skipped_empty_retrieval_edges", 0),
+        "privacy": {
+            "raw_source_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "memory_labels_included": include_memory_labels,
+        },
+    }
+
+
+
 def _retrieve_packet_for_prompt(args: argparse.Namespace):
     return retrieve_memory_packet(
         db_path=args.db_path,
@@ -5151,6 +5479,18 @@ def _build_parser() -> argparse.ArgumentParser:
     graph_inspect_parser.add_argument("start_ref")
     graph_inspect_parser.add_argument("--depth", type=int, default=1)
     graph_inspect_parser.add_argument("--limit", type=int, default=100)
+    graph_export_html_parser = graph_subparsers.add_parser(
+        "export-html",
+        help="Write a standalone read-only neural-style local HTML graph visualization without raw source/query text.",
+    )
+    graph_export_html_parser.add_argument("db_path", type=Path)
+    graph_export_html_parser.add_argument("--output", type=Path, required=True)
+    graph_export_html_parser.add_argument("--limit", type=int, default=200)
+    graph_export_html_parser.add_argument(
+        "--include-memory-labels",
+        action="store_true",
+        help="Opt in to embedding curated memory labels in the local HTML. Raw source/query/trace text is still excluded.",
+    )
 
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_action", required=True)
@@ -5987,6 +6327,19 @@ def main() -> None:
             print(
                 json.dumps(
                     _inspect_relation_graph(args.db_path, start_ref=args.start_ref, depth=args.depth, limit=args.limit),
+                    indent=2,
+                )
+            )
+            return
+        if args.graph_action == "export-html":
+            print(
+                json.dumps(
+                    _export_memory_graph_html(
+                        args.db_path,
+                        output_path=args.output,
+                        limit=args.limit,
+                        include_memory_labels=args.include_memory_labels,
+                    ),
                     indent=2,
                 )
             )
