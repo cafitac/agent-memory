@@ -1,0 +1,41 @@
+{
+  "references": {
+    "current_version_fact": {
+      "memory_type": "fact",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.86",
+      "scope": "project:m1"
+    },
+    "stale_version_fact": {
+      "memory_type": "fact",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.75",
+      "scope": "project:m1"
+    }
+  },
+  "tasks": [
+    {
+      "id": "same-slot-current-release-version",
+      "query": "What is the latest Project M1 release version?",
+      "preferred_scope": "project:m1",
+      "limit": 2,
+      "expected": {
+        "facts": ["current_version_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": ["stale_version_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Keep stale same-slot facts hidden behind the current fact for a direct release-version query.",
+      "notes": [
+        "Both facts share subject, predicate, and scope; only the current object value should surface.",
+        "This guards the conflict-resolution path without changing default retrieval ranking."
+      ]
+    }
+  ]
+}
