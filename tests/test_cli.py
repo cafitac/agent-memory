@@ -1616,6 +1616,133 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_validat
 
 
 
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contract_blocked_without_mutation_or_leaks(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "query-preview-cleanup-restore-apply-contract.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Query preview cleanup restore apply contract target phrase is RESTORE_APPLY_CONTRACT_OK.",
+        metadata={"project": "query-preview-cleanup-restore-apply-contract"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Query preview cleanup restore apply contract",
+        predicate="target_phrase",
+        object_ref_or_value="RESTORE_APPLY_CONTRACT_OK",
+        evidence_ids=[source.id],
+        scope="project:query-preview-cleanup-restore-apply-contract",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "restore apply token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:query-preview-cleanup-restore-apply-contract",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE retrieval_observations SET query_preview = ?, created_at = ? WHERE id = 1",
+            ("token=SHOULD_NOT_LEAK", "2026-01-01 00:00:00"),
+        )
+
+    cleanup_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-v1",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "create rollback artifact before restore apply contract checkpoint",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert cleanup_result.returncode == 0, cleanup_result.stderr
+    cleanup_payload = json.loads(cleanup_result.stdout)
+    rollback_path = Path(cleanup_payload["apply"]["rollback_manifest"]["artifact_path"])
+
+    restore_apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup-restore",
+            str(db_path),
+            str(rollback_path),
+            "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-restore-v1",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "restore apply contract reason token=SHOULD_NOT_LEAK",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert restore_apply_result.returncode == 0, restore_apply_result.stderr
+    payload = json.loads(restore_apply_result.stdout)
+    assert payload["kind"] == "dogfood_query_preview_cleanup_restore_apply_blocked"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "error"
+    assert payload["restore_preview"]["apply_requested"] is True
+    assert payload["restore_preview"]["restore_apply_available"] is False
+    assert payload["restore_preview"]["restorable_count"] == 1
+    assert payload["restore_apply_contract"]["policy"] == "legacy-query-preview-cleanup-restore-v1"
+    assert payload["restore_apply_contract"]["actor"] == "cli-test"
+    assert payload["restore_apply_contract"]["reason_sha256"] == hashlib.sha256(
+        b"restore apply contract reason token=SHOULD_NOT_LEAK"
+    ).hexdigest()
+    assert payload["restore_apply_contract"]["disposable_restore_check_required"] is True
+    assert payload["restore_apply_contract"]["source_database_match_required"] is True
+    assert payload["restore_apply_contract"]["artifact_integrity_required"] is True
+    assert payload["restore_apply_contract"]["audit_raw_query_preview_allowed"] is False
+    assert payload["restore_apply_contract"]["reason_raw_stored"] is False
+    assert "restore_apply_contract_checkpoint_only" in payload["blocked_reasons"]
+    assert "live_restore_not_implemented" in payload["blocked_reasons"]
+    assert "SHOULD_NOT_LEAK" not in restore_apply_result.stdout
+    assert "token=" not in restore_apply_result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute("SELECT id, query_preview FROM retrieval_observations ORDER BY id").fetchall()
+    assert rows == [(1, None)]
+
+
 def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_blocks_source_database_mismatch(
     tmp_path: Path,
 ) -> None:

@@ -197,6 +197,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
 - A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch and artifact integrity failures are blocking; live restore remains unavailable.
+- Restore apply intent is contract-only: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, and future disposable-restore rehearsal while returning `mutated=false` and `restore_apply_available=false`.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 

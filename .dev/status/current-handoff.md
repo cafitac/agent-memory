@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-08 01:19 KST
+Last updated: 2026-05-08 01:52 KST
 
 ## Trigger for the next session
 
@@ -165,6 +165,27 @@ Still forbidden after this slice:
 - raw transcript or raw query text in stdout/audit metadata;
 - default retrieval/ranking behavior changes;
 - live restore/apply without a separate RED-tested policy/actor/reason/audit/disposable path.
+
+## In-progress G4a restore apply-contract checkpoint slice
+
+Status: Started from `v0.1.105` validated `main` on branch `g4/query-preview-cleanup-restore-apply-contract`. This slice adds only a blocked contract checkpoint for restore apply. It does not restore any query previews and does not open broad G4 apply.
+
+Target contract:
+
+- `dogfood query-preview-cleanup-restore <db> <artifact> --apply` requires `--policy legacy-query-preview-cleanup-restore-v1`, `--actor`, and `--reason`.
+- Raw reason text is never printed or stored; only `reason_sha256` appears in the contract payload.
+- The command returns structured JSON with `read_only=true`, `mutated=false`, `status=error`, `restore_apply_available=false`, and blocked reasons including `restore_apply_contract_checkpoint_only` and `live_restore_not_implemented`.
+- Source DB match and artifact integrity remain required before any candidate rows are even counted as restorable.
+- Future live restore remains blocked until a separate disposable-restore rehearsal/audit slice exists.
+- No raw `query_preview`, token, API-key-like values, or sample row values may appear in stdout.
+
+Still forbidden after this slice:
+
+- broad G4 apply mode;
+- ordinary conversation auto-approval;
+- raw transcript or raw query text in stdout/audit metadata;
+- default retrieval/ranking behavior changes;
+- live restore mutation.
 
 ## v0.1.100 policy hardening release and runtime QA completed
 
