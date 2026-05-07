@@ -1,0 +1,37 @@
+{
+  "references": {
+    "current_rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 current v0.1.90 candidate validation rollout episode"
+    },
+    "stale_rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 stale rollout episode"
+    }
+  },
+  "tasks": [
+    {
+      "id": "episode-recall-same-scope-drift-guardrail",
+      "query": "What is the current Project M1 rollout episode after candidate validation?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "rationale": "Keep current rollout episodes ahead of stale same-scope rollout history under tight prompt budgets.",
+      "notes": [
+        "The retrieval target is the current rollout episode, not an older rollout incident with similar wording.",
+        "A tight limit makes episode drift visible before broad G4 apply mode is enabled."
+      ],
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": ["current_rollout_episode"]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": ["stale_rollout_episode"]
+      }
+    }
+  ]
+}
