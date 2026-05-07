@@ -1,0 +1,37 @@
+{
+  "references": {
+    "current_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests"
+    },
+    "workspace_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "workspace:agent-memory",
+      "name": "Run workspace default pre-PR checks"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure-scope-adjacent-guardrail",
+      "query": "What local tests should Project M1 run before opening a PR?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {
+        "facts": [],
+        "procedures": ["current_pre_pr_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": ["workspace_pre_pr_procedure"],
+        "episodes": []
+      },
+      "rationale": "Keep project-specific pre-PR procedure guidance ahead of scope-adjacent workspace defaults.",
+      "notes": [
+        "The workspace procedure is useful fallback guidance but should not displace a preferred-scope Project M1 procedure.",
+        "This catches lexical ties where scope-adjacent procedures share pre-PR/test wording under a tight prompt budget."
+      ]
+    }
+  ]
+}
