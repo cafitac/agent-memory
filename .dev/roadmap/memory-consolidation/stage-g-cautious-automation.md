@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, and disposable-copy preflight hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
+Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, disposable-copy preflight hardening, and restore dry-run hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened in `v0.1.100` with a named policy gate. Current follow-up adds disposable-copy preflight before target DB mutation. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.102` with a named policy gate, rollback manifest, and disposable-copy preflight before target DB mutation. Current follow-up adds read-only restore dry-run validation for rollback artifacts; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -195,6 +195,8 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - Apply clears only eligible legacy rows older than the cutoff.
 - Raw query preview values are never printed.
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
+- The command preflights apply on a private disposable DB copy before target DB mutation.
+- A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; live restore remains unavailable.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
@@ -271,6 +273,6 @@ Allow controlled application only after dry-run output is trusted and the broade
 - Default retrieval ranking changes remain forbidden.
 
 
-## Current G4a safety hardening: disposable-copy apply check
+## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.101 named-policy and rollback-manifest release, the current slice requires the command to copy the target SQLite DB to a private local disposable artifact, run the same cleanup on that copy, and compare expected eligible/cleared/remaining counts plus rollback-manifest metadata before mutating the target DB. The disposable copy can contain private query-preview data; stdout/audit metadata must stay hash/count/path only and broad G4 apply mode remains blocked.
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.102 named-policy, rollback-manifest, and disposable-copy preflight release, the current slice adds read-only `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run`. It validates the private rollback artifact kind/policy/row shape/hash and reports target rows found, restorable rows, already-populated rows, and missing rows without mutating the DB or printing raw query-preview values. Live restore remains unavailable and broad G4 apply mode remains blocked.

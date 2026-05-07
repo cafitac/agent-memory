@@ -1,7 +1,7 @@
 # G4 Readiness and First Mutation Plan
 
 Status: Superseded as a first-mutation plan; retained as historical guardrails for broader G4 planning.
-Last updated: 2026-05-07 15:35 KST
+Last updated: 2026-05-07 21:35 KST
 
 ## Purpose
 
@@ -18,8 +18,8 @@ The plan exists to prevent a direct jump from read-only dogfood reports to broad
 
 Current release/runtime:
 
-- Latest release: `v0.1.99`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`.
+- Latest release: `v0.1.102`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.102/.venv/bin/agent-memory`.
 - Live DB: `/Users/reddit/.agent-memory/memory.db`.
 - Repo branch at plan start: `main`, then docs branch `docs/g4-readiness-apply-plan`.
 
@@ -176,13 +176,16 @@ Required RED tests before implementation:
 10. Dry-run and apply output shapes are distinguishable.
 11. New privacy-safe rows remain untouched.
 12. Default retrieval/Hermes hook behavior remains unchanged.
+13. Apply runs first against a disposable DB copy and proceeds only if count/hash/rollback checks pass.
+14. A restore dry-run command validates rollback artifacts without mutating the DB or printing raw query previews; live restore remains blocked until a separate explicit policy slice.
 
 Required operator safety before live DB apply:
 
 - Run read-only preview against the live DB.
 - Export or back up the DB before mutation.
-- Run apply only with explicit policy/actor/reason.
+- Run apply only with explicit policy/actor/reason and disposable-copy preflight.
 - Re-run storage-health and query-preview cleanup preview after mutation.
+- Run restore dry-run against the private rollback artifact before considering any future live restore design.
 - Verify non-empty `query_preview` count becomes 0 or the remaining rows are explicitly explained.
 - Keep backup and rollback artifact paths out of git; rollback artifacts may contain private local query-preview values.
 
