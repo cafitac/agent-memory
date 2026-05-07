@@ -1,0 +1,51 @@
+{
+  "references": {
+    "current_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run current release QA"
+    },
+    "stale_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run legacy release QA"
+    },
+    "release_notes_noise_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Draft release notes checklist"
+    },
+    "release_monitoring_noise_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Monitor release candidate signals"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure-release-qa-budget-pressure",
+      "query": "What published artifact smoke and live Hermes runtime QA procedure should Project M1 run before marking the release candidate ready?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {
+        "facts": [],
+        "procedures": ["current_release_qa_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [
+          "stale_release_qa_procedure",
+          "release_notes_noise_procedure",
+          "release_monitoring_noise_procedure"
+        ],
+        "episodes": []
+      },
+      "rationale": "Keep authoritative release QA procedure guidance ahead of stale and same-scope procedural noise under a tight prompt budget.",
+      "notes": [
+        "This is a procedure-surface analogue to fact prompt-budget pressure: several same-scope procedures share release candidate wording, but only the published-artifact/runtime QA procedure should survive limit=1.",
+        "Production retrieval should usually remain unchanged; the fixture locks the current ranked behavior."
+      ]
+    }
+  ]
+}
