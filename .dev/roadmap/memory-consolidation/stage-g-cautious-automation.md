@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate and rollback-manifest hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
+Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, and disposable-copy preflight hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened in `v0.1.100` with a named policy gate. Current follow-up adds rollback manifest/artifact output. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened in `v0.1.100` with a named policy gate. Current follow-up adds disposable-copy preflight before target DB mutation. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -269,3 +269,8 @@ Allow controlled application only after dry-run output is trusted and the broade
 - Ordinary conversation auto-approval remains forbidden.
 - Raw transcript storage remains forbidden.
 - Default retrieval ranking changes remain forbidden.
+
+
+## Current G4a safety hardening: disposable-copy apply check
+
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.101 named-policy and rollback-manifest release, the current slice requires the command to copy the target SQLite DB to a private local disposable artifact, run the same cleanup on that copy, and compare expected eligible/cleared/remaining counts plus rollback-manifest metadata before mutating the target DB. The disposable copy can contain private query-preview data; stdout/audit metadata must stay hash/count/path only and broad G4 apply mode remains blocked.

@@ -4183,6 +4183,154 @@ def _query_preview_cleanup_counts(connection: sqlite3.Connection, *, older_than:
     return affected, eligible
 
 
+def _query_preview_cleanup_eligible_rows(connection: sqlite3.Connection, *, older_than: str) -> list[dict[str, Any]]:
+    return [
+        {"id": int(row["id"]), "query_preview": row["query_preview"], "created_at": row["created_at"]}
+        for row in connection.execute(
+            """
+            SELECT id, query_preview, created_at
+            FROM retrieval_observations
+            WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+            ORDER BY id
+            """,
+            (older_than,),
+        ).fetchall()
+    ]
+
+
+def _query_preview_cleanup_ids_sha256(eligible_ids: list[int]) -> str:
+    return hashlib.sha256(",".join(str(value) for value in eligible_ids).encode()).hexdigest()
+
+
+def _write_query_preview_cleanup_rollback_manifest(
+    *,
+    db_path: Path,
+    older_than: str,
+    policy: str,
+    eligible_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    eligible_ids = [row["id"] for row in eligible_rows]
+    rollback_artifact = {
+        "kind": "query_preview_cleanup_rollback_artifact",
+        "policy": policy,
+        "operation": "restore_stored_query_excerpts",
+        "parameters": {"older_than": older_than},
+        "row_count": len(eligible_rows),
+        "rows": eligible_rows,
+        "privacy": {
+            "artifact_contains_private_query_preview": True,
+            "do_not_commit": True,
+        },
+    }
+    rollback_artifact_text = json.dumps(rollback_artifact, sort_keys=True, indent=2)
+    rollback_artifact_sha256 = hashlib.sha256(rollback_artifact_text.encode()).hexdigest()
+    rollback_dir = db_path.parent / ".agent-memory-query-preview-cleanup-rollbacks"
+    rollback_dir.mkdir(parents=True, exist_ok=True)
+    rollback_artifact_path = rollback_dir / f"query-preview-cleanup-{rollback_artifact_sha256[:16]}.json"
+    rollback_artifact_path.write_text(rollback_artifact_text)
+    return {
+        "kind": "query_preview_cleanup_rollback_manifest",
+        "policy": policy,
+        "operation": "restore_stored_query_excerpts",
+        "artifact_path": str(rollback_artifact_path),
+        "artifact_sha256": rollback_artifact_sha256,
+        "row_count": len(eligible_rows),
+        "eligible_ids_sha256": _query_preview_cleanup_ids_sha256(eligible_ids),
+        "privacy": {
+            "raw_query_preview_included_in_output": False,
+            "artifact_contains_private_query_preview": True,
+        },
+    }
+
+
+def _apply_query_preview_cleanup_to_connection(
+    connection: sqlite3.Connection,
+    *,
+    older_than: str,
+    db_path: Path,
+    policy: str,
+) -> tuple[list[int], sqlite3.Row, dict[str, Any]]:
+    eligible_rows = _query_preview_cleanup_eligible_rows(connection, older_than=older_than)
+    eligible_ids = [row["id"] for row in eligible_rows]
+    rollback_manifest = _write_query_preview_cleanup_rollback_manifest(
+        db_path=db_path,
+        older_than=older_than,
+        policy=policy,
+        eligible_rows=eligible_rows,
+    )
+    if eligible_ids:
+        connection.execute(
+            """
+            UPDATE retrieval_observations
+            SET query_preview = NULL
+            WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
+            """,
+            (older_than,),
+        )
+    affected_after, _eligible_after = _query_preview_cleanup_counts(connection, older_than=older_than)
+    return eligible_ids, affected_after, rollback_manifest
+
+
+def _run_query_preview_cleanup_disposable_apply_check(
+    *,
+    db_path: Path,
+    older_than: str,
+    policy: str,
+    expected_eligible_count: int,
+    expected_remaining_affected_count: int,
+) -> dict[str, Any]:
+    disposable_dir = db_path.parent / ".agent-memory-query-preview-cleanup-disposable-checks"
+    disposable_dir.mkdir(parents=True, exist_ok=True)
+    source_fingerprint = hashlib.sha256(f"{db_path}:{older_than}:{policy}".encode()).hexdigest()[:16]
+    disposable_db_path = disposable_dir / f"query-preview-cleanup-check-{source_fingerprint}.db"
+    if disposable_db_path.exists():
+        disposable_db_path.unlink()
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as source_connection:
+        with sqlite3.connect(disposable_db_path) as backup_connection:
+            source_connection.backup(backup_connection)
+    with connect(disposable_db_path) as disposable_connection:
+        disposable_affected_before, disposable_eligible_before = _query_preview_cleanup_counts(
+            disposable_connection,
+            older_than=older_than,
+        )
+        disposable_eligible_ids, disposable_affected_after, disposable_rollback_manifest = (
+            _apply_query_preview_cleanup_to_connection(
+                disposable_connection,
+                older_than=older_than,
+                db_path=disposable_db_path,
+                policy=policy,
+            )
+        )
+    cleared_count = len(disposable_eligible_ids)
+    remaining_affected_count = int(disposable_affected_after["count"])
+    checks_passed = (
+        int(disposable_eligible_before["count"]) == expected_eligible_count
+        and cleared_count == expected_eligible_count
+        and remaining_affected_count == expected_remaining_affected_count
+        and disposable_rollback_manifest["row_count"] == expected_eligible_count
+    )
+    return {
+        "kind": "query_preview_cleanup_disposable_apply_check",
+        "status": "passed" if checks_passed else "failed",
+        "live_database_mutated_before_check": False,
+        "checked_database_path": str(disposable_db_path),
+        "affected_before_count": int(disposable_affected_before["count"]),
+        "eligible_count": int(disposable_eligible_before["count"]),
+        "cleared_count": cleared_count,
+        "remaining_affected_count": remaining_affected_count,
+        "expected": {
+            "eligible_count": expected_eligible_count,
+            "cleared_count": expected_eligible_count,
+            "remaining_affected_count": expected_remaining_affected_count,
+        },
+        "rollback_manifest": disposable_rollback_manifest,
+        "privacy": {
+            "raw_query_preview_included_in_output": False,
+            "disposable_copy_contains_private_query_preview": True,
+        },
+    }
+
+
 def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     older_than = args.older_than
@@ -4233,65 +4381,42 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                     "warnings": ["retrieval_observations_missing"],
                 }
             affected_before, eligible_before = _query_preview_cleanup_counts(connection, older_than=older_than)
-            eligible_rows = [
-                {"id": int(row["id"]), "query_preview": row["query_preview"], "created_at": row["created_at"]}
-                for row in connection.execute(
-                    """
-                    SELECT id, query_preview, created_at
-                    FROM retrieval_observations
-                    WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
-                    ORDER BY id
-                    """,
-                    (older_than,),
-                ).fetchall()
-            ]
-            eligible_ids = [row["id"] for row in eligible_rows]
-            eligible_ids_sha256 = hashlib.sha256(
-                ",".join(str(value) for value in eligible_ids).encode()
-            ).hexdigest()
-            rollback_artifact = {
-                "kind": "query_preview_cleanup_rollback_artifact",
-                "policy": policy,
-                "operation": "restore_stored_query_excerpts",
-                "parameters": {"older_than": older_than},
-                "row_count": len(eligible_rows),
-                "rows": eligible_rows,
-                "privacy": {
-                    "artifact_contains_private_query_preview": True,
-                    "do_not_commit": True,
-                },
-            }
-            rollback_artifact_text = json.dumps(rollback_artifact, sort_keys=True, indent=2)
-            rollback_artifact_sha256 = hashlib.sha256(rollback_artifact_text.encode()).hexdigest()
-            rollback_dir = db_path.parent / ".agent-memory-query-preview-cleanup-rollbacks"
-            rollback_dir.mkdir(parents=True, exist_ok=True)
-            rollback_artifact_path = rollback_dir / f"query-preview-cleanup-{rollback_artifact_sha256[:16]}.json"
-            rollback_artifact_path.write_text(rollback_artifact_text)
-            rollback_manifest = {
-                "kind": "query_preview_cleanup_rollback_manifest",
-                "policy": policy,
-                "operation": "restore_stored_query_excerpts",
-                "artifact_path": str(rollback_artifact_path),
-                "artifact_sha256": rollback_artifact_sha256,
-                "row_count": len(eligible_rows),
-                "eligible_ids_sha256": eligible_ids_sha256,
-                "privacy": {
-                    "raw_query_preview_included_in_output": False,
-                    "artifact_contains_private_query_preview": True,
-                },
-            }
-            if eligible_ids:
-                connection.execute(
-                    """
-                    UPDATE retrieval_observations
-                    SET query_preview = NULL
-                    WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
-                    """,
-                    (older_than,),
-                )
-            affected_after, _eligible_after = _query_preview_cleanup_counts(connection, older_than=older_than)
+            expected_remaining_affected_count = int(affected_before["count"]) - int(eligible_before["count"])
+            disposable_apply_check = _run_query_preview_cleanup_disposable_apply_check(
+                db_path=db_path,
+                older_than=older_than,
+                policy=policy,
+                expected_eligible_count=int(eligible_before["count"]),
+                expected_remaining_affected_count=expected_remaining_affected_count,
+            )
+            if disposable_apply_check["status"] != "passed":
+                return {
+                    "kind": kind,
+                    "read_only": False,
+                    "mutated": False,
+                    "status": "error",
+                    "database": {"path": str(db_path), "exists": True},
+                    "affected_count": int(affected_before["count"]),
+                    "eligible_count": int(eligible_before["count"]),
+                    "cleared_count": 0,
+                    "remaining_affected_count": int(affected_before["count"]),
+                    "apply": {
+                        "policy": policy,
+                        "actor": actor,
+                        "reason_sha256": hashlib.sha256(reason.encode()).hexdigest(),
+                        "disposable_apply_check": disposable_apply_check,
+                    },
+                    "privacy": _query_preview_cleanup_privacy_payload(),
+                    "warnings": ["query_preview_cleanup_disposable_apply_check_failed"],
+                }
+            eligible_ids, affected_after, rollback_manifest = _apply_query_preview_cleanup_to_connection(
+                connection,
+                older_than=older_than,
+                db_path=db_path,
+                policy=policy,
+            )
             reason_sha256 = hashlib.sha256(reason.encode()).hexdigest()
-            eligible_ids_sha256 = hashlib.sha256(",".join(str(value) for value in eligible_ids).encode()).hexdigest()
+            eligible_ids_sha256 = _query_preview_cleanup_ids_sha256(eligible_ids)
             audit_metadata = {
                 "operation": "clear_stored_query_excerpts",
                 "policy": policy,
@@ -4303,6 +4428,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                 "affected_before_count": int(affected_before["count"]),
                 "remaining_affected_count": int(affected_after["count"]),
                 "eligible_ids_sha256": eligible_ids_sha256,
+                "disposable_apply_check": disposable_apply_check,
                 "rollback_manifest": rollback_manifest,
                 "raw_query_preview_included": False,
                 "sample_values_included": False,
@@ -4361,6 +4487,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                 "reason_sha256": reason_sha256,
                 "audit_trace_id": audit_trace_id,
                 "eligible_ids_sha256": eligible_ids_sha256,
+                "disposable_apply_check": disposable_apply_check,
                 "rollback_manifest": rollback_manifest,
                 "operation": "clear_stored_query_excerpts",
                 "parameters": {"older_than": older_than},
