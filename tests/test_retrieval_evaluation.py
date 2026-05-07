@@ -162,6 +162,28 @@ def _write_legacy_branch_fixture_file(tmp_path: Path, seeded_ids: dict[str, int]
     return fixture_path
 
 
+def _write_missing_expected_fixture_file(tmp_path: Path) -> Path:
+    fixture_path = tmp_path / "missing-expected-regression.json"
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "missing-expected-policy",
+                        "query": "This query intentionally cannot retrieve the expected fact id.",
+                        "preferred_scope": "project:m1",
+                        "limit": 5,
+                        "expected": {"facts": [999_999_999], "procedures": [], "episodes": []},
+                        "avoid": {"facts": [], "procedures": [], "episodes": []},
+                    }
+                ]
+            },
+            indent=2,
+        )
+    )
+    return fixture_path
+
+
 
 def _seed_checked_in_fixture_eval_db(db_path: Path) -> dict[str, int]:
     initialize_database(db_path)
@@ -2016,20 +2038,20 @@ def test_evaluate_retrieval_fixtures_raises_when_fail_on_regression_enabled(tmp_
     from agent_memory.core.retrieval_eval import RetrievalEvalRegressionError, evaluate_retrieval_fixtures
 
     db_path = tmp_path / "retrieval-eval-fail.db"
-    seeded_ids = _seed_checked_in_fixture_eval_db(db_path)
-    fixture_path = _write_legacy_branch_fixture_file(tmp_path, seeded_ids)
+    _seed_checked_in_fixture_eval_db(db_path)
+    fixture_path = _write_missing_expected_fixture_file(tmp_path)
 
     with pytest.raises(RetrievalEvalRegressionError) as exc_info:
         evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixture_path, fail_on_regression=True)
 
-    assert exc_info.value.failed_task_ids == ["legacy-branch-policy"]
+    assert exc_info.value.failed_task_ids == ["missing-expected-policy"]
 
 
 
 def test_cli_eval_retrieval_exits_nonzero_when_fail_on_regression_enabled(tmp_path: Path) -> None:
     db_path = tmp_path / "retrieval-eval-cli-fail.db"
-    seeded_ids = _seed_checked_in_fixture_eval_db(db_path)
-    fixture_path = _write_legacy_branch_fixture_file(tmp_path, seeded_ids)
+    _seed_checked_in_fixture_eval_db(db_path)
+    fixture_path = _write_missing_expected_fixture_file(tmp_path)
     env = {**os.environ, "PYTHONPATH": "src"}
 
     result = subprocess.run(
@@ -2050,7 +2072,7 @@ def test_cli_eval_retrieval_exits_nonzero_when_fail_on_regression_enabled(tmp_pa
     )
 
     assert result.returncode == 1
-    assert "legacy-branch-policy" in result.stderr
+    assert "missing-expected-policy" in result.stderr
     assert result.stdout == ""
 
 
