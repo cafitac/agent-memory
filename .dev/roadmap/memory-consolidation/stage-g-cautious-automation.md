@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Planned. This must be a planning/contract slice before mutating code.
+Status: Complete for first narrow cleanup mutations. Broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -208,7 +208,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 
 ## PR G4b: Add second narrow mutation for ordinary trace metadata default cleanup
 
-Status: Implemented in PR #145, released in `v0.1.78` via PR #146, and applied once to the live DB. Follow-up branch `fix/scheduled-dry-run-storage-health-healthy` fixes the scheduled-dry-run quality gate to treat storage-health status `healthy` as clean. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #145, released in `v0.1.78` via PR #146, and applied once to the live DB. Follow-up quality-gate stabilization landed before the v0.1.97 runtime QA line. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -232,11 +232,33 @@ Normalize legacy ordinary `turn` traces that are already metadata-only but are m
 - After preview reports 0 ordinary metadata-only violations and storage-health reports `status=healthy` with no warnings.
 - The follow-up quality-gate fix removes stale `storage_health_not_clean` blocked reasons when storage-health reports `healthy`.
 
-## PR G4: Add background consolidation apply mode behind explicit policy
+## PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
+
+Status: Planned. This is the next safe docs/RED-test-only slice after v0.1.97.
 
 ### Objective
 
-Allow controlled application only after dry-run output is trusted.
+Define the future contract for controlled background consolidation mutations before implementation. The contract must decide which promotion, snooze, rejection, or decay actions are eligible; which actions remain blocked; what preview/apply JSON looks like; and how audit/restore works.
+
+### Acceptance
+
+- No broad mutation is implemented in this planning slice.
+- No ordinary conversation auto-approval.
+- No raw transcript archive.
+- No default retrieval ranking change.
+- Requires explicit `--apply`, `--actor`, `--reason`, and a named policy before any future mutation.
+- Preview remains read-only and is the default.
+- Apply output is aggregate/ref/hash-only and distinguishes real mutation from no-op.
+- Every future mutation path has audit or reviewable operation records plus restore/rollback guidance.
+- Live Hermes runtime QA from the published artifact is required before any future broad apply slice is marked complete.
+
+## PR G4: Add broader background consolidation apply mode behind explicit policy
+
+Status: Blocked until PR G4-broad-plan lands and is reviewed.
+
+### Objective
+
+Allow controlled application only after dry-run output is trusted and the broader apply-mode contract is RED-tested.
 
 ### Acceptance
 
@@ -244,3 +266,6 @@ Allow controlled application only after dry-run output is trusted.
 - Requires policy file/config.
 - Writes audit trail.
 - Docs explain risk and rollback.
+- Ordinary conversation auto-approval remains forbidden.
+- Raw transcript storage remains forbidden.
+- Default retrieval ranking changes remain forbidden.

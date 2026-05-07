@@ -1,7 +1,7 @@
 # G4 Readiness and First Mutation Plan
 
-Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 21:05 KST
+Status: Superseded as a first-mutation plan; retained as historical guardrails for broader G4 planning.
+Last updated: 2026-05-07 15:35 KST
 
 ## Purpose
 
@@ -18,8 +18,8 @@ The plan exists to prevent a direct jump from read-only dogfood reports to broad
 
 Current release/runtime:
 
-- Latest release: `v0.1.76`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.76/.venv/bin/agent-memory`.
+- Latest release: `v0.1.97`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.97/.venv/bin/agent-memory`.
 - Live DB: `/Users/reddit/.agent-memory/memory.db`.
 - Repo branch at plan start: `main`, then docs branch `docs/g4-readiness-apply-plan`.
 
@@ -218,3 +218,15 @@ find /Users/reddit/.agent-memory/reports/g4-readiness -maxdepth 1 -name 'schedul
 4. If the comparison still says `continue_scheduled_report_collection_before_g4`, do not implement mutation yet unless the user explicitly chooses the legacy cleanup slice.
 
 5. If the user asks to proceed with the first mutation, start with RED tests for `query-preview-cleanup --apply --actor --reason`.
+
+## 2026-05-07 status update
+
+This plan successfully served its original purpose: it prevented a direct jump from read-only dogfood reports to broad automatic memory approval.
+
+Completed since the original draft:
+
+- `query-preview cleanup` became the first narrow explicit mutation in G4a. It cleared only legacy `retrieval_observations.query_preview` privacy debt under `--apply --actor --reason` and audit-safe output.
+- `ordinary trace metadata default cleanup` became the second narrow explicit mutation in G4b. It normalized only already-metadata-only ordinary `turn` traces by filling conservative metadata defaults.
+- H1-H4 hardening and retrieval-eval expansion continued through `v0.1.97`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.97-runtime-qa-20260507T053631`.
+
+The next G4 slice is not another immediate mutation. It is a docs/RED-test-only broader background consolidation apply-mode contract. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit policy, actor, reason, audit, and restore guidance.

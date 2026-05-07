@@ -36,9 +36,9 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified v0.1.83 repo/release state and immediate next recommended slice.
+- `.dev/status/current-handoff.md` — latest verified v0.1.97 repo/release/runtime-QA state and immediate next recommended slice.
 - `current-progress-and-next-steps.md` — historical verified progress and dogfood context after `v0.1.76`; still useful for G4 background but no longer the latest release checkpoint.
-- `g4-readiness-and-first-mutation-plan.md` — ordered post-G3f sequence: collect scheduled reports, compare trends, draft the G4 apply-mode plan, then implement only the first narrow mutation slice.
+- `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for the next broader G4 apply-mode contract.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
 
@@ -83,8 +83,10 @@ Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the
 | G2 | Automation | Narrow opt-in auto-approval | off by default |
 | G3 | Automation | Background consolidation dry-run | dry-run default |
 | G3f | Automation | Scheduled report comparison | read-only trend check |
-| G4-plan | Automation | Apply-mode contract before implementation | docs/tests plan first |
+| G4-plan | Automation | First mutation contract before implementation | docs/tests plan first |
 | G4a | Automation | First narrow mutation: legacy query-preview cleanup | explicit flag, actor, reason |
+| G4b | Automation | Second narrow mutation: ordinary trace metadata cleanup | explicit flag, actor, reason |
+| G4-broad-plan | Automation | Broader apply-mode contract before implementation | docs/RED-test-only |
 | G4 | Automation | Broader background consolidation apply mode | explicit policy only |
 | H1 | Hardening | Consolidation eval fixtures/metrics | advisory CI |
 | H2 | Hardening | Graph/trace visualization export | local/redacted |
