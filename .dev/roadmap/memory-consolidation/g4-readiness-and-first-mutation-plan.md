@@ -131,7 +131,7 @@ Minimum apply-mode contract:
 - Output must include `read_only=false` only when mutation really happened.
 - Output must include `mutated=true` only when mutation really happened.
 - Output must include operation ids or affected refs without raw content.
-- Every mutation must have an audit/history row or an equivalent reviewable record.
+- Every mutation must have an audit/history row or an equivalent reviewable record, plus rollback/restore metadata when the mutation deletes or clears private local state.
 
 Hard blocks:
 
@@ -152,7 +152,7 @@ Acceptance:
 
 Recommended first mutation:
 
-`dogfood query-preview-cleanup --apply --actor <actor> --reason <reason>` for legacy non-empty `retrieval_observations.query_preview` rows only.
+`dogfood query-preview-cleanup --apply --policy legacy-query-preview-cleanup-v1 --actor <actor> --reason <reason>` for legacy non-empty `retrieval_observations.query_preview` rows only.
 
 Why this is the safest first mutation:
 
@@ -171,18 +171,20 @@ Required RED tests before implementation:
 5. Apply does not print raw query preview values.
 6. Apply reports affected counts, timestamps, and hashed affected ids only.
 7. Apply writes an audit marker or operation summary without raw content.
-8. Dry-run and apply output shapes are distinguishable.
-9. New privacy-safe rows remain untouched.
-10. Default retrieval/Hermes hook behavior remains unchanged.
+8. Apply emits a rollback manifest with private artifact path, artifact hash, row count, and hash-only affected ids.
+9. The rollback artifact is local/private and may contain the exact pre-clear values needed for restore; stdout/audit remain raw-value-free.
+10. Dry-run and apply output shapes are distinguishable.
+11. New privacy-safe rows remain untouched.
+12. Default retrieval/Hermes hook behavior remains unchanged.
 
 Required operator safety before live DB apply:
 
 - Run read-only preview against the live DB.
 - Export or back up the DB before mutation.
-- Run apply only with explicit actor/reason.
+- Run apply only with explicit policy/actor/reason.
 - Re-run storage-health and query-preview cleanup preview after mutation.
 - Verify non-empty `query_preview` count becomes 0 or the remaining rows are explicitly explained.
-- Keep backup path out of git.
+- Keep backup and rollback artifact paths out of git; rollback artifacts may contain private local query-preview values.
 
 ## What not to do next
 
@@ -229,4 +231,4 @@ Completed since the original draft:
 - `ordinary trace metadata default cleanup` became the second narrow explicit mutation in G4b. It normalized only already-metadata-only ordinary `turn` traces by filling conservative metadata defaults.
 - H1-H4 hardening and retrieval-eval expansion continued through `v0.1.99`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118`.
 
-The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit named policy, actor, reason, audit, and restore guidance. The first hardening step is to require the named query-preview cleanup policy on the existing G4a cleanup apply path.
+The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit named policy, actor, reason, audit, and restore guidance. The first hardening step required the named query-preview cleanup policy on the existing G4a cleanup apply path and shipped in v0.1.100. The next hardening step is rollback-manifest output: before clearing eligible legacy values, apply writes a private local rollback artifact and emits only path/hash/count metadata in stdout/audit.

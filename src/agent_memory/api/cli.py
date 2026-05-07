@@ -4233,11 +4233,11 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                     "warnings": ["retrieval_observations_missing"],
                 }
             affected_before, eligible_before = _query_preview_cleanup_counts(connection, older_than=older_than)
-            eligible_ids = [
-                int(row["id"])
+            eligible_rows = [
+                {"id": int(row["id"]), "query_preview": row["query_preview"], "created_at": row["created_at"]}
                 for row in connection.execute(
                     """
-                    SELECT id
+                    SELECT id, query_preview, created_at
                     FROM retrieval_observations
                     WHERE COALESCE(query_preview, '') <> '' AND created_at < ?
                     ORDER BY id
@@ -4245,6 +4245,41 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                     (older_than,),
                 ).fetchall()
             ]
+            eligible_ids = [row["id"] for row in eligible_rows]
+            eligible_ids_sha256 = hashlib.sha256(
+                ",".join(str(value) for value in eligible_ids).encode()
+            ).hexdigest()
+            rollback_artifact = {
+                "kind": "query_preview_cleanup_rollback_artifact",
+                "policy": policy,
+                "operation": "restore_stored_query_excerpts",
+                "parameters": {"older_than": older_than},
+                "row_count": len(eligible_rows),
+                "rows": eligible_rows,
+                "privacy": {
+                    "artifact_contains_private_query_preview": True,
+                    "do_not_commit": True,
+                },
+            }
+            rollback_artifact_text = json.dumps(rollback_artifact, sort_keys=True, indent=2)
+            rollback_artifact_sha256 = hashlib.sha256(rollback_artifact_text.encode()).hexdigest()
+            rollback_dir = db_path.parent / ".agent-memory-query-preview-cleanup-rollbacks"
+            rollback_dir.mkdir(parents=True, exist_ok=True)
+            rollback_artifact_path = rollback_dir / f"query-preview-cleanup-{rollback_artifact_sha256[:16]}.json"
+            rollback_artifact_path.write_text(rollback_artifact_text)
+            rollback_manifest = {
+                "kind": "query_preview_cleanup_rollback_manifest",
+                "policy": policy,
+                "operation": "restore_stored_query_excerpts",
+                "artifact_path": str(rollback_artifact_path),
+                "artifact_sha256": rollback_artifact_sha256,
+                "row_count": len(eligible_rows),
+                "eligible_ids_sha256": eligible_ids_sha256,
+                "privacy": {
+                    "raw_query_preview_included_in_output": False,
+                    "artifact_contains_private_query_preview": True,
+                },
+            }
             if eligible_ids:
                 connection.execute(
                     """
@@ -4268,6 +4303,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                 "affected_before_count": int(affected_before["count"]),
                 "remaining_affected_count": int(affected_after["count"]),
                 "eligible_ids_sha256": eligible_ids_sha256,
+                "rollback_manifest": rollback_manifest,
                 "raw_query_preview_included": False,
                 "sample_values_included": False,
             }
@@ -4325,6 +4361,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                 "reason_sha256": reason_sha256,
                 "audit_trace_id": audit_trace_id,
                 "eligible_ids_sha256": eligible_ids_sha256,
+                "rollback_manifest": rollback_manifest,
                 "operation": "clear_stored_query_excerpts",
                 "parameters": {"older_than": older_than},
             },

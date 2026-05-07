@@ -1398,6 +1398,22 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert payload["apply"]["policy"] == "legacy-query-preview-cleanup-v1"
     assert payload["apply"]["reason_sha256"]
     assert payload["apply"]["audit_trace_id"]
+    rollback = payload["apply"]["rollback_manifest"]
+    assert rollback["kind"] == "query_preview_cleanup_rollback_manifest"
+    assert rollback["policy"] == "legacy-query-preview-cleanup-v1"
+    assert rollback["row_count"] == 1
+    assert rollback["artifact_path"].endswith(".json")
+    assert rollback["artifact_sha256"]
+    assert rollback["privacy"]["raw_query_preview_included_in_output"] is False
+    assert rollback["privacy"]["artifact_contains_private_query_preview"] is True
+    rollback_path = Path(rollback["artifact_path"])
+    assert rollback_path.exists()
+    rollback_payload = json.loads(rollback_path.read_text())
+    assert rollback_payload["kind"] == "query_preview_cleanup_rollback_artifact"
+    assert rollback_payload["policy"] == "legacy-query-preview-cleanup-v1"
+    assert rollback_payload["rows"] == [
+        {"id": 1, "query_preview": "token=SHOULD_NOT_LEAK", "created_at": "2026-01-01 00:00:00"}
+    ]
     assert payload["privacy"]["raw_query_preview_included"] is False
     assert payload["privacy"]["sample_values_included"] is False
     assert "SHOULD_NOT_LEAK" not in apply_result.stdout
@@ -1418,6 +1434,8 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert audit_metadata["cleared_count"] == 1
     assert audit_metadata["eligible_count"] == 1
     assert audit_metadata["policy"] == "legacy-query-preview-cleanup-v1"
+    assert audit_metadata["rollback_manifest"]["artifact_sha256"] == rollback["artifact_sha256"]
+    assert audit_metadata["rollback_manifest"]["row_count"] == 1
     assert audit_metadata["reason_sha256"] == payload["apply"]["reason_sha256"]
     assert "SHOULD_NOT_LEAK" not in audit[2]
     assert "api key" not in audit[2].lower()
