@@ -1,0 +1,37 @@
+{
+  "references": {
+    "current_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run current release QA"
+    },
+    "stale_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run legacy release QA"
+    }
+  },
+  "tasks": [
+    {
+      "id": "same-scope-current-release-qa-procedure",
+      "query": "What release QA should Project M1 run for the current v0.1.94 candidate?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {
+        "facts": [],
+        "procedures": ["current_release_qa_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": ["stale_release_qa_procedure"],
+        "episodes": []
+      },
+      "rationale": "Keep the current same-scope release QA procedure ahead of stale legacy release QA guidance.",
+      "notes": [
+        "Both procedures share the same Project M1 scope and release-candidate trigger wording.",
+        "The tight limit protects prompt budget so stale same-scope procedure guidance does not displace current artifact/runtime QA."
+      ]
+    }
+  ]
+}
