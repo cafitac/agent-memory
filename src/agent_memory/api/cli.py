@@ -4154,6 +4154,7 @@ def _dogfood_ordinary_trace_metadata_cleanup_payload(args: argparse.Namespace) -
 
 
 QUERY_PREVIEW_CLEANUP_POLICY = "legacy-query-preview-cleanup-v1"
+QUERY_PREVIEW_CLEANUP_RESTORE_POLICY = "legacy-query-preview-cleanup-restore-v1"
 
 
 def _query_preview_cleanup_privacy_payload() -> dict[str, bool]:
@@ -4351,9 +4352,27 @@ def _run_query_preview_cleanup_disposable_apply_check(
 def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     artifact_path = args.rollback_artifact_path.expanduser().resolve(strict=False)
-    if not getattr(args, "dry_run", False):
-        raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run")
-    kind = "dogfood_query_preview_cleanup_restore_dry_run"
+    dry_run = bool(getattr(args, "dry_run", False))
+    apply_restore = bool(getattr(args, "apply", False))
+    actor = getattr(args, "actor", None)
+    reason = getattr(args, "reason", None)
+    restore_policy = getattr(args, "restore_policy", None)
+    if not dry_run and not apply_restore:
+        raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run or --apply")
+    if apply_restore and restore_policy != QUERY_PREVIEW_CLEANUP_RESTORE_POLICY:
+        raise ValueError(
+            "dogfood query-preview-cleanup-restore --apply requires "
+            f"--policy {QUERY_PREVIEW_CLEANUP_RESTORE_POLICY}"
+        )
+    if apply_restore and not actor:
+        raise ValueError("dogfood query-preview-cleanup-restore --apply requires --actor")
+    if apply_restore and not reason:
+        raise ValueError("dogfood query-preview-cleanup-restore --apply requires --reason")
+    kind = (
+        "dogfood_query_preview_cleanup_restore_apply_blocked"
+        if apply_restore
+        else "dogfood_query_preview_cleanup_restore_dry_run"
+    )
     if not db_path.exists():
         return {
             "kind": kind,
@@ -4519,8 +4538,11 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         blocked_reasons.append("duplicate_artifact_row_ids")
     if skipped_count and source_database_matched and artifact_integrity_passed:
         warnings.append("some_artifact_rows_are_not_currently_restorable")
-    status = "error" if not source_database_matched or not artifact_integrity_passed else "warning"
-    return {
+    status = "error" if apply_restore or not source_database_matched or not artifact_integrity_passed else "warning"
+    if apply_restore:
+        warnings.append("restore_apply_contract_checkpoint_only")
+        blocked_reasons.append("restore_apply_contract_checkpoint_only")
+    payload = {
         "kind": kind,
         "read_only": True,
         "mutated": False,
@@ -4554,7 +4576,8 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         },
         "restore_preview": {
             "operation": "restore_stored_query_excerpts",
-            "dry_run": True,
+            "dry_run": dry_run,
+            "apply_requested": apply_restore,
             "restore_apply_available": False,
             "candidate_restore_count": len(candidate_rows),
             "target_rows_found_count": target_rows_found_count,
@@ -4575,6 +4598,25 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "Keep rollback artifacts private; they contain stored query preview values.",
         ],
     }
+    if apply_restore:
+        payload["restore_apply_contract"] = {
+            "policy": restore_policy,
+            "actor": actor,
+            "reason_sha256": hashlib.sha256(reason.encode()).hexdigest(),
+            "reason_raw_stored": False,
+            "disposable_restore_check_required": True,
+            "source_database_match_required": True,
+            "artifact_integrity_required": True,
+            "audit_raw_query_preview_allowed": False,
+            "rollback_artifact_private_required": True,
+            "broad_g4_apply_allowed": False,
+        }
+        payload["suggested_next_steps"] = [
+            "Do not run live restore yet; this command is a contract checkpoint only.",
+            "Implement a separate disposable-restore rehearsal and audit path before enabling any mutation.",
+            "Keep rollback artifacts private; they contain stored query preview values.",
+        ]
+    return payload
 
 
 def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -5967,6 +6009,10 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_restore_parser.add_argument("db_path", type=Path)
     dogfood_query_preview_cleanup_restore_parser.add_argument("rollback_artifact_path", type=Path)
     dogfood_query_preview_cleanup_restore_parser.add_argument("--dry-run", action="store_true")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--apply", action="store_true")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--policy", dest="restore_policy")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--actor")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--reason")
     dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(
         "ordinary-trace-metadata-cleanup",
         help="Preview/apply raw-content-safe normalization for legacy ordinary turn trace metadata defaults.",

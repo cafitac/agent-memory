@@ -180,6 +180,7 @@ Required RED tests before implementation:
 14. A restore dry-run command validates rollback artifacts without mutating the DB or printing raw query previews; live restore remains blocked until a separate explicit policy slice.
 15. Rollback artifacts are source-bound with a hashed DB fingerprint; restore dry-run fails closed on source/target DB mismatch.
 16. Restore dry-run fails closed on artifact integrity problems such as wrong policy, invalid operation, declared row-count mismatch, duplicate row ids, or missing source fingerprint; the failure output remains aggregate/hash-only and read-only.
+17. Restore apply remains unavailable, but `query-preview-cleanup-restore --apply` has a read-only contract checkpoint that requires a separate restore policy, actor, reason hash, source DB match, artifact integrity, future disposable-restore rehearsal, and audit raw-query exclusion before any live restore implementation can be considered.
 
 Required operator safety before live DB apply:
 
@@ -188,6 +189,7 @@ Required operator safety before live DB apply:
 - Run apply only with explicit policy/actor/reason and disposable-copy preflight.
 - Re-run storage-health and query-preview cleanup preview after mutation.
 - Run restore dry-run against the private rollback artifact before considering any future live restore design; source/target DB fingerprint mismatches and artifact integrity failures must remain blocking read-only errors.
+- Treat restore apply as contract-only: `--apply` must remain read-only/blocked with `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity requirements, and disposable-restore rehearsal still pending.
 - Verify non-empty `query_preview` count becomes 0 or the remaining rows are explicitly explained.
 - Keep backup and rollback artifact paths out of git; rollback artifacts may contain private local query-preview values.
 
