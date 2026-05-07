@@ -1,0 +1,37 @@
+{
+  "references": {
+    "current_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests"
+    },
+    "noisy_pre_pr_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 pre-PR retrospective episode"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-procedure-noisy-episode-guardrail",
+      "query": "What local tests should I run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {
+        "facts": [],
+        "procedures": ["current_pre_pr_procedure"],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": ["noisy_pre_pr_episode"]
+      },
+      "rationale": "Keep procedure-oriented pre-PR guidance ahead of same-scope episodic noise under tight prompt budgets.",
+      "notes": [
+        "The retrieval target is the current local-test procedure, not a retrospective episode that reuses pre-PR wording.",
+        "A source or lexical comparator can overfit on shared before-opening-a-PR wording and treat the episode as relevant noise."
+      ]
+    }
+  ]
+}

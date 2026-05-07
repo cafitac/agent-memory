@@ -57,6 +57,42 @@ def _trust_band(uncertainty_score: float) -> str:
     return "low"
 
 
+_PROCEDURE_INTENT_TERMS = (
+    "procedure",
+    "run",
+    "test",
+    "tests",
+    "command",
+    "check",
+    "checks",
+    "before opening a pr",
+    "pre-pr",
+)
+_EPISODE_INTENT_TERMS = (
+    "episode",
+    "history",
+    "rollout",
+    "retrospective",
+    "meeting",
+    "what happened",
+)
+
+
+def _query_prefers_procedural_guidance(query: str) -> bool:
+    normalized = query.lower()
+    if any(term in normalized for term in _EPISODE_INTENT_TERMS):
+        return False
+    return any(term in normalized for term in _PROCEDURE_INTENT_TERMS)
+
+
+def _suppress_episodic_noise_for_procedure_intent(query: str, ranked_procedures, ranked_episodes):
+    if not ranked_procedures or not ranked_episodes or not _query_prefers_procedural_guidance(query):
+        return ranked_episodes
+
+    top_procedure_score = ranked_procedures[0][1].total_score
+    return [item for item in ranked_episodes if item[1].total_score > top_procedure_score]
+
+
 def _build_trust_summaries(packet_trace):
     trust_summaries: list[MemoryTrustSummary] = []
     for trace in packet_trace:
@@ -336,6 +372,7 @@ def retrieve_memory_packet(
         )
 
     semantic_facts = [fact for fact, _trace in ranked_facts]
+    ranked_episodes = _suppress_episodic_noise_for_procedure_intent(query, ranked_procedures, ranked_episodes)
     procedural_guidance = [procedure for procedure, _trace in ranked_procedures]
     episodic_context = [episode for episode, _trace in ranked_episodes]
     retrieval_trace = [
