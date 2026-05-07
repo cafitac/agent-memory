@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-07 12:26 KST
+Last updated: 2026-05-07 13:20 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.94`: PR #189 added a checked-in scope-adjacent procedure retrieval-eval guardrail for Project M1 pre-PR guidance, and PR #190 release-sync published `v0.1.94`. GitHub Release, npm, and PyPI all report `v0.1.94`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.94/.venv/bin/agent-memory`; `agent-memory hermes-doctor` is healthy for all three configs. Checked-in retrieval-eval coverage is now 19 tasks.
+agent-memory is currently verified through `v0.1.95`: PR #192 added a checked-in same-scope procedure recency retrieval-eval guardrail for Project M1 release QA guidance, and PR #193 release-sync published `v0.1.95`. GitHub Release, npm, and PyPI all report `v0.1.95`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.95/.venv/bin/agent-memory`; `agent-memory hermes-doctor` is healthy for all three configs. Checked-in retrieval-eval coverage is now 20 tasks.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` read-only/non-mutating; scheduled dry-run remains read-only and recommends continuing dogfood evidence before G4 rather than enabling broad mutation.
 
 ## Current next slice
 
-Current slice: v0.1.94 scope-adjacent procedure conflict retrieval release/runtime QA is complete. The safest next implementation slice is another retrieval-quality fixture around same-scope procedure conflict/recency or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
+Current slice: v0.1.95 same-scope procedure recency retrieval release/runtime QA is complete. The safest next implementation slice is either another retrieval-quality fixture around procedure prompt-budget pressure, or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
 
-Why this is the best next move: v0.1.94 locks in that project-specific procedure guidance wins over workspace fallback procedures under tight prompt budgets. The remaining product risk is quality/automation maturity, not packaging availability.
+Why this is the best next move: v0.1.95 locks in that current same-scope release QA guidance wins over stale legacy release QA guidance under tight prompt budgets. The remaining product risk is quality/automation maturity, not packaging availability.
 
 Recommended local backup commands:
 
@@ -57,9 +57,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged retrieval-quality PR: #189 `test: add scope-adjacent procedure retrieval fixture`.
-- Latest merged release-sync PR: #190 `chore: release v0.1.94 [skip release]`.
-- Latest completed release: `v0.1.94`.
+- Latest merged retrieval-quality PR: #192 `test: add same-scope procedure recency fixture`.
+- Latest merged release-sync PR: #193 `chore: release v0.1.95 [skip release]`.
+- Latest completed release: `v0.1.95`.
 
 Expected GitHub identity:
 
@@ -70,26 +70,26 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.94`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.94`
-- npm package: `@cafitac/agent-memory@0.1.94`
-- PyPI package: `cafitac-agent-memory==0.1.94`
+- `v0.1.95`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.95`
+- npm package: `@cafitac/agent-memory@0.1.95`
+- PyPI package: `cafitac-agent-memory==0.1.95`
 
-Latest verified source checkout snapshot, checked 2026-05-07 12:26 KST:
+Latest verified source checkout snapshot, checked 2026-05-07 13:20 KST:
 
 - branch: `main`, synced with `origin/main` before this docs checkpoint branch
-- latest release-sync commit: `ebd2e14 chore: release v0.1.94 [skip release]`
-- latest retrieval-quality merge commit: `4a17917 test: add scope-adjacent procedure retrieval fixture`
+- latest release-sync commit: `788e487 chore: release v0.1.95 [skip release]`
+- latest retrieval-quality merge commit: `a59e0b2 test: add same-scope procedure recency fixture`
 - previous retrieval/ranking merge commit: `f16b637 fix: suppress episodic noise for procedure retrieval`
 - latest stabilization merge commit: `40b6f52 chore: release v0.1.93 [skip release]`
-- open PRs: none observed after v0.1.94 release-sync/runtime QA at checkpoint time
-- GitHub Release, npm, and PyPI all report `v0.1.94`
-- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.94"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.94 runtime and `agent-memory hermes-doctor` is healthy
-- local full tests for PR #189: `uv run pytest tests/ -q` passed
-- checked-in retrieval-eval fixtures now include 19 tasks; `uv run pytest tests/test_retrieval_evaluation.py -q` passed
+- open PRs: none observed after v0.1.95 release-sync/runtime QA at checkpoint time
+- GitHub Release, npm, and PyPI all report `v0.1.95`
+- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.95"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.95 runtime and `agent-memory hermes-doctor` is healthy
+- local full tests for PR #192: `uv run pytest tests/ -q` passed
+- checked-in retrieval-eval fixtures now include 20 tasks; `uv run pytest tests/test_retrieval_evaluation.py -q` passed
 - PR #171 initially exposed a main-branch CI-only instability in the shared-seed cross-scope branch assertion; PR #172 narrowed that query and main CI passed
-- installed runtime dogfood storage-health: `read_only=true`, `mutated=false`, `agent_memory_version=0.1.94`
+- installed runtime dogfood storage-health: `read_only=true`, `mutated=false`, `agent_memory_version=0.1.95`
 - installed runtime scheduled dry-run: `read_only=true`, `mutated=false`, quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`
 
 Expected local untracked artifacts to preserve in the root checkout:
@@ -105,6 +105,30 @@ Do not delete or commit these unless the user explicitly asks.
 
 
 
+
+
+## v0.1.95 same-scope procedure recency retrieval release completed
+
+PR #192 `test: add same-scope procedure recency fixture` and release-sync PR #193 merged.
+
+Completed behavior:
+
+- Added checked-in Project M1 guardrail `tests/fixtures/retrieval_eval/procedure/same-scope-procedure-recency-guardrail.json`.
+- Seeded current `v0.1.94` release QA guidance and stale `v0.1.75` legacy release QA guidance in the shared retrieval-eval DB.
+- Verified current same-scope release QA procedure guidance wins under `limit=1`.
+- Checked-in retrieval task count is now 20.
+- No production retrieval/ranking change was needed for this slice.
+
+Verification completed:
+
+- RED: new checked-in fixture presence test failed before the fixture existed.
+- GREEN/targeted: same-scope procedure recency fixture contract, checked-in aggregate/comparator matrix, and CLI fixture-directory tests passed.
+- Local full verification: `uv run pytest tests/test_retrieval_evaluation.py -q`, `uv run pytest tests/ -q`, `uv run ruff check tests/test_retrieval_evaluation.py`, release metadata/version smoke, and checked-in retrieval-eval smoke passed (`20 20 0`).
+- PR #192 checks passed before merge. Main CI after PR #192 passed: `25475564685`.
+- Release-sync PR #193 merged and post-merge CI/publish succeeded: CI `25475710843`, auto-release `25475710846`, publish `25475715957`.
+- GitHub Release, PyPI, and npm all report `v0.1.95`.
+- Fresh artifact smoke passed from PyPI and npm.
+- Live Hermes runtime QA passed from `/Users/reddit/.agent-memory/runtime/v0.1.95/.venv/bin/agent-memory`; report: `/Users/reddit/.agent-memory/reports/v0.1.95-runtime-qa-20260507T041950`.
 
 ## v0.1.94 scope-adjacent procedure retrieval release completed
 

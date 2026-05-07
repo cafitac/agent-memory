@@ -15,7 +15,7 @@ Turn the consolidation system into something external users can trust: measurabl
 
 ## PR H1: Add retrieval/consolidation evaluation fixtures and metrics
 
-Status: complete for the first retrieval-eval hardening slice before `v0.1.83`, with follow-up cross-scope procedure coverage released in `v0.1.85`, noisy global fact coverage released in `v0.1.86`, same-slot conflicting fact coverage released in `v0.1.87`, same-scope stale procedure coverage released in `v0.1.88`, and prompt-budget pressure coverage plus conflict-penalty tuning released in `v0.1.89`, and same-scope episode drift coverage released in `v0.1.90`, noisy episode/procedure procedure-intent coverage released in `v0.1.91`, and scope-adjacent procedure conflict coverage released in `v0.1.94`.
+Status: complete for the first retrieval-eval hardening slice before `v0.1.83`, with follow-up cross-scope procedure coverage released in `v0.1.85`, noisy global fact coverage released in `v0.1.86`, same-slot conflicting fact coverage released in `v0.1.87`, same-scope stale procedure coverage released in `v0.1.88`, and prompt-budget pressure coverage plus conflict-penalty tuning released in `v0.1.89`, and same-scope episode drift coverage released in `v0.1.90`, noisy episode/procedure procedure-intent coverage released in `v0.1.91`, scope-adjacent procedure conflict coverage released in `v0.1.94`, and same-scope procedure recency coverage released in `v0.1.95`.
 
 ### Objective
 
@@ -34,7 +34,7 @@ Measure retrieval quality before adding embeddings, reranking, broader graph exp
 - Covered by `tests/test_retrieval_evaluation.py` and CLI tests.
 - Public README documents the command and current stable options.
 - No external flaky services are required.
-- Local verification on 2026-05-07: `uv run pytest tests/ -q` passed after the v0.1.90 same-scope episode drift fixture; checked-in retrieval-eval coverage is now 19 tasks.
+- Local verification on 2026-05-07: `uv run pytest tests/ -q` passed after the v0.1.90 same-scope episode drift fixture; checked-in retrieval-eval coverage is now 20 tasks.
 
 ## PR H2: Add graph/trace visualization export
 
@@ -87,7 +87,7 @@ Expose the consolidation model to users only after implementation and dogfood ar
 - `docs/privacy-and-safety.md` documents local-first storage, private artifacts, backup/restore privacy, read-only diagnostics, opt-in mutation guardrails, and sharing guidance.
 - `docs/first-run-memory-layer.md` now tells new users to create and inspect a backup before experiments.
 - `docs/hermes-dogfood.md` clarifies that dogfood/consolidation commands are diagnostics, not broad automatic memory saving.
-- `docs/install-smoke.md` reflects the v0.1.84 validated release, current npm/uvx command shapes, and backup/restore smoke coverage; v0.1.85, v0.1.86, v0.1.87, v0.1.88, v0.1.89, v0.1.90, v0.1.91, and v0.1.94 runtime QA were recorded in the handoff after PR #162/#163, PR #165/#166, PR #168/#169, PR #171/#173, PR #175/#176, and PR #178/#179, PR #181/#182/#183, and PR #189/#190.
+- `docs/install-smoke.md` reflects the v0.1.84 validated release, current npm/uvx command shapes, and backup/restore smoke coverage; v0.1.85, v0.1.86, v0.1.87, v0.1.88, v0.1.89, v0.1.90, v0.1.91, v0.1.94, and v0.1.95 runtime QA were recorded in the handoff after PR #162/#163, PR #165/#166, PR #168/#169, PR #171/#173, PR #175/#176, and PR #178/#179, PR #181/#182/#183, PR #189/#190, and PR #192/#193.
 
 ### Acceptance
 
