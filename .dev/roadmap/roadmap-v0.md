@@ -34,7 +34,7 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.95 state and next recommended slice.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.96 state and next recommended slice.
 - `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — ordered post-G3f plan: collect scheduled artifacts, compare trends, draft apply-mode contract, then implement only the first narrow mutation slice.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
