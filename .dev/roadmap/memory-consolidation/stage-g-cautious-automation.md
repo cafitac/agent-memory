@@ -234,7 +234,7 @@ Normalize legacy ordinary `turn` traces that are already metadata-only but are m
 
 ## PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
 
-Status: Planned. This is the next safe docs/RED-test-only slice after v0.1.97.
+Status: Complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.98 via PR #201. This remains a docs/RED-test-only contract checkpoint; broad mutation is still blocked.
 
 ### Objective
 
@@ -254,7 +254,7 @@ Define the future contract for controlled background consolidation mutations bef
 
 ## PR G4: Add broader background consolidation apply mode behind explicit policy
 
-Status: Blocked until PR G4-broad-plan lands and is reviewed.
+Status: Blocked until a first disposable-DB-backed explicit policy/action slice proves the apply/audit/restore contract. PR G4-broad-plan has landed, but it did not authorize live broad apply.
 
 ### Objective
 
