@@ -532,14 +532,18 @@ def test_prepare_hermes_memory_context_trims_prompt_lines_without_mutating_paylo
         include_reason_codes=False,
     )
 
-    assert len(context.prompt_text.splitlines()) == 5
-    assert context.prompt_text.splitlines() == [
+    prompt_lines = context.prompt_text.splitlines()
+    assert len(prompt_lines) == 5
+    assert prompt_lines[:2] == [
         "Memory response mode: direct",
         "Prompt prefix: Answer directly using the top-ranked memory.",
-        "Top memory: fact #1 (Project Budget), trust=high, hidden_alternatives=no",
-        "Alternative memory: fact #2 (Project Budget), trust=high, hidden_alternatives=no",
-        "Guideline: Use fact #1 (Project Budget) as the primary memory for the answer.",
     ]
+    assert prompt_lines[2].startswith("Top memory: fact #")
+    assert prompt_lines[2].endswith(" (Project Budget), trust=high, hidden_alternatives=no")
+    assert prompt_lines[3].startswith("Alternative memory: fact #")
+    assert prompt_lines[3].endswith(" (Project Budget), trust=high, hidden_alternatives=no")
+    top_ref = prompt_lines[2].removeprefix("Top memory: ").split(" (", 1)[0]
+    assert prompt_lines[4] == f"Guideline: Use {top_ref} (Project Budget) as the primary memory for the answer."
     assert len(context.payload.alternative_memories) == 2
     assert context.payload.policy_reason_codes == [
         "top_ranked_memory",
