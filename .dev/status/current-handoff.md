@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-07 10:37 KST
+Last updated: 2026-05-07 11:18 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.90`: PR #158 added local backup/import/export commands and released `v0.1.84`, PR #161 promoted public privacy/safety docs, PR #162 added a cross-scope procedure retrieval-eval guardrail, PR #163 release-sync published `v0.1.85`, PR #165 added a noisy global fact retrieval-eval guardrail, PR #166 release-sync published `v0.1.86`, PR #168 added a same-slot conflicting fact retrieval-eval guardrail, PR #169 release-sync published `v0.1.87`, PR #171 added a same-scope stale procedure retrieval-eval guardrail, PR #172 stabilized the branch-pattern retrieval assertion after that shared-seed expansion, and PR #173 release-sync published `v0.1.88`, PR #175 added a prompt-budget pressure retrieval/ranking guardrail, PR #176 release-sync published `v0.1.89`, PR #178 added a same-scope episode drift retrieval-eval guardrail, and PR #179 release-sync published `v0.1.90`. GitHub Release, npm, and PyPI all report `v0.1.90`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.90/.venv/bin/agent-memory`; `agent-memory hermes-doctor` is healthy for all three configs.
+agent-memory is currently verified through `v0.1.91`: PR #158 added local backup/import/export commands and released `v0.1.84`, PR #161 promoted public privacy/safety docs, PR #162 added a cross-scope procedure retrieval-eval guardrail, PR #163 release-sync published `v0.1.85`, PR #165 added a noisy global fact retrieval-eval guardrail, PR #166 release-sync published `v0.1.86`, PR #168 added a same-slot conflicting fact retrieval-eval guardrail, PR #169 release-sync published `v0.1.87`, PR #171 added a same-scope stale procedure retrieval-eval guardrail, PR #172 stabilized the branch-pattern retrieval assertion after that shared-seed expansion, and PR #173 release-sync published `v0.1.88`, PR #175 added a prompt-budget pressure retrieval/ranking guardrail, PR #176 release-sync published `v0.1.89`, PR #178 added a same-scope episode drift retrieval-eval guardrail, PR #179 release-sync published `v0.1.90`, PR #181 added a procedure-intent guardrail that suppresses same-scope episodic noise when procedural guidance is clearly requested, PR #183 stabilized the lexical-global CLI baseline assertion exposed by main CI, and PR #182 release-sync published `v0.1.91`. GitHub Release, npm, and PyPI all report `v0.1.91`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.91/.venv/bin/agent-memory`; `agent-memory hermes-doctor` is healthy for all three configs.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` status `healthy`, `read_only=true`, `mutated=false`; scheduled dry-run remains read-only and recommends `continue_scheduled_dry_run_dogfooding_before_g4` rather than enabling broad mutation.
 
 ## Current next slice
 
-Current slice: v0.1.90 episode drift release/runtime checkpoint is complete locally and should be kept durable via this docs checkpoint PR. After this checkpoint is merged, the safest next implementation slice is another retrieval-quality fixture for noisy irrelevant procedure/episode retrieval or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
+Current slice: v0.1.91 noisy episode/procedure retrieval release/runtime checkpoint is complete locally and should be kept durable via this docs checkpoint PR. After this checkpoint is merged, the safest next implementation slice is either another retrieval-quality fixture for scope-adjacent procedural conflict or a docs/RED-test-only G4 apply-mode contract plan; do not jump straight to broad apply mode.
 
-Why this is the best next move: v0.1.90 adds a same-scope episode drift retrieval-eval guardrail, so the release is not done until the published artifact is installed into the live Hermes hook runtime and the result is recorded. That has now been verified. The remaining product risk is quality/automation maturity, not packaging availability.
+Why this is the best next move: v0.1.91 adds a conservative procedure-intent retrieval guardrail plus CI assertion stabilization, so the release is not done until the published artifact is installed into the live Hermes hook runtime and the result is recorded. That has now been verified. The remaining product risk is quality/automation maturity, not packaging availability.
 
 Recommended local backup commands:
 
@@ -57,9 +57,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged retrieval-quality PR: #178 `test: add episode drift retrieval fixture`.
-- Latest merged release-sync PR: #179 `chore: release v0.1.90 [skip release]`.
-- Latest completed release: `v0.1.90`.
+- Latest merged retrieval-quality PR: #181 `fix: suppress episodic noise for procedure retrieval`.
+- Latest merged release-sync PR: #182 `chore: release v0.1.91 [skip release]`.
+- Latest completed release: `v0.1.91`.
 
 Expected GitHub identity:
 
@@ -70,26 +70,26 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.90`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.90`
-- npm package: `@cafitac/agent-memory@0.1.90`
-- PyPI package: `cafitac-agent-memory==0.1.90`
+- `v0.1.91`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.91`
+- npm package: `@cafitac/agent-memory@0.1.91`
+- PyPI package: `cafitac-agent-memory==0.1.91`
 
-Latest verified source checkout snapshot, checked 2026-05-07 10:37 KST:
+Latest verified source checkout snapshot, checked 2026-05-07 11:18 KST:
 
 - branch: `main`, synced with `origin/main` before this docs checkpoint branch
-- latest release-sync commit: `847f316 chore: release v0.1.90 [skip release]`
-- latest retrieval-quality merge commit: `ff1d67f test: add episode drift retrieval fixture`
+- latest release-sync commit: `76befaf chore: release v0.1.91 [skip release]`
+- latest retrieval-quality merge commit: `f16b637 fix: suppress episodic noise for procedure retrieval`
 - previous retrieval/ranking merge commit: `39281ff fix: keep current facts above budget noise`
-- latest stabilization merge commit: `cecc221 test: stabilize cross-scope branch retrieval assertion`
-- open PRs: none observed after v0.1.90 release-sync/runtime QA at checkpoint time
-- GitHub Release, npm, and PyPI all report `v0.1.90`
-- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.90"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.90 runtime and `agent-memory hermes-doctor` is healthy
-- local full tests for PR #178: `uv run pytest tests/ -q` passed
-- checked-in retrieval-eval fixtures now include 17 tasks; `uv run pytest tests/test_retrieval_evaluation.py -q` passed
+- latest stabilization merge commit: `e78ac66 test: stabilize lexical global CLI baseline assertion`
+- open PRs: none observed after v0.1.91 release-sync/runtime QA at checkpoint time
+- GitHub Release, npm, and PyPI all report `v0.1.91`
+- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.91"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.91 runtime and `agent-memory hermes-doctor` is healthy
+- local full tests for PR #181/#183: `uv run pytest tests/ -q` passed
+- checked-in retrieval-eval fixtures now include 18 tasks; `uv run pytest tests/test_retrieval_evaluation.py -q` passed
 - PR #171 initially exposed a main-branch CI-only instability in the shared-seed cross-scope branch assertion; PR #172 narrowed that query and main CI passed
-- installed runtime dogfood storage-health: `healthy`, `read_only=true`, `mutated=false`, `agent_memory_version=0.1.90`
+- installed runtime dogfood storage-health: `healthy`, `read_only=true`, `mutated=false`, `agent_memory_version=0.1.91`
 - installed runtime scheduled dry-run: `read_only=true`, `mutated=false`, quality gate decision `continue_scheduled_dry_run_dogfooding_before_g4`
 
 Expected local untracked artifacts to preserve in the root checkout:
@@ -103,6 +103,31 @@ Expected local untracked artifacts to preserve in the root checkout:
 Do not delete or commit these unless the user explicitly asks.
 
 
+
+
+
+## v0.1.91 noisy episode/procedure retrieval release completed
+
+PR #181 `fix: suppress episodic noise for procedure retrieval`, PR #183 `test: stabilize lexical global CLI baseline assertion`, and release-sync PR #182 merged.
+
+Completed behavior:
+
+- Added checked-in Project M1 guardrail `tests/fixtures/retrieval_eval/noise/irrelevant-episode-procedure-guardrail.json`.
+- Retrieval now suppresses episodic context when a query clearly asks for procedural guidance and approved procedures are available, preventing same-scope but irrelevant PR-preparation episodes from crowding out procedure answers.
+- Checked-in retrieval task count is now 18.
+- Stabilized the lexical-global CLI baseline test to avoid platform-dependent current-vs-baseline delta assumptions while preserving the baseline output contract.
+
+Verification completed:
+
+- RED: new checked-in fixture presence test failed before the fixture existed.
+- GREEN/targeted: noisy procedure/episode guardrail, checked-in aggregate/comparator matrix, and CLI fixture-directory tests passed.
+- Local full verification: `uv run pytest tests/ -q`, `uv run ruff check src/agent_memory/core/retrieval.py tests/test_retrieval_evaluation.py`, release metadata/version smoke, and checked-in retrieval-eval CLI smoke passed.
+- PR #181 checks passed before merge. Main CI initially exposed a pre-existing platform-dependent assertion; PR #183 stabilized it and passed.
+- Main CI after PR #183 passed: `25472090279`.
+- Release-sync PR #182 merged and post-merge CI/publish succeeded: CI `25472167607`, auto-release `25472167557`, publish `25472175000`.
+- GitHub Release, PyPI, and npm all report `v0.1.91`.
+- Fresh artifact smoke passed from PyPI and npm.
+- Live Hermes runtime QA passed from `/Users/reddit/.agent-memory/runtime/v0.1.91/.venv/bin/agent-memory`; report: `/Users/reddit/.agent-memory/reports/v0.1.91-runtime-qa-20260507T021821`.
 
 
 ## v0.1.90 same-scope episode drift retrieval release completed
