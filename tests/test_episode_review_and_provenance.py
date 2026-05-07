@@ -6,7 +6,6 @@ from pathlib import Path
 
 from agent_memory.core.curation import (
     approve_fact,
-    approve_procedure,
     create_candidate_fact,
     create_candidate_procedure,
     create_episode,

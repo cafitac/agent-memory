@@ -4153,6 +4153,9 @@ def _dogfood_ordinary_trace_metadata_cleanup_payload(args: argparse.Namespace) -
     }
 
 
+QUERY_PREVIEW_CLEANUP_POLICY = "legacy-query-preview-cleanup-v1"
+
+
 def _query_preview_cleanup_privacy_payload() -> dict[str, bool]:
     return {
         "raw_query_preview_included": False,
@@ -4186,7 +4189,15 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
     apply_cleanup = bool(getattr(args, "apply", False))
     actor = getattr(args, "actor", None)
     reason = getattr(args, "reason", None)
+    policy = getattr(args, "policy", None)
     kind = "dogfood_query_preview_cleanup_apply" if apply_cleanup else "dogfood_query_preview_cleanup_preview"
+    if apply_cleanup and not policy:
+        raise ValueError("dogfood query-preview-cleanup --apply requires --policy")
+    if apply_cleanup and policy != QUERY_PREVIEW_CLEANUP_POLICY:
+        raise ValueError(
+            "dogfood query-preview-cleanup --apply requires "
+            f"--policy {QUERY_PREVIEW_CLEANUP_POLICY}"
+        )
     if apply_cleanup and not actor:
         raise ValueError("dogfood query-preview-cleanup --apply requires --actor")
     if apply_cleanup and not reason:
@@ -4213,7 +4224,11 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
                     "cleared_count": 0,
                     "remaining_affected_count": 0,
                     "latest_eligible_at": None,
-                    "apply": {"actor": actor, "reason_sha256": hashlib.sha256(reason.encode()).hexdigest()},
+                    "apply": {
+                        "policy": policy,
+                        "actor": actor,
+                        "reason_sha256": hashlib.sha256(reason.encode()).hexdigest(),
+                    },
                     "privacy": _query_preview_cleanup_privacy_payload(),
                     "warnings": ["retrieval_observations_missing"],
                 }
@@ -4244,6 +4259,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
             eligible_ids_sha256 = hashlib.sha256(",".join(str(value) for value in eligible_ids).encode()).hexdigest()
             audit_metadata = {
                 "operation": "clear_stored_query_excerpts",
+                "policy": policy,
                 "actor": actor,
                 "reason_sha256": reason_sha256,
                 "older_than": older_than,
@@ -4304,6 +4320,7 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
             "earliest_eligible_at": eligible_before["earliest"],
             "latest_eligible_at": eligible_before["latest"],
             "apply": {
+                "policy": policy,
                 "actor": actor,
                 "reason_sha256": reason_sha256,
                 "audit_trace_id": audit_trace_id,
@@ -4363,7 +4380,8 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
             "recommended_operation": "clear_stored_query_excerpts",
             "parameters": {"older_than": older_than},
             "apply_command_available": True,
-            "apply_guardrails": ["--apply", "--actor", "--reason"],
+            "apply_policy": QUERY_PREVIEW_CLEANUP_POLICY,
+            "apply_guardrails": ["--apply", "--policy", "--actor", "--reason"],
         },
         "privacy": _query_preview_cleanup_privacy_payload(),
         "warnings": warnings,
@@ -5529,6 +5547,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_parser.add_argument("db_path", type=Path)
     dogfood_query_preview_cleanup_parser.add_argument("--older-than", default="9999-12-31T23:59:59")
     dogfood_query_preview_cleanup_parser.add_argument("--apply", action="store_true")
+    dogfood_query_preview_cleanup_parser.add_argument("--policy")
     dogfood_query_preview_cleanup_parser.add_argument("--actor")
     dogfood_query_preview_cleanup_parser.add_argument("--reason")
     dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(

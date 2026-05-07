@@ -263,7 +263,7 @@ Allow controlled application only after dry-run output is trusted and the broade
 ### Acceptance
 
 - Requires explicit `--apply` or equivalent.
-- Requires policy file/config.
+- Requires an explicit named policy; the first narrow cleanup path uses `--policy legacy-query-preview-cleanup-v1`.
 - Writes audit trail.
 - Docs explain risk and rollback.
 - Ordinary conversation auto-approval remains forbidden.
