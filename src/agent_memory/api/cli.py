@@ -4380,14 +4380,73 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         artifact_payload = json.loads(artifact_text)
     except json.JSONDecodeError as exc:
         raise ValueError("query-preview-cleanup restore artifact must be valid JSON") from exc
-    if artifact_payload.get("kind") != "query_preview_cleanup_rollback_artifact":
-        raise ValueError("query-preview-cleanup restore requires a query_preview_cleanup_rollback_artifact")
+    artifact_kind = artifact_payload.get("kind")
+    if artifact_kind != "query_preview_cleanup_rollback_artifact":
+        return {
+            "kind": kind,
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": True},
+            "artifact": {
+                "kind": artifact_kind,
+                "path": str(artifact_path),
+                "exists": True,
+                "artifact_sha256": artifact_sha256,
+            },
+            "restore_preview": {
+                "operation": "restore_stored_query_excerpts",
+                "dry_run": True,
+                "restore_apply_available": False,
+                "candidate_restore_count": 0,
+                "target_rows_found_count": 0,
+                "restorable_count": 0,
+                "already_has_query_preview_count": 0,
+                "missing_row_count": 0,
+                "skipped_count": 0,
+            },
+            "privacy": {
+                "raw_query_preview_included": False,
+                "sample_values_included": False,
+                "artifact_contains_private_query_preview": False,
+            },
+            "blocked_reasons": ["artifact_kind_invalid", "live_restore_not_implemented"],
+            "warnings": ["artifact_kind_invalid", "live_restore_not_implemented"],
+        }
     policy = artifact_payload.get("policy")
     if policy != QUERY_PREVIEW_CLEANUP_POLICY:
-        raise ValueError(
-            "query-preview-cleanup restore requires rollback artifact policy "
-            f"{QUERY_PREVIEW_CLEANUP_POLICY}"
-        )
+        return {
+            "kind": kind,
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": True},
+            "artifact": {
+                "kind": artifact_kind,
+                "path": str(artifact_path),
+                "exists": True,
+                "policy": policy,
+                "artifact_sha256": artifact_sha256,
+            },
+            "restore_preview": {
+                "operation": "restore_stored_query_excerpts",
+                "dry_run": True,
+                "restore_apply_available": False,
+                "candidate_restore_count": 0,
+                "target_rows_found_count": 0,
+                "restorable_count": 0,
+                "already_has_query_preview_count": 0,
+                "missing_row_count": 0,
+                "skipped_count": 0,
+            },
+            "privacy": {
+                "raw_query_preview_included": False,
+                "sample_values_included": False,
+                "artifact_contains_private_query_preview": False,
+            },
+            "blocked_reasons": ["artifact_policy_invalid", "live_restore_not_implemented"],
+            "warnings": ["artifact_policy_invalid", "live_restore_not_implemented"],
+        }
     rows = artifact_payload.get("rows")
     if not isinstance(rows, list):
         raise ValueError("query-preview-cleanup restore artifact rows must be a list")
@@ -4401,6 +4460,11 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         created_at = row.get("created_at")
         candidate_rows.append({"id": int(row["id"]), "query_preview": query_preview, "created_at": created_at})
     candidate_ids = [row["id"] for row in candidate_rows]
+    duplicate_id_count = len(candidate_ids) - len(set(candidate_ids))
+    declared_row_count = artifact_payload.get("row_count")
+    declared_row_count_matches = declared_row_count == len(candidate_rows)
+    operation = artifact_payload.get("operation")
+    operation_valid = operation == "restore_stored_query_excerpts"
     eligible_ids_sha256 = _query_preview_cleanup_ids_sha256(candidate_ids)
     artifact_source_database = artifact_payload.get("source_database")
     artifact_source_fingerprint = (
@@ -4412,7 +4476,8 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     restorable_count = 0
     already_has_query_preview_count = 0
     missing_row_count = 0
-    if source_database_matched:
+    artifact_integrity_passed = duplicate_id_count == 0 and declared_row_count_matches and operation_valid
+    if source_database_matched and artifact_integrity_passed:
         with _open_readonly_sqlite(db_path) as connection:
             if not _table_exists(connection, "retrieval_observations"):
                 missing_row_count = len(candidate_rows)
@@ -4433,6 +4498,8 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     skipped_count = already_has_query_preview_count + missing_row_count
     if not source_database_matched:
         skipped_count = len(candidate_rows)
+    if source_database_matched and not artifact_integrity_passed:
+        skipped_count = len(candidate_rows)
     warnings = ["live_restore_not_implemented"]
     blocked_reasons = ["live_restore_not_implemented"]
     if artifact_source_fingerprint is None:
@@ -4441,9 +4508,18 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     elif not source_database_matched:
         warnings.append("source_database_mismatch")
         blocked_reasons.append("source_database_mismatch")
-    if skipped_count and source_database_matched:
+    if not operation_valid:
+        warnings.append("artifact_operation_invalid")
+        blocked_reasons.append("artifact_operation_invalid")
+    if not declared_row_count_matches:
+        warnings.append("artifact_row_count_mismatch")
+        blocked_reasons.append("artifact_row_count_mismatch")
+    if duplicate_id_count:
+        warnings.append("duplicate_artifact_row_ids")
+        blocked_reasons.append("duplicate_artifact_row_ids")
+    if skipped_count and source_database_matched and artifact_integrity_passed:
         warnings.append("some_artifact_rows_are_not_currently_restorable")
-    status = "error" if not source_database_matched else "warning"
+    status = "error" if not source_database_matched or not artifact_integrity_passed else "warning"
     return {
         "kind": kind,
         "read_only": True,
@@ -4455,12 +4531,19 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "path": str(artifact_path),
             "exists": True,
             "policy": policy,
-            "operation": artifact_payload.get("operation"),
+            "operation": operation,
             "parameters": artifact_payload.get("parameters", {}),
             "row_count": len(candidate_rows),
+            "declared_row_count": declared_row_count,
             "artifact_sha256": artifact_sha256,
             "eligible_ids_sha256": eligible_ids_sha256,
             "source_database": artifact_source_database if isinstance(artifact_source_database, dict) else None,
+        },
+        "artifact_integrity": {
+            "passed": artifact_integrity_passed,
+            "operation_valid": operation_valid,
+            "declared_row_count_matches": declared_row_count_matches,
+            "duplicate_id_count": duplicate_id_count,
         },
         "source_database_match": {
             "matched": source_database_matched,

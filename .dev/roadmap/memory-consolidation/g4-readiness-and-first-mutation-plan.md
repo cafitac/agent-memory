@@ -179,6 +179,7 @@ Required RED tests before implementation:
 13. Apply runs first against a disposable DB copy and proceeds only if count/hash/rollback checks pass.
 14. A restore dry-run command validates rollback artifacts without mutating the DB or printing raw query previews; live restore remains blocked until a separate explicit policy slice.
 15. Rollback artifacts are source-bound with a hashed DB fingerprint; restore dry-run fails closed on source/target DB mismatch.
+16. Restore dry-run fails closed on artifact integrity problems such as wrong policy, invalid operation, declared row-count mismatch, duplicate row ids, or missing source fingerprint; the failure output remains aggregate/hash-only and read-only.
 
 Required operator safety before live DB apply:
 
@@ -186,7 +187,7 @@ Required operator safety before live DB apply:
 - Export or back up the DB before mutation.
 - Run apply only with explicit policy/actor/reason and disposable-copy preflight.
 - Re-run storage-health and query-preview cleanup preview after mutation.
-- Run restore dry-run against the private rollback artifact before considering any future live restore design; source/target DB fingerprint mismatches must remain blocking read-only errors.
+- Run restore dry-run against the private rollback artifact before considering any future live restore design; source/target DB fingerprint mismatches and artifact integrity failures must remain blocking read-only errors.
 - Verify non-empty `query_preview` count becomes 0 or the remaining rows are explicitly explained.
 - Keep backup and rollback artifact paths out of git; rollback artifacts may contain private local query-preview values.
 
@@ -235,9 +236,14 @@ Completed since the original draft:
 - `ordinary trace metadata default cleanup` became the second narrow explicit mutation in G4b. It normalized only already-metadata-only ordinary `turn` traces by filling conservative metadata defaults.
 - H1-H4 hardening and retrieval-eval expansion continued through `v0.1.99`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118`.
 
-The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit named policy, actor, reason, audit, and restore guidance. The first hardening step required the named query-preview cleanup policy on the existing G4a cleanup apply path and shipped in v0.1.100. The next hardening step is rollback-manifest output: before clearing eligible legacy values, apply writes a private local rollback artifact and emits only path/hash/count metadata in stdout/audit.
+The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit named policy, actor, reason, audit, and restore guidance. The first hardening step required the named query-preview cleanup policy on the existing G4a cleanup apply path and shipped in v0.1.100. The v0.1.104 hardening line adds source DB binding to rollback artifacts and restore dry-run. The next hardening step is artifact-integrity fail-closed behavior: restore dry-run should reject wrong-policy, invalid-operation, row-count-mismatched, duplicate-id, or missing-fingerprint artifacts as read-only structured errors before any future live restore is designed.
 
 
 ## Current G4a safety hardening: disposable-copy apply check
 
 `dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.101 named-policy and rollback-manifest release, the current slice requires the command to copy the target SQLite DB to a private local disposable artifact, run the same cleanup on that copy, and compare expected eligible/cleared/remaining counts plus rollback-manifest metadata before mutating the target DB. The disposable copy can contain private query-preview data; stdout/audit metadata must stay hash/count/path only and broad G4 apply mode remains blocked.
+
+
+## Current G4a safety hardening: restore artifact-integrity check
+
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.104 named-policy, rollback-manifest, disposable-copy preflight, restore dry-run, and source-binding release, the current slice tightens `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run` so malformed or tampered artifacts fail closed with structured JSON. The dry-run remains read-only and aggregate/hash-only, reports blocked reasons such as `artifact_policy_invalid`, `artifact_operation_invalid`, `artifact_row_count_mismatch`, `duplicate_artifact_row_ids`, and `source_database_fingerprint_missing`, and keeps live restore unavailable. Broad G4 apply mode remains blocked.
