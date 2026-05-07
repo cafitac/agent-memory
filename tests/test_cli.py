@@ -1225,6 +1225,8 @@ def test_python_module_cli_dogfood_query_preview_cleanup_preview_reports_legacy_
     assert payload["cleanup_preview"]["mutation_required"] is True
     assert payload["cleanup_preview"]["recommended_operation"] == "clear_stored_query_excerpts"
     assert payload["cleanup_preview"]["parameters"] == {"older_than": "2030-01-01T00:00:00"}
+    assert payload["cleanup_preview"]["apply_policy"] == "legacy-query-preview-cleanup-v1"
+    assert payload["cleanup_preview"]["apply_guardrails"] == ["--apply", "--policy", "--actor", "--reason"]
     assert payload["privacy"]["raw_query_preview_included"] is False
     assert payload["privacy"]["sample_values_included"] is False
     assert "SHOULD_NOT_LEAK" not in preview_result.stdout
@@ -1298,6 +1300,8 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
             "--older-than",
             "2026-01-02T00:00:00",
             "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-v1",
             "--actor",
             "cli-test",
         ],
@@ -1308,7 +1312,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     )
     assert missing_reason_result.returncode != 0
 
-    apply_result = subprocess.run(
+    missing_policy_result = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -1329,6 +1333,58 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
         capture_output=True,
         text=True,
     )
+    assert missing_policy_result.returncode != 0
+    assert "--policy" in missing_policy_result.stderr
+
+    invalid_policy_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--policy",
+            "broad-g4-apply",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "remove legacy query preview values after read-only preview",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert invalid_policy_result.returncode != 0
+    assert "legacy-query-preview-cleanup-v1" in invalid_policy_result.stderr
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-v1",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "remove legacy query preview values after read-only preview",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
 
     assert apply_result.returncode == 0, apply_result.stderr
     payload = json.loads(apply_result.stdout)
@@ -1339,6 +1395,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert payload["cleared_count"] == 1
     assert payload["remaining_affected_count"] == 1
     assert payload["apply"]["actor"] == "cli-test"
+    assert payload["apply"]["policy"] == "legacy-query-preview-cleanup-v1"
     assert payload["apply"]["reason_sha256"]
     assert payload["apply"]["audit_trace_id"]
     assert payload["privacy"]["raw_query_preview_included"] is False
@@ -1360,6 +1417,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     audit_metadata = json.loads(audit[2])
     assert audit_metadata["cleared_count"] == 1
     assert audit_metadata["eligible_count"] == 1
+    assert audit_metadata["policy"] == "legacy-query-preview-cleanup-v1"
     assert audit_metadata["reason_sha256"] == payload["apply"]["reason_sha256"]
     assert "SHOULD_NOT_LEAK" not in audit[2]
     assert "api key" not in audit[2].lower()

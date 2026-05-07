@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-07 16:41 KST
+Last updated: 2026-05-07 19:24 KST
 
 ## Trigger for the next session
 
@@ -24,7 +24,7 @@ Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_prev
 
 Current slice: v0.1.99 release/runtime QA is complete and the broader G4 apply-mode contract checkpoint has landed. The safest next implementation slice is not broad apply yet; start with a very narrow, disposable-DB-backed policy contract for one explicit consolidation action class, with RED tests first and no live DB mutation.
 
-Why this is the best next move: v0.1.99 leaves packaging, runtime QA, the 21-task retrieval-eval harness, and the broad apply-mode safety contract healthy. The remaining product risk is mutation safety/automation maturity: query-preview cleanup and ordinary trace metadata cleanup are already implemented as narrow explicit mutations, but broader consolidation apply mode must still prove one explicit policy/action path on disposable evidence before touching live memory.
+Why this is the best next move: v0.1.99 leaves packaging, runtime QA, the 21-task retrieval-eval harness, and the broad apply-mode safety contract healthy. The remaining product risk is mutation safety/automation maturity: query-preview cleanup and ordinary trace metadata cleanup are already implemented as narrow explicit mutations; the current slice tightens the first cleanup path so its apply mode also requires the named policy `legacy-query-preview-cleanup-v1` before any mutation. Broader consolidation apply mode must still prove future explicit policy/action paths on disposable evidence before touching live memory.
 
 Recommended local backup commands:
 
@@ -106,6 +106,26 @@ Do not delete or commit these unless the user explicitly asks.
 
 
 
+
+## In-progress G4a policy hardening slice
+
+Current branch: `g4/query-preview-cleanup-policy`.
+
+Scope:
+
+- Tighten only `dogfood query-preview-cleanup --apply`.
+- Apply now requires the named policy `legacy-query-preview-cleanup-v1` in addition to `--apply --actor --reason`.
+- Preview remains read-only and does not require policy.
+- Output/audit metadata includes the policy name, reason hash, audit trace id, and hash-only affected-id summary.
+- Invalid or missing policy exits before mutation.
+
+Still forbidden after this slice:
+
+- broad G4/background consolidation apply mode;
+- ordinary conversation auto-approval;
+- raw transcript, raw prompt, raw query, or query-preview persistence;
+- default retrieval ranking changes;
+- live DB mutation without preview, backup/restore guidance, explicit policy, actor, reason, and audit.
 
 ## v0.1.99 release-sync and runtime QA completed
 
