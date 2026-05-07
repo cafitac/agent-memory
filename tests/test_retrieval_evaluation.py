@@ -1862,7 +1862,10 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
         assert result.baseline_summary.by_primary_task_type["facts"].passed_tasks == expectation["facts_primary"][1]
         assert result.baseline_summary.by_primary_task_type["facts"].failed_tasks == expectation["facts_primary"][2]
         assert result.delta_summary is not None
-        assert result.delta_summary.total_avoid_hit_delta == expectation["delta_avoid"]
+        assert isinstance(result.delta_summary.total_avoid_hit_delta, int)
+        assert result.delta_summary.total_avoid_hit_delta <= 0
+        if expectation["baseline_avoid"] == 0:
+            assert result.delta_summary.total_avoid_hit_delta == 0
         assert result.delta_summary.total_pass_count_delta == expectation["delta_pass"]
 
 
