@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, disposable-copy preflight hardening, and restore dry-run hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
+Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, disposable-copy preflight hardening, restore dry-run validation, and source-database fingerprint hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.102` with a named policy gate, rollback manifest, and disposable-copy preflight before target DB mutation. Current follow-up adds read-only restore dry-run validation for rollback artifacts; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.103` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, and read-only restore dry-run validation. Current follow-up source-binds rollback artifacts with a DB fingerprint and makes restore dry-run fail closed on artifact/target mismatch; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -196,7 +196,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - Raw query preview values are never printed.
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
-- A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; live restore remains unavailable.
+- A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch is blocking; live restore remains unavailable.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 

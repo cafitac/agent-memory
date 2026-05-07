@@ -1587,6 +1587,10 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_validat
     assert payload["artifact"]["row_count"] == 1
     assert payload["artifact"]["artifact_sha256"] == apply_payload["apply"]["rollback_manifest"]["artifact_sha256"]
     assert payload["artifact"]["eligible_ids_sha256"] == apply_payload["apply"]["rollback_manifest"]["eligible_ids_sha256"]
+    assert payload["artifact"]["source_database"]["fingerprint_sha256"] == apply_payload["apply"]["rollback_manifest"]["source_database"]["fingerprint_sha256"]
+    assert payload["source_database_match"]["matched"] is True
+    assert payload["source_database_match"]["artifact_fingerprint_sha256"] == apply_payload["apply"]["rollback_manifest"]["source_database"]["fingerprint_sha256"]
+    assert payload["source_database_match"]["target_fingerprint_sha256"] == apply_payload["apply"]["rollback_manifest"]["source_database"]["fingerprint_sha256"]
     assert payload["restore_preview"]["operation"] == "restore_stored_query_excerpts"
     assert payload["restore_preview"]["dry_run"] is True
     assert payload["restore_preview"]["restore_apply_available"] is False
@@ -1608,6 +1612,132 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_validat
             "SELECT id, query_preview FROM retrieval_observations ORDER BY id"
         ).fetchall()
     assert rows == [(1, None), (2, "api key SHOULD_NOT_LEAK")]
+
+
+
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_blocks_source_database_mismatch(
+    tmp_path: Path,
+) -> None:
+    source_db_path = tmp_path / "query-preview-cleanup-source.db"
+    other_db_path = tmp_path / "query-preview-cleanup-other.db"
+    for db_path in (source_db_path, other_db_path):
+        initialize_database(db_path)
+        source = ingest_source_text(
+            db_path=db_path,
+            source_type="transcript",
+            content="Query preview cleanup restore mismatch target phrase is RESTORE_MISMATCH_OK.",
+            metadata={"project": "query-preview-cleanup-restore-mismatch"},
+        )
+        fact = create_candidate_fact(
+            db_path=db_path,
+            subject_ref="Query preview cleanup restore mismatch",
+            predicate="target_phrase",
+            object_ref_or_value="RESTORE_MISMATCH_OK",
+            evidence_ids=[source.id],
+            scope="project:query-preview-cleanup-restore-mismatch",
+            confidence=0.95,
+        )
+        approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(source_db_path),
+            "source token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:query-preview-cleanup-restore-mismatch",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+    with sqlite3.connect(source_db_path) as connection:
+        connection.execute(
+            "UPDATE retrieval_observations SET query_preview = ?, created_at = ? WHERE id = 1",
+            ("token=SHOULD_NOT_LEAK", "2026-01-01 00:00:00"),
+        )
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(source_db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-v1",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "create source-bound rollback artifact for mismatch dry run test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    apply_payload = json.loads(apply_result.stdout)
+    rollback = apply_payload["apply"]["rollback_manifest"]
+    assert rollback["source_database"]["fingerprint_sha256"]
+    rollback_path = Path(rollback["artifact_path"])
+
+    restore_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup-restore",
+            str(other_db_path),
+            str(rollback_path),
+            "--dry-run",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert restore_result.returncode == 0, restore_result.stderr
+    payload = json.loads(restore_result.stdout)
+    assert payload["kind"] == "dogfood_query_preview_cleanup_restore_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "error"
+    assert payload["source_database_match"]["matched"] is False
+    assert payload["source_database_match"]["artifact_fingerprint_sha256"] == rollback["source_database"]["fingerprint_sha256"]
+    assert payload["source_database_match"]["target_fingerprint_sha256"] != rollback["source_database"]["fingerprint_sha256"]
+    assert "source_database_mismatch" in payload["warnings"]
+    assert "source_database_mismatch" in payload["blocked_reasons"]
+    assert payload["restore_preview"]["restorable_count"] == 0
+    assert payload["restore_preview"]["target_rows_found_count"] == 0
+    assert payload["restore_preview"]["skipped_count"] == 1
+    assert "SHOULD_NOT_LEAK" not in restore_result.stdout
+    assert "token=" not in restore_result.stdout
+
+    with sqlite3.connect(source_db_path) as connection:
+        source_rows = connection.execute(
+            "SELECT id, query_preview FROM retrieval_observations ORDER BY id"
+        ).fetchall()
+    with sqlite3.connect(other_db_path) as connection:
+        other_rows = connection.execute(
+            "SELECT id, query_preview FROM retrieval_observations ORDER BY id"
+        ).fetchall()
+    assert source_rows == [(1, None)]
+    assert other_rows == []
 
 
 def test_python_module_cli_dogfood_ordinary_trace_metadata_cleanup_apply_requires_actor_reason_and_fills_safe_defaults_without_leaks(

@@ -4202,6 +4202,19 @@ def _query_preview_cleanup_ids_sha256(eligible_ids: list[int]) -> str:
     return hashlib.sha256(",".join(str(value) for value in eligible_ids).encode()).hexdigest()
 
 
+def _query_preview_cleanup_source_database_fingerprint(db_path: Path) -> dict[str, Any]:
+    resolved_path = db_path.expanduser().resolve(strict=False)
+    fingerprint_sha256 = hashlib.sha256(
+        f"query-preview-cleanup-source-db-v1\0{resolved_path}".encode()
+    ).hexdigest()
+    return {
+        "fingerprint_sha256": fingerprint_sha256,
+        "fingerprint_version": "query-preview-cleanup-source-db-v1",
+        "path_sha256": hashlib.sha256(str(resolved_path).encode()).hexdigest(),
+        "path_basename": resolved_path.name,
+    }
+
+
 def _write_query_preview_cleanup_rollback_manifest(
     *,
     db_path: Path,
@@ -4210,11 +4223,13 @@ def _write_query_preview_cleanup_rollback_manifest(
     eligible_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     eligible_ids = [row["id"] for row in eligible_rows]
+    source_database = _query_preview_cleanup_source_database_fingerprint(db_path)
     rollback_artifact = {
         "kind": "query_preview_cleanup_rollback_artifact",
         "policy": policy,
         "operation": "restore_stored_query_excerpts",
         "parameters": {"older_than": older_than},
+        "source_database": source_database,
         "row_count": len(eligible_rows),
         "rows": eligible_rows,
         "privacy": {
@@ -4234,6 +4249,7 @@ def _write_query_preview_cleanup_rollback_manifest(
         "operation": "restore_stored_query_excerpts",
         "artifact_path": str(rollback_artifact_path),
         "artifact_sha256": rollback_artifact_sha256,
+        "source_database": source_database,
         "row_count": len(eligible_rows),
         "eligible_ids_sha256": _query_preview_cleanup_ids_sha256(eligible_ids),
         "privacy": {
@@ -4386,36 +4402,53 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         candidate_rows.append({"id": int(row["id"]), "query_preview": query_preview, "created_at": created_at})
     candidate_ids = [row["id"] for row in candidate_rows]
     eligible_ids_sha256 = _query_preview_cleanup_ids_sha256(candidate_ids)
+    artifact_source_database = artifact_payload.get("source_database")
+    artifact_source_fingerprint = (
+        artifact_source_database.get("fingerprint_sha256") if isinstance(artifact_source_database, dict) else None
+    )
+    target_source_database = _query_preview_cleanup_source_database_fingerprint(db_path)
+    source_database_matched = artifact_source_fingerprint == target_source_database["fingerprint_sha256"]
     target_rows_found_count = 0
     restorable_count = 0
     already_has_query_preview_count = 0
     missing_row_count = 0
-    with _open_readonly_sqlite(db_path) as connection:
-        if not _table_exists(connection, "retrieval_observations"):
-            missing_row_count = len(candidate_rows)
-        else:
-            for row in candidate_rows:
-                target_row = connection.execute(
-                    "SELECT query_preview FROM retrieval_observations WHERE id = ?",
-                    (row["id"],),
-                ).fetchone()
-                if target_row is None:
-                    missing_row_count += 1
-                    continue
-                target_rows_found_count += 1
-                if target_row["query_preview"] in (None, ""):
-                    restorable_count += 1
-                else:
-                    already_has_query_preview_count += 1
+    if source_database_matched:
+        with _open_readonly_sqlite(db_path) as connection:
+            if not _table_exists(connection, "retrieval_observations"):
+                missing_row_count = len(candidate_rows)
+            else:
+                for row in candidate_rows:
+                    target_row = connection.execute(
+                        "SELECT query_preview FROM retrieval_observations WHERE id = ?",
+                        (row["id"],),
+                    ).fetchone()
+                    if target_row is None:
+                        missing_row_count += 1
+                        continue
+                    target_rows_found_count += 1
+                    if target_row["query_preview"] in (None, ""):
+                        restorable_count += 1
+                    else:
+                        already_has_query_preview_count += 1
     skipped_count = already_has_query_preview_count + missing_row_count
+    if not source_database_matched:
+        skipped_count = len(candidate_rows)
     warnings = ["live_restore_not_implemented"]
-    if skipped_count:
+    blocked_reasons = ["live_restore_not_implemented"]
+    if artifact_source_fingerprint is None:
+        warnings.append("source_database_fingerprint_missing")
+        blocked_reasons.append("source_database_fingerprint_missing")
+    elif not source_database_matched:
+        warnings.append("source_database_mismatch")
+        blocked_reasons.append("source_database_mismatch")
+    if skipped_count and source_database_matched:
         warnings.append("some_artifact_rows_are_not_currently_restorable")
+    status = "error" if not source_database_matched else "warning"
     return {
         "kind": kind,
         "read_only": True,
         "mutated": False,
-        "status": "warning",
+        "status": status,
         "database": {"path": str(db_path), "exists": True},
         "artifact": {
             "kind": artifact_payload["kind"],
@@ -4427,6 +4460,14 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "row_count": len(candidate_rows),
             "artifact_sha256": artifact_sha256,
             "eligible_ids_sha256": eligible_ids_sha256,
+            "source_database": artifact_source_database if isinstance(artifact_source_database, dict) else None,
+        },
+        "source_database_match": {
+            "matched": source_database_matched,
+            "artifact_fingerprint_sha256": artifact_source_fingerprint,
+            "target_fingerprint_sha256": target_source_database["fingerprint_sha256"],
+            "fingerprint_version": target_source_database["fingerprint_version"],
+            "target_path_basename": target_source_database["path_basename"],
         },
         "restore_preview": {
             "operation": "restore_stored_query_excerpts",
@@ -4444,7 +4485,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "sample_values_included": False,
             "artifact_contains_private_query_preview": True,
         },
-        "blocked_reasons": ["live_restore_not_implemented"],
+        "blocked_reasons": blocked_reasons,
         "warnings": warnings,
         "suggested_next_steps": [
             "Inspect this dry-run summary before considering any future explicit restore apply command.",
