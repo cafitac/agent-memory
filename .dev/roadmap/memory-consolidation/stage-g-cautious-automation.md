@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, disposable-copy preflight hardening, restore dry-run validation, and source-database fingerprint hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
+Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate, rollback-manifest hardening, disposable-copy preflight hardening, restore dry-run validation, and source-database fingerprint hardening complete and artifact-integrity hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.103` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, and read-only restore dry-run validation. Current follow-up source-binds rollback artifacts with a DB fingerprint and makes restore dry-run fail closed on artifact/target mismatch; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.104` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, and source DB binding. Current follow-up makes restore dry-run fail closed on artifact integrity problems such as wrong policy, invalid operation, row-count mismatch, duplicate row ids, or missing source fingerprint; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -196,7 +196,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - Raw query preview values are never printed.
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
-- A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch is blocking; live restore remains unavailable.
+- A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch and artifact integrity failures are blocking; live restore remains unavailable.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
@@ -275,4 +275,4 @@ Allow controlled application only after dry-run output is trusted and the broade
 
 ## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.102 named-policy, rollback-manifest, and disposable-copy preflight release, the current slice adds read-only `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run`. It validates the private rollback artifact kind/policy/row shape/hash and reports target rows found, restorable rows, already-populated rows, and missing rows without mutating the DB or printing raw query-preview values. Live restore remains unavailable and broad G4 apply mode remains blocked.
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.104 named-policy, rollback-manifest, disposable-copy preflight, restore dry-run, and source-binding release, the current slice hardens read-only `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run` against malformed or tampered artifacts. It rejects wrong-policy, invalid-operation, declared row-count mismatch, duplicate row id, and missing/mismatched source fingerprint cases as structured read-only errors before reporting any restorable rows. Live restore remains unavailable and broad G4 apply mode remains blocked.

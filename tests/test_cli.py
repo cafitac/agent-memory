@@ -1,4 +1,5 @@
 import fcntl
+import hashlib
 import json
 import os
 import sqlite3
@@ -1738,6 +1739,137 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_blocks_
         ).fetchall()
     assert source_rows == [(1, None)]
     assert other_rows == []
+
+
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_reports_wrong_policy_as_read_only_error(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "query-preview-cleanup-wrong-policy.db"
+    initialize_database(db_path)
+    artifact_path = tmp_path / "wrong-policy-rollback-artifact.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "kind": "query_preview_cleanup_rollback_artifact",
+                "policy": "legacy-query-preview-cleanup-v0",
+                "operation": "restore_stored_query_excerpts",
+                "row_count": 0,
+                "rows": [],
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup-restore",
+            str(db_path),
+            str(artifact_path),
+            "--dry-run",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_query_preview_cleanup_restore_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "error"
+    assert payload["artifact"]["exists"] is True
+    assert payload["artifact"]["policy"] == "legacy-query-preview-cleanup-v0"
+    assert "artifact_policy_invalid" in payload["blocked_reasons"]
+    assert payload["restore_preview"]["restorable_count"] == 0
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+
+
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_blocks_artifact_integrity_mismatch(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "query-preview-cleanup-integrity.db"
+    initialize_database(db_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations(surface, query_sha256, query_preview, preferred_scope, limit_value, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("cli-test", "c" * 64, None, "project:integrity", 5, "2026-01-01 00:00:00"),
+        )
+
+    resolved_path = db_path.expanduser().resolve(strict=False)
+    source_database = {
+        "fingerprint_sha256": hashlib.sha256(
+            f"query-preview-cleanup-source-db-v1\0{resolved_path}".encode()
+        ).hexdigest(),
+        "fingerprint_version": "query-preview-cleanup-source-db-v1",
+        "path_sha256": hashlib.sha256(str(resolved_path).encode()).hexdigest(),
+        "path_basename": resolved_path.name,
+    }
+    artifact_path = tmp_path / "tampered-rollback-artifact.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "kind": "query_preview_cleanup_rollback_artifact",
+                "policy": "legacy-query-preview-cleanup-v1",
+                "operation": "restore_stored_query_excerpts",
+                "parameters": {"older_than": "2026-01-02T00:00:00"},
+                "source_database": source_database,
+                "row_count": 3,
+                "rows": [
+                    {"id": 1, "query_preview": "token=SHOULD_NOT_LEAK", "created_at": "2026-01-01 00:00:00"},
+                    {"id": 1, "query_preview": "token=SHOULD_NOT_LEAK", "created_at": "2026-01-01 00:00:00"},
+                ],
+                "privacy": {"artifact_contains_private_query_preview": True, "do_not_commit": True},
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup-restore",
+            str(db_path),
+            str(artifact_path),
+            "--dry-run",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_query_preview_cleanup_restore_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["status"] == "error"
+    assert payload["artifact"]["row_count"] == 2
+    assert payload["artifact"]["declared_row_count"] == 3
+    assert payload["artifact_integrity"]["passed"] is False
+    assert payload["artifact_integrity"]["duplicate_id_count"] == 1
+    assert payload["artifact_integrity"]["declared_row_count_matches"] is False
+    assert "artifact_row_count_mismatch" in payload["blocked_reasons"]
+    assert "duplicate_artifact_row_ids" in payload["blocked_reasons"]
+    assert payload["restore_preview"]["restorable_count"] == 0
+    assert payload["restore_preview"]["skipped_count"] == 2
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute("SELECT id, query_preview FROM retrieval_observations ORDER BY id").fetchall()
+    assert rows == [(1, None)]
 
 
 def test_python_module_cli_dogfood_ordinary_trace_metadata_cleanup_apply_requires_actor_reason_and_fills_safe_defaults_without_leaks(
