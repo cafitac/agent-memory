@@ -86,7 +86,7 @@ Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the
 | G4-plan | Automation | First mutation contract before implementation | docs/tests plan first |
 | G4a | Automation | First narrow mutation: legacy query-preview cleanup | explicit flag, actor, reason |
 | G4b | Automation | Second narrow mutation: ordinary trace metadata cleanup | explicit flag, actor, reason |
-| G4-broad-plan | Automation | Broader apply-mode contract before implementation | complete in PR #200 / v0.1.98 |
+| G4-broad-plan | Automation | Broader apply-mode contract before implementation | complete in PR #200 / v0.1.99 |
 | G4 | Automation | Broader background consolidation apply mode | explicit policy only |
 | H1 | Hardening | Consolidation eval fixtures/metrics | advisory CI |
 | H2 | Hardening | Graph/trace visualization export | local/redacted |

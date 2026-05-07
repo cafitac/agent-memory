@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-07 16:24 KST
+Last updated: 2026-05-07 16:41 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.98`: PR #200 landed the docs/RED-test-only broader G4 consolidation apply-mode contract checkpoint, PR #202 stabilized the Linux/SQLite retrieval avoid-delta assertion exposed after that checkpoint, and release-sync PR #201 published `v0.1.98`. GitHub Release, npm, and PyPI all report `v0.1.98`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.98/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.98-runtime-qa-20260507T070630`. Checked-in retrieval-eval coverage remains 21 tasks.
+agent-memory is currently verified through `v0.1.99`: PR #200 landed the docs/RED-test-only broader G4 consolidation apply-mode contract checkpoint, PR #202 stabilized the Linux/SQLite retrieval avoid-delta assertion exposed after that checkpoint, and release-sync PR #204 published `v0.1.99`. GitHub Release, npm, and PyPI all report `v0.1.99`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118`. Checked-in retrieval-eval coverage remains 21 tasks.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` read-only/non-mutating; scheduled dry-run remains read-only and recommends continuing dogfood evidence before broad G4 mutation rather than enabling broad apply mode.
 
 ## Current next slice
 
-Current slice: v0.1.98 release/runtime QA is complete and the broader G4 apply-mode contract checkpoint has landed. The safest next implementation slice is not broad apply yet; start with a very narrow, disposable-DB-backed policy contract for one explicit consolidation action class, with RED tests first and no live DB mutation.
+Current slice: v0.1.99 release/runtime QA is complete and the broader G4 apply-mode contract checkpoint has landed. The safest next implementation slice is not broad apply yet; start with a very narrow, disposable-DB-backed policy contract for one explicit consolidation action class, with RED tests first and no live DB mutation.
 
-Why this is the best next move: v0.1.98 leaves packaging, runtime QA, the 21-task retrieval-eval harness, and the broad apply-mode safety contract healthy. The remaining product risk is mutation safety/automation maturity: query-preview cleanup and ordinary trace metadata cleanup are already implemented as narrow explicit mutations, but broader consolidation apply mode must still prove one explicit policy/action path on disposable evidence before touching live memory.
+Why this is the best next move: v0.1.99 leaves packaging, runtime QA, the 21-task retrieval-eval harness, and the broad apply-mode safety contract healthy. The remaining product risk is mutation safety/automation maturity: query-preview cleanup and ordinary trace metadata cleanup are already implemented as narrow explicit mutations, but broader consolidation apply mode must still prove one explicit policy/action path on disposable evidence before touching live memory.
 
 Recommended local backup commands:
 
@@ -58,8 +58,8 @@ Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
 - Latest merged retrieval-quality PR: #195 `test: add procedure prompt budget fixture`.
-- Latest merged release-sync PR: #201 `chore: release v0.1.98 [skip release]`.
-- Latest completed release: `v0.1.98`.
+- Latest merged release-sync PR: #204 `chore: release v0.1.99 [skip release]`.
+- Latest completed release: `v0.1.99`.
 
 Expected GitHub identity:
 
@@ -70,25 +70,25 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.98`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.98`
-- npm package: `@cafitac/agent-memory@0.1.98`
-- PyPI package: `cafitac-agent-memory==0.1.98`
+- `v0.1.99`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.99`
+- npm package: `@cafitac/agent-memory@0.1.99`
+- PyPI package: `cafitac-agent-memory==0.1.99`
 
-Latest verified source checkout snapshot, checked 2026-05-07 16:24 KST:
+Latest verified source checkout snapshot, checked 2026-05-07 16:41 KST:
 
 - branch: `main`, synced with `origin/main` before this checkpoint branch
-- latest release-sync commit: `chore: release v0.1.98 [skip release]` via PR #201
+- latest release-sync commit: `chore: release v0.1.99 [skip release]` via PR #204
 - latest G4 contract merge: PR #200 `docs: checkpoint broad g4 apply contract`
 - latest stabilization merge: PR #202 `test: stabilize retrieval avoid delta assertion`
 - previous retrieval-quality merge commit: PR #195 `test: add procedure prompt budget fixture`
 - previous retrieval/ranking merge commit: PR #181 `fix: suppress episodic noise for procedure retrieval`
 - open PRs: none observed before this checkpoint branch
-- GitHub Release, npm, and PyPI all report `v0.1.98`
-- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.98"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.98 runtime and `agent-memory hermes-doctor` is healthy
+- GitHub Release, npm, and PyPI all report `v0.1.99`
+- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.99"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.99 runtime and `agent-memory hermes-doctor` is healthy
 - checked-in retrieval-eval fixtures remain at 21 tasks; PR #200/PR #202 full local tests passed before merge
-- installed runtime dogfood storage-health: `read_only=true`, `mutated=false`, `agent_memory_version=0.1.98`
+- installed runtime dogfood storage-health: `read_only=true`, `mutated=false`, `agent_memory_version=0.1.99`
 - installed runtime scheduled dry-run: `read_only=true`, `mutated=false`, quality gate decision remains a pre-broad-G4 dogfood/evidence gate
 
 Expected local untracked artifacts to preserve in the root checkout:
@@ -107,9 +107,9 @@ Do not delete or commit these unless the user explicitly asks.
 
 
 
-## v0.1.98 G4 broad contract checkpoint and runtime QA completed
+## v0.1.99 release-sync and runtime QA completed
 
-PR #200 `docs: checkpoint broad g4 apply contract`, PR #202 `test: stabilize retrieval avoid delta assertion`, and release-sync PR #201 merged.
+PR #203 `docs: checkpoint v0.1.98 runtime qa` and release-sync PR #204 merged after PR #200/#202/#201.
 
 Completed behavior:
 
@@ -121,13 +121,12 @@ Completed behavior:
 
 Verification completed:
 
-- PR #200 checks passed; post-merge main CI exposed avoid-hit delta variability.
-- PR #202 stabilized that assertion and post-merge main CI passed: `25480826373`, auto-release `25480826294`.
-- Release-sync PR #201 merged and post-merge CI/publish succeeded: CI `25480972083`, auto-release `25480972080`.
-- GitHub Release, PyPI, and npm all report `v0.1.98`.
+- PR #203 checks passed and merged; post-merge main CI passed: `25482409415`; auto-release `25482409434` created release-sync PR #204.
+- Release-sync PR #204 merged and post-merge CI/publish succeeded: CI `25482537303`, auto-release `25482537294`, publish `25482545760`.
+- GitHub Release, PyPI, and npm all report `v0.1.99`.
 - Fresh artifact smoke passed from PyPI and npm.
-- Live Hermes runtime QA passed from `/Users/reddit/.agent-memory/runtime/v0.1.98/.venv/bin/agent-memory`; report: `/Users/reddit/.agent-memory/reports/v0.1.98-runtime-qa-20260507T070630`.
-- Hermes config backup suffix: `.bak-agent-memory-v0.1.98-20260507T070503`.
+- Live Hermes runtime QA passed from `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`; report: `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118`.
+- Hermes config backup suffix: `.bak-agent-memory-v0.1.99-20260507T074006`.
 
 ## v0.1.96/v0.1.97 procedure prompt-budget and stabilization releases completed
 

@@ -234,7 +234,7 @@ Normalize legacy ordinary `turn` traces that are already metadata-only but are m
 
 ## PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
 
-Status: Complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.98 via PR #201. This remains a docs/RED-test-only contract checkpoint; broad mutation is still blocked.
+Status: Complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.99 via PR #204. This remains a docs/RED-test-only contract checkpoint; broad mutation is still blocked.
 
 ### Objective
 
