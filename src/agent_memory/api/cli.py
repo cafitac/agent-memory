@@ -4331,6 +4331,128 @@ def _run_query_preview_cleanup_disposable_apply_check(
     }
 
 
+
+def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    artifact_path = args.rollback_artifact_path.expanduser().resolve(strict=False)
+    if not getattr(args, "dry_run", False):
+        raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run")
+    kind = "dogfood_query_preview_cleanup_restore_dry_run"
+    if not db_path.exists():
+        return {
+            "kind": kind,
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "artifact": {"path": str(artifact_path), "exists": artifact_path.exists()},
+            "warnings": ["database_missing"],
+        }
+    if not artifact_path.exists():
+        return {
+            "kind": kind,
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": True},
+            "artifact": {"path": str(artifact_path), "exists": False},
+            "warnings": ["rollback_artifact_missing"],
+        }
+    artifact_text = artifact_path.read_text()
+    artifact_sha256 = hashlib.sha256(artifact_text.encode()).hexdigest()
+    try:
+        artifact_payload = json.loads(artifact_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("query-preview-cleanup restore artifact must be valid JSON") from exc
+    if artifact_payload.get("kind") != "query_preview_cleanup_rollback_artifact":
+        raise ValueError("query-preview-cleanup restore requires a query_preview_cleanup_rollback_artifact")
+    policy = artifact_payload.get("policy")
+    if policy != QUERY_PREVIEW_CLEANUP_POLICY:
+        raise ValueError(
+            "query-preview-cleanup restore requires rollback artifact policy "
+            f"{QUERY_PREVIEW_CLEANUP_POLICY}"
+        )
+    rows = artifact_payload.get("rows")
+    if not isinstance(rows, list):
+        raise ValueError("query-preview-cleanup restore artifact rows must be a list")
+    candidate_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), int):
+            raise ValueError("query-preview-cleanup restore artifact rows must include integer id values")
+        query_preview = row.get("query_preview")
+        if not isinstance(query_preview, str) or query_preview == "":
+            raise ValueError("query-preview-cleanup restore artifact rows must include non-empty query_preview values")
+        created_at = row.get("created_at")
+        candidate_rows.append({"id": int(row["id"]), "query_preview": query_preview, "created_at": created_at})
+    candidate_ids = [row["id"] for row in candidate_rows]
+    eligible_ids_sha256 = _query_preview_cleanup_ids_sha256(candidate_ids)
+    target_rows_found_count = 0
+    restorable_count = 0
+    already_has_query_preview_count = 0
+    missing_row_count = 0
+    with _open_readonly_sqlite(db_path) as connection:
+        if not _table_exists(connection, "retrieval_observations"):
+            missing_row_count = len(candidate_rows)
+        else:
+            for row in candidate_rows:
+                target_row = connection.execute(
+                    "SELECT query_preview FROM retrieval_observations WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
+                if target_row is None:
+                    missing_row_count += 1
+                    continue
+                target_rows_found_count += 1
+                if target_row["query_preview"] in (None, ""):
+                    restorable_count += 1
+                else:
+                    already_has_query_preview_count += 1
+    skipped_count = already_has_query_preview_count + missing_row_count
+    warnings = ["live_restore_not_implemented"]
+    if skipped_count:
+        warnings.append("some_artifact_rows_are_not_currently_restorable")
+    return {
+        "kind": kind,
+        "read_only": True,
+        "mutated": False,
+        "status": "warning",
+        "database": {"path": str(db_path), "exists": True},
+        "artifact": {
+            "kind": artifact_payload["kind"],
+            "path": str(artifact_path),
+            "exists": True,
+            "policy": policy,
+            "operation": artifact_payload.get("operation"),
+            "parameters": artifact_payload.get("parameters", {}),
+            "row_count": len(candidate_rows),
+            "artifact_sha256": artifact_sha256,
+            "eligible_ids_sha256": eligible_ids_sha256,
+        },
+        "restore_preview": {
+            "operation": "restore_stored_query_excerpts",
+            "dry_run": True,
+            "restore_apply_available": False,
+            "candidate_restore_count": len(candidate_rows),
+            "target_rows_found_count": target_rows_found_count,
+            "restorable_count": restorable_count,
+            "already_has_query_preview_count": already_has_query_preview_count,
+            "missing_row_count": missing_row_count,
+            "skipped_count": skipped_count,
+        },
+        "privacy": {
+            "raw_query_preview_included": False,
+            "sample_values_included": False,
+            "artifact_contains_private_query_preview": True,
+        },
+        "blocked_reasons": ["live_restore_not_implemented"],
+        "warnings": warnings,
+        "suggested_next_steps": [
+            "Inspect this dry-run summary before considering any future explicit restore apply command.",
+            "Keep rollback artifacts private; they contain stored query preview values.",
+        ],
+    }
+
+
 def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     older_than = args.older_than
@@ -5714,6 +5836,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_parser.add_argument("--policy")
     dogfood_query_preview_cleanup_parser.add_argument("--actor")
     dogfood_query_preview_cleanup_parser.add_argument("--reason")
+    dogfood_query_preview_cleanup_restore_parser = dogfood_subparsers.add_parser(
+        "query-preview-cleanup-restore",
+        help="Dry-run validation for private query-preview cleanup rollback artifacts without printing raw values.",
+    )
+    dogfood_query_preview_cleanup_restore_parser.add_argument("db_path", type=Path)
+    dogfood_query_preview_cleanup_restore_parser.add_argument("rollback_artifact_path", type=Path)
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--dry-run", action="store_true")
     dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(
         "ordinary-trace-metadata-cleanup",
         help="Preview/apply raw-content-safe normalization for legacy ordinary turn trace metadata defaults.",
@@ -6602,6 +6731,9 @@ def main() -> None:
             return
         if args.dogfood_action == "query-preview-cleanup":
             print(json.dumps(_dogfood_query_preview_cleanup_payload(args), indent=2))
+            return
+        if args.dogfood_action == "query-preview-cleanup-restore":
+            print(json.dumps(_dogfood_query_preview_cleanup_restore_dry_run_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-trace-metadata-cleanup":
             print(json.dumps(_dogfood_ordinary_trace_metadata_cleanup_payload(args), indent=2))
