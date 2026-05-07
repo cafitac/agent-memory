@@ -18,8 +18,8 @@ The plan exists to prevent a direct jump from read-only dogfood reports to broad
 
 Current release/runtime:
 
-- Latest release: `v0.1.98`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.98/.venv/bin/agent-memory`.
+- Latest release: `v0.1.99`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`.
 - Live DB: `/Users/reddit/.agent-memory/memory.db`.
 - Repo branch at plan start: `main`, then docs branch `docs/g4-readiness-apply-plan`.
 
@@ -227,6 +227,6 @@ Completed since the original draft:
 
 - `query-preview cleanup` became the first narrow explicit mutation in G4a. It cleared only legacy `retrieval_observations.query_preview` privacy debt under `--apply --actor --reason` and audit-safe output.
 - `ordinary trace metadata default cleanup` became the second narrow explicit mutation in G4b. It normalized only already-metadata-only ordinary `turn` traces by filling conservative metadata defaults.
-- H1-H4 hardening and retrieval-eval expansion continued through `v0.1.98`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.98-runtime-qa-20260507T053631`.
+- H1-H4 hardening and retrieval-eval expansion continued through `v0.1.99`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T053631`.
 
-The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.98. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit policy, actor, reason, audit, and restore guidance.
+The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit policy, actor, reason, audit, and restore guidance.

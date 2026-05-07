@@ -16,12 +16,12 @@ def test_g4_broad_apply_contract_checkpoint_matches_latest_release_state() -> No
     stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
     g4_plan = _read_doc(".dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md")
 
-    assert "v0.1.98" in handoff
+    assert "v0.1.99" in handoff
     assert "PR #200" in handoff
-    assert "PR #201" in handoff
+    assert "PR #204" in handoff
     assert "PR #202" in handoff
-    assert "/Users/reddit/.agent-memory/runtime/v0.1.98/.venv/bin/agent-memory" in handoff
-    assert "/Users/reddit/.agent-memory/reports/v0.1.98-runtime-qa-20260507T070630" in handoff
+    assert "/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory" in handoff
+    assert "/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118" in handoff
 
     assert "- [x] PR G3g" in roadmap
     assert "- [x] PR G4-plan" in roadmap
@@ -31,7 +31,7 @@ def test_g4_broad_apply_contract_checkpoint_matches_latest_release_state() -> No
     assert "ordinary conversation auto-approval remains forbidden" in roadmap
 
     assert "Status: Superseded as a first-mutation plan" in g4_plan
-    assert "v0.1.98" in g4_plan
+    assert "v0.1.99" in g4_plan
     assert "query-preview cleanup" in g4_plan
     assert "ordinary trace metadata default cleanup" in g4_plan
     assert "broader background consolidation apply-mode contract" in g4_plan

@@ -250,7 +250,7 @@ If a later session changes direction, update both this checklist and the relevan
   - Goal: define the contract for controlled promotion/snooze/decay actions without adding broad mutation yet.
   - Scope: docs/RED-test-only checkpoint over CLI flags, policy naming, eligible action classes, blocked action classes, preview/apply JSON, audit records, restore/rollback, and live-runtime QA prerequisites.
   - Acceptance: broad apply remains unimplemented; `--apply --actor --reason` plus a named policy are required; ordinary conversation auto-approval remains forbidden; raw transcript storage remains forbidden; default retrieval ranking changes remain forbidden.
-  - Status: complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.98 via PR #201. This checkpoint authorizes only the next disposable-DB-backed explicit policy/action slice, not live broad apply.
+  - Status: complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.99 via PR #204. This checkpoint authorizes only the next disposable-DB-backed explicit policy/action slice, not live broad apply.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
