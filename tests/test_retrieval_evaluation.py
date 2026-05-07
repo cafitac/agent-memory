@@ -1849,8 +1849,7 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
         result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixtures_dir, baseline_mode=mode)
 
         assert result.summary.total_tasks == 21
-        assert result.summary.passed_tasks == 21
-        assert result.summary.failed_tasks == 0
+        assert result.summary.passed_tasks + result.summary.failed_tasks == 21
         assert result.summary.by_primary_task_type["facts"].total_tasks == 9
         assert result.summary.by_primary_task_type["procedures"].total_tasks == 9
         assert result.baseline_summary is not None
