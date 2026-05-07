@@ -1398,6 +1398,20 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert payload["apply"]["policy"] == "legacy-query-preview-cleanup-v1"
     assert payload["apply"]["reason_sha256"]
     assert payload["apply"]["audit_trace_id"]
+    disposable = payload["apply"]["disposable_apply_check"]
+    assert disposable["kind"] == "query_preview_cleanup_disposable_apply_check"
+    assert disposable["status"] == "passed"
+    assert disposable["live_database_mutated_before_check"] is False
+    assert disposable["checked_database_path"].endswith(".db")
+    assert disposable["checked_database_path"] != str(db_path)
+    assert Path(disposable["checked_database_path"]).exists()
+    assert disposable["eligible_count"] == 1
+    assert disposable["cleared_count"] == 1
+    assert disposable["remaining_affected_count"] == 1
+    assert disposable["rollback_manifest"]["row_count"] == 1
+    assert disposable["rollback_manifest"]["artifact_sha256"]
+    assert disposable["privacy"]["raw_query_preview_included_in_output"] is False
+    assert disposable["privacy"]["disposable_copy_contains_private_query_preview"] is True
     rollback = payload["apply"]["rollback_manifest"]
     assert rollback["kind"] == "query_preview_cleanup_rollback_manifest"
     assert rollback["policy"] == "legacy-query-preview-cleanup-v1"
@@ -1436,6 +1450,8 @@ def test_python_module_cli_dogfood_query_preview_cleanup_apply_requires_actor_re
     assert audit_metadata["policy"] == "legacy-query-preview-cleanup-v1"
     assert audit_metadata["rollback_manifest"]["artifact_sha256"] == rollback["artifact_sha256"]
     assert audit_metadata["rollback_manifest"]["row_count"] == 1
+    assert audit_metadata["disposable_apply_check"]["status"] == "passed"
+    assert audit_metadata["disposable_apply_check"]["rollback_manifest"]["artifact_sha256"] == disposable["rollback_manifest"]["artifact_sha256"]
     assert audit_metadata["reason_sha256"] == payload["apply"]["reason_sha256"]
     assert "SHOULD_NOT_LEAK" not in audit[2]
     assert "api key" not in audit[2].lower()

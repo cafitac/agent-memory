@@ -232,3 +232,8 @@ Completed since the original draft:
 - H1-H4 hardening and retrieval-eval expansion continued through `v0.1.99`; latest runtime QA passed at `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118`.
 
 The next G4 slice is not live broad mutation. The docs/RED-test-only broader background consolidation apply-mode contract landed in PR #200 and was runtime-verified through v0.1.99. The next safe move is one disposable-DB-backed explicit policy/action slice. That contract must keep the original hard blocks: no ordinary conversation auto-approval, no raw transcript/prompt/query/query-preview persistence, no default retrieval ranking change, no broad LLM extraction from ordinary turns, and no apply mode without explicit named policy, actor, reason, audit, and restore guidance. The first hardening step required the named query-preview cleanup policy on the existing G4a cleanup apply path and shipped in v0.1.100. The next hardening step is rollback-manifest output: before clearing eligible legacy values, apply writes a private local rollback artifact and emits only path/hash/count metadata in stdout/audit.
+
+
+## Current G4a safety hardening: disposable-copy apply check
+
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.101 named-policy and rollback-manifest release, the current slice requires the command to copy the target SQLite DB to a private local disposable artifact, run the same cleanup on that copy, and compare expected eligible/cleared/remaining counts plus rollback-manifest metadata before mutating the target DB. The disposable copy can contain private query-preview data; stdout/audit metadata must stay hash/count/path only and broad G4 apply mode remains blocked.

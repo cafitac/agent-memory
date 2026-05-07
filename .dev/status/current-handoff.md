@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-07 20:24 KST
+Last updated: 2026-05-07 21:06 KST
 
 ## Trigger for the next session
 
@@ -16,24 +16,22 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.100`: PR #206 tightened the first narrow G4a cleanup mutation so `dogfood query-preview-cleanup --apply` requires the named policy `legacy-query-preview-cleanup-v1`; release-sync PR #207 published `v0.1.100`; PR #208 stabilized Linux/SQLite retrieval-eval assertions exposed by post-release CI. GitHub Release, npm, and PyPI all report `v0.1.100`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.100/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.100-runtime-qa-20260507T105232`. Checked-in retrieval-eval coverage remains 21 tasks.
+agent-memory is currently verified through `v0.1.101`: PR #206 tightened the first narrow G4a cleanup mutation so `dogfood query-preview-cleanup --apply` requires the named policy `legacy-query-preview-cleanup-v1`; PR #209 added rollback-manifest/private-artifact output; PR #210 stabilized Linux/SQLite retrieval-eval assertions exposed by the new release; release-sync PR #211 published `v0.1.101`. GitHub Release, npm, and PyPI all report `v0.1.101`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.101/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.101-runtime-qa-20260507T115303`. Checked-in retrieval-eval coverage remains 21 tasks.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` read-only/non-mutating; scheduled dry-run remains read-only and recommends continuing dogfood evidence before broad G4 mutation rather than enabling broad apply mode.
 
 ## Current next slice
 
-Current slice: v0.1.100 release/runtime QA is complete and the first narrow cleanup mutation now has an explicit named policy gate. The next safety hardening slice is still not broad apply: require `query-preview-cleanup --apply` to emit a rollback manifest and private rollback artifact before clearing eligible legacy query previews.
+Current slice: v0.1.101 release/runtime QA is complete and the first narrow cleanup mutation now has explicit named-policy and rollback-manifest gates. The next safety hardening slice is still not broad apply: run the same cleanup against a disposable database copy before mutating the target DB, and only proceed when the disposable apply check reports the expected eligible/cleared/remaining counts plus a rollback manifest.
 
-Why this is the best next move: v0.1.100 leaves packaging, runtime QA, the 21-task retrieval-eval harness, and the first named-policy mutation gate healthy. The remaining apply-mode risk is recoverability: if an operator clears legacy query-preview rows, output should include a hash-only manifest plus a local private artifact path that can restore exactly the eligible rows. Broader consolidation apply mode remains blocked until explicit policy/action paths prove preview, audit, rollback, and privacy behavior on narrow/disposable evidence.
+Why this is the best next move: v0.1.101 leaves packaging, runtime QA, the 21-task retrieval-eval harness, named policy, rollback manifest, and private rollback artifact healthy. The remaining apply-mode risk is pre-mutation confidence: before touching the live DB, the command should prove the exact operation on a copy and expose hash-only check metadata. Broader consolidation apply mode remains blocked until explicit policy/action paths prove preview, disposable preflight, audit, rollback, and privacy behavior on narrow/disposable evidence.
 
 Recommended local backup commands:
 
 ```bash
-agent-memory backup export /Users/reddit/.agent-memory/memory.db \
-  /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip
+agent-memory backup export /Users/reddit/.agent-memory/memory.db   /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip
 agent-memory backup inspect /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip
-agent-memory backup restore /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip \
-  /Users/reddit/.agent-memory/restored-memory.db
+agent-memory backup restore /Users/reddit/.agent-memory/backups/memory.agent-memory-backup.zip   /Users/reddit/.agent-memory/restored-memory.db
 ```
 
 The backup manifest is metadata-only, but the bundled SQLite database contains local memory state and should be treated as private local data.
@@ -41,9 +39,7 @@ The backup manifest is metadata-only, but the bundled SQLite database contains l
 Recommended local graph command:
 
 ```bash
-agent-memory graph export-html /Users/reddit/.agent-memory/memory.db \
-  --output /Users/reddit/.agent-memory/reports/memory-graph.html \
-  --limit 240
+agent-memory graph export-html /Users/reddit/.agent-memory/memory.db   --output /Users/reddit/.agent-memory/reports/memory-graph.html   --limit 240
 ```
 
 Use `--include-memory-labels` only when intentionally creating a local-only artifact with curated memory labels. Raw source/query/trace text remains excluded.
@@ -57,9 +53,9 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged retrieval-quality PR: #195 `test: add procedure prompt budget fixture`.
-- Latest merged release-sync PR: #207 `chore: release v0.1.100 [skip release]`.
-- Latest completed release: `v0.1.100`.
+- Latest merged retrieval-quality PR: #210 `test: stabilize soft regression advisory assertion`.
+- Latest merged release-sync PR: #211 `chore: release v0.1.101 [skip release]`.
+- Latest completed release: `v0.1.101`.
 
 Expected GitHub identity:
 
@@ -70,26 +66,26 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.100`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.100`
-- npm package: `@cafitac/agent-memory@0.1.100`
-- PyPI package: `cafitac-agent-memory==0.1.100`
+- `v0.1.101`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.101`
+- npm package: `@cafitac/agent-memory@0.1.101`
+- PyPI package: `cafitac-agent-memory==0.1.101`
 
-Latest verified source checkout snapshot, checked 2026-05-07 20:24 KST:
+Latest verified source checkout snapshot, checked 2026-05-07 21:06 KST:
 
-- branch: `main`, synced with `origin/main` before this rollback-manifest branch
-- latest release-sync commit: `chore: release v0.1.100 [skip release]` via PR #207
-- latest G4a hardening merge: PR #206 `feat: require policy for query preview cleanup apply`
-- latest stabilization merge: PR #208 `test: stabilize retrieval eval linux assertions`
+- branch: `main`, synced with `origin/main` before this disposable-gate branch
+- latest release-sync commit: `chore: release v0.1.101 [skip release]` via PR #211
+- latest G4a hardening merges: PR #206 `feat: require policy for query preview cleanup apply`, PR #209 `feat: add query preview cleanup rollback manifest`
+- latest stabilization merge: PR #210 `test: stabilize soft regression advisory assertion`
 - previous G4 contract merge: PR #200 `docs: checkpoint broad g4 apply contract`
 - previous G4 contract stabilization merge: PR #202 `test: stabilize retrieval avoid delta assertion`
 - previous retrieval-quality merge commit: PR #195 `test: add procedure prompt budget fixture`
-- open PRs: none observed before this rollback-manifest branch
-- GitHub Release, npm, and PyPI all report `v0.1.100`
-- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.100"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.100 runtime
-- checked-in retrieval-eval fixtures remain at 21 tasks; local full tests passed at 268 tests after PR #208
-- installed runtime dogfood storage-health and scheduled dry-run remain read-only/non-mutating; broad G4 remains blocked
+- open PRs: none observed before this disposable-gate branch
+- GitHub Release, npm, and PyPI all report `v0.1.101`
+- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.101"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.101 runtime
+- checked-in retrieval-eval fixtures remain at 21 tasks; local full tests passed after PR #210
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview rollback apply smoke, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -107,26 +103,27 @@ Do not delete or commit these unless the user explicitly asks.
 
 
 
-## In-progress G4a rollback hardening slice
+## In-progress G4a disposable-copy hardening slice
 
-Current branch: `g4/query-preview-cleanup-rollback-manifest`.
+Current branch: `g4/query-preview-cleanup-disposable-gate`.
 
 Scope:
 
 - Tighten only `dogfood query-preview-cleanup --apply`.
-- Apply already requires the named policy `legacy-query-preview-cleanup-v1` in addition to `--apply --actor --reason`; this slice adds rollback manifest/artifact output before clearing eligible rows.
+- Apply already requires the named policy `legacy-query-preview-cleanup-v1` in addition to `--apply --actor --reason`; v0.1.101 added rollback manifest/artifact output before clearing eligible rows.
+- This slice adds a disposable DB copy apply check before the target DB mutation.
 - Preview remains read-only and does not require policy.
-- Output/audit metadata includes the policy name, reason hash, audit trace id, hash-only affected-id summary, and rollback manifest metadata.
+- Output/audit metadata includes the policy name, reason hash, audit trace id, hash-only affected-id summary, disposable apply check metadata, and rollback manifest metadata.
 - Invalid or missing policy exits before mutation.
-- Successful apply writes a private local rollback artifact containing the exact eligible `query_preview` values and emits only its path/hash/count in stdout and audit metadata.
+- Successful apply first mutates only a private disposable copy and proceeds on the target DB only if eligible/cleared/remaining counts and rollback manifest expectations match.
 
 Still forbidden after this slice:
 
-- broad G4/background consolidation apply mode;
+- broad G4 consolidation apply mode;
 - ordinary conversation auto-approval;
-- raw transcript, raw prompt, raw query, or query-preview persistence;
-- default retrieval ranking changes;
-- live DB mutation without preview, backup/restore guidance, explicit policy, actor, reason, and audit.
+- raw transcript or raw query text in stdout/audit metadata;
+- default retrieval/ranking behavior changes;
+- live DB mutation without preview, backup/restore guidance, explicit policy, actor, reason, disposable preflight, rollback, and audit.
 
 ## v0.1.100 policy hardening release and runtime QA completed
 
