@@ -166,7 +166,7 @@ Keep collecting scheduled dry-run artifacts while making the next four-step sequ
 
 ## PR G4-plan: Draft background apply-mode contract before implementation
 
-Status: Complete for first narrow cleanup mutations. Broader consolidation apply mode still requires a separate contract before mutating code.
+Status: Complete for first narrow cleanup mutations. The query-preview cleanup path now has a named policy gate and rollback-manifest hardening in progress; broader consolidation apply mode still requires a separate contract before mutating code.
 
 ### Objective
 
@@ -177,12 +177,12 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 - Dry-run remains default.
 - `--apply`, `--actor`, `--reason`, and a named policy are mandatory for future mutation.
 - JSON output distinguishes no-op/dry-run from real mutation.
-- Every mutation path has audit or reviewable operation records.
+- Every mutation path has audit or reviewable operation records plus restore/rollback guidance.
 - Ordinary conversation auto-approval, raw transcript storage, broad LLM extraction, and default retrieval ranking changes remain forbidden.
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, and applied once to the live DB. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened in `v0.1.100` with a named policy gate. Current follow-up adds rollback manifest/artifact output. Broader G4 consolidation apply mode remains planned and blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -190,11 +190,11 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 
 ### Acceptance
 
-- RED tests prove apply cannot run without `--apply --actor --reason`.
+- RED tests prove apply cannot run without `--apply --policy legacy-query-preview-cleanup-v1 --actor --reason`.
 - Dry-run remains read-only.
 - Apply clears only eligible legacy rows older than the cutoff.
 - Raw query preview values are never printed.
-- The command writes audit-safe operation metadata.
+- The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
@@ -265,7 +265,7 @@ Allow controlled application only after dry-run output is trusted and the broade
 - Requires explicit `--apply` or equivalent.
 - Requires an explicit named policy; the first narrow cleanup path uses `--policy legacy-query-preview-cleanup-v1`.
 - Writes audit trail.
-- Docs explain risk and rollback.
+- Docs explain risk and rollback; narrow cleanup apply emits a rollback manifest before mutation.
 - Ordinary conversation auto-approval remains forbidden.
 - Raw transcript storage remains forbidden.
 - Default retrieval ranking changes remain forbidden.
