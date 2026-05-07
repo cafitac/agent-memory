@@ -178,6 +178,7 @@ Required RED tests before implementation:
 12. Default retrieval/Hermes hook behavior remains unchanged.
 13. Apply runs first against a disposable DB copy and proceeds only if count/hash/rollback checks pass.
 14. A restore dry-run command validates rollback artifacts without mutating the DB or printing raw query previews; live restore remains blocked until a separate explicit policy slice.
+15. Rollback artifacts are source-bound with a hashed DB fingerprint; restore dry-run fails closed on source/target DB mismatch.
 
 Required operator safety before live DB apply:
 
@@ -185,7 +186,7 @@ Required operator safety before live DB apply:
 - Export or back up the DB before mutation.
 - Run apply only with explicit policy/actor/reason and disposable-copy preflight.
 - Re-run storage-health and query-preview cleanup preview after mutation.
-- Run restore dry-run against the private rollback artifact before considering any future live restore design.
+- Run restore dry-run against the private rollback artifact before considering any future live restore design; source/target DB fingerprint mismatches must remain blocking read-only errors.
 - Verify non-empty `query_preview` count becomes 0 or the remaining rows are explicitly explained.
 - Keep backup and rollback artifact paths out of git; rollback artifacts may contain private local query-preview values.
 
