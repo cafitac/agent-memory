@@ -1511,7 +1511,7 @@ def _hidden_fact_alternative_map(
 def _conflict_penalty(conflict_count: int) -> float:
     if conflict_count <= 0:
         return 0.0
-    return -0.75 * float(conflict_count)
+    return -0.20 * float(conflict_count)
 
 
 def _parse_timestamp(value: Any) -> datetime | None:

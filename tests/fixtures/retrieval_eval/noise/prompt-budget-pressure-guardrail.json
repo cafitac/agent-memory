@@ -1,0 +1,59 @@
+{
+  "references": {
+    "current_version_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.86"
+    },
+    "stale_version_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.75"
+    },
+    "budget_pressure_release_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1 release notes",
+      "predicate": "budget_pressure_context",
+      "object_ref_or_value": "release candidate checklist noise near v0.1.86"
+    },
+    "budget_pressure_release_checklist_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1 release checklist",
+      "predicate": "budget_pressure_context",
+      "object_ref_or_value": "release notes checklist budget reminder without authoritative version"
+    }
+  },
+  "tasks": [
+    {
+      "id": "project-scope-release-version-budget-pressure",
+      "query": "What is the latest release version for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {
+        "facts": ["current_version_fact"],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact",
+          "budget_pressure_release_fact",
+          "budget_pressure_release_checklist_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Under a tight prompt budget, keep the authoritative same-slot release version above stale and noisy same-scope release notes.",
+      "notes": [
+        "This fixture adds same-scope approved release-note noise rather than cross-scope global noise.",
+        "The limit=1 assertion approximates a tight prompt budget where only the top memory is surfaced."
+      ]
+    }
+  ]
+}
