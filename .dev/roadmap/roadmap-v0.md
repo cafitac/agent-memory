@@ -246,10 +246,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: RED tests prove preview is read-only, apply cannot run without actor/reason, apply only fills `candidate_policy=evidence_only` and `auto_approved=false` for traces that already have `summary=NULL` and `retention_policy=ephemeral`, raw metadata/sample values are never printed, and default retrieval/Hermes hook behavior is unchanged.
   - Status: implemented in PR #145, released in v0.1.78 via PR #146, and applied once to the live DB; 1 legacy ordinary turn row normalized, ordinary metadata-only preview now reports 0 violations, and storage-health is healthy. Follow-up quality-gate stabilization landed before the v0.1.97 runtime QA line.
 
-- [ ] PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
+- [x] PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
   - Goal: define the contract for controlled promotion/snooze/decay actions without adding broad mutation yet.
   - Scope: docs/RED-test-only checkpoint over CLI flags, policy naming, eligible action classes, blocked action classes, preview/apply JSON, audit records, restore/rollback, and live-runtime QA prerequisites.
   - Acceptance: broad apply remains unimplemented; `--apply --actor --reason` plus a named policy are required; ordinary conversation auto-approval remains forbidden; raw transcript storage remains forbidden; default retrieval ranking changes remain forbidden.
+  - Status: complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.98 via PR #201. This checkpoint authorizes only the next disposable-DB-backed explicit policy/action slice, not live broad apply.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
