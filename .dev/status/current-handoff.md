@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-08 12:17 KST
+Last updated: 2026-05-08 12:55 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.109`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, and a blocked audit write dry-run. GitHub Release, npm, and PyPI all report `v0.1.109`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.109/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.109-runtime-qa-20260508T024050`.
+agent-memory is currently verified through `v0.1.110`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, and a blocked audit-write apply contract. GitHub Release, npm, and PyPI all report `v0.1.110`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.110/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.110-runtime-qa-20260508T034840`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only an audit write apply contract inside the already-blocked restore audit write dry-run; it still does not write audit rows or mutate the live DB.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a restore audit-write preflight gate inside the already-blocked audit write apply contract; it still does not write audit rows or mutate the live DB.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: start from `v0.1.109` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-apply-contract`. Add an audit write apply contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run` so any future `experience_traces` write requires its own policy and preserves hash-only metadata before any real audit write or live restore implementation is considered.
+Current slice: start from `v0.1.110` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-preflight-gate`. Add a restore audit-write preflight gate under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract` so any future `experience_traces` audit write must pass source/integrity/rehearsal/hash/duplicate/privacy checks while still returning `write_allowed=false`.
 
-Why this is the best next move: v0.1.109 makes restore audit write dry-run explicit but still write-blocked. The remaining gap before any audit write or live restore is proving the future audit write apply gate: separate audit-write policy, actor/reason hash continuity, insert-preview shape, source/integrity/rehearsal prerequisites, and raw query/reason/sample exclusion. Broad consolidation apply mode remains blocked.
+Why this is the best next move: v0.1.110 makes the audit-write apply contract explicit but still write-blocked. The remaining gap before any audit write or live restore is proving a deterministic preflight gate: exact policy, actor/reason hash continuity, source DB match, artifact integrity, disposable rehearsal, content/metadata hash match, duplicate audit event absence, and raw query/reason/sample exclusion. Broad consolidation apply mode remains blocked.
 
 Recommended local backup commands:
 
@@ -47,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-apply-contract`.
-- Latest merged G4a hardening PR: #227 `feat: add restore audit write dry run`.
-- Latest merged release-sync PR: #228 `chore: release v0.1.109 [skip release]`.
-- Latest completed release: `v0.1.109`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-preflight-gate`.
+- Latest merged G4a hardening PR: #229 `feat: add restore audit write apply contract`.
+- Latest merged release-sync PR: #230 `chore: release v0.1.110 [skip release]`.
+- Latest completed release: `v0.1.110`.
 
 Expected GitHub identity:
 
@@ -61,20 +61,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.109`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.109`
-- npm package: `@cafitac/agent-memory@0.1.109`
-- PyPI package: `cafitac-agent-memory==0.1.109`
+- `v0.1.110`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.110`
+- npm package: `@cafitac/agent-memory@0.1.110`
+- PyPI package: `cafitac-agent-memory==0.1.110`
 
-Latest verified source checkout snapshot, checked 2026-05-08 12:17 KST:
+Latest verified source checkout snapshot, checked 2026-05-08 12:55 KST:
 
 - branch before this slice: `main`, synced with `origin/main`
 - open PRs: none observed before this branch
-- GitHub Release, npm, and PyPI all report `v0.1.109`
-- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.109"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.109 runtime
+- GitHub Release, npm, and PyPI all report `v0.1.110`
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.110"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.110 runtime
 - checked-in retrieval-eval fixtures remain at 21 tasks
-- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write dry-run smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 

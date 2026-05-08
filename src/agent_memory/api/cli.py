@@ -4728,6 +4728,74 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "retention_policy": "review",
             "metadata_json_sha256": audit_metadata_json_sha256,
         }
+        duplicate_audit_event_count = 0
+        with _open_readonly_sqlite(db_path) as connection:
+            if _table_exists(connection, "experience_traces"):
+                duplicate_audit_event_count = connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM experience_traces
+                    WHERE surface = ?
+                      AND event_kind = ?
+                      AND content_sha256 = ?
+                      AND metadata_json = ?
+                    """,
+                    (
+                        audit_insert_preview["surface"],
+                        audit_insert_preview["event_kind"],
+                        audit_insert_preview["content_sha256"],
+                        audit_metadata_json,
+                    ),
+                ).fetchone()[0]
+        audit_write_apply_blocked_reasons = [
+            "audit_write_apply_contract_checkpoint_only",
+            "restore_audit_write_not_implemented",
+            "live_restore_not_implemented",
+        ]
+        audit_write_preflight_checks = {
+            "policy_matches_required": True,
+            "actor_present": bool(actor),
+            "reason_sha256_matches_restore_contract": True,
+            "source_database_match_passed": source_database_matched,
+            "artifact_integrity_passed": artifact_integrity_passed,
+            "disposable_rehearsal_passed": bool(
+                restore_disposable_rehearsal and restore_disposable_rehearsal["status"] == "passed"
+            ),
+            "content_sha256_matches_insert_preview": audit_metadata_json_sha256
+            == audit_insert_preview["content_sha256"],
+            "metadata_json_sha256_matches_insert_preview": audit_metadata_json_sha256
+            == audit_insert_preview["metadata_json_sha256"],
+            "duplicate_audit_event_absent": duplicate_audit_event_count == 0,
+            "raw_query_preview_allowed": False,
+            "raw_reason_allowed": False,
+            "sample_values_allowed": False,
+            "broad_g4_apply_allowed": False,
+        }
+        required_audit_write_preflight_checks = (
+            "policy_matches_required",
+            "actor_present",
+            "reason_sha256_matches_restore_contract",
+            "source_database_match_passed",
+            "artifact_integrity_passed",
+            "disposable_rehearsal_passed",
+            "content_sha256_matches_insert_preview",
+            "metadata_json_sha256_matches_insert_preview",
+            "duplicate_audit_event_absent",
+        )
+        audit_write_preflight_passed = all(
+            audit_write_preflight_checks[key] is True for key in required_audit_write_preflight_checks
+        )
+        audit_write_preflight = {
+            "kind": "query_preview_cleanup_restore_audit_write_preflight",
+            "status": "passed_but_write_blocked" if audit_write_preflight_passed else "failed_blocked",
+            "passed": audit_write_preflight_passed,
+            "write_allowed": False,
+            "duplicate_audit_event_count": duplicate_audit_event_count,
+            "checked_content_sha256": audit_metadata_json_sha256,
+            "checked_metadata_json_sha256": audit_metadata_json_sha256,
+            "checks": audit_write_preflight_checks,
+            "blocked_reasons": audit_write_apply_blocked_reasons,
+        }
         payload["restore_apply_contract"]["audit_preview"] = {
             "kind": "query_preview_cleanup_restore_audit_preview",
             "audit_write_available": False,
@@ -4753,11 +4821,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                     "target_table": "experience_traces",
                     "event_kind": "dogfood_query_preview_cleanup_restore_apply",
                     "retention_policy": "review",
-                    "blocked_reasons": [
-                        "audit_write_apply_contract_checkpoint_only",
-                        "restore_audit_write_not_implemented",
-                        "live_restore_not_implemented",
-                    ],
+                    "blocked_reasons": audit_write_apply_blocked_reasons,
                     "requirements": {
                         "restore_apply_contract_required": True,
                         "source_database_match_required": True,
@@ -4770,6 +4834,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                         "broad_g4_apply_allowed": False,
                     },
                     "insert_preview": audit_insert_preview,
+                    "preflight": audit_write_preflight,
                     "privacy": audit_write_privacy,
                 },
                 "privacy": audit_write_privacy,

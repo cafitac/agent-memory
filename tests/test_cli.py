@@ -1817,6 +1817,30 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "retention_policy": "review",
         "metadata_json_sha256": dry_run["metadata_json_sha256"],
     }
+    preflight = audit_write_apply["preflight"]
+    assert preflight["kind"] == "query_preview_cleanup_restore_audit_write_preflight"
+    assert preflight["status"] == "passed_but_write_blocked"
+    assert preflight["passed"] is True
+    assert preflight["write_allowed"] is False
+    assert preflight["duplicate_audit_event_count"] == 0
+    assert preflight["checked_content_sha256"] == dry_run["content_sha256"]
+    assert preflight["checked_metadata_json_sha256"] == dry_run["metadata_json_sha256"]
+    assert preflight["checks"] == {
+        "policy_matches_required": True,
+        "actor_present": True,
+        "reason_sha256_matches_restore_contract": True,
+        "source_database_match_passed": True,
+        "artifact_integrity_passed": True,
+        "disposable_rehearsal_passed": True,
+        "content_sha256_matches_insert_preview": True,
+        "metadata_json_sha256_matches_insert_preview": True,
+        "duplicate_audit_event_absent": True,
+        "raw_query_preview_allowed": False,
+        "raw_reason_allowed": False,
+        "sample_values_allowed": False,
+        "broad_g4_apply_allowed": False,
+    }
+    assert preflight["blocked_reasons"] == audit_write_apply["blocked_reasons"]
     assert audit_write_apply["privacy"] == {
         "raw_query_preview_included": False,
         "raw_reason_included": False,
