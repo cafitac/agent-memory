@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-09 00:36 KST
+Last updated: 2026-05-09 06:05 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.114`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, a read-only audit-write preflight gate, duplicate/conflict fail-closed reporting, a dry-run audit row materialization contract, and a single-row audit-write policy packet. GitHub Release, npm, and PyPI all report `v0.1.114`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.114/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.114-runtime-qa-20260508T152922`.
+agent-memory is currently verified through `v0.1.115`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, a read-only audit-write preflight gate, duplicate/conflict fail-closed reporting, a dry-run audit row materialization contract, a single-row audit-write policy packet, and an approval-token-missing negative gate. GitHub Release, npm, and PyPI all report `v0.1.115`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.115/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.115-runtime-qa-20260508T155548`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only an approval-token-missing negative gate inside the already-blocked audit write apply contract; it still does not add an approval-token flag, write audit rows, or mutate the live DB.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only an approval-token flag dry-run parser inside the already-blocked audit write apply contract; it hashes any provided token, marks it unvalidated, and still does not validate approval, write audit rows, run live restore, or mutate the live DB.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: start from `v0.1.114` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-approval-token-negative-gate`. Add an approval-token-missing negative gate under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet` so any future `experience_traces` audit write is still blocked unless a separate future approval-token contract is introduced. It must report `approval_token_required=true`, `approval_token_present=false`, `approval_token_sha256=null`, `write_blocked_by_missing_approval=true`, and `restore_audit_write_approval_token_missing` while still returning `would_insert=false` and `write_allowed=false`.
+Current slice: start from `v0.1.115` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-approval-token-parser`. Add an approval-token flag dry-run parser under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet` so a supplied token is accepted only as secret input, represented by `approval_token_sha256`, and still blocked as unvalidated. It must report `approval_token_required=true`, `approval_token_present=true`, `approval_token_validated=false`, `write_blocked_by_missing_approval=false`, `write_blocked_by_unvalidated_approval=true`, and `restore_audit_write_approval_token_unvalidated` while still returning `would_insert=false` and `write_allowed=false`. Without the flag, the v0.1.115 missing-token negative gate remains in force.
 
-Why this is the best next move: v0.1.114 freezes the future audit-write policy packet, but it intentionally has no approval-token flag or token hash. Before any audit row write or live restore, the missing-token fail-closed boundary should be explicit and testable. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best next move: v0.1.115 freezes the missing-token fail-closed boundary. Before any audit row write or live restore, the token-present path should be explicit and testable without raw token output or approval validation. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands:
 
@@ -47,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-approval-token-negative-gate`.
-- Latest merged G4a hardening PR: #238 `feat: add restore audit write policy packet`.
-- Latest merged release-sync PR: #239 `chore: release v0.1.114 [skip release]`.
-- Latest completed release: `v0.1.114`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-approval-token-parser`.
+- Latest merged G4a hardening PR: #240 `feat: add restore audit write approval token gate`.
+- Latest merged release-sync PR: #241 `chore: release v0.1.115 [skip release]`.
+- Latest completed release: `v0.1.115`.
 
 Expected GitHub identity:
 
@@ -61,20 +61,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.114`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.114`
-- npm package: `@cafitac/agent-memory@0.1.114`
-- PyPI package: `cafitac-agent-memory==0.1.114`
+- `v0.1.115`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.115`
+- npm package: `@cafitac/agent-memory@0.1.115`
+- PyPI package: `cafitac-agent-memory==0.1.115`
 
-Latest verified source checkout snapshot, checked 2026-05-09 00:36 KST:
+Latest verified source checkout snapshot, checked 2026-05-09 06:05 KST:
 
 - branch before this slice: `main`, synced with `origin/main`
 - open PRs: none observed before this branch
-- GitHub Release, npm, and PyPI all report `v0.1.114`
-- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.114"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.114 runtime
+- GitHub Release, npm, and PyPI all report `v0.1.115`
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.115"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.115 runtime
 - checked-in retrieval-eval fixtures remain at 21 tasks
-- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight+fail-closed+row-materialization+policy-packet smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight+fail-closed+row-materialization+policy-packet+approval-token-missing-gate smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 
