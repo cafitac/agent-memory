@@ -1769,6 +1769,19 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "restored_ids_sha256",
         "restored_count",
     }
+    dry_run = audit["write_dry_run"]
+    assert dry_run["kind"] == "query_preview_cleanup_restore_audit_write_dry_run"
+    assert dry_run["status"] == "blocked"
+    assert dry_run["would_insert"] is False
+    assert dry_run["target_table"] == "experience_traces"
+    assert dry_run["event_kind"] == "dogfood_query_preview_cleanup_restore_apply"
+    assert dry_run["retention_policy"] == "review"
+    assert dry_run["content_sha256"]
+    assert dry_run["metadata_json_sha256"]
+    assert dry_run["metadata_json_preview"] == audit["fields"]
+    assert dry_run["privacy"]["raw_query_preview_included"] is False
+    assert dry_run["privacy"]["raw_reason_included"] is False
+    assert dry_run["privacy"]["sample_values_included"] is False
     assert "restore_apply_contract_checkpoint_only" in payload["blocked_reasons"]
     assert "restore_audit_write_not_implemented" in payload["blocked_reasons"]
     assert "live_restore_not_implemented" in payload["blocked_reasons"]

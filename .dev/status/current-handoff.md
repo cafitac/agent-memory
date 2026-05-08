@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-08 10:49 KST
+Last updated: 2026-05-08 11:17 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.107`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, and disposable restore rehearsal. GitHub Release, npm, and PyPI all report `v0.1.107`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.107/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.106-runtime-qa-20260507T171432`.
+agent-memory is currently verified through `v0.1.108`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, and aggregate-only restore audit preview. GitHub Release, npm, and PyPI all report `v0.1.108`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.108/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.108-runtime-qa-20260508T021003`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only an aggregate restore audit preview contract to the already-blocked restore apply contract; it still does not write audit rows or mutate the live DB.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a restore audit write dry-run shape to the already-blocked restore apply contract; it still does not write audit rows or mutate the live DB.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: start from `v0.1.106` validated `main` on branch `g4/query-preview-cleanup-restore-disposable-rehearsal`. Add a disposable-copy restore rehearsal inside `dogfood query-preview-cleanup-restore --apply` so the future restore path proves it can restore expected rows on a private DB copy before any live restore implementation is considered.
+Current slice: start from `v0.1.108` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-dry-run`. Add a restore audit write dry-run shape inside `dogfood query-preview-cleanup-restore --apply` so the future audit row serialization is locked to aggregate/hash-only fields before any real audit write or live restore implementation is considered.
 
-Why this is the best next move: v0.1.106 makes restore apply explicit but contract-only. The remaining gap before even discussing live restore is proving the restore operation itself on an isolated copy: source and artifact integrity must pass, the disposable copy may temporarily contain private query previews, expected restored count must match, post-restore rows must no longer be empty, stdout must remain aggregate/hash-only, and the live DB must remain unchanged. Broad consolidation apply mode remains blocked.
+Why this is the best next move: v0.1.108 makes restore audit preview explicit but still write-blocked. The remaining gap before any audit write or live restore is proving the exact audit-row serialization shape: policy/actor/reason hash/artifact hash/source fingerprint/rehearsal status/restored ids hash/count only, with raw query previews and raw reasons excluded. Broad consolidation apply mode remains blocked.
 
 Recommended local backup commands:
 
@@ -47,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-contract`.
-- Latest merged G4a hardening PR: #223 `feat: rehearse query preview restore on disposable copy`.
-- Latest merged release-sync PR: #224 `chore: release v0.1.107 [skip release]`.
-- Latest completed release: `v0.1.107`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-dry-run`.
+- Latest merged G4a hardening PR: #225 `feat: add query preview restore audit contract`.
+- Latest merged release-sync PR: #226 `chore: release v0.1.108 [skip release]`.
+- Latest completed release: `v0.1.108`.
 
 Expected GitHub identity:
 
@@ -71,8 +71,8 @@ Latest verified source checkout snapshot, checked 2026-05-08 10:10 KST:
 - branch before this slice: `main`, synced with `origin/main`
 - open PRs: none observed before this branch
 - GitHub Release, npm, and PyPI all report `v0.1.106`
-- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.106"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.107 runtime
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.108"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.108 runtime
 - checked-in retrieval-eval fixtures remain at 21 tasks
 - installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
