@@ -4697,21 +4697,40 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "rollback_artifact_private_required": True,
             "broad_g4_apply_allowed": False,
         }
+        audit_preview_fields = {
+            "policy": restore_policy,
+            "actor": actor,
+            "reason_sha256": payload["restore_apply_contract"]["reason_sha256"],
+            "artifact_sha256": artifact_sha256,
+            "source_database_fingerprint_sha256": target_source_database["fingerprint_sha256"],
+            "source_database_match": source_database_matched,
+            "artifact_integrity_passed": artifact_integrity_passed,
+            "rehearsal_status": restore_disposable_rehearsal["status"] if restore_disposable_rehearsal else None,
+            "restored_ids_sha256": _query_preview_cleanup_ids_sha256(restorable_ids),
+            "restored_count": restorable_count,
+        }
+        audit_metadata_json = json.dumps(audit_preview_fields, sort_keys=True)
+        audit_metadata_json_sha256 = hashlib.sha256(audit_metadata_json.encode()).hexdigest()
         payload["restore_apply_contract"]["audit_preview"] = {
             "kind": "query_preview_cleanup_restore_audit_preview",
             "audit_write_available": False,
             "audit_row_would_be_written": False,
-            "fields": {
-                "policy": restore_policy,
-                "actor": actor,
-                "reason_sha256": payload["restore_apply_contract"]["reason_sha256"],
-                "artifact_sha256": artifact_sha256,
-                "source_database_fingerprint_sha256": target_source_database["fingerprint_sha256"],
-                "source_database_match": source_database_matched,
-                "artifact_integrity_passed": artifact_integrity_passed,
-                "rehearsal_status": restore_disposable_rehearsal["status"] if restore_disposable_rehearsal else None,
-                "restored_ids_sha256": _query_preview_cleanup_ids_sha256(restorable_ids),
-                "restored_count": restorable_count,
+            "fields": audit_preview_fields,
+            "write_dry_run": {
+                "kind": "query_preview_cleanup_restore_audit_write_dry_run",
+                "status": "blocked",
+                "would_insert": False,
+                "target_table": "experience_traces",
+                "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+                "retention_policy": "review",
+                "content_sha256": audit_metadata_json_sha256,
+                "metadata_json_sha256": audit_metadata_json_sha256,
+                "metadata_json_preview": audit_preview_fields,
+                "privacy": {
+                    "raw_query_preview_included": False,
+                    "raw_reason_included": False,
+                    "sample_values_included": False,
+                },
             },
             "privacy": {
                 "raw_query_preview_allowed": False,
