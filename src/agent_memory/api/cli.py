@@ -4427,6 +4427,10 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     actor = getattr(args, "actor", None)
     reason = getattr(args, "reason", None)
     restore_policy = getattr(args, "restore_policy", None)
+    approval_token = getattr(args, "approval_token", None)
+    approval_token_present = bool(approval_token)
+    approval_token_sha256 = hashlib.sha256(approval_token.encode()).hexdigest() if approval_token_present else None
+    approval_token_validated = False
     if not dry_run and not apply_restore:
         raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run or --apply")
     if apply_restore and restore_policy != QUERY_PREVIEW_CLEANUP_RESTORE_POLICY:
@@ -4865,15 +4869,20 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "conflict_policy": audit_write_conflict_policy,
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
-        audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
+        if approval_token_present:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_unvalidated")
+        else:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
         audit_write_single_row_apply_policy_packet = {
             "kind": "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet",
             "status": "approval_required_write_blocked",
             "requires_explicit_operator_approval": True,
             "approval_token_required": True,
-            "approval_token_present": False,
-            "approval_token_sha256": None,
-            "write_blocked_by_missing_approval": True,
+            "approval_token_present": approval_token_present,
+            "approval_token_sha256": approval_token_sha256,
+            "approval_token_validated": approval_token_validated,
+            "write_blocked_by_missing_approval": not approval_token_present,
+            "write_blocked_by_unvalidated_approval": approval_token_present and not approval_token_validated,
             "would_insert": False,
             "write_allowed": False,
             "expected_insert_count": 1,
@@ -6348,6 +6357,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_restore_parser.add_argument("--policy", dest="restore_policy")
     dogfood_query_preview_cleanup_restore_parser.add_argument("--actor")
     dogfood_query_preview_cleanup_restore_parser.add_argument("--reason")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--approval-token")
     dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(
         "ordinary-trace-metadata-cleanup",
         help="Preview/apply raw-content-safe normalization for legacy ordinary turn trace metadata defaults.",
