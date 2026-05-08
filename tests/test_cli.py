@@ -1897,6 +1897,33 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "privacy_leak_risk": "fail_closed",
     }
     assert preflight["blocked_reasons"] == audit_write_apply["blocked_reasons"]
+    approval_packet = audit_write_apply["single_row_apply_policy_packet"]
+    assert approval_packet["kind"] == "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet"
+    assert approval_packet["status"] == "approval_required_write_blocked"
+    assert approval_packet["requires_explicit_operator_approval"] is True
+    assert approval_packet["would_insert"] is False
+    assert approval_packet["write_allowed"] is False
+    assert approval_packet["expected_insert_count"] == 1
+    assert approval_packet["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
+    assert approval_packet["actor"] == "cli-test"
+    assert approval_packet["reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
+    assert approval_packet["source_database_fingerprint_sha256"] == payload["source_database_match"]["target_fingerprint_sha256"]
+    assert approval_packet["artifact_sha256"] == payload["artifact"]["artifact_sha256"]
+    assert approval_packet["rehearsal_status"] == "passed"
+    assert approval_packet["preflight_passed"] is True
+    assert approval_packet["duplicate_audit_event_count"] == 0
+    assert approval_packet["row_materialization_sha256"] == row_materialization["metadata_json_sha256"]
+    assert approval_packet["row_schema_version"] == row_materialization["schema_version"]
+    assert approval_packet["rollback"] == {
+        "undo_requires_manual_audit_trace_review": True,
+        "live_restore_enabled": False,
+        "audit_row_delete_enabled": False,
+    }
+    assert approval_packet["privacy"] == {
+        "raw_query_preview_included": False,
+        "raw_reason_included": False,
+        "sample_values_included": False,
+    }
     assert audit_write_apply["privacy"] == {
         "raw_query_preview_included": False,
         "raw_reason_included": False,

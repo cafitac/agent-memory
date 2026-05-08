@@ -4865,6 +4865,30 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "conflict_policy": audit_write_conflict_policy,
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
+        audit_write_single_row_apply_policy_packet = {
+            "kind": "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet",
+            "status": "approval_required_write_blocked",
+            "requires_explicit_operator_approval": True,
+            "would_insert": False,
+            "write_allowed": False,
+            "expected_insert_count": 1,
+            "required_policy": "legacy-query-preview-cleanup-restore-audit-write-v1",
+            "actor": actor,
+            "reason_sha256": payload["restore_apply_contract"]["reason_sha256"],
+            "source_database_fingerprint_sha256": target_source_database["fingerprint_sha256"],
+            "artifact_sha256": artifact_sha256,
+            "rehearsal_status": restore_disposable_rehearsal["status"] if restore_disposable_rehearsal else None,
+            "preflight_passed": audit_write_preflight_passed,
+            "duplicate_audit_event_count": duplicate_audit_event_count,
+            "row_materialization_sha256": audit_row_materialization["metadata_json_sha256"],
+            "row_schema_version": audit_row_materialization["schema_version"],
+            "rollback": {
+                "undo_requires_manual_audit_trace_review": True,
+                "live_restore_enabled": False,
+                "audit_row_delete_enabled": False,
+            },
+            "privacy": audit_write_privacy,
+        }
         payload["restore_apply_contract"]["audit_preview"] = {
             "kind": "query_preview_cleanup_restore_audit_preview",
             "audit_write_available": False,
@@ -4905,6 +4929,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                     },
                     "insert_preview": audit_insert_preview,
                     "preflight": audit_write_preflight,
+                    "single_row_apply_policy_packet": audit_write_single_row_apply_policy_packet,
                     "privacy": audit_write_privacy,
                 },
                 "privacy": audit_write_privacy,
