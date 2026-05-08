@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.104` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, and source DB binding. Current follow-up makes restore dry-run fail closed on artifact integrity problems such as wrong policy, invalid operation, row-count mismatch, duplicate row ids, or missing source fingerprint; live restore and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.109` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, source DB binding, artifact integrity, blocked restore apply contract, disposable restore rehearsal, aggregate audit preview, and audit write dry-run. Current follow-up adds only a blocked audit-write apply contract; live restore, audit row writes, and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
 
 ### Objective
 
@@ -197,7 +197,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
 - A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch and artifact integrity failures are blocking; live restore remains unavailable.
-- Restore apply intent is contract-only: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, an aggregate restore audit preview, and a blocked audit write dry-run while returning `mutated=false` and `restore_apply_available=false`.
+- Restore apply intent is contract-only: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, an aggregate restore audit preview, a blocked audit write dry-run, and a blocked audit-write apply contract requiring `legacy-query-preview-cleanup-restore-audit-write-v1` while returning `mutated=false`, `restore_apply_available=false`, and `would_insert=false`.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
