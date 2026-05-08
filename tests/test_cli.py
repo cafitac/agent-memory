@@ -1795,7 +1795,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "audit_write_apply_contract_checkpoint_only",
         "restore_audit_write_not_implemented",
         "live_restore_not_implemented",
-        "restore_audit_write_approval_token_unvalidated",
+        "restore_audit_write_approval_token_invalid",
     ]
     assert audit_write_apply["requirements"] == {
         "restore_apply_contract_required": True,
@@ -1910,13 +1910,15 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         b"approval-token-secret-SHOULD_NOT_LEAK"
     ).hexdigest()
     assert approval_packet["approval_token_validated"] is False
+    assert approval_packet["approval_token_validation_status"] == "invalid_or_unverified"
     assert approval_packet["write_blocked_by_missing_approval"] is False
     assert approval_packet["write_blocked_by_unvalidated_approval"] is True
+    assert approval_packet["write_blocked_by_invalid_approval"] is True
     assert approval_packet["would_insert"] is False
     assert approval_packet["write_allowed"] is False
     assert approval_packet["expected_insert_count"] == 1
-    assert "restore_audit_write_approval_token_unvalidated" in audit_write_apply["blocked_reasons"]
-    assert "restore_audit_write_approval_token_unvalidated" in approval_packet["blocked_reasons"]
+    assert "restore_audit_write_approval_token_invalid" in audit_write_apply["blocked_reasons"]
+    assert "restore_audit_write_approval_token_invalid" in approval_packet["blocked_reasons"]
     assert approval_packet["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
     assert approval_packet["actor"] == "cli-test"
     assert approval_packet["reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
