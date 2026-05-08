@@ -1743,7 +1743,34 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert rehearsal["post_restore_still_empty_count"] == 0
     assert rehearsal["privacy"]["raw_query_preview_included_in_output"] is False
     assert rehearsal["privacy"]["disposable_copy_contains_private_query_preview"] is True
+    audit = payload["restore_apply_contract"]["audit_preview"]
+    assert audit["kind"] == "query_preview_cleanup_restore_audit_preview"
+    assert audit["audit_write_available"] is False
+    assert audit["audit_row_would_be_written"] is False
+    assert audit["privacy"]["raw_query_preview_allowed"] is False
+    assert audit["privacy"]["raw_reason_allowed"] is False
+    assert audit["fields"]["policy"] == "legacy-query-preview-cleanup-restore-v1"
+    assert audit["fields"]["actor"] == "cli-test"
+    assert audit["fields"]["reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
+    assert audit["fields"]["artifact_sha256"] == payload["artifact"]["artifact_sha256"]
+    assert audit["fields"]["source_database_fingerprint_sha256"] == payload["source_database_match"]["target_fingerprint_sha256"]
+    assert audit["fields"]["rehearsal_status"] == "passed"
+    assert audit["fields"]["restored_ids_sha256"] == payload["artifact"]["eligible_ids_sha256"]
+    assert audit["fields"]["restored_count"] == 1
+    assert set(audit["fields"]) == {
+        "policy",
+        "actor",
+        "reason_sha256",
+        "artifact_sha256",
+        "source_database_fingerprint_sha256",
+        "source_database_match",
+        "artifact_integrity_passed",
+        "rehearsal_status",
+        "restored_ids_sha256",
+        "restored_count",
+    }
     assert "restore_apply_contract_checkpoint_only" in payload["blocked_reasons"]
+    assert "restore_audit_write_not_implemented" in payload["blocked_reasons"]
     assert "live_restore_not_implemented" in payload["blocked_reasons"]
     assert "SHOULD_NOT_LEAK" not in restore_apply_result.stdout
     assert "token=" not in restore_apply_result.stdout
