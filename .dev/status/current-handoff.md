@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-08 01:52 KST
+Last updated: 2026-05-08 10:10 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.104`: PR #206 tightened the first narrow G4a cleanup mutation so `dogfood query-preview-cleanup --apply` requires the named policy `legacy-query-preview-cleanup-v1`; PR #209 added rollback-manifest/private-artifact output; PR #212 added a disposable-copy preflight gate before target DB mutation; PR #214 added read-only restore dry-run validation for rollback artifacts; PR #216 source-bound rollback artifacts with a hashed DB fingerprint; PR #218 stabilized the Linux/SQLite retrieval-eval comparator advisory; release-sync PR #217 published `v0.1.104`. GitHub Release, npm, and PyPI all report `v0.1.104`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.104/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.104-runtime-qa-20260507T160731`. Checked-in retrieval-eval coverage remains 21 tasks.
+agent-memory is currently verified through `v0.1.106`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, and a blocked restore apply contract checkpoint. GitHub Release, npm, and PyPI all report `v0.1.106`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.106/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.106-runtime-qa-20260507T171432`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, ordinary metadata-only violations are normalized, graph exports stay local/read-only/redacted by default, and broad G4 consolidation apply mode remains blocked. The latest installed-runtime dogfood snapshot reports `storage-health` read-only/non-mutating; scheduled dry-run remains read-only and recommends continuing dogfood evidence before broad G4 mutation rather than enabling broad apply mode.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a disposable restore rehearsal to the already-blocked restore apply contract; it still does not mutate the live DB.
+
+Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: v0.1.104 release/runtime QA is complete and the first narrow cleanup mutation now has explicit named-policy, rollback-manifest, disposable-copy preflight, restore dry-run, and source DB binding gates. The next safety hardening slice is still not broad apply or live restore: make restore dry-run fail closed on malformed/tampered rollback artifacts such as wrong policy, invalid operation, declared row-count mismatch, duplicate row ids, or missing source fingerprint, without printing raw query previews or mutating any DB.
+Current slice: start from `v0.1.106` validated `main` on branch `g4/query-preview-cleanup-restore-disposable-rehearsal`. Add a disposable-copy restore rehearsal inside `dogfood query-preview-cleanup-restore --apply` so the future restore path proves it can restore expected rows on a private DB copy before any live restore implementation is considered.
 
-Why this is the best next move: v0.1.104 leaves packaging, runtime QA, the 21-task retrieval-eval harness, named policy, rollback manifest, private rollback artifact, disposable preflight, restore dry-run, and source binding healthy. The remaining rollback risk is accepting a syntactically valid but semantically tampered artifact: before any future restore apply exists, restore dry-run should report artifact integrity failures as blocking read-only errors. Broader consolidation apply mode remains blocked until explicit policy/action paths prove preview, disposable preflight, audit, rollback, dry-run restore, source binding, artifact integrity, and privacy behavior on narrow/disposable evidence.
+Why this is the best next move: v0.1.106 makes restore apply explicit but contract-only. The remaining gap before even discussing live restore is proving the restore operation itself on an isolated copy: source and artifact integrity must pass, the disposable copy may temporarily contain private query previews, expected restored count must match, post-restore rows must no longer be empty, stdout must remain aggregate/hash-only, and the live DB must remain unchanged. Broad consolidation apply mode remains blocked.
 
 Recommended local backup commands:
 
@@ -36,14 +38,6 @@ agent-memory backup restore /Users/reddit/.agent-memory/backups/memory.agent-mem
 
 The backup manifest is metadata-only, but the bundled SQLite database contains local memory state and should be treated as private local data.
 
-Recommended local graph command:
-
-```bash
-agent-memory graph export-html /Users/reddit/.agent-memory/memory.db   --output /Users/reddit/.agent-memory/reports/memory-graph.html   --limit 240
-```
-
-Use `--include-memory-labels` only when intentionally creating a local-only artifact with curated memory labels. Raw source/query/trace text remains excluded.
-
 ## Current repo state
 
 Canonical repo path:
@@ -53,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged retrieval-quality PR: #210 `test: stabilize soft regression advisory assertion`.
-- Latest merged G4a hardening PR: #216 `feat: source-bind query preview cleanup restore dry run`.
-- Latest merged release-sync PR: #217 `chore: release v0.1.104 [skip release]`.
-- Latest completed release: `v0.1.104`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-disposable-rehearsal`.
+- Latest merged G4a hardening PR: #221 `feat: add restore apply contract checkpoint`.
+- Latest merged release-sync PR: #222 `chore: release v0.1.106 [skip release]`.
+- Latest completed release: `v0.1.106`.
 
 Expected GitHub identity:
 
@@ -67,26 +61,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.104`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.104`
-- npm package: `@cafitac/agent-memory@0.1.104`
-- PyPI package: `cafitac-agent-memory==0.1.104`
+- `v0.1.106`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.106`
+- npm package: `@cafitac/agent-memory@0.1.106`
+- PyPI package: `cafitac-agent-memory==0.1.106`
 
-Latest verified source checkout snapshot, checked 2026-05-08 01:19 KST:
+Latest verified source checkout snapshot, checked 2026-05-08 10:10 KST:
 
-- branch: `main`, synced with `origin/main` before this restore-dry-run branch
-- latest release-sync commit: `chore: release v0.1.104 [skip release]` via PR #217
-- latest G4a hardening merges: PR #206 `feat: require policy for query preview cleanup apply`, PR #209 `feat: add query preview cleanup rollback manifest`, PR #212 `feat: preflight query preview cleanup apply on disposable copy`, PR #214 `feat: add query preview cleanup restore dry run`, PR #216 `feat: source-bind query preview cleanup restore dry run`
-- latest stabilization merges: PR #210 `test: stabilize soft regression advisory assertion`, PR #218 `test: stabilize comparator avoid delta assertion`
-- previous G4 contract merge: PR #200 `docs: checkpoint broad g4 apply contract`
-- previous G4 contract stabilization merge: PR #202 `test: stabilize retrieval avoid delta assertion`
-- previous retrieval-quality merge commit: PR #195 `test: add procedure prompt budget fixture`
-- open PRs: none observed before this restore-dry-run branch
-- GitHub Release, npm, and PyPI all report `v0.1.104`
-- published-install QA passed from fresh PyPI venv and npm smoke; `agent_memory.__version__ == "0.1.104"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.104 runtime
-- checked-in retrieval-eval fixtures remain at 21 tasks; local full tests passed after PR #210
-- installed runtime dogfood storage-health, scheduled dry-run, query-preview disposable-gated apply smoke, restore dry-run/source-binding smoke, and hook smoke passed; broad G4 remains blocked
+- branch before this slice: `main`, synced with `origin/main`
+- open PRs: none observed before this branch
+- GitHub Release, npm, and PyPI all report `v0.1.106`
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.106"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.106 runtime
+- checked-in retrieval-eval fixtures remain at 21 tasks
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 
@@ -98,85 +86,17 @@ Expected local untracked artifacts to preserve in the root checkout:
 
 Do not delete or commit these unless the user explicitly asks.
 
+## In-progress G4a restore disposable-rehearsal slice
 
-
-
-
-
-
-## In-progress G4a disposable-copy hardening slice
-
-Current branch: `g4/query-preview-cleanup-disposable-gate`.
-
-Scope:
-
-- Tighten only `dogfood query-preview-cleanup --apply`.
-- Apply already requires the named policy `legacy-query-preview-cleanup-v1` in addition to `--apply --actor --reason`; v0.1.101 added rollback manifest/artifact output before clearing eligible rows.
-- This slice adds a disposable DB copy apply check before the target DB mutation.
-- Preview remains read-only and does not require policy.
-- Output/audit metadata includes the policy name, reason hash, audit trace id, hash-only affected-id summary, disposable apply check metadata, and rollback manifest metadata.
-- Invalid or missing policy exits before mutation.
-- Successful apply first mutates only a private disposable copy and proceeds on the target DB only if eligible/cleared/remaining counts and rollback manifest expectations match.
-
-Still forbidden after this slice:
-
-- broad G4 consolidation apply mode;
-- ordinary conversation auto-approval;
-- raw transcript or raw query text in stdout/audit metadata;
-- default retrieval/ranking behavior changes;
-- live DB mutation without preview, backup/restore guidance, explicit policy, actor, reason, disposable preflight, rollback, and audit.
-
-## In-progress G4a restore dry-run source-binding hardening slice
-
-Current branch: `g4/query-preview-cleanup-restore-fingerprint`.
-
-Scope:
-
-- Add source DB fingerprint metadata to rollback artifacts/manifests created by `dogfood query-preview-cleanup --apply`.
-- Keep `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run` read-only, but fail closed with `source_database_mismatch` when the target DB fingerprint differs from the artifact fingerprint.
-- Output only aggregate counts/hash/path-basename metadata: artifact row count, artifact sha256, eligible ids sha256, source fingerprint match status, target rows found, restorable rows, already-populated rows, and missing rows.
-- Keep live restore unavailable (`restore_apply_available=false`, `live_restore_not_implemented`) until a separate explicit policy/apply slice exists.
-- Rollback artifacts remain private/local because they contain raw `query_preview` values; stdout/audit/docs must not print those values.
-
-Still forbidden after this slice:
-
-- broad G4 apply mode;
-- ordinary conversation auto-approval;
-- raw transcript or raw query text in stdout/audit metadata;
-- default retrieval/ranking behavior changes;
-- live restore/apply without a separate RED-tested policy/actor/reason/audit/disposable path.
-
-## In-progress G4a restore artifact-integrity hardening slice
-
-Current branch: `g4/query-preview-cleanup-restore-artifact-integrity`.
-
-Scope:
-
-- Keep `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run` read-only and non-mutating.
-- Add operator-facing integrity checks for wrong policy, invalid operation, declared row-count mismatch, duplicate row ids, and missing/mismatched source fingerprint.
-- Fail closed with structured JSON `status=error`, aggregate counts, and blocked reasons rather than accepting tampered artifacts.
-- Do not print raw `query_preview`, token, API-key-like strings, or raw reason text.
-- Keep live restore unavailable (`restore_apply_available=false`, `live_restore_not_implemented`) until a separate explicit policy/apply slice exists.
-
-Still forbidden after this slice:
-
-- broad G4 apply mode;
-- ordinary conversation auto-approval;
-- raw transcript or raw query text in stdout/audit metadata;
-- default retrieval/ranking behavior changes;
-- live restore/apply without a separate RED-tested policy/actor/reason/audit/disposable path.
-
-## In-progress G4a restore apply-contract checkpoint slice
-
-Status: Started from `v0.1.105` validated `main` on branch `g4/query-preview-cleanup-restore-apply-contract`. This slice adds only a blocked contract checkpoint for restore apply. It does not restore any query previews and does not open broad G4 apply.
+Status: Started from `v0.1.106` validated `main` on branch `g4/query-preview-cleanup-restore-disposable-rehearsal`. This slice adds only a disposable DB copy rehearsal for restore apply. It does not restore query previews in the target DB and does not open broad G4 apply.
 
 Target contract:
 
-- `dogfood query-preview-cleanup-restore <db> <artifact> --apply` requires `--policy legacy-query-preview-cleanup-restore-v1`, `--actor`, and `--reason`.
+- `dogfood query-preview-cleanup-restore <db> <artifact> --apply` still requires `--policy legacy-query-preview-cleanup-restore-v1`, `--actor`, and `--reason`.
 - Raw reason text is never printed or stored; only `reason_sha256` appears in the contract payload.
-- The command returns structured JSON with `read_only=true`, `mutated=false`, `status=error`, `restore_apply_available=false`, and blocked reasons including `restore_apply_contract_checkpoint_only` and `live_restore_not_implemented`.
-- Source DB match and artifact integrity remain required before any candidate rows are even counted as restorable.
-- Future live restore remains blocked until a separate disposable-restore rehearsal/audit slice exists.
+- Source DB match and artifact integrity must pass before rehearsal runs.
+- Rehearsal copies the target DB to a private disposable DB, restores only the rows that are currently empty there, verifies expected restored count and post-restore non-empty state, and reports aggregate counts only.
+- The command still returns `read_only=true`, `mutated=false`, `status=error`, `restore_apply_available=false`, and blocked reasons including `restore_apply_contract_checkpoint_only` and `live_restore_not_implemented`.
 - No raw `query_preview`, token, API-key-like values, or sample row values may appear in stdout.
 
 Still forbidden after this slice:
