@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-08 23:03 KST
+Last updated: 2026-05-08 23:30 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.111`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, and a read-only audit-write preflight gate. GitHub Release, npm, and PyPI all report `v0.1.111`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.111/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.111-runtime-qa-20260508T044144`.
+agent-memory is currently verified through `v0.1.112`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, a read-only audit-write preflight gate, and duplicate/conflict fail-closed reporting. GitHub Release, npm, and PyPI all report `v0.1.112`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.112/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.112-runtime-qa-20260508T142335`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a duplicate/conflict fail-closed contract inside the already-blocked audit write preflight gate; it still does not write audit rows or mutate the live DB.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a dry-run `experience_traces` row materialization contract inside the already-blocked audit write dry-run; it still does not write audit rows or mutate the live DB.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: start from `v0.1.111` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-fail-closed-contract`. Add a duplicate/conflict fail-closed contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.preflight` so any future `experience_traces` audit write must fail closed on duplicate audit events, content/metadata hash mismatch, source DB mismatch, artifact integrity failure, disposable rehearsal failure, or privacy leak risk while still returning `write_allowed=false`.
+Current slice: start from `v0.1.112` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-row-materialization`. Add a dry-run row materialization contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run` so any future `experience_traces` audit write has a machine-checkable final row shape before writes are considered. It must report schema version, target table, ordered columns, canonical JSON/stringified values, duplicate key, metadata/content hashes, and privacy flags while still returning `would_insert=false` and `write_allowed=false`.
 
-Why this is the best next move: v0.1.111 makes the deterministic audit-write preflight gate explicit but still write-blocked. The remaining gap before any audit write or live restore is proving negative paths are machine-checkable and fail closed: duplicate audit event absence, source/integrity/rehearsal/hash checks, and raw query/reason/sample exclusion must all block writes when violated. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best next move: v0.1.112 proves the preflight gate fails closed on duplicate/conflict conditions, but the final insert row is still only represented by `insert_preview` hashes. Before any audit row write or live restore, the exact DB row materialization should be locked in dry-run form with canonical JSON and no raw query/reason/sample output. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands:
 
@@ -47,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-fail-closed-contract`.
-- Latest merged G4a hardening PR: #232 `feat: add restore audit write preflight gate`.
-- Latest merged release-sync PR: #233 `chore: release v0.1.111 [skip release]`.
-- Latest completed release: `v0.1.111`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-row-materialization`.
+- Latest merged G4a hardening PR: #234 `feat: add restore audit write fail-closed contract`.
+- Latest merged release-sync PR: #235 `chore: release v0.1.112 [skip release]`.
+- Latest completed release: `v0.1.112`.
 
 Expected GitHub identity:
 
@@ -61,20 +61,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.111`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.111`
-- npm package: `@cafitac/agent-memory@0.1.111`
-- PyPI package: `cafitac-agent-memory==0.1.111`
+- `v0.1.112`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.112`
+- npm package: `@cafitac/agent-memory@0.1.112`
+- PyPI package: `cafitac-agent-memory==0.1.112`
 
-Latest verified source checkout snapshot, checked 2026-05-08 23:03 KST:
+Latest verified source checkout snapshot, checked 2026-05-08 23:30 KST:
 
 - branch before this slice: `main`, synced with `origin/main`
 - open PRs: none observed before this branch
-- GitHub Release, npm, and PyPI all report `v0.1.111`
-- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.111"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.111 runtime
+- GitHub Release, npm, and PyPI all report `v0.1.112`
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.112"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.112 runtime
 - checked-in retrieval-eval fixtures remain at 21 tasks
-- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight+fail-closed smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 
