@@ -4865,10 +4865,15 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "conflict_policy": audit_write_conflict_policy,
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
+        audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
         audit_write_single_row_apply_policy_packet = {
             "kind": "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet",
             "status": "approval_required_write_blocked",
             "requires_explicit_operator_approval": True,
+            "approval_token_required": True,
+            "approval_token_present": False,
+            "approval_token_sha256": None,
+            "write_blocked_by_missing_approval": True,
             "would_insert": False,
             "write_allowed": False,
             "expected_insert_count": 1,
@@ -4882,6 +4887,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "duplicate_audit_event_count": duplicate_audit_event_count,
             "row_materialization_sha256": audit_row_materialization["metadata_json_sha256"],
             "row_schema_version": audit_row_materialization["schema_version"],
+            "blocked_reasons": audit_write_apply_blocked_reasons,
             "rollback": {
                 "undo_requires_manual_audit_trace_review": True,
                 "live_restore_enabled": False,
