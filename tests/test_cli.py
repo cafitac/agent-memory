@@ -1779,6 +1779,49 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert dry_run["content_sha256"]
     assert dry_run["metadata_json_sha256"]
     assert dry_run["metadata_json_preview"] == audit["fields"]
+    audit_write_apply = dry_run["apply_contract"]
+    assert audit_write_apply["kind"] == "query_preview_cleanup_restore_audit_write_apply_contract"
+    assert audit_write_apply["audit_write_apply_available"] is False
+    assert audit_write_apply["would_insert"] is False
+    assert audit_write_apply["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
+    assert audit_write_apply["required_actor"] == "cli-test"
+    assert audit_write_apply["required_reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
+    assert audit_write_apply["target_table"] == "experience_traces"
+    assert audit_write_apply["event_kind"] == "dogfood_query_preview_cleanup_restore_apply"
+    assert audit_write_apply["retention_policy"] == "review"
+    assert audit_write_apply["blocked_reasons"] == [
+        "audit_write_apply_contract_checkpoint_only",
+        "restore_audit_write_not_implemented",
+        "live_restore_not_implemented",
+    ]
+    assert audit_write_apply["requirements"] == {
+        "restore_apply_contract_required": True,
+        "source_database_match_required": True,
+        "artifact_integrity_required": True,
+        "disposable_restore_rehearsal_required": True,
+        "audit_metadata_json_sha256_required": True,
+        "raw_query_preview_allowed": False,
+        "raw_reason_allowed": False,
+        "sample_values_allowed": False,
+        "broad_g4_apply_allowed": False,
+    }
+    assert audit_write_apply["insert_preview"] == {
+        "surface": "dogfood",
+        "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+        "content_sha256": dry_run["content_sha256"],
+        "summary": None,
+        "salience": 0.0,
+        "user_emphasis": 0.0,
+        "related_memory_refs_json": [],
+        "related_observation_ids_json": [],
+        "retention_policy": "review",
+        "metadata_json_sha256": dry_run["metadata_json_sha256"],
+    }
+    assert audit_write_apply["privacy"] == {
+        "raw_query_preview_included": False,
+        "raw_reason_included": False,
+        "sample_values_included": False,
+    }
     assert dry_run["privacy"]["raw_query_preview_included"] is False
     assert dry_run["privacy"]["raw_reason_included"] is False
     assert dry_run["privacy"]["sample_values_included"] is False

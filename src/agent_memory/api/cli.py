@@ -4711,6 +4711,23 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         }
         audit_metadata_json = json.dumps(audit_preview_fields, sort_keys=True)
         audit_metadata_json_sha256 = hashlib.sha256(audit_metadata_json.encode()).hexdigest()
+        audit_write_privacy = {
+            "raw_query_preview_included": False,
+            "raw_reason_included": False,
+            "sample_values_included": False,
+        }
+        audit_insert_preview = {
+            "surface": "dogfood",
+            "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+            "content_sha256": audit_metadata_json_sha256,
+            "summary": None,
+            "salience": 0.0,
+            "user_emphasis": 0.0,
+            "related_memory_refs_json": [],
+            "related_observation_ids_json": [],
+            "retention_policy": "review",
+            "metadata_json_sha256": audit_metadata_json_sha256,
+        }
         payload["restore_apply_contract"]["audit_preview"] = {
             "kind": "query_preview_cleanup_restore_audit_preview",
             "audit_write_available": False,
@@ -4726,11 +4743,36 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                 "content_sha256": audit_metadata_json_sha256,
                 "metadata_json_sha256": audit_metadata_json_sha256,
                 "metadata_json_preview": audit_preview_fields,
-                "privacy": {
-                    "raw_query_preview_included": False,
-                    "raw_reason_included": False,
-                    "sample_values_included": False,
+                "apply_contract": {
+                    "kind": "query_preview_cleanup_restore_audit_write_apply_contract",
+                    "audit_write_apply_available": False,
+                    "would_insert": False,
+                    "required_policy": "legacy-query-preview-cleanup-restore-audit-write-v1",
+                    "required_actor": actor,
+                    "required_reason_sha256": payload["restore_apply_contract"]["reason_sha256"],
+                    "target_table": "experience_traces",
+                    "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+                    "retention_policy": "review",
+                    "blocked_reasons": [
+                        "audit_write_apply_contract_checkpoint_only",
+                        "restore_audit_write_not_implemented",
+                        "live_restore_not_implemented",
+                    ],
+                    "requirements": {
+                        "restore_apply_contract_required": True,
+                        "source_database_match_required": True,
+                        "artifact_integrity_required": True,
+                        "disposable_restore_rehearsal_required": True,
+                        "audit_metadata_json_sha256_required": True,
+                        "raw_query_preview_allowed": False,
+                        "raw_reason_allowed": False,
+                        "sample_values_allowed": False,
+                        "broad_g4_apply_allowed": False,
+                    },
+                    "insert_preview": audit_insert_preview,
+                    "privacy": audit_write_privacy,
                 },
+                "privacy": audit_write_privacy,
             },
             "privacy": {
                 "raw_query_preview_allowed": False,
