@@ -4752,6 +4752,15 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "restore_audit_write_not_implemented",
             "live_restore_not_implemented",
         ]
+        audit_write_conflict_policy = {
+            "duplicate_audit_event": "fail_closed",
+            "content_hash_mismatch": "fail_closed",
+            "metadata_hash_mismatch": "fail_closed",
+            "source_database_mismatch": "fail_closed",
+            "artifact_integrity_failure": "fail_closed",
+            "disposable_rehearsal_failure": "fail_closed",
+            "privacy_leak_risk": "fail_closed",
+        }
         audit_write_preflight_checks = {
             "policy_matches_required": True,
             "actor_present": bool(actor),
@@ -4782,18 +4791,36 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "metadata_json_sha256_matches_insert_preview",
             "duplicate_audit_event_absent",
         )
-        audit_write_preflight_passed = all(
-            audit_write_preflight_checks[key] is True for key in required_audit_write_preflight_checks
-        )
+        audit_write_preflight_failed_checks = [
+            key for key in required_audit_write_preflight_checks if audit_write_preflight_checks[key] is not True
+        ]
+        if audit_write_preflight_failed_checks:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_preflight_failed")
+        if not audit_write_preflight_checks["duplicate_audit_event_absent"]:
+            audit_write_apply_blocked_reasons.append("duplicate_restore_audit_event")
+        if not audit_write_preflight_checks["content_sha256_matches_insert_preview"]:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_content_hash_mismatch")
+        if not audit_write_preflight_checks["metadata_json_sha256_matches_insert_preview"]:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_metadata_hash_mismatch")
+        if not audit_write_preflight_checks["source_database_match_passed"]:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_source_database_mismatch")
+        if not audit_write_preflight_checks["artifact_integrity_passed"]:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_artifact_integrity_failed")
+        if not audit_write_preflight_checks["disposable_rehearsal_passed"]:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_disposable_rehearsal_failed")
+        audit_write_preflight_passed = not audit_write_preflight_failed_checks
         audit_write_preflight = {
             "kind": "query_preview_cleanup_restore_audit_write_preflight",
             "status": "passed_but_write_blocked" if audit_write_preflight_passed else "failed_blocked",
             "passed": audit_write_preflight_passed,
             "write_allowed": False,
+            "write_blocked_by_preflight": not audit_write_preflight_passed,
             "duplicate_audit_event_count": duplicate_audit_event_count,
             "checked_content_sha256": audit_metadata_json_sha256,
             "checked_metadata_json_sha256": audit_metadata_json_sha256,
             "checks": audit_write_preflight_checks,
+            "failed_checks": audit_write_preflight_failed_checks,
+            "conflict_policy": audit_write_conflict_policy,
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
         payload["restore_apply_contract"]["audit_preview"] = {
