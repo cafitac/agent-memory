@@ -4349,6 +4349,76 @@ def _run_query_preview_cleanup_disposable_apply_check(
 
 
 
+def _run_query_preview_cleanup_restore_disposable_rehearsal(
+    *,
+    db_path: Path,
+    artifact_sha256: str,
+    candidate_rows: list[dict[str, Any]],
+    expected_restorable_count: int,
+) -> dict[str, Any]:
+    disposable_dir = db_path.parent / ".agent-memory-query-preview-restore-disposable-checks"
+    disposable_dir.mkdir(parents=True, exist_ok=True)
+    source_fingerprint = hashlib.sha256(f"{db_path}:{artifact_sha256}".encode()).hexdigest()[:16]
+    disposable_db_path = disposable_dir / f"query-preview-restore-check-{source_fingerprint}.db"
+    if disposable_db_path.exists():
+        disposable_db_path.unlink()
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as source_connection:
+        with sqlite3.connect(disposable_db_path) as backup_connection:
+            source_connection.backup(backup_connection)
+
+    restored_count = 0
+    post_restore_missing_count = 0
+    post_restore_still_empty_count = 0
+    with connect(disposable_db_path) as disposable_connection:
+        if not _table_exists(disposable_connection, "retrieval_observations"):
+            post_restore_missing_count = len(candidate_rows)
+        else:
+            for row in candidate_rows:
+                target_row = disposable_connection.execute(
+                    "SELECT query_preview FROM retrieval_observations WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
+                if target_row is None:
+                    post_restore_missing_count += 1
+                    continue
+                if target_row["query_preview"] in (None, ""):
+                    disposable_connection.execute(
+                        "UPDATE retrieval_observations SET query_preview = ? WHERE id = ?",
+                        (row["query_preview"], row["id"]),
+                    )
+                    restored_count += 1
+            for row in candidate_rows:
+                target_row = disposable_connection.execute(
+                    "SELECT query_preview FROM retrieval_observations WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
+                if target_row is not None and target_row["query_preview"] in (None, ""):
+                    post_restore_still_empty_count += 1
+
+    checks_passed = (
+        restored_count == expected_restorable_count
+        and post_restore_missing_count == 0
+        and post_restore_still_empty_count == 0
+    )
+    return {
+        "kind": "query_preview_cleanup_restore_disposable_rehearsal",
+        "status": "passed" if checks_passed else "failed",
+        "live_database_mutated_before_check": False,
+        "checked_database_path": str(disposable_db_path),
+        "candidate_restore_count": len(candidate_rows),
+        "restored_count": restored_count,
+        "post_restore_missing_count": post_restore_missing_count,
+        "post_restore_still_empty_count": post_restore_still_empty_count,
+        "expected": {
+            "restored_count": expected_restorable_count,
+        },
+        "privacy": {
+            "raw_query_preview_included_in_output": False,
+            "disposable_copy_contains_private_query_preview": True,
+        },
+    }
+
+
 def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     artifact_path = args.rollback_artifact_path.expanduser().resolve(strict=False)
@@ -4538,6 +4608,17 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         blocked_reasons.append("duplicate_artifact_row_ids")
     if skipped_count and source_database_matched and artifact_integrity_passed:
         warnings.append("some_artifact_rows_are_not_currently_restorable")
+    restore_disposable_rehearsal = None
+    if apply_restore and source_database_matched and artifact_integrity_passed:
+        restore_disposable_rehearsal = _run_query_preview_cleanup_restore_disposable_rehearsal(
+            db_path=db_path,
+            artifact_sha256=artifact_sha256,
+            candidate_rows=candidate_rows,
+            expected_restorable_count=restorable_count,
+        )
+        if restore_disposable_rehearsal["status"] != "passed":
+            warnings.append("restore_disposable_rehearsal_failed")
+            blocked_reasons.append("restore_disposable_rehearsal_failed")
     status = "error" if apply_restore or not source_database_matched or not artifact_integrity_passed else "warning"
     if apply_restore:
         warnings.append("restore_apply_contract_checkpoint_only")
@@ -4605,6 +4686,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "reason_sha256": hashlib.sha256(reason.encode()).hexdigest(),
             "reason_raw_stored": False,
             "disposable_restore_check_required": True,
+            "disposable_restore_rehearsal": restore_disposable_rehearsal,
             "source_database_match_required": True,
             "artifact_integrity_required": True,
             "audit_raw_query_preview_allowed": False,

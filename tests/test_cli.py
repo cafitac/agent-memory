@@ -1733,6 +1733,16 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert payload["restore_apply_contract"]["artifact_integrity_required"] is True
     assert payload["restore_apply_contract"]["audit_raw_query_preview_allowed"] is False
     assert payload["restore_apply_contract"]["reason_raw_stored"] is False
+    rehearsal = payload["restore_apply_contract"]["disposable_restore_rehearsal"]
+    assert rehearsal["kind"] == "query_preview_cleanup_restore_disposable_rehearsal"
+    assert rehearsal["status"] == "passed"
+    assert rehearsal["live_database_mutated_before_check"] is False
+    assert rehearsal["restored_count"] == 1
+    assert rehearsal["expected"]["restored_count"] == 1
+    assert rehearsal["post_restore_missing_count"] == 0
+    assert rehearsal["post_restore_still_empty_count"] == 0
+    assert rehearsal["privacy"]["raw_query_preview_included_in_output"] is False
+    assert rehearsal["privacy"]["disposable_copy_contains_private_query_preview"] is True
     assert "restore_apply_contract_checkpoint_only" in payload["blocked_reasons"]
     assert "live_restore_not_implemented" in payload["blocked_reasons"]
     assert "SHOULD_NOT_LEAK" not in restore_apply_result.stdout
