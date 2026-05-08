@@ -197,7 +197,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
 - A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch and artifact integrity failures are blocking; live restore remains unavailable.
-- Restore apply intent is contract-only: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, an aggregate restore audit preview, a blocked audit write dry-run, and a blocked audit-write apply contract requiring `legacy-query-preview-cleanup-restore-audit-write-v1` while returning `mutated=false`, `restore_apply_available=false`, and `would_insert=false`.
+- Restore apply intent is contract-only: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, an aggregate restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract requiring `legacy-query-preview-cleanup-restore-audit-write-v1`, and a read-only audit-write preflight gate while returning `mutated=false`, `restore_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
@@ -237,7 +237,7 @@ Normalize legacy ordinary `turn` traces that are already metadata-only but are m
 
 ## PR G4-broad-plan: Draft broader consolidation apply-mode contract before implementation
 
-Status: Complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.99 via PR #204. This remains a docs/RED-test-only contract checkpoint; broad mutation is still blocked.
+Status: Complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.99 via PR #204. This remains a docs/RED-test-only contract checkpoint; broad mutation is still blocked — DO NOT enable broad G4 apply mode.
 
 ### Objective
 
