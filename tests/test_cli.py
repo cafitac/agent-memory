@@ -1817,6 +1817,51 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "retention_policy": "review",
         "metadata_json_sha256": dry_run["metadata_json_sha256"],
     }
+    row_materialization = dry_run["row_materialization"]
+    assert row_materialization["kind"] == "query_preview_cleanup_restore_audit_row_materialization"
+    assert row_materialization["status"] == "dry_run_blocked"
+    assert row_materialization["target_table"] == "experience_traces"
+    assert row_materialization["would_insert"] is False
+    assert row_materialization["write_allowed"] is False
+    assert row_materialization["schema_version"] == "query-preview-cleanup-restore-audit-row-v1"
+    assert row_materialization["duplicate_key"] == {
+        "surface": "dogfood",
+        "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+        "content_sha256": dry_run["content_sha256"],
+        "metadata_json_sha256": dry_run["metadata_json_sha256"],
+    }
+    assert row_materialization["columns"] == [
+        "surface",
+        "event_kind",
+        "content_sha256",
+        "summary",
+        "salience",
+        "user_emphasis",
+        "related_memory_refs_json",
+        "related_observation_ids_json",
+        "retention_policy",
+        "metadata_json",
+    ]
+    assert row_materialization["values"] == {
+        "surface": "dogfood",
+        "event_kind": "dogfood_query_preview_cleanup_restore_apply",
+        "content_sha256": dry_run["content_sha256"],
+        "summary": None,
+        "salience": 0.0,
+        "user_emphasis": 0.0,
+        "related_memory_refs_json": "[]",
+        "related_observation_ids_json": "[]",
+        "retention_policy": "review",
+        "metadata_json": row_materialization["metadata_json_canonical"],
+    }
+    assert json.loads(row_materialization["metadata_json_canonical"]) == dry_run["metadata_json_preview"]
+    assert row_materialization["metadata_json_sha256"] == dry_run["metadata_json_sha256"]
+    assert row_materialization["content_sha256"] == dry_run["content_sha256"]
+    assert row_materialization["privacy"] == {
+        "raw_query_preview_included": False,
+        "raw_reason_included": False,
+        "sample_values_included": False,
+    }
     preflight = audit_write_apply["preflight"]
     assert preflight["kind"] == "query_preview_cleanup_restore_audit_write_preflight"
     assert preflight["status"] == "passed_but_write_blocked"

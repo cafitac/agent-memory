@@ -4728,6 +4728,48 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "retention_policy": "review",
             "metadata_json_sha256": audit_metadata_json_sha256,
         }
+        audit_row_materialization = {
+            "kind": "query_preview_cleanup_restore_audit_row_materialization",
+            "status": "dry_run_blocked",
+            "target_table": "experience_traces",
+            "would_insert": False,
+            "write_allowed": False,
+            "schema_version": "query-preview-cleanup-restore-audit-row-v1",
+            "duplicate_key": {
+                "surface": audit_insert_preview["surface"],
+                "event_kind": audit_insert_preview["event_kind"],
+                "content_sha256": audit_insert_preview["content_sha256"],
+                "metadata_json_sha256": audit_insert_preview["metadata_json_sha256"],
+            },
+            "columns": [
+                "surface",
+                "event_kind",
+                "content_sha256",
+                "summary",
+                "salience",
+                "user_emphasis",
+                "related_memory_refs_json",
+                "related_observation_ids_json",
+                "retention_policy",
+                "metadata_json",
+            ],
+            "values": {
+                "surface": audit_insert_preview["surface"],
+                "event_kind": audit_insert_preview["event_kind"],
+                "content_sha256": audit_insert_preview["content_sha256"],
+                "summary": audit_insert_preview["summary"],
+                "salience": audit_insert_preview["salience"],
+                "user_emphasis": audit_insert_preview["user_emphasis"],
+                "related_memory_refs_json": json.dumps(audit_insert_preview["related_memory_refs_json"]),
+                "related_observation_ids_json": json.dumps(audit_insert_preview["related_observation_ids_json"]),
+                "retention_policy": audit_insert_preview["retention_policy"],
+                "metadata_json": audit_metadata_json,
+            },
+            "metadata_json_canonical": audit_metadata_json,
+            "metadata_json_sha256": audit_metadata_json_sha256,
+            "content_sha256": audit_metadata_json_sha256,
+            "privacy": audit_write_privacy,
+        }
         duplicate_audit_event_count = 0
         with _open_readonly_sqlite(db_path) as connection:
             if _table_exists(connection, "experience_traces"):
@@ -4838,6 +4880,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                 "content_sha256": audit_metadata_json_sha256,
                 "metadata_json_sha256": audit_metadata_json_sha256,
                 "metadata_json_preview": audit_preview_fields,
+                "row_materialization": audit_row_materialization,
                 "apply_contract": {
                     "kind": "query_preview_cleanup_restore_audit_write_apply_contract",
                     "audit_write_apply_available": False,
