@@ -4563,6 +4563,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     source_database_matched = artifact_source_fingerprint == target_source_database["fingerprint_sha256"]
     target_rows_found_count = 0
     restorable_count = 0
+    restorable_ids: list[int] = []
     already_has_query_preview_count = 0
     missing_row_count = 0
     artifact_integrity_passed = duplicate_id_count == 0 and declared_row_count_matches and operation_valid
@@ -4582,6 +4583,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                     target_rows_found_count += 1
                     if target_row["query_preview"] in (None, ""):
                         restorable_count += 1
+                        restorable_ids.append(row["id"])
                     else:
                         already_has_query_preview_count += 1
     skipped_count = already_has_query_preview_count + missing_row_count
@@ -4623,6 +4625,8 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     if apply_restore:
         warnings.append("restore_apply_contract_checkpoint_only")
         blocked_reasons.append("restore_apply_contract_checkpoint_only")
+        warnings.append("restore_audit_write_not_implemented")
+        blocked_reasons.append("restore_audit_write_not_implemented")
     payload = {
         "kind": kind,
         "read_only": True,
@@ -4692,6 +4696,28 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "audit_raw_query_preview_allowed": False,
             "rollback_artifact_private_required": True,
             "broad_g4_apply_allowed": False,
+        }
+        payload["restore_apply_contract"]["audit_preview"] = {
+            "kind": "query_preview_cleanup_restore_audit_preview",
+            "audit_write_available": False,
+            "audit_row_would_be_written": False,
+            "fields": {
+                "policy": restore_policy,
+                "actor": actor,
+                "reason_sha256": payload["restore_apply_contract"]["reason_sha256"],
+                "artifact_sha256": artifact_sha256,
+                "source_database_fingerprint_sha256": target_source_database["fingerprint_sha256"],
+                "source_database_match": source_database_matched,
+                "artifact_integrity_passed": artifact_integrity_passed,
+                "rehearsal_status": restore_disposable_rehearsal["status"] if restore_disposable_rehearsal else None,
+                "restored_ids_sha256": _query_preview_cleanup_ids_sha256(restorable_ids),
+                "restored_count": restorable_count,
+            },
+            "privacy": {
+                "raw_query_preview_allowed": False,
+                "raw_reason_allowed": False,
+                "sample_values_allowed": False,
+            },
         }
         payload["suggested_next_steps"] = [
             "Do not run live restore yet; this command is a contract checkpoint only.",
