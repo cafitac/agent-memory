@@ -4430,8 +4430,12 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     approval_token = getattr(args, "approval_token", None)
     approval_token_present = bool(approval_token)
     approval_token_sha256 = hashlib.sha256(approval_token.encode()).hexdigest() if approval_token_present else None
+    approval_token_expected_sha256 = None
+    approval_token_expected_sha256_present = bool(approval_token_expected_sha256)
     approval_token_validated = False
-    approval_token_validation_status = "invalid_or_unverified" if approval_token_present else "missing"
+    approval_token_validation_status = (
+        "expected_hash_missing" if approval_token_present and not approval_token_expected_sha256_present else "missing"
+    )
     approval_token_invalid = approval_token_present and not approval_token_validated
     if not dry_run and not apply_restore:
         raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run or --apply")
@@ -4872,7 +4876,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
         if approval_token_present:
-            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_invalid")
+            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_expected_hash_missing")
         else:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
         audit_write_single_row_apply_policy_packet = {
@@ -4882,11 +4886,15 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "approval_token_required": True,
             "approval_token_present": approval_token_present,
             "approval_token_sha256": approval_token_sha256,
+            "approval_token_expected_sha256_required": True,
+            "approval_token_expected_sha256_present": approval_token_expected_sha256_present,
             "approval_token_validated": approval_token_validated,
             "approval_token_validation_status": approval_token_validation_status,
             "write_blocked_by_missing_approval": not approval_token_present,
             "write_blocked_by_unvalidated_approval": approval_token_present and not approval_token_validated,
             "write_blocked_by_invalid_approval": approval_token_invalid,
+            "write_blocked_by_missing_expected_approval_hash": approval_token_present
+            and not approval_token_expected_sha256_present,
             "would_insert": False,
             "write_allowed": False,
             "expected_insert_count": 1,
