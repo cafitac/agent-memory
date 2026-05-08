@@ -1822,6 +1822,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert preflight["status"] == "passed_but_write_blocked"
     assert preflight["passed"] is True
     assert preflight["write_allowed"] is False
+    assert preflight["write_blocked_by_preflight"] is False
     assert preflight["duplicate_audit_event_count"] == 0
     assert preflight["checked_content_sha256"] == dry_run["content_sha256"]
     assert preflight["checked_metadata_json_sha256"] == dry_run["metadata_json_sha256"]
@@ -1840,6 +1841,16 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "sample_values_allowed": False,
         "broad_g4_apply_allowed": False,
     }
+    assert preflight["failed_checks"] == []
+    assert preflight["conflict_policy"] == {
+        "duplicate_audit_event": "fail_closed",
+        "content_hash_mismatch": "fail_closed",
+        "metadata_hash_mismatch": "fail_closed",
+        "source_database_mismatch": "fail_closed",
+        "artifact_integrity_failure": "fail_closed",
+        "disposable_rehearsal_failure": "fail_closed",
+        "privacy_leak_risk": "fail_closed",
+    }
     assert preflight["blocked_reasons"] == audit_write_apply["blocked_reasons"]
     assert audit_write_apply["privacy"] == {
         "raw_query_preview_included": False,
@@ -1857,6 +1868,191 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
 
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT id, query_preview FROM retrieval_observations ORDER BY id").fetchall()
+    assert rows == [(1, None)]
+
+
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_audit_write_preflight_fails_closed_on_duplicate(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "query-preview-cleanup-restore-audit-duplicate.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Query preview cleanup duplicate audit contract target phrase is RESTORE_DUPLICATE_OK.",
+        metadata={"project": "query-preview-cleanup-restore-audit-duplicate"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Query preview cleanup duplicate audit contract",
+        predicate="target_phrase",
+        object_ref_or_value="RESTORE_DUPLICATE_OK",
+        evidence_ids=[source.id],
+        scope="project:query-preview-cleanup-restore-audit-duplicate",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "restore duplicate token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:query-preview-cleanup-restore-audit-duplicate",
+            "--observe",
+            "cli-test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE retrieval_observations SET query_preview = ?, created_at = ? WHERE id = 1",
+            ("token=SHOULD_NOT_LEAK", "2026-01-01 00:00:00"),
+        )
+
+    cleanup_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "query-preview-cleanup",
+            str(db_path),
+            "--older-than",
+            "2026-01-02T00:00:00",
+            "--apply",
+            "--policy",
+            "legacy-query-preview-cleanup-v1",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "create rollback artifact before duplicate audit preflight test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert cleanup_result.returncode == 0, cleanup_result.stderr
+    rollback_path = Path(json.loads(cleanup_result.stdout)["apply"]["rollback_manifest"]["artifact_path"])
+
+    restore_command = [
+        sys.executable,
+        "-m",
+        "agent_memory.api.cli",
+        "dogfood",
+        "query-preview-cleanup-restore",
+        str(db_path),
+        str(rollback_path),
+        "--apply",
+        "--policy",
+        "legacy-query-preview-cleanup-restore-v1",
+        "--actor",
+        "cli-test",
+        "--reason",
+        "restore duplicate audit contract reason token=SHOULD_NOT_LEAK",
+    ]
+    first_restore_result = subprocess.run(
+        restore_command,
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert first_restore_result.returncode == 0, first_restore_result.stderr
+    first_payload = json.loads(first_restore_result.stdout)
+    first_dry_run = first_payload["restore_apply_contract"]["audit_preview"]["write_dry_run"]
+    first_apply_contract = first_dry_run["apply_contract"]
+    first_preflight = first_apply_contract["preflight"]
+    assert first_preflight["passed"] is True
+    assert first_preflight["write_allowed"] is False
+
+    duplicate_metadata_json = json.dumps(first_dry_run["metadata_json_preview"], sort_keys=True)
+    with sqlite3.connect(db_path) as connection:
+        before_trace_count = connection.execute("SELECT COUNT(*) FROM experience_traces").fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                surface,
+                event_kind,
+                content_sha256,
+                summary,
+                salience,
+                user_emphasis,
+                related_memory_refs_json,
+                related_observation_ids_json,
+                retention_policy,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                first_apply_contract["insert_preview"]["surface"],
+                first_apply_contract["insert_preview"]["event_kind"],
+                first_apply_contract["insert_preview"]["content_sha256"],
+                None,
+                0.0,
+                0.0,
+                json.dumps([]),
+                json.dumps([]),
+                "review",
+                duplicate_metadata_json,
+            ),
+        )
+
+    duplicate_restore_result = subprocess.run(
+        restore_command,
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert duplicate_restore_result.returncode == 0, duplicate_restore_result.stderr
+    duplicate_payload = json.loads(duplicate_restore_result.stdout)
+    duplicate_dry_run = duplicate_payload["restore_apply_contract"]["audit_preview"]["write_dry_run"]
+    duplicate_apply_contract = duplicate_dry_run["apply_contract"]
+    duplicate_preflight = duplicate_apply_contract["preflight"]
+
+    assert duplicate_payload["read_only"] is True
+    assert duplicate_payload["mutated"] is False
+    assert duplicate_dry_run["would_insert"] is False
+    assert duplicate_apply_contract["would_insert"] is False
+    assert duplicate_apply_contract["audit_write_apply_available"] is False
+    assert duplicate_preflight["status"] == "failed_blocked"
+    assert duplicate_preflight["passed"] is False
+    assert duplicate_preflight["write_allowed"] is False
+    assert duplicate_preflight["write_blocked_by_preflight"] is True
+    assert duplicate_preflight["duplicate_audit_event_count"] == 1
+    assert duplicate_preflight["checks"]["duplicate_audit_event_absent"] is False
+    assert duplicate_preflight["failed_checks"] == ["duplicate_audit_event_absent"]
+    assert duplicate_preflight["conflict_policy"] == {
+        "duplicate_audit_event": "fail_closed",
+        "content_hash_mismatch": "fail_closed",
+        "metadata_hash_mismatch": "fail_closed",
+        "source_database_mismatch": "fail_closed",
+        "artifact_integrity_failure": "fail_closed",
+        "disposable_rehearsal_failure": "fail_closed",
+        "privacy_leak_risk": "fail_closed",
+    }
+    assert "restore_audit_write_preflight_failed" in duplicate_preflight["blocked_reasons"]
+    assert "duplicate_restore_audit_event" in duplicate_preflight["blocked_reasons"]
+    assert duplicate_apply_contract["blocked_reasons"] == duplicate_preflight["blocked_reasons"]
+    assert "SHOULD_NOT_LEAK" not in duplicate_restore_result.stdout
+    assert "token=" not in duplicate_restore_result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_trace_count = connection.execute("SELECT COUNT(*) FROM experience_traces").fetchone()[0]
+        rows = connection.execute("SELECT id, query_preview FROM retrieval_observations ORDER BY id").fetchall()
+    assert after_trace_count == before_trace_count + 1
     assert rows == [(1, None)]
 
 
