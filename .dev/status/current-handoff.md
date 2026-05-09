@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 05:11 KST
+Last updated: 2026-05-10 06:08 KST
 
 ## Trigger for the next session
 
@@ -16,24 +16,24 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.124`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and one live metadata-only restore audit trace has been written through the new v0.1.123 narrow audit corridor. GitHub Release, npm, and PyPI all report `v0.1.124`. Main CI, auto-release, publish, and published PyPI/npm smoke passed for the v0.1.124 release.
+agent-memory is currently verified through `v0.1.125`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and one live metadata-only restore audit trace has been written through the v0.1.123 narrow audit corridor. GitHub Release, npm, and PyPI all report `v0.1.125`. Main CI, auto-release, publish, and published PyPI/npm smoke passed for the v0.1.125 release.
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows stayed at 0 before and after the audit write, restore artifacts remain private/local, and broad G4 consolidation apply mode remains blocked. The live audit write inserted `experience_traces.id=1465` with `event_kind=dogfood_query_preview_cleanup_restore_apply`, `restored_count=0`, source DB match true, artifact integrity true, rehearsal passed, raw reason absent, raw approval token absent, and no live query-preview restore. Live query-preview restore, broad G4 apply, raw reason storage, raw query preview output, sample-value output, and ordinary-conversation auto-approval remain blocked.
 
-Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.124 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
+Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.125 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor and blocker diagnostics; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice: `feat/g4-blocker-drilldown` drills into the remaining G4 blockers with aggregate-safe, no-raw-content diagnostics. It does not enable broad apply. The new fields add trace coverage linkage diagnostics, empty-retrieval activation breakdowns, and decay-risk candidate decomposition under dogfood reports and `quality_gate.blocker_diagnostics`.
+Current slice: `feat/g4-readiness-blockers` starts clearing the post-v0.1.125 blocker list without enabling broad apply. It links newly created Hermes hook traces to retrieval observation ids, expands empty-retrieval diagnostics by hook event/response mode/trace linkage, explains the remaining decay-risk candidate with ref-safe evidence/resolution hints, and adds one intentionally xfailed broad-G4 apply contract test as a RED checkpoint.
 
-Target shape for this blocker-diagnostics slice:
+Target shape for this readiness-blockers slice:
 
-- `quality_gate.blocker_diagnostics.trace_quality_needs_more_dogfooding` includes source, recommendation, coverage ratio, empty-retrieval ratio, warnings, coverage diagnostics, and next action.
-- `quality_gate.blocker_diagnostics.decay_risk_above_threshold` includes source, candidate count, threshold, excess, aggregate candidate decomposition, and next action.
-- `quality_gate.blocker_diagnostics.background_quality_warnings_present` includes source, warning count, warning names, empty-retrieval activation diagnostics, and next action.
-- Reports stay `read_only=true`, `mutated=false`, `automation_policy.apply_supported=false`, and `default_retrieval_policy=approved_only_unchanged`.
+- New Hermes hook retrievals should record `MemoryPacket.retrieval_observation_id` and pass it to `experience_traces.related_observation_ids` for ordinary-turn traces.
+- Empty-retrieval diagnostics should stay raw-free while adding `by_hook_event_name`, `by_response_mode`, and trace linkage counts.
+- Decay-risk candidates should include `ref_safe_evidence` and `resolution_hint` plus aggregate `resolution_hint_counts`.
+- Broad G4 apply stays blocked; the new broad-G4 test is xfailed/RED-only and asserts the future review-queue contract.
 
-Why this is the best move: the v0.1.123 live smoke proved the narrow audit trace write, but the latest scheduled dry-run still blocks broad G4. This slice explains exactly why using aggregate/hash-safe fields before any broad apply contract is attempted. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best move: v0.1.125 made the blockers explainable, and the live DB still blocks broad G4. This slice fixes future trace/observation linkage at the source, makes empty retrieval and decay-risk blockers actionable without raw content, and pins the broad-G4 apply shape as RED-only before any implementation. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands before any future live mutation:
 
@@ -56,11 +56,11 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `feat/g4-blocker-drilldown`.
+- Current feature branch for this slice: `feat/g4-readiness-blockers`.
 - Latest merged G4a hardening PR: #257 `feat: write narrow restore audit trace`.
 - Latest merged docs checkpoint PR: #259 `docs: record v0.1.123 live audit smoke`.
 - Latest merged release-sync PR: #258 `chore: release v0.1.123 [skip release]`.
-- Latest completed release before this slice: `v0.1.124`.
+- Latest completed release before this slice: `v0.1.125`.
 
 Expected GitHub identity:
 
@@ -71,10 +71,10 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.124`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.124`
-- npm package: `@cafitac/agent-memory@0.1.124`
-- PyPI package: `cafitac-agent-memory==0.1.124`
+- `v0.1.125`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.125`
+- npm package: `@cafitac/agent-memory@0.1.125`
+- PyPI package: `cafitac-agent-memory==0.1.125`
 
 Latest verified source/runtime snapshot, checked 2026-05-10 04:38 KST:
 
@@ -114,7 +114,17 @@ Latest source-branch blocker diagnostic smoke, checked 2026-05-10 04:38 KST:
 - blocker diagnostics identified current aggregate blockers as: trace coverage ratio `0.0` with `low_observation_trace_coverage`, empty retrieval ratio `0.6188`, decay-risk candidate count `1` over threshold `0`, and background warning `high_empty_retrieval_activation_ratio`
 - quality gate still returned `continue_scheduled_dry_run_dogfooding_before_g4`
 
-Next safe work after this slice: if released and live-smoked, use the new blocker diagnostics to reduce/understand low trace coverage, high empty-retrieval activation ratio, and the single decay-risk candidate before drafting any broad G4 apply contract.
+Latest readiness-blockers source smoke, checked 2026-05-10 06:08 KST:
+
+- report: `/tmp/agent-memory-g4-readiness-blockers-live.json`
+- command: source checkout `dogfood scheduled-dry-run` against `/Users/reddit/.agent-memory/memory.db`
+- result stayed `read_only=true`, `mutated=false`, `automation_policy.apply_supported=false`, and privacy flags false
+- live DB still blocks broad G4 with `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`
+- live blocker details now include empty-retrieval diagnostics by hook event `pre_llm_call`, response mode `unknown`, hashed cwd scopes only, and trace linkage counts
+- live decay-risk candidate `fact:1` is classified with resolution hint `add_relation_or_confirm_isolated_approved_memory`, ref-safe evidence only, and no raw content
+- the trace linkage fix applies to new Hermes hook traces; historical live activations/traces remain unlinked until enough new dogfood evidence accumulates
+
+Next safe work after this slice: if released and live-smoked, dogfood enough new Hermes turns to verify activation trace-link coverage improves, then decide whether empty retrievals are expected misses or query/scope gaps. Broad G4 implementation still requires turning the xfailed RED contract into a real review-queue apply path in a separate approved slice.
 
 Expected local untracked artifacts to preserve in the root checkout:
 

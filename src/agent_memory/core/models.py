@@ -250,6 +250,7 @@ class MemoryPacket(BaseModel):
     provenance: list[ProvenanceSummary] = Field(default_factory=list)
     retrieval_trace: list[RetrievalTraceEntry] = Field(default_factory=list)
     trust_summaries: list[MemoryTrustSummary] = Field(default_factory=list)
+    retrieval_observation_id: int | None = None
 
 
 class KbExportedFile(BaseModel):

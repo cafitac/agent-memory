@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
@@ -18,6 +20,7 @@ from agent_memory.storage.sqlite import (
     insert_experience_trace,
     insert_relation,
     list_experience_traces,
+    list_retrieval_observations,
     record_memory_retrieval,
     update_memory_status,
 )
@@ -628,6 +631,89 @@ def test_python_module_cli_observations_audit_reports_frequent_and_stale_refs_wi
     assert top_ref["observation_window"]["latest_observed_at"]
     assert "SUPERSECRET" not in audit_result.stdout
     assert "abc123" not in audit_result.stdout
+
+
+def test_python_module_cli_activations_decay_risk_reports_ref_safe_resolution_hints(tmp_path: Path) -> None:
+    db_path = tmp_path / "activation-decay-ref-safe.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Decay risk diagnostics should explain isolated approved refs without raw user prompts.",
+        metadata={"project": "decay-ref-safe"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Decay diagnostics",
+        predicate="posture",
+        object_ref_or_value="ref-safe isolated approved memory explanation",
+        evidence_ids=[source.id],
+        scope="project:decay-ref-safe",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    retrieve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "retrieve",
+            str(db_path),
+            "Explain decay diagnostics token=SHOULD_NOT_LEAK",
+            "--preferred-scope",
+            "project:decay-ref-safe",
+            "--observe",
+            "hermes-pre-llm-hook",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stderr
+
+    report_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "decay-risk-report",
+            str(db_path),
+            "--limit",
+            "50",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert report_result.returncode == 0, report_result.stderr
+    payload = json.loads(report_result.stdout)
+    candidate = payload["decay_risk_candidates"][0]
+    assert candidate["memory_ref"] == f"fact:{fact.id}"
+    assert candidate["ref_safe_evidence"] == {
+        "memory_ref": f"fact:{fact.id}",
+        "memory_type": "fact",
+        "memory_id": fact.id,
+        "exists": True,
+        "evidence_id_count": 1,
+        "relation_count": 0,
+        "scope_present": True,
+        "content_included": False,
+    }
+    assert candidate["resolution_hint"] == "add_relation_or_confirm_isolated_approved_memory"
+    assert payload["candidate_decomposition"]["resolution_hint_counts"] == {
+        "add_relation_or_confirm_isolated_approved_memory": 1,
+    }
+    assert "SHOULD_NOT_LEAK" not in report_result.stdout
+    assert "token=" not in report_result.stdout
+
 
 
 def test_python_module_cli_observations_review_candidates_explains_top_refs_without_mutation_or_raw_queries(
@@ -4236,6 +4322,9 @@ def test_python_module_cli_hermes_pre_llm_hook_records_metadata_only_turn_trace_
     assert trace.user_emphasis == 0.0
     assert trace.retention_policy == "ephemeral"
     assert trace.related_memory_refs == [f"fact:{fact.id}"]
+    observations = list_retrieval_observations(db_path)
+    assert len(observations) == 1
+    assert trace.related_observation_ids == [observations[0].id]
     trace_json = trace.model_dump_json()
     assert "SHOULD_NOT_APPEAR" not in trace_json
     assert "user_message" not in trace_json
@@ -4295,6 +4384,9 @@ def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_tur
     assert trace.event_kind == "turn"
     assert trace.summary is None
     assert trace.related_memory_refs == []
+    observations = list_retrieval_observations(db_path)
+    assert len(observations) == 1
+    assert trace.related_observation_ids == [observations[0].id]
     trace_json = trace.model_dump_json()
     assert "SHOULD_NOT_APPEAR" not in trace_json
     assert "password" not in trace_json
@@ -4308,6 +4400,32 @@ def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_tur
         "auto_approved": False,
     }
 
+    dry_run_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "background",
+            "dry-run",
+            str(db_path),
+            "--limit",
+            "50",
+            "--top",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert dry_run_result.returncode == 0, dry_run_result.stderr
+    empty_diagnostics = json.loads(dry_run_result.stdout)["reports"]["activation_summary"]["empty_retrieval"]
+    assert empty_diagnostics["by_surface"] == {"hermes-pre-llm-hook": 1}
+    assert empty_diagnostics["by_hook_event_name"] == {"pre_llm_call": 1}
+    assert empty_diagnostics["trace_linkage"] == {"linked_to_trace_count": 1, "unlinked_to_trace_count": 0}
+    assert "SHOULD_NOT_APPEAR" not in dry_run_result.stdout
+    assert "password" not in dry_run_result.stdout
 
 
 def test_hermes_pre_llm_hook_records_trace_even_when_no_context_is_injected(tmp_path: Path, monkeypatch) -> None:
@@ -4344,6 +4462,9 @@ def test_hermes_pre_llm_hook_records_trace_even_when_no_context_is_injected(tmp_
     assert trace.event_kind == "turn"
     assert trace.scope == "project:no-context-turn-trace"
     assert trace.related_memory_refs == []
+    observations = list_retrieval_observations(db_path)
+    assert len(observations) == 1
+    assert trace.related_observation_ids == [observations[0].id]
     assert trace.metadata == {
         "hook_event_name": "pre_llm_call",
         "platform": "cli",
@@ -7216,6 +7337,77 @@ def test_dogfood_background_dry_run_quality_gates_summarize_reports_without_muta
     assert output_path.exists()
     assert json.loads(output_path.read_text()) == payload
     assert _table_counts(db_path, ["experience_traces", "facts", "source_records", "relations", "memory_status_transitions"]) == before_counts
+
+
+@pytest.mark.xfail(strict=True, reason="Broad G4 apply contract is intentionally RED until apply mode is implemented.")
+def test_dogfood_background_dry_run_broad_g4_apply_contract_red_until_supported(tmp_path: Path) -> None:
+    db_path = tmp_path / "background-dogfood-future-apply.db"
+    report_path = tmp_path / "background-report.json"
+    initialize_database(db_path)
+    report_path.write_text(
+        json.dumps(
+            {
+                "kind": "memory_consolidation_background_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "status": "completed",
+                "scan": {"quality_warnings": []},
+                "reports": {
+                    "candidates": {"candidate_count": 3, "trace_count": 8, "quality_warnings": []},
+                    "activation_summary": {"activation_count": 25, "quality_warnings": []},
+                    "reinforcement": {"candidate_count": 2, "quality_warnings": []},
+                    "decay_risk": {"decay_risk_candidates": [], "quality_warnings": []},
+                },
+                "review_handoff": {
+                    "candidate_count": 3,
+                    "reinforcement_candidate_count": 2,
+                    "decay_risk_candidate_count": 0,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "background-dry-run",
+            str(db_path),
+            "--report",
+            str(report_path),
+            "--candidate-min",
+            "1",
+            "--max-decay-risk",
+            "0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["quality_gate"]["decision"] == "dry_run_quality_gate_passed_plan_g4_only"
+    assert payload["automation_policy"] == {
+        "apply_supported": True,
+        "apply_mode": "broad_g4_review_queue",
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "mutation_contract": {
+            "raw_content_allowed": False,
+            "default_retrieval_policy_mutation_allowed": False,
+            "memory_status_mutation_allowed": False,
+            "writes_review_queue_only": True,
+        },
+    }
+
 
 
 def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_noisy_or_incomplete(

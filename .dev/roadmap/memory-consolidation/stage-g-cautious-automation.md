@@ -258,7 +258,7 @@ Define the future contract for controlled background consolidation mutations bef
 
 ## PR G4: Add broader background consolidation apply mode behind explicit policy
 
-Status: Blocked. The narrow restore/audit corridor proved approval-token validation and one metadata-only audit trace write in `v0.1.123`, and v0.1.124 added aggregate blocker diagnostics, but scheduled-dry-run still blocks broad G4. The current blocker-drilldown branch explains low trace linkage, high empty-retrieval activation ratio, and the remaining decay-risk candidate with aggregate-safe fields; it does not authorize live broad apply.
+Status: Blocked. The narrow restore/audit corridor proved approval-token validation and one metadata-only audit trace write in `v0.1.123`, and v0.1.125 added aggregate blocker drilldowns, but scheduled-dry-run still blocks broad G4. The current readiness-blockers branch fixes future Hermes hook trace-to-observation linkage, splits empty-retrieval diagnostics, adds ref-safe decay-risk resolution hints, and keeps broad G4 apply as an intentionally xfailed RED contract; it does not authorize live broad apply.
 
 ### Objective
 
@@ -277,4 +277,4 @@ Allow controlled application only after dry-run output is trusted and the broade
 
 ## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied, and `v0.1.123` added one live metadata-only restore audit trace write. The current blocker-drilldown branch keeps read-only `quality_gate.blocker_diagnostics` but adds trace coverage diagnostics, empty-retrieval activation breakdowns, and decay-risk candidate decomposition. It still blocks live query-preview restore and broad G4 apply mode.
+`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied, and `v0.1.123` added one live metadata-only restore audit trace write. `v0.1.125` shipped read-only blocker drilldowns. The current readiness-blockers branch makes new Hermes hook traces link to retrieval observations, adds empty-retrieval hook/response/linkage diagnostics, adds ref-safe decay-risk resolution hints, and preserves live query-preview restore and broad G4 apply blocks.
