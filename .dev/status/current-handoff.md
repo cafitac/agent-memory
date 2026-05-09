@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-09 09:31 KST
+Last updated: 2026-05-09 10:37 KST
 
 ## Trigger for the next session
 
@@ -16,17 +16,17 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.119`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, a read-only audit-write preflight gate, duplicate/conflict fail-closed reporting, a dry-run audit row materialization contract, a single-row audit-write policy packet, an approval-token-missing negative gate, an approval-token flag dry-run parser, an invalid-token validator negative contract, an expected approval hash missing contract, and an expected approval hash flag parser. GitHub Release, npm, and PyPI all report `v0.1.119`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.119/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.119-runtime-qa-20260509T002435`.
+agent-memory is currently verified through `v0.1.120`: the first narrow G4a cleanup mutation has named-policy, rollback-manifest/private-artifact, disposable cleanup preflight, restore dry-run, source DB binding, artifact-integrity checks, a blocked restore apply contract checkpoint, disposable restore rehearsal, aggregate-only restore audit preview, a blocked audit write dry-run, a blocked audit-write apply contract, a read-only audit-write preflight gate, duplicate/conflict fail-closed reporting, a dry-run audit row materialization contract, a single-row audit-write policy packet, an approval-token-missing negative gate, an approval-token flag dry-run parser, an invalid-token validator negative contract, an expected approval hash missing contract, an expected approval hash flag parser, and a token/expected-hash mismatch negative contract. GitHub Release, npm, and PyPI all report `v0.1.120`. The live Hermes `default`/`personal-oss` plus `earlypay` hook runtimes were upgraded to `/Users/reddit/.agent-memory/runtime/v0.1.120/.venv/bin/agent-memory`; installed-runtime QA passed with report `/Users/reddit/.agent-memory/reports/v0.1.120-runtime-qa-20260509T004933`.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only an approval-token expected-hash mismatch negative contract inside the already-blocked audit write apply contract; it keeps tokens hash-only, reports token/expected-hash mismatch explicitly, and still does not validate approval successfully, write audit rows, run live restore, or mutate the live DB.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch adds only a matching-token/expected-hash still-blocked contract inside the already-blocked audit write apply contract; it keeps tokens hash-only, reports `approval_token_hash_matches_expected=true`, and still does not validate approval successfully, write audit rows, run live restore, or mutate the live DB.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline.
 
 ## Current next slice
 
-Current slice: start from `v0.1.119` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-approval-token-hash-mismatch`. Add only the token/expected-hash mismatch negative contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet`. With token and expected hash supplied but not matching, it must report `approval_token_expected_sha256_present=true`, normalized `approval_token_expected_sha256`, `approval_token_hash_matches_expected=false`, `approval_token_validated=false`, `approval_token_validation_status=hash_mismatch`, `write_blocked_by_approval_hash_mismatch=true`, and `restore_audit_write_approval_token_hash_mismatch` while still returning `would_insert=false` and `write_allowed=false`. Matching token/hash should remain validation-not-implemented until a separate explicit slice.
+Current slice: start from `v0.1.120` validated `main` on branch `g4/query-preview-cleanup-restore-audit-write-approval-token-hash-match-blocked`. Add only the matching token/expected-hash still-blocked contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet`. With token and expected hash supplied and matching, it must report `approval_token_expected_sha256_present=true`, normalized `approval_token_expected_sha256`, `approval_token_hash_matches_expected=true`, `approval_token_validated=false`, `approval_token_validation_status=hash_match_validation_not_implemented`, `write_blocked_by_unimplemented_approval_validation=true`, and `restore_audit_write_approval_token_hash_match_validation_not_implemented` while still returning `would_insert=false` and `write_allowed=false`. Mismatched token/hash should remain a separate `hash_mismatch` fail-closed path.
 
-Why this is the best next move: v0.1.119 freezes the expected-hash input surface while still blocking validation. Before any successful validator or audit row write exists, explicitly fail closed on token/hash mismatch so future validator work cannot accidentally treat a wrong token as merely unimplemented. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best next move: v0.1.120 freezes wrong-token mismatch as fail-closed. Before any successful validator or audit row write exists, explicitly fail closed even on token/hash match so future validator work cannot accidentally turn a matching hash into write permission. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands:
 
@@ -47,10 +47,10 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-approval-token-hash-mismatch`.
-- Latest merged G4a hardening PR: #248 `feat: add restore audit approval expected hash parser`.
-- Latest merged release-sync PR: #249 `chore: release v0.1.119 [skip release]`.
-- Latest completed release: `v0.1.119`.
+- Current feature branch for this slice: `g4/query-preview-cleanup-restore-audit-write-approval-token-hash-match-blocked`.
+- Latest merged G4a hardening PR: #250 `feat: add restore audit approval hash mismatch gate`.
+- Latest merged release-sync PR: #251 `chore: release v0.1.120 [skip release]`.
+- Latest completed release: `v0.1.120`.
 
 Expected GitHub identity:
 
@@ -61,20 +61,20 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.119`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.119`
-- npm package: `@cafitac/agent-memory@0.1.119`
-- PyPI package: `cafitac-agent-memory==0.1.119`
+- `v0.1.120`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.120`
+- npm package: `@cafitac/agent-memory@0.1.120`
+- PyPI package: `cafitac-agent-memory==0.1.120`
 
-Latest verified source checkout snapshot, checked 2026-05-09 09:31 KST:
+Latest verified source checkout snapshot, checked 2026-05-09 10:37 KST:
 
 - branch before this slice: `main`, synced with `origin/main`
 - open PRs: none observed before this branch
-- GitHub Release, npm, and PyPI all report `v0.1.119`
-- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.119"`
-- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.119 runtime
+- GitHub Release, npm, and PyPI all report `v0.1.120`
+- fresh artifact smoke passed from PyPI and npm; `agent_memory.__version__ == "0.1.120"`
+- live Hermes `default`, `personal-oss`, and `earlypay` configs use the pinned v0.1.120 runtime
 - checked-in retrieval-eval fixtures remain at 21 tasks
-- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight+fail-closed+row-materialization+policy-packet+approval-token-missing-gate+token-parser+invalid-token-validator+expected-hash-parser smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
+- installed runtime dogfood storage-health, scheduled dry-run, query-preview cleanup preview, restore dry-run, restore apply contract+rehearsal+audit write apply contract+preflight+fail-closed+row-materialization+policy-packet+approval-token-missing-gate+token-parser+invalid-token-validator+hash-mismatch smoke, backup inspect, and hook smoke passed; broad G4 remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:
 
