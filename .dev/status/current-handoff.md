@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 03:16 KST
+Last updated: 2026-05-10 03:42 KST
 
 ## Trigger for the next session
 
@@ -16,34 +16,30 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.121`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and the restore/audit path has been hardened through a matching approval-token/expected-hash still-blocked contract. GitHub Release, npm, and PyPI all report `v0.1.121`. Main CI and auto-release passed for the v0.1.121 release. The live Hermes runtime path `/Users/reddit/.agent-memory/runtime/v0.1.121/.venv/bin/agent-memory` exists and is executable.
+agent-memory is currently verified through `v0.1.122`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and the restore/audit path now treats matching approval-token/expected-hash input as a validated approval signal. GitHub Release, npm, and PyPI all report `v0.1.122`. Main CI, auto-release, and published PyPI/npm smoke passed for the v0.1.122 release.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they can contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch advances the v0.1.121 still-blocked hash-match state by treating a matching approval token plus expected hash as validated (`approval_token_validated=true`, `approval_token_validation_status=validated_by_expected_sha256`) while still reporting `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they can contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch advances the v0.1.122 validated-approval state by allowing exactly one narrow metadata-only restore audit row in `experience_traces` when preflight passes and the approval token hash matches the expected sha256. Live query-preview restore, broad G4 apply, raw reason storage, raw query preview output, and sample-value output remain blocked.
 
-Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.121 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
+Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.122 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice: this branch implements the RED-test-first approval validation contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet`. After this branch, the next slice should plan the narrow audit-row write implementation separately; do not combine it with broad G4 apply.
+Current slice: this branch implements the RED-test-first narrow restore audit-row write under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract`. The branch allows a single metadata-only `experience_traces` row only when source DB match, artifact integrity, disposable restore rehearsal, duplicate preflight, explicit actor/reason, and approval-token expected-sha256 validation all pass.
 
-The next safest behavior is to treat a matching `--approval-token` plus `--approval-token-expected-sha256` as a validated approval signal while still keeping audit row writes disabled. Target shape:
+Target shape for the positive path:
 
-- `approval_token_present=true`
-- `approval_token_expected_sha256_present=true`
-- `approval_token_hash_matches_expected=true`
 - `approval_token_validated=true`
 - `approval_token_validation_status=validated_by_expected_sha256`
-- `write_blocked_by_missing_approval=false`
-- `write_blocked_by_unvalidated_approval=false`
-- `write_blocked_by_invalid_approval=false`
-- `write_blocked_by_missing_expected_approval_hash=false`
-- `write_blocked_by_approval_hash_mismatch=false`
-- `write_blocked_by_unimplemented_approval_validation=false`
-- `audit_write_apply_available=false`
-- `would_insert=false`
-- `write_allowed=false`
+- `audit_write_apply_available=true`
+- `would_insert=true`
+- `write_allowed=true`
+- `inserted=true` with `inserted_trace_id`
+- `status=audit_written_restore_blocked`
+- `audit_trace_mutated=true`
+- `live_restore_mutated=false`
+- top-level `blocked_reasons=["live_restore_not_implemented"]`
 
-Why this is the best move: v0.1.121 froze both wrong-token mismatch and matching-token still-blocked behavior. This PR separates "approval is cryptographically validated" from "DB write is allowed" so a future audit-row write implementation cannot accidentally conflate matching hashes with mutation permission. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best move: v0.1.122 separated "approval is cryptographically validated" from "DB write is allowed". This slice opens only the narrow audit trace write, not live query-preview restore and not broad G4 consolidation apply. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands before any future live mutation:
 
@@ -66,11 +62,11 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/restore-audit-write-approval-token-validator-positive-contract`.
-- Latest merged G4a hardening PR before this slice: #252 `feat: add restore audit approval hash match gate`.
-- Latest merged release-sync PR: #253 `chore: release v0.1.121 [skip release]`.
-- Latest completed release: `v0.1.121`.
-- Open PRs: none observed during the v0.1.121 checkpoint.
+- Current feature branch for this slice: `g4/restore-audit-row-write-narrow`.
+- Latest merged G4a hardening PR before this slice: #255 `feat: validate restore audit approval token hash`.
+- Latest merged release-sync PR: #256 `chore: release v0.1.122 [skip release]`.
+- Latest completed release: `v0.1.122`.
+- Open PRs: none observed before starting this slice.
 
 Expected GitHub identity:
 
@@ -81,22 +77,21 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.121`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.121`
-- npm package: `@cafitac/agent-memory@0.1.121`
-- PyPI package: `cafitac-agent-memory==0.1.121`
+- `v0.1.122`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.122`
+- npm package: `@cafitac/agent-memory@0.1.122`
+- PyPI package: `cafitac-agent-memory==0.1.122`
 
-Latest verified source/runtime snapshot, checked 2026-05-10 03:04 KST:
+Latest verified source/runtime snapshot, checked 2026-05-10 03:42 KST:
 
-- branch before this docs slice: `main`, synced with `origin/main`
-- open PRs: none observed
-- GitHub Release, npm, and PyPI all report `v0.1.121`
-- source checkout version smoke: `agent_memory.__version__ == "0.1.121"`
-- live runtime path exists: `/Users/reddit/.agent-memory/runtime/v0.1.121/.venv/bin/agent-memory`
-- latest main CI and auto-release runs completed successfully
+- branch before this slice: `main`, synced with `origin/main` at `v0.1.122`
+- open PRs: none observed before branch creation
+- GitHub Release, npm, and PyPI all report `v0.1.122`
+- source checkout is based on `agent_memory.__version__ == "0.1.122"`
+- latest main CI, auto-release, release-sync, and published PyPI/npm smoke completed successfully for `v0.1.122`
 - checked-in retrieval-eval fixtures remain at 21 tasks
 - live DB aggregate snapshot: `retrieval_observations=2153`, `memory_activations=2058`, `experience_traces=1435`, `facts=3`, `procedures=0`, `episodes=0`, and non-empty `query_preview=0`
-- targeted restore apply contract test passed locally: `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contract_blocked_without_mutation_or_leaks -q`
+- targeted restore audit-row write contract test passed locally on this branch: `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_writes_single_audit_row_without_live_restore_or_leaks -q`
 - broad G4 consolidation apply mode remains blocked
 
 Expected local untracked artifacts to preserve in the root checkout:

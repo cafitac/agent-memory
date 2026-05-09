@@ -4650,11 +4650,9 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             warnings.append("restore_disposable_rehearsal_failed")
             blocked_reasons.append("restore_disposable_rehearsal_failed")
     status = "error" if apply_restore or not source_database_matched or not artifact_integrity_passed else "warning"
-    if apply_restore:
+    if apply_restore and (not source_database_matched or not artifact_integrity_passed):
         warnings.append("restore_apply_contract_checkpoint_only")
         blocked_reasons.append("restore_apply_contract_checkpoint_only")
-        warnings.append("restore_audit_write_not_implemented")
-        blocked_reasons.append("restore_audit_write_not_implemented")
     payload = {
         "kind": kind,
         "read_only": True,
@@ -4817,11 +4815,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                         audit_metadata_json,
                     ),
                 ).fetchone()[0]
-        audit_write_apply_blocked_reasons = [
-            "audit_write_apply_contract_checkpoint_only",
-            "restore_audit_write_not_implemented",
-            "live_restore_not_implemented",
-        ]
+        audit_write_apply_blocked_reasons = ["live_restore_not_implemented"]
         audit_write_conflict_policy = {
             "duplicate_audit_event": "fail_closed",
             "content_hash_mismatch": "fail_closed",
@@ -4896,16 +4890,59 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         if approval_token_present and approval_token_expected_sha256_present and not approval_token_hash_matches_expected:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_hash_mismatch")
         elif approval_token_present and approval_token_expected_sha256_present:
-            audit_write_apply_blocked_reasons.append(
-                "restore_audit_write_approval_token_hash_match_validated_write_blocked"
-            )
+            pass
         elif approval_token_present:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_expected_hash_missing")
         else:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
+        audit_write_allowed = (
+            apply_restore
+            and audit_write_preflight_passed
+            and approval_token_validated
+            and source_database_matched
+            and artifact_integrity_passed
+        )
+        audit_inserted_trace_id = None
+        if audit_write_allowed:
+            audit_trace = insert_experience_trace(
+                db_path,
+                surface=audit_insert_preview["surface"],
+                event_kind=audit_insert_preview["event_kind"],
+                content_sha256=audit_insert_preview["content_sha256"],
+                summary=audit_insert_preview["summary"],
+                salience=audit_insert_preview["salience"],
+                user_emphasis=audit_insert_preview["user_emphasis"],
+                related_memory_refs=audit_insert_preview["related_memory_refs_json"],
+                related_observation_ids=audit_insert_preview["related_observation_ids_json"],
+                retention_policy=audit_insert_preview["retention_policy"],
+                metadata=audit_preview_fields,
+            )
+            audit_inserted_trace_id = audit_trace.id
+            payload.update(
+                {
+                    "read_only": False,
+                    "mutated": True,
+                    "status": "audit_written_restore_blocked",
+                    "audit_trace_mutated": True,
+                    "live_restore_mutated": False,
+                    "blocked_reasons": ["live_restore_not_implemented"],
+                    "warnings": ["live_restore_not_implemented"],
+                }
+            )
+        else:
+            payload.update({"audit_trace_mutated": False, "live_restore_mutated": False})
+        audit_write_preflight["status"] = (
+            "passed" if audit_write_allowed else "passed_but_write_blocked" if audit_write_preflight_passed else "failed_blocked"
+        )
+        audit_write_preflight["write_allowed"] = audit_write_allowed
+        audit_row_materialization["status"] = "inserted" if audit_write_allowed else "dry_run_blocked"
+        audit_row_materialization["would_insert"] = audit_write_allowed
+        audit_row_materialization["write_allowed"] = audit_write_allowed
+        if audit_inserted_trace_id is not None:
+            audit_row_materialization["inserted_trace_id"] = audit_inserted_trace_id
         audit_write_single_row_apply_policy_packet = {
             "kind": "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet",
-            "status": "approval_required_write_blocked",
+            "status": "validated_write_allowed" if audit_write_allowed else "approval_required_write_blocked",
             "requires_explicit_operator_approval": True,
             "approval_token_required": True,
             "approval_token_present": approval_token_present,
@@ -4924,8 +4961,9 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             and not approval_token_expected_sha256_present,
             "write_blocked_by_approval_hash_mismatch": approval_token_hash_matches_expected is False,
             "write_blocked_by_unimplemented_approval_validation": False,
-            "would_insert": False,
-            "write_allowed": False,
+            "would_insert": audit_write_allowed,
+            "write_allowed": audit_write_allowed,
+            "inserted_trace_id": audit_inserted_trace_id,
             "expected_insert_count": 1,
             "required_policy": "legacy-query-preview-cleanup-restore-audit-write-v1",
             "actor": actor,
@@ -4941,19 +4979,23 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "rollback": {
                 "undo_requires_manual_audit_trace_review": True,
                 "live_restore_enabled": False,
+                "inserted_trace_id": audit_inserted_trace_id,
                 "audit_row_delete_enabled": False,
             },
             "privacy": audit_write_privacy,
         }
         payload["restore_apply_contract"]["audit_preview"] = {
             "kind": "query_preview_cleanup_restore_audit_preview",
-            "audit_write_available": False,
-            "audit_row_would_be_written": False,
+            "audit_write_available": audit_write_allowed,
+            "audit_row_would_be_written": audit_write_allowed,
+            "audit_row_written": audit_write_allowed,
             "fields": audit_preview_fields,
             "write_dry_run": {
                 "kind": "query_preview_cleanup_restore_audit_write_dry_run",
-                "status": "blocked",
-                "would_insert": False,
+                "status": "inserted" if audit_write_allowed else "blocked",
+                "would_insert": audit_write_allowed,
+                "inserted": audit_write_allowed,
+                "inserted_trace_id": audit_inserted_trace_id,
                 "target_table": "experience_traces",
                 "event_kind": "dogfood_query_preview_cleanup_restore_apply",
                 "retention_policy": "review",
@@ -4963,8 +5005,10 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
                 "row_materialization": audit_row_materialization,
                 "apply_contract": {
                     "kind": "query_preview_cleanup_restore_audit_write_apply_contract",
-                    "audit_write_apply_available": False,
-                    "would_insert": False,
+                    "audit_write_apply_available": audit_write_allowed,
+                    "would_insert": audit_write_allowed,
+                    "inserted": audit_write_allowed,
+                    "inserted_trace_id": audit_inserted_trace_id,
                     "required_policy": "legacy-query-preview-cleanup-restore-audit-write-v1",
                     "required_actor": actor,
                     "required_reason_sha256": payload["restore_apply_contract"]["reason_sha256"],

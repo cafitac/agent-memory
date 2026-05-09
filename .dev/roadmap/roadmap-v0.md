@@ -34,8 +34,8 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — current progress checkpoint refreshed after `v0.1.121`; use it with `.dev/status/current-handoff.md` for the latest verified state and next recommended slice.
-- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — historical first-mutation plan retained as guardrails; v0.1.121 work is now hardening the narrow restore/audit safety corridor before any broader G4 mutation.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — current progress checkpoint refreshed after `v0.1.122`; use it with `.dev/status/current-handoff.md` for the latest verified state and next recommended slice.
+- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — historical first-mutation plan retained as guardrails; current work is hardening the narrow restore/audit safety corridor before any broader G4 mutation.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -254,8 +254,8 @@ If a later session changes direction, update both this checklist and the relevan
 
 - [~] PR G4-safety-corridor: Harden the narrow restore/audit apply corridor before broader background consolidation apply mode
   - Goal: prove approval-token validation, preflight, duplicate/conflict fail-closed behavior, audit-row materialization, and rollback/restore contracts in the narrow query-preview cleanup restore path before enabling broader consolidation mutation.
-  - Scope: keep broad G4 apply blocked; advance only one safety contract at a time. After v0.1.121 the next slice is matching approval-token validation without writes.
-  - Acceptance: matching approval token plus expected hash can become validated, but `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false` stay true until a separate audit-write PR.
+  - Scope: keep broad G4 apply blocked; advance only one safety contract at a time. After v0.1.122 approval-token validation, the current slice allows only a single metadata-only restore audit row write without live restore.
+  - Acceptance: matching approval token plus expected hash is validated; the narrow restore audit row path can report `audit_write_apply_available=true`, `would_insert=true`, and `write_allowed=true` only for the single metadata-only audit trace insert while live restore and broad G4 apply stay blocked.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions only after the narrow restore/audit corridor is trusted.
