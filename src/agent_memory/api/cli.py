@@ -4453,7 +4453,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     elif not approval_token_hash_matches_expected:
         approval_token_validation_status = "hash_mismatch"
     else:
-        approval_token_validation_status = "validation_not_implemented"
+        approval_token_validation_status = "hash_match_validation_not_implemented"
     approval_token_invalid = approval_token_present and not approval_token_validated
     if not dry_run and not apply_restore:
         raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run or --apply")
@@ -4896,7 +4896,9 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
         if approval_token_present and approval_token_expected_sha256_present and not approval_token_hash_matches_expected:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_hash_mismatch")
         elif approval_token_present and approval_token_expected_sha256_present:
-            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_validation_not_implemented")
+            audit_write_apply_blocked_reasons.append(
+                "restore_audit_write_approval_token_hash_match_validation_not_implemented"
+            )
         elif approval_token_present:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_expected_hash_missing")
         else:
@@ -4921,6 +4923,7 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "write_blocked_by_missing_expected_approval_hash": approval_token_present
             and not approval_token_expected_sha256_present,
             "write_blocked_by_approval_hash_mismatch": approval_token_hash_matches_expected is False,
+            "write_blocked_by_unimplemented_approval_validation": approval_token_hash_matches_expected is True,
             "would_insert": False,
             "write_allowed": False,
             "expected_insert_count": 1,
