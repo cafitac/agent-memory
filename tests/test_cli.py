@@ -2864,6 +2864,22 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
         "continue_scheduled_dry_run_dogfooding_before_g4",
         "scheduled_dry_run_quality_gate_passed_plan_g4_only",
     }
+    blocker_diagnostics = payload["quality_gate"]["blocker_diagnostics"]
+    assert blocker_diagnostics["trace_quality_needs_more_dogfooding"]["source"] == "reports.trace_quality"
+    assert blocker_diagnostics["trace_quality_needs_more_dogfooding"]["recommendation"] in {
+        "continue_dogfooding",
+        "ready_for_more_dry_runs",
+        "consider_g4_plan",
+    }
+    assert blocker_diagnostics["trace_quality_needs_more_dogfooding"]["next_action"]
+    assert blocker_diagnostics["decay_risk_above_threshold"]["source"] == (
+        "reports.background_dry_run.review_handoff.decay_risk_candidate_count"
+    )
+    assert blocker_diagnostics["decay_risk_above_threshold"]["max_allowed"] == 1
+    assert blocker_diagnostics["background_quality_warnings_present"]["source"] == (
+        "reports.background_dry_run.scan.quality_warnings"
+    )
+    assert isinstance(blocker_diagnostics["background_quality_warnings_present"]["warnings"], list)
     assert payload["automation_policy"] == {
         "apply_supported": False,
         "ordinary_conversation_auto_approval": False,
@@ -2920,7 +2936,7 @@ def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_
                     "reinforcement_candidate_count": 1,
                     "decay_risk_candidate_count": 0,
                 },
-                "scan": {"quality_warnings": ["low_activation_count"]},
+                "scan": {"quality_warnings": ["low_activation_count", "no_clusters_meet_min_evidence"]},
             },
         },
         "quality_gate": {
@@ -3016,6 +3032,30 @@ def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_
             "decay_risk_above_threshold",
             "background_quality_warnings_present",
         ],
+        "blocker_diagnostics": {
+            "trace_quality_needs_more_dogfooding": {
+                "blocked": True,
+                "source": "aggregate.blocked_reasons",
+                "report_count": 2,
+                "affected_report_count": 1,
+                "next_action": "Keep comparing scheduled reports until trace-quality blockers disappear consistently.",
+            },
+            "decay_risk_above_threshold": {
+                "blocked": True,
+                "source": "aggregate.decay_risk_candidate_count_max",
+                "candidate_count_max": 1,
+                "max_allowed": 0,
+                "excess": 1,
+                "next_action": "Inspect decay-risk candidates before broad G4 planning.",
+            },
+            "background_quality_warnings_present": {
+                "blocked": True,
+                "source": "aggregate.background_quality_warnings",
+                "warning_count": 2,
+                "warnings": ["low_activation_count", "no_clusters_meet_min_evidence"],
+                "next_action": "Resolve or classify recurring background warnings before broad G4 planning.",
+            },
+        },
     }
     assert payload["privacy"]["raw_conversation_content_included"] is False
     assert payload["privacy"]["raw_query_text_included"] is False
@@ -7247,6 +7287,19 @@ def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_nois
         "decay_risk_above_threshold",
         "quality_warnings_present",
     }
+    blocker_diagnostics = payload["quality_gate"]["blocker_diagnostics"]
+    assert blocker_diagnostics["decay_risk_above_threshold"] == {
+        "blocked": True,
+        "source": "aggregate.decay_risk_candidate_count_max",
+        "candidate_count_max": 1,
+        "max_allowed": 0,
+        "excess": 1,
+        "next_action": "Inspect aggregate decay-risk candidates before broad G4 planning.",
+    }
+    assert blocker_diagnostics["quality_warnings_present"]["blocked"] is True
+    assert blocker_diagnostics["quality_warnings_present"]["source"] == "aggregate.quality_warnings"
+    assert blocker_diagnostics["quality_warnings_present"]["warnings"] == ["no_clusters_meet_min_evidence"]
+    assert blocker_diagnostics["candidate_signal_below_threshold"]["candidate_count_max"] == 0
     assert payload["aggregate"]["candidate_count_max"] == 0
     assert payload["aggregate"]["decay_risk_candidate_count_max"] == 1
     assert "Do not enable background apply mode from this report." in payload["suggested_next_steps"]

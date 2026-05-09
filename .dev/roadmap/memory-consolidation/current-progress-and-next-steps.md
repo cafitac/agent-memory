@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 04:13 KST
+Last updated: 2026-05-10 04:38 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.123 narrow restore audit trace write release and live smoke. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.123 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.123 narrow restore audit trace write release/live smoke and the current G4 blocker-diagnostics slice. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.123 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
 
 Use it when the user asks:
 
@@ -54,6 +54,7 @@ Current implementation interpretation:
 - Restore/audit safety hardening reached the approval-token positive validation checkpoint in `v0.1.122` and the metadata-only audit trace write checkpoint in `v0.1.123`.
 - The v0.1.123 live smoke wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) when approval/preflight gates passed; duplicate rerun failed closed with no second row.
 - Live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, raw query-preview output, sample values, and default retrieval ranking changes remain disabled.
+- The current source branch adds aggregate-safe `quality_gate.blocker_diagnostics` to scheduled dry-run, scheduled compare, and background dry-run dogfood reports so the remaining G4 blockers can be worked one at a time without enabling mutation.
 
 ## Current live dogfood health snapshot
 
@@ -75,6 +76,7 @@ Privacy/integrity interpretation:
 - Restore artifacts and backups remain private local files because rollback artifacts can contain raw query previews.
 - Broad G4 consolidation apply mode remains blocked.
 - v0.1.123 live narrow-audit smoke report: `/Users/reddit/.agent-memory/reports/v0.1.123-live-narrow-audit-write-20260510T041120`; after the write, `retrieval_observations.query_preview` stayed at 0, `experience_traces` increased by exactly 1, `live_restore_mutated=false`, and scheduled dry-run still returned `continue_scheduled_dry_run_dogfooding_before_g4`.
+- Current blocker-diagnostics source smoke report: `/Users/reddit/.agent-memory/reports/v0.1.123-g4-blocker-diagnostics-source-20260509T193808Z`; the report stayed read-only/no-mutation and decomposed current blockers into low trace coverage (`0.0`), high empty retrieval ratio (`0.6188`), one decay-risk candidate over threshold, and background warning `high_empty_retrieval_activation_ratio`.
 
 ## What is intentionally not happening yet
 

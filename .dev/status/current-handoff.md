@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 04:13 KST
+Last updated: 2026-05-10 04:38 KST
 
 ## Trigger for the next session
 
@@ -20,26 +20,20 @@ agent-memory is currently verified through `v0.1.123`: the first narrow G4a clea
 
 Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows stayed at 0 before and after the audit write, restore artifacts remain private/local, and broad G4 consolidation apply mode remains blocked. The live audit write inserted `experience_traces.id=1465` with `event_kind=dogfood_query_preview_cleanup_restore_apply`, `restored_count=0`, source DB match true, artifact integrity true, rehearsal passed, raw reason absent, raw approval token absent, and no live query-preview restore. Live query-preview restore, broad G4 apply, raw reason storage, raw query preview output, sample-value output, and ordinary-conversation auto-approval remain blocked.
 
-Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.122 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
+Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.123 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice status: completed, merged, released, and live-smoked. PR #257 added the RED-test-first narrow restore audit-row write under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract`; release-sync PR #258 published `v0.1.123`; the live DB wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) after backup and approval-token expected-sha256 validation.
+Current slice: `feat/g4-blocker-diagnostics` decomposes the three remaining scheduled-dry-run G4 blockers into aggregate-safe diagnostics. It does not enable broad apply. The new fields live under `quality_gate.blocker_diagnostics` for scheduled dry-run, scheduled compare, and background dry-run dogfood reports.
 
-Target shape for the positive path:
+Target shape for this blocker-diagnostics slice:
 
-- `approval_token_validated=true`
-- `approval_token_validation_status=validated_by_expected_sha256`
-- `audit_write_apply_available=true`
-- `would_insert=true`
-- `write_allowed=true`
-- `inserted=true` with `inserted_trace_id`
-- `status=audit_written_restore_blocked`
-- `audit_trace_mutated=true`
-- `live_restore_mutated=false`
-- top-level `blocked_reasons=["live_restore_not_implemented"]`
+- `quality_gate.blocker_diagnostics.trace_quality_needs_more_dogfooding` includes source, recommendation, coverage ratio, empty-retrieval ratio, warnings, and next action.
+- `quality_gate.blocker_diagnostics.decay_risk_above_threshold` includes source, candidate count, threshold, excess, and next action.
+- `quality_gate.blocker_diagnostics.background_quality_warnings_present` includes source, warning count, warning names, and next action.
+- Reports stay `read_only=true`, `mutated=false`, `automation_policy.apply_supported=false`, and `default_retrieval_policy=approved_only_unchanged`.
 
-Why this is the best move: v0.1.122 separated "approval is cryptographically validated" from "DB write is allowed". This slice opens only the narrow audit trace write, not live query-preview restore and not broad G4 consolidation apply. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best move: the v0.1.123 live smoke proved the narrow audit trace write, but the latest scheduled dry-run still blocks broad G4. This slice explains exactly why using aggregate/hash-safe fields before any broad apply contract is attempted. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands before any future live mutation:
 
@@ -62,11 +56,11 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for the completed slice was `g4/restore-audit-row-write-narrow`; it was deleted after merge.
+- Current feature branch for this slice: `feat/g4-blocker-diagnostics`.
 - Latest merged G4a hardening PR: #257 `feat: write narrow restore audit trace`.
+- Latest merged docs checkpoint PR: #259 `docs: record v0.1.123 live audit smoke`.
 - Latest merged release-sync PR: #258 `chore: release v0.1.123 [skip release]`.
 - Latest completed release: `v0.1.123`.
-- Open PRs: none expected for the completed slice.
 
 Expected GitHub identity:
 
@@ -82,16 +76,14 @@ Latest completed release:
 - npm package: `@cafitac/agent-memory@0.1.123`
 - PyPI package: `cafitac-agent-memory==0.1.123`
 
-Latest verified source/runtime snapshot, checked 2026-05-10 03:42 KST:
+Latest verified source/runtime snapshot, checked 2026-05-10 04:38 KST:
 
-- branch before this slice: `main`, synced with `origin/main` at `v0.1.122`
-- open PRs: none observed before branch creation
-- GitHub Release, npm, and PyPI all report `v0.1.122`
-- source checkout is based on `agent_memory.__version__ == "0.1.122"`
-- latest main CI, auto-release, release-sync, and published PyPI/npm smoke completed successfully for `v0.1.122`
+- branch before this slice: `main`, synced with `origin/main` at `v0.1.123` plus docs PR #259
+- GitHub Release, npm, and PyPI all report `v0.1.123`
+- latest main CI, auto-release, release-sync, publish, and published PyPI/npm smoke completed successfully for `v0.1.123`
 - checked-in retrieval-eval fixtures remain at 21 tasks
-- live DB aggregate snapshot: `retrieval_observations=2153`, `memory_activations=2058`, `experience_traces=1435`, `facts=3`, `procedures=0`, `episodes=0`, and non-empty `query_preview=0`
-- targeted restore audit-row write contract test passed locally on this branch: `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_writes_single_audit_row_without_live_restore_or_leaks -q`
+- live DB remains privacy-clean for legacy query previews: non-empty `query_preview=0`
+- targeted blocker-diagnostics tests passed locally on this branch: `uv run pytest tests/test_cli.py -q -k 'scheduled_dry_run or scheduled_compare or background_dry_run_quality_gates'`
 - broad G4 consolidation apply mode remains blocked
 
 Latest live narrow-audit smoke, checked 2026-05-10 04:13 KST:
@@ -104,7 +96,15 @@ Latest live narrow-audit smoke, checked 2026-05-10 04:13 KST:
 - duplicate rerun failed closed: no second audit row, `failed_checks=["duplicate_audit_event_absent"]`, `mutated=false`, `live_restore_mutated=false`
 - post-write scheduled dry-run stayed read-only/no-mutation and still returned `decision=continue_scheduled_dry_run_dogfooding_before_g4` with blocked reasons `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`
 
-Next safe work: do not broaden apply mode yet. Start with a docs/plan or RED-test-only slice for the next G4 blocker: reduce/understand trace-quality warnings, decay-risk threshold failures, and background-quality warnings before any broad consolidation mutation.
+Latest source-branch blocker diagnostic smoke, checked 2026-05-10 04:38 KST:
+
+- report dir: `/Users/reddit/.agent-memory/reports/v0.1.123-g4-blocker-diagnostics-source-20260509T193808Z`
+- command: source checkout `dogfood scheduled-dry-run` against `/Users/reddit/.agent-memory/memory.db`
+- result stayed `read_only=true`, `mutated=false`, `automation_policy.apply_supported=false`, and `ordinary_conversation_auto_approval=false`
+- blocker diagnostics identified current aggregate blockers as: trace coverage ratio `0.0` with `low_observation_trace_coverage`, empty retrieval ratio `0.6188`, decay-risk candidate count `1` over threshold `0`, and background warning `high_empty_retrieval_activation_ratio`
+- quality gate still returned `continue_scheduled_dry_run_dogfooding_before_g4`
+
+Next safe work after this slice: if released and live-smoked, use the new blocker diagnostics to reduce/understand low trace coverage, high empty-retrieval activation ratio, and the single decay-risk candidate before drafting any broad G4 apply contract.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
