@@ -2484,17 +2484,24 @@ def _scheduled_dry_run_quality_decision(
     max_decay_risk: int,
 ) -> dict[str, Any]:
     blocked_reasons: list[str] = []
-    if storage_health.get("status") not in {"ok", "pass", "healthy"}:
-        blocked_reasons.append("storage_health_not_clean")
-    if trace_quality.get("recommendation") != "consider_g4_plan":
-        blocked_reasons.append("trace_quality_needs_more_dogfooding")
-    if background_dry_run.get("status") != "completed":
-        blocked_reasons.append("background_dry_run_not_completed")
+    trace_recommendation = str(trace_quality.get("recommendation", "unknown"))
+    trace_coverage = trace_quality.get("coverage", {}) if isinstance(trace_quality.get("coverage"), dict) else {}
+    retrieval_quality = (
+        trace_quality.get("retrieval_quality", {}) if isinstance(trace_quality.get("retrieval_quality"), dict) else {}
+    )
+    trace_warnings = trace_quality.get("warnings", []) if isinstance(trace_quality.get("warnings"), list) else []
     review_handoff = background_dry_run.get("review_handoff", {}) if isinstance(background_dry_run.get("review_handoff"), dict) else {}
     candidate_count = _safe_int(review_handoff.get("candidate_count"))
     decay_risk_candidate_count = _safe_int(review_handoff.get("decay_risk_candidate_count"))
     scan = background_dry_run.get("scan", {}) if isinstance(background_dry_run.get("scan"), dict) else {}
     quality_warnings = scan.get("quality_warnings", []) if isinstance(scan.get("quality_warnings"), list) else []
+
+    if storage_health.get("status") not in {"ok", "pass", "healthy"}:
+        blocked_reasons.append("storage_health_not_clean")
+    if trace_recommendation != "consider_g4_plan":
+        blocked_reasons.append("trace_quality_needs_more_dogfooding")
+    if background_dry_run.get("status") != "completed":
+        blocked_reasons.append("background_dry_run_not_completed")
     if candidate_count < candidate_min:
         blocked_reasons.append("candidate_signal_below_threshold")
     if decay_risk_candidate_count > max_decay_risk:
@@ -2510,6 +2517,33 @@ def _scheduled_dry_run_quality_decision(
     ):
         blocked_reasons.append("default_retrieval_changed")
 
+    blocker_diagnostics = {
+        "trace_quality_needs_more_dogfooding": {
+            "blocked": "trace_quality_needs_more_dogfooding" in blocked_reasons,
+            "source": "reports.trace_quality",
+            "recommendation": trace_recommendation,
+            "coverage_ratio": round(_safe_float(trace_coverage.get("observation_trace_coverage_ratio")), 4),
+            "empty_retrieval_ratio": round(_safe_float(retrieval_quality.get("empty_retrieval_ratio")), 4),
+            "warnings": sorted(str(warning) for warning in trace_warnings if warning),
+            "next_action": "Collect more metadata-only trace/activation evidence or lower only after a RED-tested plan.",
+        },
+        "decay_risk_above_threshold": {
+            "blocked": "decay_risk_above_threshold" in blocked_reasons,
+            "source": "reports.background_dry_run.review_handoff.decay_risk_candidate_count",
+            "candidate_count": decay_risk_candidate_count,
+            "max_allowed": max_decay_risk,
+            "excess": max(0, decay_risk_candidate_count - max_decay_risk),
+            "next_action": "Inspect aggregate decay-risk candidates and decide whether they are stale evidence or expected weak traces.",
+        },
+        "background_quality_warnings_present": {
+            "blocked": "background_quality_warnings_present" in blocked_reasons,
+            "source": "reports.background_dry_run.scan.quality_warnings",
+            "warning_count": len(quality_warnings),
+            "warnings": sorted(str(warning) for warning in quality_warnings if warning),
+            "next_action": "Resolve or classify each background warning before drafting any broad G4 apply contract.",
+        },
+    }
+
     passed = not blocked_reasons
     return {
         "pass": passed,
@@ -2519,6 +2553,7 @@ def _scheduled_dry_run_quality_decision(
             else "continue_scheduled_dry_run_dogfooding_before_g4"
         ),
         "blocked_reasons": blocked_reasons,
+        "blocker_diagnostics": blocker_diagnostics,
     }
 
 
@@ -2674,6 +2709,33 @@ def _scheduled_dry_run_comparison_report(
         comparison_blocked_reasons.append("privacy_flag_claims_raw_content")
 
     passed = not comparison_blocked_reasons
+    trace_blocker_count = sum(
+        1 for summary in summaries if "trace_quality_needs_more_dogfooding" in summary.get("blocked_reasons", [])
+    )
+    blocker_diagnostics = {
+        "trace_quality_needs_more_dogfooding": {
+            "blocked": trace_blocker_count > 0,
+            "source": "aggregate.blocked_reasons",
+            "report_count": len(summaries),
+            "affected_report_count": trace_blocker_count,
+            "next_action": "Keep comparing scheduled reports until trace-quality blockers disappear consistently.",
+        },
+        "decay_risk_above_threshold": {
+            "blocked": "decay_risk_above_threshold" in comparison_blocked_reasons,
+            "source": "aggregate.decay_risk_candidate_count_max",
+            "candidate_count_max": decay_risk_candidate_count_max,
+            "max_allowed": max_decay_risk,
+            "excess": max(0, decay_risk_candidate_count_max - max_decay_risk),
+            "next_action": "Inspect decay-risk candidates before broad G4 planning.",
+        },
+        "background_quality_warnings_present": {
+            "blocked": "background_quality_warnings_present" in comparison_blocked_reasons,
+            "source": "aggregate.background_quality_warnings",
+            "warning_count": len(background_quality_warnings),
+            "warnings": background_quality_warnings,
+            "next_action": "Resolve or classify recurring background warnings before broad G4 planning.",
+        },
+    }
     payload = {
         "kind": "dogfood_scheduled_dry_run_comparison",
         "read_only": True,
@@ -2714,6 +2776,7 @@ def _scheduled_dry_run_comparison_report(
                 else "continue_scheduled_report_collection_before_g4"
             ),
             "blocked_reasons": comparison_blocked_reasons,
+            "blocker_diagnostics": blocker_diagnostics,
         },
         "automation_policy": {
             "apply_supported": False,
@@ -2874,6 +2937,31 @@ def _background_dry_run_dogfood_report(
         blocked_reasons.append("default_retrieval_changed")
 
     passed = not blocked_reasons
+    blocker_diagnostics = {
+        "candidate_signal_below_threshold": {
+            "blocked": "candidate_signal_below_threshold" in blocked_reasons,
+            "source": "aggregate.candidate_count_max",
+            "candidate_count_max": candidate_count_max,
+            "min_required": candidate_min,
+            "deficit": max(0, candidate_min - candidate_count_max),
+            "next_action": "Collect or explain more read-only consolidation candidates before broad G4 planning.",
+        },
+        "decay_risk_above_threshold": {
+            "blocked": "decay_risk_above_threshold" in blocked_reasons,
+            "source": "aggregate.decay_risk_candidate_count_max",
+            "candidate_count_max": decay_risk_candidate_count_max,
+            "max_allowed": max_decay_risk,
+            "excess": max(0, decay_risk_candidate_count_max - max_decay_risk),
+            "next_action": "Inspect aggregate decay-risk candidates before broad G4 planning.",
+        },
+        "quality_warnings_present": {
+            "blocked": "quality_warnings_present" in blocked_reasons,
+            "source": "aggregate.quality_warnings",
+            "warning_count": len(quality_warnings),
+            "warnings": quality_warnings,
+            "next_action": "Resolve, classify, or document each warning with RED tests before broad G4 planning.",
+        },
+    }
     payload = {
         "kind": "background_dry_run_dogfood_report",
         "read_only": True,
@@ -2900,6 +2988,7 @@ def _background_dry_run_dogfood_report(
             "pass": passed,
             "decision": "dry_run_quality_gate_passed_plan_g4_only" if passed else "continue_dry_run_dogfooding_before_g4",
             "blocked_reasons": blocked_reasons,
+            "blocker_diagnostics": blocker_diagnostics,
         },
         "automation_policy": {
             "apply_supported": False,

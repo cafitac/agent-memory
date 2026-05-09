@@ -258,7 +258,7 @@ Define the future contract for controlled background consolidation mutations bef
 
 ## PR G4: Add broader background consolidation apply mode behind explicit policy
 
-Status: Blocked until the narrow restore/audit corridor proves approval-token validation, audit-row write safety, and rollback/restore contracts in released artifacts and live dogfood evidence. PR G4-broad-plan has landed, but it did not authorize live broad apply; v0.1.122 and the current branch still keep broad G4 blocked.
+Status: Blocked. The narrow restore/audit corridor proved approval-token validation and one metadata-only audit trace write in `v0.1.123`, but scheduled-dry-run still blocks broad G4. The current blocker-diagnostics branch only explains `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present` with aggregate-safe fields; it does not authorize live broad apply.
 
 ### Objective
 
@@ -277,4 +277,4 @@ Allow controlled application only after dry-run output is trusted and the broade
 
 ## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied. After the v0.1.122 approval-token validation checkpoint, the current safety corridor recognizes missing, invalid, mismatched, and matching-token/expected-hash states. This branch allows only a single metadata-only restore audit row write when approval and preflight pass; it still blocks live query-preview restore and broad G4 apply mode.
+`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied, and `v0.1.123` added one live metadata-only restore audit trace write. The current blocker-diagnostics branch adds read-only `quality_gate.blocker_diagnostics` to explain remaining scheduled/background G4 blockers. It still blocks live query-preview restore and broad G4 apply mode.
