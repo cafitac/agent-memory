@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 03:42 KST
+Last updated: 2026-05-10 04:13 KST
 
 ## Trigger for the next session
 
@@ -16,15 +16,15 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.122`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and the restore/audit path now treats matching approval-token/expected-hash input as a validated approval signal. GitHub Release, npm, and PyPI all report `v0.1.122`. Main CI, auto-release, and published PyPI/npm smoke passed for the v0.1.122 release.
+agent-memory is currently verified through `v0.1.123`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and one live metadata-only restore audit trace has been written through the new v0.1.123 narrow audit corridor. GitHub Release, npm, and PyPI all report `v0.1.123`. Main CI, auto-release, publish, and published PyPI/npm smoke passed for the v0.1.123 release.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they can contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch advances the v0.1.122 validated-approval state by allowing exactly one narrow metadata-only restore audit row in `experience_traces` when preflight passes and the approval token hash matches the expected sha256. Live query-preview restore, broad G4 apply, raw reason storage, raw query preview output, and sample-value output remain blocked.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows stayed at 0 before and after the audit write, restore artifacts remain private/local, and broad G4 consolidation apply mode remains blocked. The live audit write inserted `experience_traces.id=1465` with `event_kind=dogfood_query_preview_cleanup_restore_apply`, `restored_count=0`, source DB match true, artifact integrity true, rehearsal passed, raw reason absent, raw approval token absent, and no live query-preview restore. Live query-preview restore, broad G4 apply, raw reason storage, raw query preview output, sample-value output, and ordinary-conversation auto-approval remain blocked.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.122 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice: this branch implements the RED-test-first narrow restore audit-row write under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract`. The branch allows a single metadata-only `experience_traces` row only when source DB match, artifact integrity, disposable restore rehearsal, duplicate preflight, explicit actor/reason, and approval-token expected-sha256 validation all pass.
+Current slice status: completed, merged, released, and live-smoked. PR #257 added the RED-test-first narrow restore audit-row write under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract`; release-sync PR #258 published `v0.1.123`; the live DB wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) after backup and approval-token expected-sha256 validation.
 
 Target shape for the positive path:
 
@@ -62,11 +62,11 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Current feature branch for this slice: `g4/restore-audit-row-write-narrow`.
-- Latest merged G4a hardening PR before this slice: #255 `feat: validate restore audit approval token hash`.
-- Latest merged release-sync PR: #256 `chore: release v0.1.122 [skip release]`.
-- Latest completed release: `v0.1.122`.
-- Open PRs: none observed before starting this slice.
+- Current feature branch for the completed slice was `g4/restore-audit-row-write-narrow`; it was deleted after merge.
+- Latest merged G4a hardening PR: #257 `feat: write narrow restore audit trace`.
+- Latest merged release-sync PR: #258 `chore: release v0.1.123 [skip release]`.
+- Latest completed release: `v0.1.123`.
+- Open PRs: none expected for the completed slice.
 
 Expected GitHub identity:
 
@@ -77,10 +77,10 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.122`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.122`
-- npm package: `@cafitac/agent-memory@0.1.122`
-- PyPI package: `cafitac-agent-memory==0.1.122`
+- `v0.1.123`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.123`
+- npm package: `@cafitac/agent-memory@0.1.123`
+- PyPI package: `cafitac-agent-memory==0.1.123`
 
 Latest verified source/runtime snapshot, checked 2026-05-10 03:42 KST:
 
@@ -93,6 +93,18 @@ Latest verified source/runtime snapshot, checked 2026-05-10 03:42 KST:
 - live DB aggregate snapshot: `retrieval_observations=2153`, `memory_activations=2058`, `experience_traces=1435`, `facts=3`, `procedures=0`, `episodes=0`, and non-empty `query_preview=0`
 - targeted restore audit-row write contract test passed locally on this branch: `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_writes_single_audit_row_without_live_restore_or_leaks -q`
 - broad G4 consolidation apply mode remains blocked
+
+Latest live narrow-audit smoke, checked 2026-05-10 04:13 KST:
+
+- report dir: `/Users/reddit/.agent-memory/reports/v0.1.123-live-narrow-audit-write-20260510T041120`
+- backup: `memory-before-narrow-audit-write.agent-memory-backup.json` plus `backup-inspect.json`
+- read-only restore dry-run: `read_only=true`, `mutated=false`, `restorable_count=0`, `restore_apply_available=false`, privacy flags false, warning only `live_restore_not_implemented`
+- live apply: `status=audit_written_restore_blocked`, `audit_trace_mutated=true`, `live_restore_mutated=false`, `restore_apply_available=false`, `blocked_reasons=["live_restore_not_implemented"]`
+- inserted audit trace: `experience_traces.id=1465`, `event_kind=dogfood_query_preview_cleanup_restore_apply`, `retention_policy=review`, `summary=NULL`, `restored_count=0`, `source_database_match=true`, `artifact_integrity_passed=true`, `rehearsal_status=passed`
+- duplicate rerun failed closed: no second audit row, `failed_checks=["duplicate_audit_event_absent"]`, `mutated=false`, `live_restore_mutated=false`
+- post-write scheduled dry-run stayed read-only/no-mutation and still returned `decision=continue_scheduled_dry_run_dogfooding_before_g4` with blocked reasons `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`
+
+Next safe work: do not broaden apply mode yet. Start with a docs/plan or RED-test-only slice for the next G4 blocker: reduce/understand trace-quality warnings, decay-risk threshold failures, and background-quality warnings before any broad consolidation mutation.
 
 Expected local untracked artifacts to preserve in the root checkout:
 
