@@ -1691,6 +1691,8 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     cleanup_payload = json.loads(cleanup_result.stdout)
     rollback_path = Path(cleanup_payload["apply"]["rollback_manifest"]["artifact_path"])
 
+    approval_token_secret = "approval-token-secret-SHOULD_NOT_LEAK"
+    approval_token_expected_sha256 = hashlib.sha256(approval_token_secret.encode()).hexdigest()
     restore_apply_result = subprocess.run(
         [
             sys.executable,
@@ -1708,7 +1710,9 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
             "--reason",
             "restore apply contract reason token=SHOULD_NOT_LEAK",
             "--approval-token",
-            "approval-token-secret-SHOULD_NOT_LEAK",
+            approval_token_secret,
+            "--approval-token-expected-sha256",
+            approval_token_expected_sha256,
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
@@ -1795,7 +1799,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "audit_write_apply_contract_checkpoint_only",
         "restore_audit_write_not_implemented",
         "live_restore_not_implemented",
-        "restore_audit_write_approval_token_expected_hash_missing",
+        "restore_audit_write_approval_token_validation_not_implemented",
     ]
     assert audit_write_apply["requirements"] == {
         "restore_apply_contract_required": True,
@@ -1906,22 +1910,24 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert approval_packet["requires_explicit_operator_approval"] is True
     assert approval_packet["approval_token_required"] is True
     assert approval_packet["approval_token_present"] is True
-    assert approval_packet["approval_token_sha256"] == hashlib.sha256(
-        b"approval-token-secret-SHOULD_NOT_LEAK"
-    ).hexdigest()
+    assert approval_packet["approval_token_sha256"] == approval_token_expected_sha256
     assert approval_packet["approval_token_validated"] is False
     assert approval_packet["approval_token_expected_sha256_required"] is True
-    assert approval_packet["approval_token_expected_sha256_present"] is False
-    assert approval_packet["approval_token_validation_status"] == "expected_hash_missing"
+    assert approval_packet["approval_token_expected_sha256_present"] is True
+    assert approval_packet["approval_token_expected_sha256"] == approval_token_expected_sha256
+    assert approval_packet["approval_token_expected_sha256_fingerprint_sha256"] == hashlib.sha256(
+        approval_token_expected_sha256.encode()
+    ).hexdigest()
+    assert approval_packet["approval_token_validation_status"] == "validation_not_implemented"
     assert approval_packet["write_blocked_by_missing_approval"] is False
     assert approval_packet["write_blocked_by_unvalidated_approval"] is True
     assert approval_packet["write_blocked_by_invalid_approval"] is True
-    assert approval_packet["write_blocked_by_missing_expected_approval_hash"] is True
+    assert approval_packet["write_blocked_by_missing_expected_approval_hash"] is False
     assert approval_packet["would_insert"] is False
     assert approval_packet["write_allowed"] is False
     assert approval_packet["expected_insert_count"] == 1
-    assert "restore_audit_write_approval_token_expected_hash_missing" in audit_write_apply["blocked_reasons"]
-    assert "restore_audit_write_approval_token_expected_hash_missing" in approval_packet["blocked_reasons"]
+    assert "restore_audit_write_approval_token_validation_not_implemented" in audit_write_apply["blocked_reasons"]
+    assert "restore_audit_write_approval_token_validation_not_implemented" in approval_packet["blocked_reasons"]
     assert approval_packet["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
     assert approval_packet["actor"] == "cli-test"
     assert approval_packet["reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
