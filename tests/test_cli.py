@@ -708,6 +708,21 @@ def test_python_module_cli_activations_decay_risk_reports_ref_safe_resolution_hi
         "content_included": False,
     }
     assert candidate["resolution_hint"] == "add_relation_or_confirm_isolated_approved_memory"
+    assert candidate["review_support"] == {
+        "review_required": True,
+        "safe_to_auto_mutate": False,
+        "raw_content_included": False,
+        "recommended_actions": [
+            "inspect_ref_safe_evidence",
+            "add_relation_to_existing_memory_or_entity",
+            "confirm_isolated_approved_memory",
+        ],
+        "operator_commands": [
+            f"agent-memory review explain fact {str(db_path)} {fact.id}",
+            f"agent-memory review history fact {str(db_path)} {fact.id}",
+            f"agent-memory graph inspect {str(db_path)} fact:{fact.id} --depth 1",
+        ],
+    }
     assert payload["candidate_decomposition"]["resolution_hint_counts"] == {
         "add_relation_or_confirm_isolated_approved_memory": 1,
     }
@@ -4249,7 +4264,7 @@ def test_python_module_cli_hermes_pre_llm_hook_outputs_context_for_hermes_shell_
     observation = observations_payload["observations"][0]
     assert observation["surface"] == "hermes-pre-llm-hook"
     assert observation["retrieved_memory_refs"] == [f"fact:{fact.id}"]
-    assert observation["metadata"] == {"hook_event_name": "pre_llm_call"}
+    assert observation["metadata"] == {"hook_event_name": "pre_llm_call", "retrieval_outcome": "retrieved_memory"}
 
 
 
@@ -4421,8 +4436,15 @@ def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_tur
     )
     assert dry_run_result.returncode == 0, dry_run_result.stderr
     empty_diagnostics = json.loads(dry_run_result.stdout)["reports"]["activation_summary"]["empty_retrieval"]
+    assert observations[0].response_mode == "verify_first"
+    assert observations[0].metadata == {
+        "hook_event_name": "pre_llm_call",
+        "retrieval_outcome": "no_reliable_memory",
+    }
     assert empty_diagnostics["by_surface"] == {"hermes-pre-llm-hook": 1}
     assert empty_diagnostics["by_hook_event_name"] == {"pre_llm_call": 1}
+    assert empty_diagnostics["by_response_mode"] == {"verify_first": 1}
+    assert empty_diagnostics["by_retrieval_outcome"] == {"no_reliable_memory": 1}
     assert empty_diagnostics["trace_linkage"] == {"linked_to_trace_count": 1, "unlinked_to_trace_count": 0}
     assert "SHOULD_NOT_APPEAR" not in dry_run_result.stdout
     assert "password" not in dry_run_result.stdout

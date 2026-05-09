@@ -620,6 +620,45 @@ def _decay_resolution_hint(*, current_status: str | None, activation_count: int,
     return "monitor_only_no_mutation"
 
 
+def _decay_review_support(db_path: Path, memory_ref: str, resolution_hint: str) -> dict[str, Any]:
+    parts = _memory_ref_parts(memory_ref)
+    recommended_actions_by_hint = {
+        "add_relation_or_confirm_isolated_approved_memory": [
+            "inspect_ref_safe_evidence",
+            "add_relation_to_existing_memory_or_entity",
+            "confirm_isolated_approved_memory",
+        ],
+        "verify_missing_ref_before_any_cleanup": [
+            "inspect_ref_safe_evidence",
+            "verify_missing_memory_ref",
+        ],
+        "collect_more_activation_evidence_before_decay_action": [
+            "inspect_ref_safe_evidence",
+            "collect_more_activation_evidence",
+        ],
+        "review_status_history_before_visibility_change": [
+            "inspect_ref_safe_evidence",
+            "review_status_history",
+        ],
+    }
+    operator_commands = [f"agent-memory graph inspect {db_path} {memory_ref} --depth 1"]
+    if parts is not None:
+        memory_type, memory_id = parts
+        operator_commands.insert(0, f"agent-memory review history {memory_type} {db_path} {memory_id}")
+        if memory_type == "fact":
+            operator_commands.insert(0, f"agent-memory review explain fact {db_path} {memory_id}")
+    return {
+        "review_required": True,
+        "safe_to_auto_mutate": False,
+        "raw_content_included": False,
+        "recommended_actions": recommended_actions_by_hint.get(
+            resolution_hint,
+            ["inspect_ref_safe_evidence", "monitor_without_mutation"],
+        ),
+        "operator_commands": operator_commands,
+    }
+
+
 def _fact_review_explanation_payload(db_path: Path, *, fact_id: int) -> dict[str, Any]:
     fact = get_fact(db_path, fact_id=fact_id)
     claim_facts = list_facts_by_claim_slot(
@@ -1856,6 +1895,13 @@ def _decay_risk_candidate_payload(
     elif current_status == "missing":
         signals.append("missing_memory_ref")
 
+    resolution_hint = _decay_resolution_hint(
+        current_status=current_status,
+        activation_count=activation_count,
+        frequent_threshold=frequent_threshold,
+        evidence_snapshot=evidence_snapshot,
+    )
+
     return {
         "memory_ref": memory_ref,
         "score": score,
@@ -1865,12 +1911,8 @@ def _decay_risk_candidate_payload(
         "factor_breakdown": factor_breakdown,
         "protections": protections,
         "ref_safe_evidence": evidence_snapshot,
-        "resolution_hint": _decay_resolution_hint(
-            current_status=current_status,
-            activation_count=activation_count,
-            frequent_threshold=frequent_threshold,
-            evidence_snapshot=evidence_snapshot,
-        ),
+        "resolution_hint": resolution_hint,
+        "review_support": _decay_review_support(db_path, memory_ref, resolution_hint),
         "signals": signals,
         "sample_activation_ids": [activation.id for activation in ref_activations[:5]],
         "sample_observation_ids": _sample_observation_ids(ref_activations),
@@ -3383,6 +3425,9 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
     empty_by_hook_event_name = Counter(
         str(observation.metadata.get("hook_event_name") or "unknown") for observation in empty_observations
     )
+    empty_by_retrieval_outcome = Counter(
+        str(observation.metadata.get("retrieval_outcome") or "unknown") for observation in empty_observations
+    )
     linked_observation_ids: set[int] = set()
     with _open_readonly_sqlite(db_path) as connection:
         if _table_exists(connection, "experience_traces"):
@@ -3425,6 +3470,7 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
             "by_scope": {key: empty_by_scope[key] for key in sorted(empty_by_scope)},
             "by_response_mode": {key: empty_by_response_mode[key] for key in sorted(empty_by_response_mode)},
             "by_hook_event_name": {key: empty_by_hook_event_name[key] for key in sorted(empty_by_hook_event_name)},
+            "by_retrieval_outcome": {key: empty_by_retrieval_outcome[key] for key in sorted(empty_by_retrieval_outcome)},
             "trace_linkage": {
                 "linked_to_trace_count": empty_linked_to_trace_count,
                 "unlinked_to_trace_count": max(0, len(empty_observation_ids) - empty_linked_to_trace_count),

@@ -475,6 +475,11 @@ def retrieve_memory_packet(
     retrieval_observation_id: int | None = None
     if observation_surface:
         try:
+            observation_response_mode = decision_summary.recommended_answer_mode if decision_summary is not None else "verify_first"
+            observation_metadata_payload = {
+                **(observation_metadata or {}),
+                "retrieval_outcome": "retrieved_memory" if retrieval_trace else "no_reliable_memory",
+            }
             observation = record_retrieval_observation(
                 db_path,
                 surface=observation_surface,
@@ -483,8 +488,8 @@ def retrieve_memory_packet(
                 limit=limit,
                 statuses=statuses,
                 retrieval_trace=retrieval_trace,
-                response_mode=decision_summary.recommended_answer_mode if decision_summary is not None else None,
-                metadata=observation_metadata,
+                response_mode=observation_response_mode,
+                metadata=observation_metadata_payload,
             )
             retrieval_observation_id = observation.id
         except Exception:

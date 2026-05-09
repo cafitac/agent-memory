@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 06:08 KST
+Last updated: 2026-05-10 06:31 KST
 
 ## Trigger for the next session
 
@@ -24,13 +24,13 @@ Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, 
 
 ## Current next slice
 
-Current slice: `feat/g4-readiness-blockers` starts clearing the post-v0.1.125 blocker list without enabling broad apply. It links newly created Hermes hook traces to retrieval observation ids, expands empty-retrieval diagnostics by hook event/response mode/trace linkage, explains the remaining decay-risk candidate with ref-safe evidence/resolution hints, and adds one intentionally xfailed broad-G4 apply contract test as a RED checkpoint.
+Current slice: `feat/empty-response-mode` continues from the v0.1.126 readiness-blockers release without enabling broad apply. It verifies the installed v0.1.126 hook path can link a new metadata-only trace to its retrieval observation, changes future empty retrieval observations from `response_mode=null/unknown` to actionable `verify_first` plus metadata-only `retrieval_outcome`, and adds ref-safe review support commands for isolated approved decay-risk candidates such as `fact:1`.
 
 Target shape for this readiness-blockers slice:
 
 - New Hermes hook retrievals should record `MemoryPacket.retrieval_observation_id` and pass it to `experience_traces.related_observation_ids` for ordinary-turn traces.
-- Empty-retrieval diagnostics should stay raw-free while adding `by_hook_event_name`, `by_response_mode`, and trace linkage counts.
-- Decay-risk candidates should include `ref_safe_evidence` and `resolution_hint` plus aggregate `resolution_hint_counts`.
+- Empty-retrieval diagnostics should stay raw-free while adding `by_hook_event_name`, `by_response_mode`, `by_retrieval_outcome`, and trace linkage counts.
+- Decay-risk candidates should include `ref_safe_evidence`, `resolution_hint`, and `review_support` plus aggregate `resolution_hint_counts`.
 - Broad G4 apply stays blocked; the new broad-G4 test is xfailed/RED-only and asserts the future review-queue contract.
 
 Why this is the best move: v0.1.125 made the blockers explainable, and the live DB still blocks broad G4. This slice fixes future trace/observation linkage at the source, makes empty retrieval and decay-risk blockers actionable without raw content, and pins the broad-G4 apply shape as RED-only before any implementation. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
@@ -125,6 +125,15 @@ Latest readiness-blockers source smoke, checked 2026-05-10 06:08 KST:
 - the trace linkage fix applies to new Hermes hook traces; historical live activations/traces remain unlinked until enough new dogfood evidence accumulates
 
 Next safe work after this slice: if released and live-smoked, dogfood enough new Hermes turns to verify activation trace-link coverage improves, then decide whether empty retrievals are expected misses or query/scope gaps. Broad G4 implementation still requires turning the xfailed RED contract into a real review-queue apply path in a separate approved slice.
+
+Latest installed-runtime linkage and next diagnostics smoke, checked 2026-05-10 06:31 KST:
+
+- installed runtime: `/Users/reddit/.agent-memory/runtime/v0.1.126/.venv/bin/agent-memory`
+- scheduled dry-run report: `/tmp/agent-memory-v0126-after-hooks.json`
+- installed v0.1.126 manual hook smoke inserted `retrieval_observations.id=2250` and `experience_traces.id=1533`; the new trace has `related_observation_ids_json=[2250]`, proving the installed hook path can link new metadata-only traces to retrieval observations
+- aggregate live coverage is still low because historical rows remain unlinked: activation trace-link coverage `0.005`, `activations_linked_to_traces=2`, `unlinked_observation_count=400`, `trace_without_observation_link_count=401`
+- broad G4 remains blocked by `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`
+- the current source branch adds future `retrieval_outcome` diagnostics so empty retrievals report `verify_first`/`no_reliable_memory` instead of only `unknown` response mode, and adds ref-safe `review_support` commands for isolated approved decay-risk candidates
 
 Expected local untracked artifacts to preserve in the root checkout:
 
