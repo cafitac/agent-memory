@@ -2725,6 +2725,15 @@ def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_sig
     assert payload["coverage"]["trace_count"] == 2
     assert payload["coverage"]["observations_linked_from_traces"] == 1
     assert payload["coverage"]["observation_trace_coverage_ratio"] == 0.3333
+    assert payload["coverage_diagnostics"] == {
+        "unlinked_observation_count": 2,
+        "trace_without_observation_link_count": 1,
+        "activation_count": 3,
+        "activations_linked_to_traces": 1,
+        "activation_trace_link_coverage_ratio": 0.3333,
+        "likely_gap": "traces_missing_observation_links",
+        "next_action": "Verify the runtime links new metadata-only turn traces to retrieval observation ids before broad G4 planning.",
+    }
     assert payload["retrieval_quality"]["empty_retrieval_count"] == 1
     assert payload["retrieval_quality"]["empty_retrieval_ratio"] == 0.3333
     assert payload["retrieval_quality"]["repeated_memory_ref_count"] == 1
@@ -2872,14 +2881,19 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
         "consider_g4_plan",
     }
     assert blocker_diagnostics["trace_quality_needs_more_dogfooding"]["next_action"]
+    assert "coverage_diagnostics" in blocker_diagnostics["trace_quality_needs_more_dogfooding"]
+    assert blocker_diagnostics["trace_quality_needs_more_dogfooding"]["coverage_diagnostics"]["likely_gap"]
     assert blocker_diagnostics["decay_risk_above_threshold"]["source"] == (
         "reports.background_dry_run.review_handoff.decay_risk_candidate_count"
     )
     assert blocker_diagnostics["decay_risk_above_threshold"]["max_allowed"] == 1
+    assert "candidate_decomposition" in blocker_diagnostics["decay_risk_above_threshold"]
+    assert "top_factor_names" in blocker_diagnostics["decay_risk_above_threshold"]["candidate_decomposition"]
     assert blocker_diagnostics["background_quality_warnings_present"]["source"] == (
         "reports.background_dry_run.scan.quality_warnings"
     )
     assert isinstance(blocker_diagnostics["background_quality_warnings_present"]["warnings"], list)
+    assert "empty_retrieval_activation_diagnostics" in blocker_diagnostics["background_quality_warnings_present"]
     assert payload["automation_policy"] == {
         "apply_supported": False,
         "ordinary_conversation_auto_approval": False,
@@ -7223,9 +7237,22 @@ def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_nois
                 "scan": {"quality_warnings": ["no_clusters_meet_min_evidence"]},
                 "reports": {
                     "candidates": {"candidate_count": 0, "trace_count": 4, "quality_warnings": ["no_clusters_meet_min_evidence"]},
-                    "activation_summary": {"activation_count": 1, "quality_warnings": []},
+                    "activation_summary": {
+                        "activation_count": 1,
+                        "quality_warnings": [],
+                        "empty_retrieval": {"count": 1, "ratio": 1.0, "by_surface": {"cli": 1}, "by_scope": {"global": 1}},
+                    },
                     "reinforcement": {"candidate_count": 0, "quality_warnings": []},
-                    "decay_risk": {"decay_risk_candidates": [{"memory_ref": "fact:1"}], "quality_warnings": []},
+                    "decay_risk": {
+                        "candidate_decomposition": {
+                            "candidate_count": 1,
+                            "max_score": 0.85,
+                            "top_factor_names": ["low_repetition", "weak_strength"],
+                            "raw_content_included": False,
+                        },
+                        "decay_risk_candidates": [{"memory_ref": "fact:1"}],
+                        "quality_warnings": [],
+                    },
                 },
                 "review_handoff": {
                     "candidate_count": 0,
@@ -7294,11 +7321,20 @@ def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_nois
         "candidate_count_max": 1,
         "max_allowed": 0,
         "excess": 1,
+        "candidate_decomposition": {
+            "report_count": 1,
+            "top_factor_names": ["low_repetition", "weak_strength"],
+            "max_score": 0.85,
+            "raw_content_included": False,
+        },
         "next_action": "Inspect aggregate decay-risk candidates before broad G4 planning.",
     }
     assert blocker_diagnostics["quality_warnings_present"]["blocked"] is True
     assert blocker_diagnostics["quality_warnings_present"]["source"] == "aggregate.quality_warnings"
     assert blocker_diagnostics["quality_warnings_present"]["warnings"] == ["no_clusters_meet_min_evidence"]
+    assert blocker_diagnostics["quality_warnings_present"]["empty_retrieval_activation_diagnostics"] == [
+        {"count": 1, "ratio": 1.0, "by_surface": {"cli": 1}, "by_scope": {"global": 1}}
+    ]
     assert blocker_diagnostics["candidate_signal_below_threshold"]["candidate_count_max"] == 0
     assert payload["aggregate"]["candidate_count_max"] == 0
     assert payload["aggregate"]["decay_risk_candidate_count_max"] == 1
