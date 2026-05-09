@@ -4430,12 +4430,23 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
     approval_token = getattr(args, "approval_token", None)
     approval_token_present = bool(approval_token)
     approval_token_sha256 = hashlib.sha256(approval_token.encode()).hexdigest() if approval_token_present else None
-    approval_token_expected_sha256 = None
-    approval_token_expected_sha256_present = bool(approval_token_expected_sha256)
-    approval_token_validated = False
-    approval_token_validation_status = (
-        "expected_hash_missing" if approval_token_present and not approval_token_expected_sha256_present else "missing"
+    approval_token_expected_sha256_raw = getattr(args, "approval_token_expected_sha256", None)
+    approval_token_expected_sha256 = (
+        approval_token_expected_sha256_raw.strip().lower() if approval_token_expected_sha256_raw else None
     )
+    approval_token_expected_sha256_present = bool(approval_token_expected_sha256)
+    approval_token_expected_sha256_fingerprint_sha256 = (
+        hashlib.sha256(approval_token_expected_sha256.encode()).hexdigest()
+        if approval_token_expected_sha256_present
+        else None
+    )
+    approval_token_validated = False
+    if not approval_token_present:
+        approval_token_validation_status = "missing"
+    elif not approval_token_expected_sha256_present:
+        approval_token_validation_status = "expected_hash_missing"
+    else:
+        approval_token_validation_status = "validation_not_implemented"
     approval_token_invalid = approval_token_present and not approval_token_validated
     if not dry_run and not apply_restore:
         raise ValueError("dogfood query-preview-cleanup-restore currently requires --dry-run or --apply")
@@ -4875,7 +4886,9 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "conflict_policy": audit_write_conflict_policy,
             "blocked_reasons": audit_write_apply_blocked_reasons,
         }
-        if approval_token_present:
+        if approval_token_present and approval_token_expected_sha256_present:
+            audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_validation_not_implemented")
+        elif approval_token_present:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_expected_hash_missing")
         else:
             audit_write_apply_blocked_reasons.append("restore_audit_write_approval_token_missing")
@@ -4888,6 +4901,8 @@ def _dogfood_query_preview_cleanup_restore_dry_run_payload(args: argparse.Namesp
             "approval_token_sha256": approval_token_sha256,
             "approval_token_expected_sha256_required": True,
             "approval_token_expected_sha256_present": approval_token_expected_sha256_present,
+            "approval_token_expected_sha256": approval_token_expected_sha256,
+            "approval_token_expected_sha256_fingerprint_sha256": approval_token_expected_sha256_fingerprint_sha256,
             "approval_token_validated": approval_token_validated,
             "approval_token_validation_status": approval_token_validation_status,
             "write_blocked_by_missing_approval": not approval_token_present,
@@ -6370,6 +6385,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_query_preview_cleanup_restore_parser.add_argument("--actor")
     dogfood_query_preview_cleanup_restore_parser.add_argument("--reason")
     dogfood_query_preview_cleanup_restore_parser.add_argument("--approval-token")
+    dogfood_query_preview_cleanup_restore_parser.add_argument("--approval-token-expected-sha256")
     dogfood_ordinary_trace_metadata_cleanup_parser = dogfood_subparsers.add_parser(
         "ordinary-trace-metadata-cleanup",
         help="Preview/apply raw-content-safe normalization for legacy ordinary turn trace metadata defaults.",
