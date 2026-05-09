@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 06:31 KST
+Last updated: 2026-05-10 06:58 KST
 
 ## Purpose
 
@@ -34,13 +34,13 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release before this slice: `v0.1.126`
+Latest completed release: `v0.1.128`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.126`
-- npm: `@cafitac/agent-memory@0.1.126`
-- PyPI: `cafitac-agent-memory==0.1.126`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.128`
+- npm: `@cafitac/agent-memory@0.1.128`
+- PyPI: `cafitac-agent-memory==0.1.128`
 
 Local Hermes/runtime signal:
 
@@ -54,7 +54,7 @@ Current implementation interpretation:
 - Restore/audit safety hardening reached the approval-token positive validation checkpoint in `v0.1.122` and the metadata-only audit trace write checkpoint in `v0.1.123`.
 - The v0.1.123 live smoke wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) when approval/preflight gates passed; duplicate rerun failed closed with no second row.
 - Live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, raw query-preview output, sample values, and default retrieval ranking changes remain disabled.
-- The v0.1.126 release fixes future Hermes hook trace-to-observation linkage and pins the future broad-G4 review-queue apply contract as an intentionally xfailed RED test without enabling mutation. The current source branch further splits empty retrieval outcomes with metadata-only `retrieval_outcome` and adds ref-safe review support for isolated approved decay-risk candidates.
+- The v0.1.128 release includes the future Hermes hook trace-to-observation linkage, metadata-only `retrieval_outcome` split for empty/retrieved observations, ref-safe review support for isolated approved decay-risk candidates, and Linux/SQLite retrieval-eval CI stabilization. Broad G4 review-queue apply remains an intentionally xfailed/RED future contract and no broad mutation is enabled.
 
 ## Current live dogfood health snapshot
 
@@ -76,7 +76,7 @@ Privacy/integrity interpretation:
 - Restore artifacts and backups remain private local files because rollback artifacts can contain raw query previews.
 - Broad G4 consolidation apply mode remains blocked.
 - v0.1.123 live narrow-audit smoke report: `/Users/reddit/.agent-memory/reports/v0.1.123-live-narrow-audit-write-20260510T041120`; after the write, `retrieval_observations.query_preview` stayed at 0, `experience_traces` increased by exactly 1, `live_restore_mutated=false`, and scheduled dry-run still returned `continue_scheduled_dry_run_dogfooding_before_g4`.
-- Current readiness-blockers release `v0.1.126` is installed at `/Users/reddit/.agent-memory/runtime/v0.1.126/.venv/bin/agent-memory`. Manual installed-runtime hook smoke proved a new metadata-only trace can link to its retrieval observation (`experience_traces.id=1533`, `related_observation_ids_json=[2250]`), but historical live rows keep aggregate coverage low (`0.005`). The current source branch turns future empty retrievals into actionable `verify_first`/`no_reliable_memory` diagnostics and adds ref-safe review support commands for isolated approved decay-risk candidates such as `fact:1`.
+- Current readiness-blockers release `v0.1.128` is installed at `/Users/reddit/.agent-memory/runtime/v0.1.128/.venv/bin/agent-memory` and Hermes config points at it. Manual installed-runtime hook smoke proved a new metadata-only trace can link to its retrieval observation (`retrieval_observations.id=2260`, `experience_traces.id=1543`, `related_observation_ids_json=[2260]`) and records `retrieval_outcome=retrieved_memory`; historical live rows keep aggregate coverage low (`0.0098`) until more new turns accumulate. Empty retrieval diagnostics now include `by_retrieval_outcome`, and decay-risk candidates include ref-safe review support commands for isolated approved candidates such as `fact:1`.
 
 ## What is intentionally not happening yet
 
@@ -210,6 +210,23 @@ Why:
 - Matching hashes are now a validated approval signal, but only this narrow metadata-only audit trace write is allowed.
 - The restore/audit path is a narrow safety corridor; it must prove approval, preflight, duplicate/conflict, audit, and rollback behavior before broader consolidation mutation.
 - The human-brain-like goal still requires cautious automation, but the current blocker is safe mutation infrastructure, not more raw evidence capture.
+
+
+## v0.1.128 checkpoint and next move
+
+Completed:
+
+- PR #266, #267, #268, and #269 are merged; `v0.1.128` is published on GitHub/npm/PyPI and fresh artifact smoke passed.
+- Live Hermes config now uses `/Users/reddit/.agent-memory/runtime/v0.1.128/.venv/bin/agent-memory`.
+- New hook traces link to retrieval observations and include metadata-only retrieval outcomes.
+- Latest scheduled dry-run remains read-only/no-mutation and blocks broad G4 for trace-quality, empty-retrieval, and isolated-decay-risk reasons.
+
+Next:
+
+1. Collect more v0.1.128 Hermes turns so the new linkage path can replace historical unlinked rows in the rolling window.
+2. Classify empty retrievals into expected misses vs query/scope gaps using the new `by_retrieval_outcome` diagnostics.
+3. Resolve `fact:1` via reviewed relation edge or explicit isolated-memory confirmation.
+4. Only after those blockers clear, turn the xfailed broad-G4 review-queue contract into a real preview/apply path; broad apply stays blocked until then.
 
 ## Recommended next PR-sized slices
 
