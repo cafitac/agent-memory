@@ -477,6 +477,7 @@ def _record_pre_llm_experience_trace(
             salience=0.0,
             user_emphasis=1.0,
             related_memory_refs=_memory_refs_from_packet(packet),
+            related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
             retention_policy="ephemeral",
             metadata=metadata,
         )
@@ -502,6 +503,7 @@ def _record_pre_llm_experience_trace(
             salience=1.0,
             user_emphasis=1.0,
             related_memory_refs=_memory_refs_from_packet(packet),
+            related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
             retention_policy="review",
             metadata=metadata,
         )
@@ -518,6 +520,7 @@ def _record_pre_llm_experience_trace(
         salience=0.1,
         user_emphasis=0.0,
         related_memory_refs=_memory_refs_from_packet(packet),
+        related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
         retention_policy="ephemeral",
         metadata={
             **_safe_hermes_trace_metadata(payload),

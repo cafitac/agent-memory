@@ -563,6 +563,63 @@ def _current_status_for_memory_ref(db_path: Path, memory_ref: str) -> str | None
         return "missing"
 
 
+def _ref_safe_evidence_snapshot(db_path: Path, memory_ref: str) -> dict[str, Any]:
+    parts = _memory_ref_parts(memory_ref)
+    if parts is None:
+        return {
+            "memory_ref": memory_ref,
+            "memory_type": None,
+            "memory_id": None,
+            "exists": False,
+            "evidence_id_count": 0,
+            "relation_count": 0,
+            "scope_present": False,
+            "content_included": False,
+        }
+    memory_type, memory_id = parts
+    table_by_type = {"fact": "facts", "procedure": "procedures", "episode": "episodes"}
+    table_name = table_by_type[memory_type]
+    with _open_readonly_sqlite(db_path) as connection:
+        row = connection.execute(
+            f"SELECT evidence_ids_json, scope FROM {table_name} WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+    relations = list_relations_for_node(db_path, node_ref=memory_ref)
+    if row is None:
+        return {
+            "memory_ref": memory_ref,
+            "memory_type": memory_type,
+            "memory_id": memory_id,
+            "exists": False,
+            "evidence_id_count": 0,
+            "relation_count": len(relations),
+            "scope_present": False,
+            "content_included": False,
+        }
+    return {
+        "memory_ref": memory_ref,
+        "memory_type": memory_type,
+        "memory_id": memory_id,
+        "exists": True,
+        "evidence_id_count": len(_safe_json_list_from_db(row["evidence_ids_json"])),
+        "relation_count": len(relations),
+        "scope_present": row["scope"] is not None,
+        "content_included": False,
+    }
+
+
+def _decay_resolution_hint(*, current_status: str | None, activation_count: int, frequent_threshold: int, evidence_snapshot: dict[str, Any]) -> str:
+    if current_status == "missing" or not evidence_snapshot.get("exists"):
+        return "verify_missing_ref_before_any_cleanup"
+    if current_status == "approved" and evidence_snapshot.get("relation_count", 0) == 0:
+        return "add_relation_or_confirm_isolated_approved_memory"
+    if current_status == "approved" and activation_count < frequent_threshold:
+        return "collect_more_activation_evidence_before_decay_action"
+    if current_status in {"deprecated", "disputed"}:
+        return "review_status_history_before_visibility_change"
+    return "monitor_only_no_mutation"
+
+
 def _fact_review_explanation_payload(db_path: Path, *, fact_id: int) -> dict[str, Any]:
     fact = get_fact(db_path, fact_id=fact_id)
     claim_facts = list_facts_by_claim_slot(
@@ -1726,6 +1783,7 @@ def _decay_risk_candidate_payload(
     current_status = _current_status_for_memory_ref(db_path, memory_ref)
     activation_count = len(ref_activations)
     total_strength = sum(activation.strength for activation in ref_activations)
+    evidence_snapshot = _ref_safe_evidence_snapshot(db_path, memory_ref)
     relations = list_relations_for_node(db_path, node_ref=memory_ref)
     latest_ref_activation_id = max(activation.id for activation in ref_activations)
 
@@ -1806,6 +1864,13 @@ def _decay_risk_candidate_payload(
         "total_strength": round(total_strength, 4),
         "factor_breakdown": factor_breakdown,
         "protections": protections,
+        "ref_safe_evidence": evidence_snapshot,
+        "resolution_hint": _decay_resolution_hint(
+            current_status=current_status,
+            activation_count=activation_count,
+            frequent_threshold=frequent_threshold,
+            evidence_snapshot=evidence_snapshot,
+        ),
         "signals": signals,
         "sample_activation_ids": [activation.id for activation in ref_activations[:5]],
         "sample_observation_ids": _sample_observation_ids(ref_activations),
@@ -1845,8 +1910,11 @@ def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, freque
     top_candidates = candidates[:top]
     factor_score_max: dict[str, float] = {}
     signal_counts: Counter[str] = Counter()
+    resolution_hint_counts: Counter[str] = Counter()
     for candidate in top_candidates:
         signal_counts.update(str(signal) for signal in candidate.get("signals", []) if signal)
+        if candidate.get("resolution_hint"):
+            resolution_hint_counts[str(candidate["resolution_hint"])] += 1
         for factor_name, factor in candidate.get("factor_breakdown", {}).items():
             factor_score_max[factor_name] = max(factor_score_max.get(factor_name, 0.0), _safe_float(factor.get("score")))
     top_factor_names = [
@@ -1881,6 +1949,7 @@ def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, freque
             "top_factor_names": top_factor_names,
             "factor_score_max": dict(sorted(factor_score_max.items())),
             "signal_counts": {key: signal_counts[key] for key in sorted(signal_counts)},
+            "resolution_hint_counts": {key: resolution_hint_counts[key] for key in sorted(resolution_hint_counts)},
             "sample_memory_refs": [candidate["memory_ref"] for candidate in top_candidates[:5]],
             "raw_content_included": False,
         },
@@ -3304,6 +3373,31 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
     empty_ratio = len(empty_retrieval_activations) / len(activations) if activations else 0.0
     empty_by_surface = Counter(str(getattr(activation, "surface", None) or "unknown") for activation in empty_retrieval_activations)
     empty_by_scope = Counter(str(getattr(activation, "scope", None) or "global") for activation in empty_retrieval_activations)
+    empty_observation_ids = {
+        activation.observation_id for activation in empty_retrieval_activations if activation.observation_id is not None
+    }
+    empty_observations = [
+        observation for observation in list_retrieval_observations(db_path, limit=limit) if observation.id in empty_observation_ids
+    ]
+    empty_by_response_mode = Counter(str(observation.response_mode or "unknown") for observation in empty_observations)
+    empty_by_hook_event_name = Counter(
+        str(observation.metadata.get("hook_event_name") or "unknown") for observation in empty_observations
+    )
+    linked_observation_ids: set[int] = set()
+    with _open_readonly_sqlite(db_path) as connection:
+        if _table_exists(connection, "experience_traces"):
+            rows = connection.execute(
+                """
+                SELECT related_observation_ids_json
+                FROM experience_traces
+                WHERE related_observation_ids_json != '[]'
+                """
+            ).fetchall()
+            for row in rows:
+                for observation_id in _safe_json_list_from_db(row["related_observation_ids_json"]):
+                    if isinstance(observation_id, int):
+                        linked_observation_ids.add(observation_id)
+    empty_linked_to_trace_count = len(empty_observation_ids & linked_observation_ids)
     quality_warnings = []
     if not activations:
         quality_warnings.append("no_activations")
@@ -3329,6 +3423,12 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
             "ratio": round(empty_ratio, 4),
             "by_surface": {key: empty_by_surface[key] for key in sorted(empty_by_surface)},
             "by_scope": {key: empty_by_scope[key] for key in sorted(empty_by_scope)},
+            "by_response_mode": {key: empty_by_response_mode[key] for key in sorted(empty_by_response_mode)},
+            "by_hook_event_name": {key: empty_by_hook_event_name[key] for key in sorted(empty_by_hook_event_name)},
+            "trace_linkage": {
+                "linked_to_trace_count": empty_linked_to_trace_count,
+                "unlinked_to_trace_count": max(0, len(empty_observation_ids) - empty_linked_to_trace_count),
+            },
             "sample_activation_ids": [activation.id for activation in empty_retrieval_activations[:5]],
             "sample_observation_ids": [
                 activation.observation_id

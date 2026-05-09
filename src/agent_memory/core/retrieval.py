@@ -472,9 +472,10 @@ def retrieve_memory_packet(
             if episode.status == "approved":
                 record_memory_retrieval(db_path, memory_type="episode", memory_id=episode.id)
 
+    retrieval_observation_id: int | None = None
     if observation_surface:
         try:
-            record_retrieval_observation(
+            observation = record_retrieval_observation(
                 db_path,
                 surface=observation_surface,
                 query=query,
@@ -485,6 +486,7 @@ def retrieve_memory_packet(
                 response_mode=decision_summary.recommended_answer_mode if decision_summary is not None else None,
                 metadata=observation_metadata,
             )
+            retrieval_observation_id = observation.id
         except Exception:
             pass
 
@@ -501,4 +503,5 @@ def retrieve_memory_packet(
         provenance=provenance,
         retrieval_trace=retrieval_trace,
         trust_summaries=trust_summaries,
+        retrieval_observation_id=retrieval_observation_id,
     )
