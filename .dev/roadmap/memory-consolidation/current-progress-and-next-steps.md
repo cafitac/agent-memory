@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-05 23:23 KST
+Last updated: 2026-05-10 03:04 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.77 query-preview cleanup apply release and live cleanup.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.121 restore/audit approval-token hash-match safety release. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.121 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
 
 Use it when the user asks:
 
@@ -34,57 +34,46 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.77`
+Latest completed release: `v0.1.121`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.77`
-- npm: `@cafitac/agent-memory@0.1.77`
-- PyPI: `cafitac-agent-memory==0.1.77`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.121`
+- npm: `@cafitac/agent-memory@0.1.121`
+- PyPI: `cafitac-agent-memory==0.1.121`
 
-Local Hermes runtime:
+Local Hermes/runtime signal:
 
-- Runtime path: `/Users/reddit/.agent-memory/runtime/v0.1.77/.venv/bin/agent-memory`
-- Hermes config backup before v0.1.77 path update: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.77-20260505224023`
-- `hermes hooks doctor` reported the agent-memory hook healthy after approval.
+- Runtime path exists and is executable: `/Users/reddit/.agent-memory/runtime/v0.1.121/.venv/bin/agent-memory`.
+- Source checkout version smoke reports `agent_memory.__version__ == "0.1.121"`.
+- Main CI and auto-release succeeded for the v0.1.121 release.
 
-v0.1.77 added explicit `dogfood query-preview-cleanup --apply --actor --reason`, published it to GitHub Release/npm/PyPI, and the live DB cleanup has been applied with backup, before/after artifacts, hash-only audit output, and no default retrieval/Hermes behavior change.
+Current implementation interpretation:
+
+- G4a narrow query-preview cleanup is complete and has been live-applied once.
+- Restore/audit safety hardening now reaches the approval-token hash-match checkpoint.
+- Matching approval token and expected hash are recognized as a hash match, but validation is intentionally still unimplemented and write-blocked.
+- No audit row write, live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, or default retrieval ranking change is enabled.
 
 ## Current live dogfood health snapshot
 
-Read-only live DB check at roughly 2026-05-05 23:23 KST, after the v0.1.77 published runtime update, live Hermes approval, and legacy query-preview cleanup verification:
+Read-only aggregate snapshot checked 2026-05-10 03:04 KST against `/Users/reddit/.agent-memory/memory.db`:
 
-- `retrieval_observations`: 838, latest 2026-05-05 14:23:14 UTC
-- `memory_activations`: 743, latest 2026-05-05 14:23:14 UTC
-- `experience_traces`: 143, latest 2026-05-05 14:21:01 UTC
-- `facts`: 3, latest 2026-05-05 14:22:46 UTC
+- `retrieval_observations`: 2153, latest 2026-05-09 18:04:14 UTC
+- `memory_activations`: 2058, latest 2026-05-09 18:04:14 UTC
+- `experience_traces`: 1435, latest 2026-05-09 18:04:14 UTC
+- `facts`: 3, latest 2026-04-30 17:26:00 UTC
 - `procedures`: 0
 - `episodes`: 0
+- non-empty legacy `retrieval_observations.query_preview`: 0
 
-Recent live Hermes v0.1.76 E2E smoke:
+Privacy/integrity interpretation:
 
-- `hermes chat --accept-hooks -Q -q 'Reply with OK only.' --source tool --provider openai-codex --model gpt-5.5` returned `OK`.
-- `hermes hooks doctor` reports all shell hooks healthy with the v0.1.76 pinned runtime path.
-- The installed runtime's G3f live smoke wrote two scheduled reports and `/tmp/agent-memory-v0176-g3f/compare.json` with `read_only=true`, `mutated=false`, `report_count=2`, privacy flags false, and decision `continue_scheduled_report_collection_before_g4`.
-- The G4-readiness kickoff wrote `/tmp/agent-memory-g4-readiness/scheduled-compare-20260505T120412Z.json` and `/Users/reddit/.agent-memory/reports/g4-readiness/scheduled-dry-run-20260505T120519Z.json`; both stayed read-only/no-mutation with privacy flags false and conservative continue-before-G4 decisions.
-- A local Hermes cron job `6894df1bfd4c` now collects four more read-only scheduled artifacts every 6 hours under `/Users/reddit/.agent-memory/reports/g4-readiness`.
-
-Privacy/integrity signals:
-
-- Recent observations have `query_sha256`.
-- Recent observations keep `query_preview` empty.
-- Legacy non-empty `query_preview` rows existed from old versions: 70 rows before v0.1.77 cleanup.
-- v0.1.77 live cleanup cleared all 70 eligible legacy rows; after preview and direct SQL found 0 non-empty `query_preview` rows.
-- Cleanup artifacts and DB backup are under `/Users/reddit/.agent-memory/reports/query-preview-cleanup-v0177-20260505T142043Z`; apply audit trace id is 143.
-- Ordinary traces remain metadata-only: `event_kind=turn`, `summary=NULL`, `retention_policy=ephemeral`, `candidate_policy=evidence_only`, `auto_approved=false`.
-
-Interpretation:
-
-- The live write path is healthy enough to keep dogfooding.
-- Observation/activation evidence is advancing.
-- Ordinary metadata-only traces are advancing.
-- Approved long-term facts are not changing during ordinary conversation, which is expected under the conservative policy.
-- The first G3e quality gate did not pass: it recommends continuing scheduled dry-run dogfooding before any G4 plan because storage-health, trace-quality, decay-risk, and background quality warnings still need more evidence or cleanup planning.
+- Observation, activation, and metadata-only trace evidence has grown substantially since the v0.1.77 checkpoint.
+- Approved facts remain intentionally sparse under conservative defaults.
+- Legacy stored query previews remain cleared.
+- Restore artifacts and backups remain private local files because rollback artifacts can contain raw query previews.
+- Broad G4 consolidation apply mode remains blocked.
 
 ## What is intentionally not happening yet
 
@@ -201,25 +190,22 @@ Current behavior:
 
 ## Current decision point
 
-The first narrow mutation slice is complete: legacy `query_preview` cleanup was implemented, released, applied to the live DB, and verified. Post-cleanup monitoring found one remaining storage-health warning that is narrower than broad consolidation apply: one legacy ordinary `turn` trace is already metadata-only but is missing the conservative metadata defaults. The next safe move is therefore G4b, a second narrow cleanup command, before any broader G4 apply-mode contract or mutation.
+The project is past the first two narrow cleanup mutations and deep into G4a restore/audit safety hardening. The immediate next decision is not broad automatic memory saving. The next safe PR-sized slice is to implement a positive approval-token validator contract for the restore audit-write path while still keeping writes disabled.
 
-The sequence from here is:
+Sequence from here:
 
-1. keep collecting scheduled dry-run artifacts over time;
-2. compare artifacts with `dogfood scheduled-compare`, including post-cleanup scheduled-dry-run artifacts;
-3. implement/release/apply only the narrow ordinary-trace metadata default cleanup if tests, live-copy smoke, and release/runtime QA pass;
-4. update thresholds/blocked reasons from aggregate evidence only;
-5. draft a separate G4 apply-mode contract before implementing broader consolidation mutation.
-
-The detailed first-mutation plan remains `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md`, now with the cleanup slice completed in practice.
+1. Update docs so future sessions start from v0.1.121 rather than stale v0.1.77/v0.1.120 checkpoints.
+2. Add RED tests for matching approval token plus expected hash becoming `approval_token_validated=true` / `approval_token_validation_status=validated_by_expected_sha256`.
+3. Implement only that validation-state transition while keeping `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
+4. Re-run targeted restore/audit CLI tests, full test suite if code changed broadly, published release workflow, registry smoke, and live Hermes runtime QA.
+5. Only after that, plan the narrow audit-row write implementation as a separate PR.
+6. Reassess broad G4 consolidation apply mode from live scheduled dogfood evidence after the narrow restore/audit corridor is safe.
 
 Why:
 
-- We now have live ordinary traces, observations, and activations.
-- The live data is still sparse.
-- Observation/activation counts are higher than trace counts; that may be expected, but the system needs a first-class report explaining coverage instead of ad hoc SQL.
-- The G3/G3a quality gate previously recommended continuing dry-run dogfooding before G4.
-- Automatic approval from ordinary conversation would be premature without better quality and privacy evidence.
+- Matching hashes should become a validated approval signal, but validation must not automatically imply mutation permission.
+- The restore/audit path is a narrow safety corridor; it should prove approval, preflight, duplicate/conflict, audit, and rollback behavior before broader consolidation mutation.
+- The human-brain-like goal still requires cautious automation, but the current blocker is safe mutation infrastructure, not more raw evidence capture.
 
 ## Recommended next PR-sized slices
 
