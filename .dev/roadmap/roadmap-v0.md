@@ -34,8 +34,8 @@ Legend:
 Detailed execution docs live under `.dev/roadmap/memory-consolidation/`:
 
 - `.dev/roadmap/memory-consolidation/README.md`
-- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — historical checkpoint after `v0.1.76`; use `.dev/status/current-handoff.md` for the latest verified v0.1.97 state and next recommended slice.
-- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — historical first-mutation plan and current guardrails for the next broader G4 contract.
+- `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` — current progress checkpoint refreshed after `v0.1.121`; use it with `.dev/status/current-handoff.md` for the latest verified state and next recommended slice.
+- `.dev/roadmap/memory-consolidation/g4-readiness-and-first-mutation-plan.md` — historical first-mutation plan retained as guardrails; v0.1.121 work is now hardening the narrow restore/audit safety corridor before any broader G4 mutation.
 - `.dev/roadmap/memory-consolidation/stage-a-plan-and-baseline.md`
 - `.dev/roadmap/memory-consolidation/stage-b-trace-layer.md`
 - `.dev/roadmap/memory-consolidation/stage-c-activation-reinforcement-decay.md`
@@ -252,10 +252,15 @@ If a later session changes direction, update both this checklist and the relevan
   - Acceptance: broad apply remains unimplemented; `--apply --actor --reason` plus a named policy are required; ordinary conversation auto-approval remains forbidden; raw transcript storage remains forbidden; default retrieval ranking changes remain forbidden.
   - Status: complete in PR #200, stabilized by PR #202, and released/runtime-verified in v0.1.99 via PR #204. This checkpoint authorizes only the next disposable-DB-backed explicit policy/action slice, not live broad apply.
 
+- [~] PR G4-safety-corridor: Harden the narrow restore/audit apply corridor before broader background consolidation apply mode
+  - Goal: prove approval-token validation, preflight, duplicate/conflict fail-closed behavior, audit-row materialization, and rollback/restore contracts in the narrow query-preview cleanup restore path before enabling broader consolidation mutation.
+  - Scope: keep broad G4 apply blocked; advance only one safety contract at a time. After v0.1.121 the next slice is matching approval-token validation without writes.
+  - Acceptance: matching approval token plus expected hash can become validated, but `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false` stay true until a separate audit-write PR.
+
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
-  - Goal: allow controlled promotion/snooze/decay actions after the dry-run path is trusted.
+  - Goal: allow controlled promotion/snooze/decay actions only after the narrow restore/audit corridor is trusted.
   - Scope: explicit `--apply` with policy file, audit trail, rollback instructions.
-  - Acceptance: no apply without explicit flag; actions are reversible or at least reviewable; docs warn this is advanced.
+  - Acceptance: no apply without explicit flag; actions are reversible or at least reviewable; docs warn this is advanced; ordinary-conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain forbidden.
 
 ### Stage H: product hardening and public readiness
 

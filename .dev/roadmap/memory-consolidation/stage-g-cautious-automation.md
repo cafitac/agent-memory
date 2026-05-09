@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.109` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, source DB binding, artifact integrity, blocked restore apply contract, disposable restore rehearsal, aggregate audit preview, and audit write dry-run. Current follow-up adds only a blocked audit-write apply contract; live restore, audit row writes, and broader G4 consolidation apply mode remain blocked by explicit policy/readiness work.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.121` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, source DB binding, artifact integrity, blocked restore apply contract, disposable restore rehearsal, aggregate audit preview, audit write dry-run, blocked audit-write apply contract, preflight/duplicate conflict gates, row materialization, single-row policy packet, missing/invalid/mismatched approval-token gates, and matching-token/expected-hash still-blocked behavior. The next slice should validate a matching token/hash pair while still keeping audit row writes, live restore, and broader G4 consolidation apply mode blocked.
 
 ### Objective
 
@@ -257,7 +257,7 @@ Define the future contract for controlled background consolidation mutations bef
 
 ## PR G4: Add broader background consolidation apply mode behind explicit policy
 
-Status: Blocked until a first disposable-DB-backed explicit policy/action slice proves the apply/audit/restore contract. PR G4-broad-plan has landed, but it did not authorize live broad apply.
+Status: Blocked until the narrow restore/audit corridor proves approval-token validation, audit-row write safety, and rollback/restore contracts. PR G4-broad-plan has landed, but it did not authorize live broad apply; v0.1.121 still keeps broad G4 blocked.
 
 ### Objective
 
@@ -276,4 +276,4 @@ Allow controlled application only after dry-run output is trusted and the broade
 
 ## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.104 named-policy, rollback-manifest, disposable-copy preflight, restore dry-run, and source-binding release, the current slice hardens read-only `dogfood query-preview-cleanup-restore <db> <rollback-artifact> --dry-run` against malformed or tampered artifacts. It rejects wrong-policy, invalid-operation, declared row-count mismatch, duplicate row id, and missing/mismatched source fingerprint cases as structured read-only errors before reporting any restorable rows. Live restore remains unavailable and broad G4 apply mode remains blocked.
+`dogfood query-preview-cleanup --apply` remains the only narrow mutation being hardened. After the v0.1.121 approval-token hash-match checkpoint, the current safety corridor recognizes missing, invalid, mismatched, and matching-token/expected-hash states while still blocking writes. The next slice should turn matching token/hash input into a validated approval signal without enabling `audit_write_apply_available`, `would_insert`, `write_allowed`, live restore, or broad G4 apply mode.
