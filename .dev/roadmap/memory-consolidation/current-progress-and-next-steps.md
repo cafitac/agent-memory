@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 03:42 KST
+Last updated: 2026-05-10 04:13 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.122 restore/audit approval-token validation safety release and the current narrow audit-row write slice. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.122 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.123 narrow restore audit trace write release and live smoke. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.123 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
 
 Use it when the user asks:
 
@@ -34,25 +34,25 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.122`
+Latest completed release: `v0.1.123`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.122`
-- npm: `@cafitac/agent-memory@0.1.122`
-- PyPI: `cafitac-agent-memory==0.1.122`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.123`
+- npm: `@cafitac/agent-memory@0.1.123`
+- PyPI: `cafitac-agent-memory==0.1.123`
 
 Local Hermes/runtime signal:
 
-- Published PyPI and npm smoke passed for `v0.1.122`.
-- Source checkout is based on `v0.1.122` main.
-- Main CI and auto-release succeeded for the v0.1.122 release.
+- Published PyPI and npm smoke passed for `v0.1.123`.
+- Source checkout is based on `v0.1.123` main.
+- Main CI, auto-release, and publish succeeded for the v0.1.123 release.
 
 Current implementation interpretation:
 
 - G4a narrow query-preview cleanup is complete and has been live-applied once.
-- Restore/audit safety hardening reached the approval-token positive validation checkpoint in `v0.1.122`.
-- The current branch opens only the narrow metadata-only restore audit row write when approval/preflight gates pass.
+- Restore/audit safety hardening reached the approval-token positive validation checkpoint in `v0.1.122` and the metadata-only audit trace write checkpoint in `v0.1.123`.
+- The v0.1.123 live smoke wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) when approval/preflight gates passed; duplicate rerun failed closed with no second row.
 - Live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, raw query-preview output, sample values, and default retrieval ranking changes remain disabled.
 
 ## Current live dogfood health snapshot
@@ -74,6 +74,7 @@ Privacy/integrity interpretation:
 - Legacy stored query previews remain cleared.
 - Restore artifacts and backups remain private local files because rollback artifacts can contain raw query previews.
 - Broad G4 consolidation apply mode remains blocked.
+- v0.1.123 live narrow-audit smoke report: `/Users/reddit/.agent-memory/reports/v0.1.123-live-narrow-audit-write-20260510T041120`; after the write, `retrieval_observations.query_preview` stayed at 0, `experience_traces` increased by exactly 1, `live_restore_mutated=false`, and scheduled dry-run still returned `continue_scheduled_dry_run_dogfooding_before_g4`.
 
 ## What is intentionally not happening yet
 

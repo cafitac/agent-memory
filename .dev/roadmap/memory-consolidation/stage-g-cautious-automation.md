@@ -182,7 +182,7 @@ Define exactly what future apply mode may mutate, what it must audit, and what r
 
 ## PR G4a: Add first narrow mutation for legacy query-preview cleanup
 
-Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.122` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, source DB binding, artifact integrity, blocked restore apply contract, disposable restore rehearsal, aggregate audit preview, audit write dry-run, audit-write apply contract, preflight/duplicate conflict gates, row materialization, single-row policy packet, missing/invalid/mismatched approval-token gates, and matching-token/expected-hash validation. The current branch allows only a single metadata-only restore audit row write while still keeping live restore and broader G4 consolidation apply mode blocked.
+Status: Implemented in PR #142, released in `v0.1.77` via PR #143, applied once to the live DB, and hardened through `v0.1.122` with a named policy gate, rollback manifest, disposable-copy preflight before target DB mutation, read-only restore dry-run validation, source DB binding, artifact integrity, blocked restore apply contract, disposable restore rehearsal, aggregate audit preview, audit write dry-run, audit-write apply contract, preflight/duplicate conflict gates, row materialization, single-row policy packet, missing/invalid/mismatched approval-token gates, and matching-token/expected-hash validation. PR #257 released this as `v0.1.123`, and the live smoke wrote one metadata-only restore audit trace (`experience_traces.id=1465`) while keeping live restore and broader G4 consolidation apply mode blocked.
 
 ### Objective
 
@@ -197,7 +197,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - The command writes audit-safe operation metadata, including rollback manifest path/hash/count without raw values in stdout/audit.
 - The command preflights apply on a private disposable DB copy before target DB mutation.
 - A restore dry-run validates rollback artifacts and target-row compatibility without mutating or printing raw query previews; source/target DB fingerprint mismatch and artifact integrity failures are blocking; live restore remains unavailable.
-- Restore apply intent stays separated from live restore: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, aggregate restore audit preview, audit write materialization, audit-write apply contract requiring `legacy-query-preview-cleanup-restore-audit-write-v1`, read-only preflight/duplicate checks, and explicit approval-token expected-sha256 validation. The current branch may write one metadata-only audit trace row when all gates pass, but it must still return `restore_apply_available=false`, keep live query-preview restore unavailable, avoid raw query preview/reason/sample values, and keep broad G4 apply blocked.
+- Restore apply intent stays separated from live restore: it requires `legacy-query-preview-cleanup-restore-v1`, actor, reason hash, source/integrity gates, a private disposable-restore rehearsal, aggregate restore audit preview, audit write materialization, audit-write apply contract requiring `legacy-query-preview-cleanup-restore-audit-write-v1`, read-only preflight/duplicate checks, and explicit approval-token expected-sha256 validation. The v0.1.123 corridor may write one metadata-only audit trace row when all gates pass, but it must still return `restore_apply_available=false`, keep live query-preview restore unavailable, avoid raw query preview/reason/sample values, fail closed on duplicate audit events, and keep broad G4 apply blocked.
 - Storage-health and cleanup preview can verify the result afterward.
 - Retrieval/Hermes behavior is unchanged.
 
@@ -208,6 +208,7 @@ Clear legacy `retrieval_observations.query_preview` values from old versions wit
 - Apply: cleared 70 rows, remaining affected count 0, audit trace id 143, reason and eligible row ids recorded as hashes.
 - After preview/direct SQL: 0 non-empty `query_preview` rows.
 - After scheduled-dry-run: read-only/no-mutation with raw-content privacy flags false.
+- v0.1.123 restore-audit live smoke: backed up the live DB, used a zero-row rollback artifact bound to `/Users/reddit/.agent-memory/memory.db`, wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`), left `query_preview` count at 0, kept `live_restore_mutated=false`, and verified duplicate rerun failed closed with no second row.
 
 ## PR G4b: Add second narrow mutation for ordinary trace metadata default cleanup
 
