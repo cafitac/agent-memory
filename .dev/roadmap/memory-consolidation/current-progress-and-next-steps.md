@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 03:04 KST
+Last updated: 2026-05-10 03:42 KST
 
 ## Purpose
 
-This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.121 restore/audit approval-token hash-match safety release. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.121 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
+This document is the restartable checkpoint for the current `agent-memory` direction after the v0.1.122 restore/audit approval-token validation safety release and the current narrow audit-row write slice. Older sections below preserve historical context from the v0.1.77-v0.1.99 transition; the current source of truth is the v0.1.122 snapshot and next-slice guidance in this file plus `.dev/status/current-handoff.md`.
 
 Use it when the user asks:
 
@@ -34,26 +34,26 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release: `v0.1.121`
+Latest completed release: `v0.1.122`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.121`
-- npm: `@cafitac/agent-memory@0.1.121`
-- PyPI: `cafitac-agent-memory==0.1.121`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.122`
+- npm: `@cafitac/agent-memory@0.1.122`
+- PyPI: `cafitac-agent-memory==0.1.122`
 
 Local Hermes/runtime signal:
 
-- Runtime path exists and is executable: `/Users/reddit/.agent-memory/runtime/v0.1.121/.venv/bin/agent-memory`.
-- Source checkout version smoke reports `agent_memory.__version__ == "0.1.121"`.
-- Main CI and auto-release succeeded for the v0.1.121 release.
+- Published PyPI and npm smoke passed for `v0.1.122`.
+- Source checkout is based on `v0.1.122` main.
+- Main CI and auto-release succeeded for the v0.1.122 release.
 
 Current implementation interpretation:
 
 - G4a narrow query-preview cleanup is complete and has been live-applied once.
-- Restore/audit safety hardening now reaches the approval-token positive validation checkpoint on the current branch.
-- Matching approval token and expected hash become a validated approval signal while audit row writes remain disabled and write-blocked.
-- No audit row write, live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, or default retrieval ranking change is enabled.
+- Restore/audit safety hardening reached the approval-token positive validation checkpoint in `v0.1.122`.
+- The current branch opens only the narrow metadata-only restore audit row write when approval/preflight gates pass.
+- Live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, raw query-preview output, sample values, and default retrieval ranking changes remain disabled.
 
 ## Current live dogfood health snapshot
 
@@ -190,21 +190,20 @@ Current behavior:
 
 ## Current decision point
 
-The project is past the first two narrow cleanup mutations and deep into G4a restore/audit safety hardening. The current branch implements the positive approval-token validator contract for the restore audit-write path while still keeping writes disabled.
+The project is past the first two narrow cleanup mutations and deep into G4a restore/audit safety hardening. The current branch implements the next narrow mutation: a single metadata-only restore audit row write after validated approval and passing preflight, while live restore and broad G4 apply remain blocked.
 
 Sequence from here:
 
-1. Merge the v0.1.121 docs checkpoint so future sessions start from current state.
-2. Add RED tests for matching approval token plus expected hash becoming `approval_token_validated=true` / `approval_token_validation_status=validated_by_expected_sha256`.
-3. Implement only that validation-state transition while keeping `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
-4. Re-run targeted restore/audit CLI tests, full test suite if code changed broadly, published release workflow, registry smoke, and live Hermes runtime QA.
-5. Only after that, plan the narrow audit-row write implementation as a separate PR.
-6. Reassess broad G4 consolidation apply mode from live scheduled dogfood evidence after the narrow restore/audit corridor is safe.
+1. Land this narrow audit-row write slice with focused restore/audit tests and full suite verification.
+2. Release and smoke the published artifacts.
+3. Run a live dry-run/contract check against the Hermes DB before considering any live audit-row write.
+4. If a live audit-row write is approved later, take a backup first and use only the named restore/audit corridor; do not restore query previews in the live DB.
+5. Reassess broad G4 consolidation apply mode from live scheduled dogfood evidence after the narrow restore/audit corridor is safe.
 
 Why:
 
-- Matching hashes should become a validated approval signal, but validation must not automatically imply mutation permission.
-- The restore/audit path is a narrow safety corridor; it should prove approval, preflight, duplicate/conflict, audit, and rollback behavior before broader consolidation mutation.
+- Matching hashes are now a validated approval signal, but only this narrow metadata-only audit trace write is allowed.
+- The restore/audit path is a narrow safety corridor; it must prove approval, preflight, duplicate/conflict, audit, and rollback behavior before broader consolidation mutation.
 - The human-brain-like goal still requires cautious automation, but the current blocker is safe mutation infrastructure, not more raw evidence capture.
 
 ## Recommended next PR-sized slices

@@ -1616,7 +1616,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_dry_run_validat
 
 
 
-def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contract_blocked_without_mutation_or_leaks(
+def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_writes_single_audit_row_without_live_restore_or_leaks(
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "query-preview-cleanup-restore-apply-contract.db"
@@ -1724,9 +1724,11 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert restore_apply_result.returncode == 0, restore_apply_result.stderr
     payload = json.loads(restore_apply_result.stdout)
     assert payload["kind"] == "dogfood_query_preview_cleanup_restore_apply_blocked"
-    assert payload["read_only"] is True
-    assert payload["mutated"] is False
-    assert payload["status"] == "error"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["status"] == "audit_written_restore_blocked"
+    assert payload["audit_trace_mutated"] is True
+    assert payload["live_restore_mutated"] is False
     assert payload["restore_preview"]["apply_requested"] is True
     assert payload["restore_preview"]["restore_apply_available"] is False
     assert payload["restore_preview"]["restorable_count"] == 1
@@ -1752,8 +1754,9 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert rehearsal["privacy"]["disposable_copy_contains_private_query_preview"] is True
     audit = payload["restore_apply_contract"]["audit_preview"]
     assert audit["kind"] == "query_preview_cleanup_restore_audit_preview"
-    assert audit["audit_write_available"] is False
-    assert audit["audit_row_would_be_written"] is False
+    assert audit["audit_write_available"] is True
+    assert audit["audit_row_would_be_written"] is True
+    assert audit["audit_row_written"] is True
     assert audit["privacy"]["raw_query_preview_allowed"] is False
     assert audit["privacy"]["raw_reason_allowed"] is False
     assert audit["fields"]["policy"] == "legacy-query-preview-cleanup-restore-v1"
@@ -1778,8 +1781,10 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     }
     dry_run = audit["write_dry_run"]
     assert dry_run["kind"] == "query_preview_cleanup_restore_audit_write_dry_run"
-    assert dry_run["status"] == "blocked"
-    assert dry_run["would_insert"] is False
+    assert dry_run["status"] == "inserted"
+    assert dry_run["would_insert"] is True
+    assert dry_run["inserted"] is True
+    assert dry_run["inserted_trace_id"] >= 1
     assert dry_run["target_table"] == "experience_traces"
     assert dry_run["event_kind"] == "dogfood_query_preview_cleanup_restore_apply"
     assert dry_run["retention_policy"] == "review"
@@ -1788,20 +1793,17 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert dry_run["metadata_json_preview"] == audit["fields"]
     audit_write_apply = dry_run["apply_contract"]
     assert audit_write_apply["kind"] == "query_preview_cleanup_restore_audit_write_apply_contract"
-    assert audit_write_apply["audit_write_apply_available"] is False
-    assert audit_write_apply["would_insert"] is False
+    assert audit_write_apply["audit_write_apply_available"] is True
+    assert audit_write_apply["would_insert"] is True
+    assert audit_write_apply["inserted"] is True
+    assert audit_write_apply["inserted_trace_id"] == dry_run["inserted_trace_id"]
     assert audit_write_apply["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
     assert audit_write_apply["required_actor"] == "cli-test"
     assert audit_write_apply["required_reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
     assert audit_write_apply["target_table"] == "experience_traces"
     assert audit_write_apply["event_kind"] == "dogfood_query_preview_cleanup_restore_apply"
     assert audit_write_apply["retention_policy"] == "review"
-    assert audit_write_apply["blocked_reasons"] == [
-        "audit_write_apply_contract_checkpoint_only",
-        "restore_audit_write_not_implemented",
-        "live_restore_not_implemented",
-        "restore_audit_write_approval_token_hash_match_validated_write_blocked",
-    ]
+    assert audit_write_apply["blocked_reasons"] == ["live_restore_not_implemented"]
     assert audit_write_apply["requirements"] == {
         "restore_apply_contract_required": True,
         "source_database_match_required": True,
@@ -1827,10 +1829,11 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     }
     row_materialization = dry_run["row_materialization"]
     assert row_materialization["kind"] == "query_preview_cleanup_restore_audit_row_materialization"
-    assert row_materialization["status"] == "dry_run_blocked"
+    assert row_materialization["status"] == "inserted"
+    assert row_materialization["inserted_trace_id"] == dry_run["inserted_trace_id"]
     assert row_materialization["target_table"] == "experience_traces"
-    assert row_materialization["would_insert"] is False
-    assert row_materialization["write_allowed"] is False
+    assert row_materialization["would_insert"] is True
+    assert row_materialization["write_allowed"] is True
     assert row_materialization["schema_version"] == "query-preview-cleanup-restore-audit-row-v1"
     assert row_materialization["duplicate_key"] == {
         "surface": "dogfood",
@@ -1872,9 +1875,9 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     }
     preflight = audit_write_apply["preflight"]
     assert preflight["kind"] == "query_preview_cleanup_restore_audit_write_preflight"
-    assert preflight["status"] == "passed_but_write_blocked"
+    assert preflight["status"] == "passed"
     assert preflight["passed"] is True
-    assert preflight["write_allowed"] is False
+    assert preflight["write_allowed"] is True
     assert preflight["write_blocked_by_preflight"] is False
     assert preflight["duplicate_audit_event_count"] == 0
     assert preflight["checked_content_sha256"] == dry_run["content_sha256"]
@@ -1907,7 +1910,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert preflight["blocked_reasons"] == audit_write_apply["blocked_reasons"]
     approval_packet = audit_write_apply["single_row_apply_policy_packet"]
     assert approval_packet["kind"] == "query_preview_cleanup_restore_audit_write_single_row_apply_policy_packet"
-    assert approval_packet["status"] == "approval_required_write_blocked"
+    assert approval_packet["status"] == "validated_write_allowed"
     assert approval_packet["requires_explicit_operator_approval"] is True
     assert approval_packet["approval_token_required"] is True
     assert approval_packet["approval_token_present"] is True
@@ -1927,11 +1930,12 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert approval_packet["write_blocked_by_missing_expected_approval_hash"] is False
     assert approval_packet["write_blocked_by_approval_hash_mismatch"] is False
     assert approval_packet["write_blocked_by_unimplemented_approval_validation"] is False
-    assert approval_packet["would_insert"] is False
-    assert approval_packet["write_allowed"] is False
+    assert approval_packet["would_insert"] is True
+    assert approval_packet["write_allowed"] is True
+    assert approval_packet["inserted_trace_id"] == dry_run["inserted_trace_id"]
     assert approval_packet["expected_insert_count"] == 1
-    assert "restore_audit_write_approval_token_hash_match_validated_write_blocked" in audit_write_apply["blocked_reasons"]
-    assert "restore_audit_write_approval_token_hash_match_validated_write_blocked" in approval_packet["blocked_reasons"]
+    assert "restore_audit_write_approval_token_hash_match_validated_write_blocked" not in audit_write_apply["blocked_reasons"]
+    assert approval_packet["blocked_reasons"] == audit_write_apply["blocked_reasons"]
     assert approval_packet["required_policy"] == "legacy-query-preview-cleanup-restore-audit-write-v1"
     assert approval_packet["actor"] == "cli-test"
     assert approval_packet["reason_sha256"] == payload["restore_apply_contract"]["reason_sha256"]
@@ -1946,6 +1950,7 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
         "undo_requires_manual_audit_trace_review": True,
         "live_restore_enabled": False,
         "audit_row_delete_enabled": False,
+        "inserted_trace_id": dry_run["inserted_trace_id"],
     }
     assert approval_packet["privacy"] == {
         "raw_query_preview_included": False,
@@ -1960,16 +1965,42 @@ def test_python_module_cli_dogfood_query_preview_cleanup_restore_apply_is_contra
     assert dry_run["privacy"]["raw_query_preview_included"] is False
     assert dry_run["privacy"]["raw_reason_included"] is False
     assert dry_run["privacy"]["sample_values_included"] is False
-    assert "restore_apply_contract_checkpoint_only" in payload["blocked_reasons"]
-    assert "restore_audit_write_not_implemented" in payload["blocked_reasons"]
-    assert "live_restore_not_implemented" in payload["blocked_reasons"]
+    assert "restore_apply_contract_checkpoint_only" not in payload["blocked_reasons"]
+    assert "restore_audit_write_not_implemented" not in payload["blocked_reasons"]
+    assert payload["blocked_reasons"] == ["live_restore_not_implemented"]
     assert "SHOULD_NOT_LEAK" not in restore_apply_result.stdout
     assert "approval-token-secret" not in restore_apply_result.stdout
     assert "token=" not in restore_apply_result.stdout
 
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT id, query_preview FROM retrieval_observations ORDER BY id").fetchall()
+        audit_rows = connection.execute(
+            """
+            SELECT id, surface, event_kind, content_sha256, summary, salience, user_emphasis,
+                   related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            FROM experience_traces
+            WHERE event_kind = 'dogfood_query_preview_cleanup_restore_apply'
+            ORDER BY id
+            """
+        ).fetchall()
     assert rows == [(1, None)]
+    assert len(audit_rows) == 1
+    audit_row = audit_rows[0]
+    assert audit_row[0] == dry_run["inserted_trace_id"]
+    assert audit_row[1:10] == (
+        "dogfood",
+        "dogfood_query_preview_cleanup_restore_apply",
+        dry_run["content_sha256"],
+        None,
+        0.0,
+        0.0,
+        "[]",
+        "[]",
+        "review",
+    )
+    assert json.loads(audit_row[10]) == dry_run["metadata_json_preview"]
+    assert "SHOULD_NOT_LEAK" not in audit_row[10]
+    assert "token=" not in audit_row[10]
 
 
 def test_python_module_cli_dogfood_query_preview_cleanup_restore_audit_write_preflight_fails_closed_on_duplicate(
