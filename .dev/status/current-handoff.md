@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 03:04 KST
+Last updated: 2026-05-10 03:16 KST
 
 ## Trigger for the next session
 
@@ -18,13 +18,13 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 agent-memory is currently verified through `v0.1.121`: the first narrow G4a cleanup mutation is complete, the live DB has 0 non-empty legacy `retrieval_observations.query_preview` rows, and the restore/audit path has been hardened through a matching approval-token/expected-hash still-blocked contract. GitHub Release, npm, and PyPI all report `v0.1.121`. Main CI and auto-release passed for the v0.1.121 release. The live Hermes runtime path `/Users/reddit/.agent-memory/runtime/v0.1.121/.venv/bin/agent-memory` exists and is executable.
 
-Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they can contain raw query previews, and broad G4 consolidation apply mode remains blocked. The latest completed code slice intentionally fails closed even when an approval token hash matches the expected hash: it reports `approval_token_hash_matches_expected=true`, `approval_token_validation_status=hash_match_validation_not_implemented`, `write_blocked_by_unimplemented_approval_validation=true`, `would_insert=false`, and `write_allowed=false`.
+Storage/privacy cleanup remains clean: legacy `retrieval_observations.query_preview` rows are expected to stay at 0, restore artifacts remain private/local because they can contain raw query previews, and broad G4 consolidation apply mode remains blocked. The current branch advances the v0.1.121 still-blocked hash-match state by treating a matching approval token plus expected hash as validated (`approval_token_validated=true`, `approval_token_validation_status=validated_by_expected_sha256`) while still reporting `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later v0.1.100-v0.1.121 releases hardened only the narrow query-preview cleanup/restore/audit safety corridor; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice: start from `v0.1.121` validated `main` on a new branch such as `g4/restore-audit-write-approval-token-validator-positive-contract`. Add only the next RED-test-first approval validation contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet`.
+Current slice: this branch implements the RED-test-first approval validation contract under `dogfood query-preview-cleanup-restore --apply -> restore_apply_contract.audit_preview.write_dry_run.apply_contract.single_row_apply_policy_packet`. After this branch, the next slice should plan the narrow audit-row write implementation separately; do not combine it with broad G4 apply.
 
 The next safest behavior is to treat a matching `--approval-token` plus `--approval-token-expected-sha256` as a validated approval signal while still keeping audit row writes disabled. Target shape:
 
@@ -43,7 +43,7 @@ The next safest behavior is to treat a matching `--approval-token` plus `--appro
 - `would_insert=false`
 - `write_allowed=false`
 
-Why this is the best next move: v0.1.121 freezes both wrong-token mismatch and matching-token still-blocked behavior. The next PR should separate "approval is cryptographically validated" from "DB write is allowed" so a future audit-row write implementation cannot accidentally conflate matching hashes with mutation permission. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
+Why this is the best move: v0.1.121 froze both wrong-token mismatch and matching-token still-blocked behavior. This PR separates "approval is cryptographically validated" from "DB write is allowed" so a future audit-row write implementation cannot accidentally conflate matching hashes with mutation permission. Broad consolidation apply mode remains blocked — DO NOT enable broad G4 apply mode.
 
 Recommended local backup commands before any future live mutation:
 
@@ -66,7 +66,8 @@ Canonical repo path:
 Current branch expectation:
 
 - Root checkout should normally be on `main` unless a docs/feature branch is active.
-- Latest merged G4a hardening PR: #252 `feat: add restore audit approval hash match gate`.
+- Current feature branch for this slice: `g4/restore-audit-write-approval-token-validator-positive-contract`.
+- Latest merged G4a hardening PR before this slice: #252 `feat: add restore audit approval hash match gate`.
 - Latest merged release-sync PR: #253 `chore: release v0.1.121 [skip release]`.
 - Latest completed release: `v0.1.121`.
 - Open PRs: none observed during the v0.1.121 checkpoint.

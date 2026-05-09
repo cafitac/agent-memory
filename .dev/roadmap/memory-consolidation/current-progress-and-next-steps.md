@@ -51,8 +51,8 @@ Local Hermes/runtime signal:
 Current implementation interpretation:
 
 - G4a narrow query-preview cleanup is complete and has been live-applied once.
-- Restore/audit safety hardening now reaches the approval-token hash-match checkpoint.
-- Matching approval token and expected hash are recognized as a hash match, but validation is intentionally still unimplemented and write-blocked.
+- Restore/audit safety hardening now reaches the approval-token positive validation checkpoint on the current branch.
+- Matching approval token and expected hash become a validated approval signal while audit row writes remain disabled and write-blocked.
 - No audit row write, live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, or default retrieval ranking change is enabled.
 
 ## Current live dogfood health snapshot
@@ -190,11 +190,11 @@ Current behavior:
 
 ## Current decision point
 
-The project is past the first two narrow cleanup mutations and deep into G4a restore/audit safety hardening. The immediate next decision is not broad automatic memory saving. The next safe PR-sized slice is to implement a positive approval-token validator contract for the restore audit-write path while still keeping writes disabled.
+The project is past the first two narrow cleanup mutations and deep into G4a restore/audit safety hardening. The current branch implements the positive approval-token validator contract for the restore audit-write path while still keeping writes disabled.
 
 Sequence from here:
 
-1. Update docs so future sessions start from v0.1.121 rather than stale v0.1.77/v0.1.120 checkpoints.
+1. Merge the v0.1.121 docs checkpoint so future sessions start from current state.
 2. Add RED tests for matching approval token plus expected hash becoming `approval_token_validated=true` / `approval_token_validation_status=validated_by_expected_sha256`.
 3. Implement only that validation-state transition while keeping `audit_write_apply_available=false`, `would_insert=false`, and `write_allowed=false`.
 4. Re-run targeted restore/audit CLI tests, full test suite if code changed broadly, published release workflow, registry smoke, and live Hermes runtime QA.
