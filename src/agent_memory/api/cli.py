@@ -1842,6 +1842,17 @@ def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, freque
         for memory_ref, ref_activations in activations_by_ref.items()
     ]
     candidates.sort(key=lambda candidate: (-candidate["score"], candidate["current_status"] or "", candidate["memory_ref"]))
+    top_candidates = candidates[:top]
+    factor_score_max: dict[str, float] = {}
+    signal_counts: Counter[str] = Counter()
+    for candidate in top_candidates:
+        signal_counts.update(str(signal) for signal in candidate.get("signals", []) if signal)
+        for factor_name, factor in candidate.get("factor_breakdown", {}).items():
+            factor_score_max[factor_name] = max(factor_score_max.get(factor_name, 0.0), _safe_float(factor.get("score")))
+    top_factor_names = [
+        factor_name
+        for factor_name, _score in sorted(factor_score_max.items(), key=lambda item: (-item[1], item[0]))[:5]
+    ]
 
     quality_warnings = []
     if not activations:
@@ -1864,7 +1875,16 @@ def _activation_decay_risk_report(db_path: Path, *, limit: int, top: int, freque
             "empty_retrieval_count": empty_retrieval_count,
             "empty_retrieval_ratio": round(empty_ratio, 4),
         },
-        "decay_risk_candidates": candidates[:top],
+        "candidate_decomposition": {
+            "candidate_count": len(top_candidates),
+            "max_score": max((candidate["score"] for candidate in top_candidates), default=0.0),
+            "top_factor_names": top_factor_names,
+            "factor_score_max": dict(sorted(factor_score_max.items())),
+            "signal_counts": {key: signal_counts[key] for key in sorted(signal_counts)},
+            "sample_memory_refs": [candidate["memory_ref"] for candidate in top_candidates[:5]],
+            "raw_content_included": False,
+        },
+        "decay_risk_candidates": top_candidates,
         "suggested_next_steps": [
             "Inspect high decay-risk refs with activations summary and review explain before any status change.",
             "Treat this report as advisory only; do not delete, deprecate, or mutate from decay score alone.",
@@ -2430,6 +2450,8 @@ def _background_dry_run_report_summary(path: Path) -> dict[str, Any]:
             "decay_risk_candidate_count": 0,
             "activation_count": 0,
             "quality_warnings": ["report_unreadable"],
+            "empty_retrieval_activation_diagnostics": {},
+            "decay_risk_candidate_decomposition": {},
             "error": {"type": exc.__class__.__name__, "message": str(exc)},
         }
     if not isinstance(raw, dict):
@@ -2445,6 +2467,8 @@ def _background_dry_run_report_summary(path: Path) -> dict[str, Any]:
             "decay_risk_candidate_count": 0,
             "activation_count": 0,
             "quality_warnings": ["report_not_json_object"],
+            "empty_retrieval_activation_diagnostics": {},
+            "decay_risk_candidate_decomposition": {},
             "error": None,
         }
 
@@ -2471,6 +2495,12 @@ def _background_dry_run_report_summary(path: Path) -> dict[str, Any]:
         "decay_risk_candidate_count": _safe_int(handoff.get("decay_risk_candidate_count", decay_count)),
         "activation_count": _safe_int(activation_summary.get("activation_count")),
         "quality_warnings": _collect_background_quality_warnings(raw),
+        "empty_retrieval_activation_diagnostics": (
+            activation_summary.get("empty_retrieval", {}) if isinstance(activation_summary.get("empty_retrieval"), dict) else {}
+        ),
+        "decay_risk_candidate_decomposition": (
+            decay_risk.get("candidate_decomposition", {}) if isinstance(decay_risk.get("candidate_decomposition"), dict) else {}
+        ),
         "error": None,
     }
 
@@ -2525,6 +2555,7 @@ def _scheduled_dry_run_quality_decision(
             "coverage_ratio": round(_safe_float(trace_coverage.get("observation_trace_coverage_ratio")), 4),
             "empty_retrieval_ratio": round(_safe_float(retrieval_quality.get("empty_retrieval_ratio")), 4),
             "warnings": sorted(str(warning) for warning in trace_warnings if warning),
+            "coverage_diagnostics": trace_quality.get("coverage_diagnostics", {}),
             "next_action": "Collect more metadata-only trace/activation evidence or lower only after a RED-tested plan.",
         },
         "decay_risk_above_threshold": {
@@ -2533,6 +2564,12 @@ def _scheduled_dry_run_quality_decision(
             "candidate_count": decay_risk_candidate_count,
             "max_allowed": max_decay_risk,
             "excess": max(0, decay_risk_candidate_count - max_decay_risk),
+            "candidate_decomposition": (
+                background_dry_run.get("reports", {}).get("decay_risk", {}).get("candidate_decomposition", {})
+                if isinstance(background_dry_run.get("reports"), dict)
+                and isinstance(background_dry_run.get("reports", {}).get("decay_risk"), dict)
+                else {}
+            ),
             "next_action": "Inspect aggregate decay-risk candidates and decide whether they are stale evidence or expected weak traces.",
         },
         "background_quality_warnings_present": {
@@ -2540,6 +2577,12 @@ def _scheduled_dry_run_quality_decision(
             "source": "reports.background_dry_run.scan.quality_warnings",
             "warning_count": len(quality_warnings),
             "warnings": sorted(str(warning) for warning in quality_warnings if warning),
+            "empty_retrieval_activation_diagnostics": (
+                background_dry_run.get("reports", {}).get("activation_summary", {}).get("empty_retrieval", {})
+                if isinstance(background_dry_run.get("reports"), dict)
+                and isinstance(background_dry_run.get("reports", {}).get("activation_summary"), dict)
+                else {}
+            ),
             "next_action": "Resolve or classify each background warning before drafting any broad G4 apply contract.",
         },
     }
@@ -2918,6 +2961,21 @@ def _background_dry_run_dogfood_report(
     reinforcement_candidate_count_max = max((summary["reinforcement_candidate_count"] for summary in summaries), default=0)
     decay_risk_candidate_count_max = max((summary["decay_risk_candidate_count"] for summary in summaries), default=0)
     activation_count_max = max((summary["activation_count"] for summary in summaries), default=0)
+    decay_decompositions = [
+        summary.get("decay_risk_candidate_decomposition", {})
+        for summary in summaries
+        if isinstance(summary.get("decay_risk_candidate_decomposition"), dict)
+        and summary.get("decay_risk_candidate_decomposition")
+    ]
+    empty_retrieval_activation_diagnostics = [
+        summary.get("empty_retrieval_activation_diagnostics", {})
+        for summary in summaries
+        if isinstance(summary.get("empty_retrieval_activation_diagnostics"), dict)
+        and summary.get("empty_retrieval_activation_diagnostics")
+    ]
+    decay_top_factor_names = sorted(
+        {name for decomposition in decay_decompositions for name in decomposition.get("top_factor_names", []) if name}
+    )
     completed_count = status_counter.get("completed", 0)
 
     blocked_reasons: list[str] = []
@@ -2952,6 +3010,12 @@ def _background_dry_run_dogfood_report(
             "candidate_count_max": decay_risk_candidate_count_max,
             "max_allowed": max_decay_risk,
             "excess": max(0, decay_risk_candidate_count_max - max_decay_risk),
+            "candidate_decomposition": {
+                "report_count": len(decay_decompositions),
+                "top_factor_names": decay_top_factor_names,
+                "max_score": max((_safe_float(item.get("max_score")) for item in decay_decompositions), default=0.0),
+                "raw_content_included": False,
+            },
             "next_action": "Inspect aggregate decay-risk candidates before broad G4 planning.",
         },
         "quality_warnings_present": {
@@ -2959,6 +3023,7 @@ def _background_dry_run_dogfood_report(
             "source": "aggregate.quality_warnings",
             "warning_count": len(quality_warnings),
             "warnings": quality_warnings,
+            "empty_retrieval_activation_diagnostics": empty_retrieval_activation_diagnostics[:5],
             "next_action": "Resolve, classify, or document each warning with RED tests before broad G4 planning.",
         },
     }
@@ -3237,6 +3302,8 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
         )
 
     empty_ratio = len(empty_retrieval_activations) / len(activations) if activations else 0.0
+    empty_by_surface = Counter(str(getattr(activation, "surface", None) or "unknown") for activation in empty_retrieval_activations)
+    empty_by_scope = Counter(str(getattr(activation, "scope", None) or "global") for activation in empty_retrieval_activations)
     quality_warnings = []
     if not activations:
         quality_warnings.append("no_activations")
@@ -3260,6 +3327,8 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
         "empty_retrieval": {
             "count": len(empty_retrieval_activations),
             "ratio": round(empty_ratio, 4),
+            "by_surface": {key: empty_by_surface[key] for key in sorted(empty_by_surface)},
+            "by_scope": {key: empty_by_scope[key] for key in sorted(empty_by_scope)},
             "sample_activation_ids": [activation.id for activation in empty_retrieval_activations[:5]],
             "sample_observation_ids": [
                 activation.observation_id
@@ -3912,7 +3981,7 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
         activation_rows = (
             connection.execute(
                 """
-                SELECT activation_kind, memory_ref
+                SELECT activation_kind, memory_ref, observation_id
                 FROM memory_activations
                 WHERE created_at >= datetime('now', ?)
                 ORDER BY id ASC
@@ -3953,6 +4022,27 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
     }
     observation_trace_coverage_ratio = round(len(linked_observation_ids) / observation_count, 4) if observation_count else 0.0
     empty_retrieval_ratio = round(empty_retrieval_count / observation_count, 4) if observation_count else 0.0
+    activation_observation_ids = {
+        int(row["observation_id"])
+        for row in activation_rows
+        if row["observation_id"] is not None
+    }
+    activations_linked_to_traces = len(activation_observation_ids & linked_observation_ids)
+    activation_trace_link_coverage_ratio = (
+        round(activations_linked_to_traces / len(activation_observation_ids), 4) if activation_observation_ids else 0.0
+    )
+    unlinked_observation_count = max(0, observation_count - len(linked_observation_ids))
+    trace_without_observation_link_count = sum(
+        1 for row in trace_rows if not _safe_json_list_from_db(row["related_observation_ids_json"])
+    )
+    if trace_without_observation_link_count and unlinked_observation_count:
+        likely_gap = "traces_missing_observation_links"
+    elif unlinked_observation_count:
+        likely_gap = "observations_missing_trace_links"
+    elif trace_without_observation_link_count:
+        likely_gap = "trace_rows_missing_observation_ids"
+    else:
+        likely_gap = "no_linkage_gap_detected"
     invariant_violation_count = int(ordinary_invariant.get("violation_count", 0)) + sum(
         int(value) for value in metadata_invariant.get("invalid_counts", {}).values()
     )
@@ -3992,6 +4082,15 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
             "activation_count": activation_count,
             "observations_linked_from_traces": len(linked_observation_ids),
             "observation_trace_coverage_ratio": observation_trace_coverage_ratio,
+        },
+        "coverage_diagnostics": {
+            "unlinked_observation_count": unlinked_observation_count,
+            "trace_without_observation_link_count": trace_without_observation_link_count,
+            "activation_count": activation_count,
+            "activations_linked_to_traces": activations_linked_to_traces,
+            "activation_trace_link_coverage_ratio": activation_trace_link_coverage_ratio,
+            "likely_gap": likely_gap,
+            "next_action": "Verify the runtime links new metadata-only turn traces to retrieval observation ids before broad G4 planning.",
         },
         "retrieval_quality": {
             "empty_retrieval_count": empty_retrieval_count,
