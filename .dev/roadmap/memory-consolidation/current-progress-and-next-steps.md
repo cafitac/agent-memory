@@ -561,3 +561,11 @@ Implemented report additions in the active branch:
 Live source smoke artifact: `/tmp/agent-memory-fresh-epoch-classified-source.json` (local-only, not committed). Current aggregate reading: 22 unknown empty outcomes are classified as `legacy_missing_outcome_metadata_gap`, unresolved unknown count is 0, but fresh-epoch quality still blocks on low linkage/high empty ratio/classified metadata gap.
 
 Next after this release: handle `fact:1` isolated approved memory using relation or intentional-isolation review support, then implement telemetry-only reset preview.
+
+
+### Telemetry reset preview slice (2026-05-10 13:55 KST)
+
+- Branch: `feat/telemetry-reset-preview`.
+- Added `dogfood telemetry-reset-preview` as read-only aggregate preview only; no apply/delete path.
+- Guardrails: telemetry tables only (`retrieval_observations`, `memory_activations`, `experience_traces`), protected memory/source/relation/status tables are counted but not mutated, backup required before any future apply design.
+- Live source preview artifact: `/tmp/agent-memory-telemetry-reset-preview-source.json`; epoch `2026-05-09T21:57:33Z` would target 5,965 historical telemetry rows and retain 66 rows per telemetry table; protected tables remain out of scope.
