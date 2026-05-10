@@ -4590,6 +4590,154 @@ def _g4_review_queue_entry(
     }
 
 
+def _g4_background_quality_warning_analysis(
+    dry_run: dict[str, Any],
+    *,
+    queue_count: int,
+) -> dict[str, Any]:
+    reports = dry_run.get("reports", {}) if isinstance(dry_run.get("reports"), dict) else {}
+    candidates_report = reports.get("candidates", {}) if isinstance(reports.get("candidates"), dict) else {}
+    activation_report = reports.get("activation_summary", {}) if isinstance(reports.get("activation_summary"), dict) else {}
+    reinforcement_report = reports.get("reinforcement", {}) if isinstance(reports.get("reinforcement"), dict) else {}
+    decay_report = reports.get("decay_risk", {}) if isinstance(reports.get("decay_risk"), dict) else {}
+    scan = dry_run.get("scan", {}) if isinstance(dry_run.get("scan"), dict) else {}
+
+    source_reports = {
+        "scan": scan,
+        "candidates": candidates_report,
+        "activation_summary": activation_report,
+        "reinforcement": reinforcement_report,
+        "decay_risk": decay_report,
+    }
+
+    warning_sources: dict[str, list[str]] = defaultdict(list)
+    for source_name, source_report in source_reports.items():
+        warnings = source_report.get("quality_warnings", []) if isinstance(source_report, dict) else []
+        if not isinstance(warnings, list):
+            continue
+        for warning in warnings:
+            if warning:
+                warning_sources[str(warning)].append(source_name)
+
+    empty = activation_report.get("empty_retrieval", {}) if isinstance(activation_report.get("empty_retrieval"), dict) else {}
+    by_outcome = empty.get("by_retrieval_outcome", {}) if isinstance(empty.get("by_retrieval_outcome"), dict) else {}
+    trace_linkage = empty.get("trace_linkage", {}) if isinstance(empty.get("trace_linkage"), dict) else {}
+    empty_count = _safe_int(empty.get("count"))
+    unknown_outcome_count = _safe_int(by_outcome.get("unknown"))
+    unlinked_trace_count = _safe_int(trace_linkage.get("unlinked_to_trace_count"))
+    linked_trace_count = _safe_int(trace_linkage.get("linked_to_trace_count"))
+
+    analyses: list[dict[str, Any]] = []
+    blocking_reasons: list[str] = []
+    for warning in sorted(warning_sources):
+        severity = "diagnostic"
+        gate_effect = "does_not_block_queue_preview"
+        likely_causes: list[str] = []
+        next_actions: list[str] = []
+        ref_safe_metrics: dict[str, Any] = {}
+
+        if warning == "high_empty_retrieval_activation_ratio":
+            likely_causes = []
+            if unknown_outcome_count:
+                likely_causes.append("unknown_empty_retrieval_outcome_rows")
+                blocking_reasons.append("background_empty_retrieval_outcome_unknown")
+            if unlinked_trace_count:
+                likely_causes.append("empty_retrieval_observations_missing_trace_links")
+                blocking_reasons.append("background_empty_retrieval_trace_linkage_gap")
+            if _safe_int(by_outcome.get("no_reliable_memory")):
+                likely_causes.append("expected_no_reliable_memory_negative_evidence")
+            if not likely_causes:
+                likely_causes.append("classified_empty_retrieval_negative_evidence")
+            severity = "blocking" if unknown_outcome_count or unlinked_trace_count else "diagnostic"
+            gate_effect = "blocks_until_unknown_or_unlinked_empty_evidence_is_resolved" if severity == "blocking" else "diagnostic_only_after_classification"
+            ref_safe_metrics = {
+                "empty_retrieval_count": empty_count,
+                "empty_retrieval_ratio": round(_safe_float(empty.get("ratio")), 4),
+                "by_retrieval_outcome": {str(key): _safe_int(value) for key, value in sorted(by_outcome.items())},
+                "trace_linkage": {
+                    "linked_to_trace_count": linked_trace_count,
+                    "unlinked_to_trace_count": unlinked_trace_count,
+                },
+                "sample_activation_ids": empty.get("sample_activation_ids", [])[:5] if isinstance(empty.get("sample_activation_ids"), list) else [],
+                "sample_observation_ids": empty.get("sample_observation_ids", [])[:5] if isinstance(empty.get("sample_observation_ids"), list) else [],
+                "raw_content_included": False,
+                "sample_values_included": False,
+            }
+            next_actions = [
+                "Prefer fresh-epoch or telemetry-reset-preview comparison before any apply path.",
+                "Resolve unknown retrieval outcomes by collecting new classified hook data or retiring historical telemetry only through a separate reviewed reset corridor.",
+                "Resolve trace-linkage gaps before treating empty-retrieval volume as safe negative evidence.",
+            ]
+        elif warning == "no_clusters_meet_min_evidence":
+            severity = "blocking" if queue_count == 0 else "diagnostic"
+            gate_effect = "blocks_when_no_queue_candidates_exist" if queue_count == 0 else "does_not_block_when_review_queue_has_candidates"
+            if severity == "blocking":
+                blocking_reasons.append("background_cluster_signal_below_threshold")
+            likely_causes = ["trace_clusters_below_min_evidence"]
+            ref_safe_metrics = {
+                "trace_count": _safe_int(candidates_report.get("trace_count")),
+                "candidate_count": _safe_int(candidates_report.get("candidate_count")),
+                "min_evidence": _safe_int(candidates_report.get("min_evidence")),
+                "queue_count": queue_count,
+            }
+            next_actions = ["Collect more metadata-only traces or lower thresholds only with a RED-tested plan."]
+        elif warning in {"low_activation_count", "low_observation_count"}:
+            severity = "blocking" if queue_count == 0 else "diagnostic"
+            gate_effect = "blocks_when_evidence_is_too_sparse_for_queue" if queue_count == 0 else "does_not_block_existing_review_queue_preview"
+            if severity == "blocking":
+                blocking_reasons.append("background_evidence_volume_below_threshold")
+            likely_causes = ["bounded_recent_window_sparse"]
+            ref_safe_metrics = {
+                "activation_count": _safe_int(activation_report.get("activation_count")),
+                "queue_count": queue_count,
+            }
+            next_actions = ["Collect more dogfood runs and compare aggregate trends."]
+        elif warning in {"no_activations", "no_observations", "no_traces"}:
+            severity = "blocking"
+            gate_effect = "blocks_until_required_telemetry_exists"
+            blocking_reasons.append(f"background_{warning}")
+            likely_causes = ["required_telemetry_missing"]
+            ref_safe_metrics = {
+                "activation_count": _safe_int(activation_report.get("activation_count")),
+                "trace_count": _safe_int(candidates_report.get("trace_count")),
+                "queue_count": queue_count,
+            }
+            next_actions = ["Verify Hermes hook/runtime telemetry writes before queue persistence planning."]
+        else:
+            severity = "blocking"
+            gate_effect = "blocks_until_warning_is_explicitly_classified"
+            blocking_reasons.append("background_unclassified_quality_warning")
+            likely_causes = ["unclassified_background_warning"]
+            next_actions = ["Add a ref-safe classifier for this warning before reducing the gate."]
+
+        analyses.append(
+            {
+                "warning": warning,
+                "sources": sorted(set(warning_sources[warning])),
+                "severity": severity,
+                "gate_effect": gate_effect,
+                "likely_causes": likely_causes,
+                "ref_safe_metrics": ref_safe_metrics,
+                "next_actions": next_actions,
+            }
+        )
+
+    unique_blocking = sorted(set(blocking_reasons))
+    return {
+        "kind": "g4_background_quality_warning_analysis",
+        "aggregate_or_ref_only": True,
+        "raw_content_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "sample_values_included": False,
+        "warning_count": len(warning_sources),
+        "blocking_warning_count": sum(1 for item in analyses if item["severity"] == "blocking"),
+        "diagnostic_warning_count": sum(1 for item in analyses if item["severity"] == "diagnostic"),
+        "blocking_reasons": unique_blocking,
+        "warnings": analyses,
+    }
+
+
 def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.limit < 1:
         raise ValueError("dogfood g4-review-queue-preview limit must be >= 1")
@@ -4674,14 +4822,14 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
             )
         )
 
+    warning_analysis = _g4_background_quality_warning_analysis(dry_run, queue_count=len(queue_entries))
     blocked_reasons: list[str] = []
     if dry_run.get("status") != "completed":
         blocked_reasons.append("background_dry_run_not_completed")
     if not queue_entries:
         blocked_reasons.append("no_review_queue_candidates")
-    quality_warnings = dry_run.get("scan", {}).get("quality_warnings", []) if isinstance(dry_run.get("scan"), dict) else []
-    if quality_warnings:
-        blocked_reasons.append("background_quality_warnings_present")
+    blocked_reasons.extend(str(reason) for reason in warning_analysis.get("blocking_reasons", []))
+    blocked_reasons = sorted(set(blocked_reasons))
 
     payload = {
         "kind": "dogfood_g4_review_queue_preview",
@@ -4696,6 +4844,7 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         "queue_limit": args.queue_limit,
         "queue_count": len(queue_entries),
         "queue": queue_entries,
+        "background_quality_warning_analysis": warning_analysis,
         "quality_gate": {
             "pass": not blocked_reasons,
             "decision": "review_queue_ready_for_manual_review" if not blocked_reasons else "continue_read_only_dogfood_before_review_queue",

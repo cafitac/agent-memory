@@ -3392,6 +3392,112 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_is_ref_safe_and_read_
 
 
 
+def test_python_module_cli_dogfood_g4_review_queue_preview_decomposes_background_quality_warnings(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-review-queue-warning-decomposition.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="G4 warning decomposition sensitive SHOULD_NOT_LEAK detail.",
+        metadata={"project": "g4-warning-decomposition"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 warning decomposition",
+        predicate="safe_ref",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-warning-decomposition",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        for index in range(1, 5):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-warning-decomposition', 1, '["approved"]', ?, ?, 'direct', '{}')
+                """,
+                (index, hashlib.sha256(f"retrieved-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), f"fact:{fact.id}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', 'retrieved', ?, ?, NULL,
+                          'project:g4-warning-decomposition', 1.0, '{}')
+                """,
+                (index, f"fact:{fact.id}", index),
+            )
+        for index in range(5, 11):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-warning-decomposition', 1, '["approved"]', '[]', NULL, 'verify_first', '{}')
+                """,
+                (index, hashlib.sha256(f"empty-{index}".encode()).hexdigest()),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', 'empty_retrieval', NULL, ?, NULL,
+                          'project:g4-warning-decomposition', 1.0, '{}')
+                """,
+                (index, index),
+            )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-review-queue-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--queue-limit",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["queue_count"] >= 1
+    assert "background_quality_warnings_present" not in payload["quality_gate"]["blocked_reasons"]
+    assert "background_empty_retrieval_outcome_unknown" in payload["quality_gate"]["blocked_reasons"]
+    assert "background_empty_retrieval_trace_linkage_gap" in payload["quality_gate"]["blocked_reasons"]
+    analysis = payload["background_quality_warning_analysis"]
+    assert analysis["kind"] == "g4_background_quality_warning_analysis"
+    assert analysis["raw_content_included"] is False
+    assert analysis["raw_query_text_included"] is False
+    assert analysis["sample_values_included"] is False
+    warning = analysis["warnings"][0]
+    assert warning["warning"] == "high_empty_retrieval_activation_ratio"
+    assert warning["severity"] == "blocking"
+    assert warning["ref_safe_metrics"]["by_retrieval_outcome"] == {"unknown": 6}
+    assert warning["ref_safe_metrics"]["trace_linkage"]["unlinked_to_trace_count"] == 6
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+
 def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
     tmp_path: Path,
 ) -> None:
