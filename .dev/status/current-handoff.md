@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 20:48 KST
+Last updated: 2026-05-10 21:14 KST
 
 ## Trigger for the next session
 
@@ -12,7 +12,17 @@ If the user starts a fresh session with a vague prompt such as:
 > 다음 거 진행해줘
 > agent-memory 이어서 해줘
 
-read this file first. Do not ask the user to restate context. Verify repo state, then answer from the current roadmap position below.
+read this file first, then read `.dev/status/next-agent-memory-action.md` for the shortest current recommendation. Do not ask the user to restate context. Verify repo state, then answer from the current roadmap position below.
+
+
+
+## Fast next-action pointer
+
+For prompts like "다음으로 뭐해야 해?" or "다음 할 거 추천해줘", the shortest source of truth is now:
+
+- `.dev/status/next-agent-memory-action.md`
+
+Current recommendation: do a read-only fresh linkage-gap diagnostic slice before any broad G4/background apply or live queue mutation. v0.1.136 is installed and live-smoked, but broad G4 is still blocked by `background_empty_retrieval_trace_linkage_gap`.
 
 ## Ready-to-say answer
 

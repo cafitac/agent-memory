@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 20:48 KST
+Last updated: 2026-05-10 21:14 KST
 
 ## Purpose
 
@@ -38,15 +38,16 @@ Latest completed release/runtime rollout: `v0.1.136`
 
 Released artifacts:
 
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.128`
-- npm: `@cafitac/agent-memory@0.1.128`
-- PyPI: `cafitac-agent-memory==0.1.128`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.136`
+- npm: `@cafitac/agent-memory@0.1.136`
+- PyPI: `cafitac-agent-memory==0.1.136`
 
 Local Hermes/runtime signal:
 
-- Published PyPI and npm smoke passed for `v0.1.125`.
-- Source checkout is based on `v0.1.125` main.
-- Main CI, auto-release, and publish succeeded for the v0.1.125 release.
+- Published PyPI and npm smoke passed for `v0.1.136`.
+- Source checkout is based on `v0.1.136` main.
+- Main CI, auto-release, release-sync, publish, fresh artifact smoke, installed runtime smoke, live read-only G4 preview, and disposable installed apply smoke succeeded for the v0.1.136 release.
+- Short next-action handoff: `.dev/status/next-agent-memory-action.md`.
 
 Current implementation interpretation:
 
@@ -59,15 +60,17 @@ Current implementation interpretation:
 
 ## Current live dogfood health snapshot
 
-Read-only aggregate snapshot checked 2026-05-10 03:04 KST against `/Users/reddit/.agent-memory/memory.db`:
+Read-only aggregate snapshot checked 2026-05-10 20:48 KST against `/Users/reddit/.agent-memory/memory.db`:
 
-- `retrieval_observations`: 2153, latest 2026-05-09 18:04:14 UTC
-- `memory_activations`: 2058, latest 2026-05-09 18:04:14 UTC
-- `experience_traces`: 1435, latest 2026-05-09 18:04:14 UTC
-- `facts`: 3, latest 2026-04-30 17:26:00 UTC
+- `retrieval_observations`: 181 rows, latest id 2440
+- `memory_activations`: 181 rows, latest id 2345
+- `experience_traces`: 181 rows, latest id 1723
+- `facts`: 3 rows, latest id 3
 - `procedures`: 0
 - `episodes`: 0
-- non-empty legacy `retrieval_observations.query_preview`: 0
+- `g4_review_queue_items`: 2
+- `g4_review_queue_applications`: 2
+- non-empty legacy `retrieval_observations.query_preview`: expected to remain 0 from prior cleanup; verify again before any live mutation.
 
 Privacy/integrity interpretation:
 
