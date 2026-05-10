@@ -548,3 +548,16 @@ Do not broaden automation until all of these are true:
 ## Short answer for the current strategy
 
 Yes: for now we keep talking and using Hermes so ordinary traces, retrieval observations, and activation evidence accumulate. Then we inspect the quality of that evidence with read-only reports. Only after the evidence is stable and reviewable do we consider narrow, guarded apply-mode automation.
+
+
+### Fresh epoch empty retrieval classification slice (2026-05-10 13:39 KST)
+
+Purpose: before telemetry reset, classify fresh-epoch empty retrieval rows that still have `retrieval_outcome=unknown` using aggregate metadata only.
+
+Implemented report additions in the active branch:
+- `empty_retrieval_diagnostics.by_likely_cause`
+- `empty_retrieval_diagnostics.unknown_outcome_drilldown`
+
+Live source smoke artifact: `/tmp/agent-memory-fresh-epoch-classified-source.json` (local-only, not committed). Current aggregate reading: 22 unknown empty outcomes are classified as `legacy_missing_outcome_metadata_gap`, unresolved unknown count is 0, but fresh-epoch quality still blocks on low linkage/high empty ratio/classified metadata gap.
+
+Next after this release: handle `fact:1` isolated approved memory using relation or intentional-isolation review support, then implement telemetry-only reset preview.

@@ -1038,3 +1038,12 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 - Do not change default retrieval/Hermes hook ranking as part of background consolidation.
 - Treat G4/background apply as a separate high-risk slice requiring a new RED-tested plan.
 - Preserve local-only untracked files listed above.
+
+
+## In-flight checkpoint — fresh epoch empty retrieval classification (2026-05-10 13:39 KST)
+
+- Branch: `feat/empty-retrieval-classification`.
+- Goal: split fresh-epoch empty retrieval `unknown` outcomes into aggregate, metadata-only likely causes before any telemetry reset/delete path.
+- New report fields: `empty_retrieval_diagnostics.by_likely_cause` and `unknown_outcome_drilldown`.
+- Source smoke on live DB wrote `/tmp/agent-memory-fresh-epoch-classified-source.json` with `read_only=true` and `mutated=false`; aggregate result: 50 observations/traces/activations since epoch, coverage 0.24, empty ratio 0.52, unknown outcomes classified as `legacy_missing_outcome_metadata_gap` with unresolved_count 0.
+- Still blocked: low fresh-epoch linkage, high empty ratio, and classified legacy metadata gap; broad G4 apply remains blocked.
