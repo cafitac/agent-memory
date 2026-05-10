@@ -4548,6 +4548,183 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 
+def _g4_review_queue_entry(
+    *,
+    queue_id: str,
+    proposal_type: str,
+    memory_ref: str | None,
+    reason_codes: list[str],
+    priority_score: float,
+    evidence_refs: list[str],
+    proposed_action: str,
+    operator_commands: list[str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "queue_id": queue_id,
+        "proposal_type": proposal_type,
+        "proposed_action": proposed_action,
+        "target_ref": memory_ref,
+        "priority_score": round(priority_score, 4),
+        "policy": {
+            "requires_human_review": True,
+            "auto_apply_allowed": False,
+            "approval_required": True,
+            "approval_phrase": "approve-g4-review-queue-item",
+        },
+        "reason_codes": reason_codes,
+        "ref_safe_evidence": {
+            "memory_ref": memory_ref,
+            "evidence_refs": evidence_refs,
+            "raw_content_included": False,
+            "sample_values_included": False,
+        },
+        "audit_contract": {
+            "required_fields": ["actor", "reason", "policy", "evidence_refs", "source_queue_id"],
+            "status_before_required": True,
+            "status_after_required": True,
+            "rollback_hint_required": True,
+        },
+        "operator_commands": operator_commands,
+        "metadata": metadata,
+    }
+
+
+def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood g4-review-queue-preview limit must be >= 1")
+    if args.top < 1:
+        raise ValueError("dogfood g4-review-queue-preview top must be >= 1")
+    if args.min_evidence_count < 1:
+        raise ValueError("dogfood g4-review-queue-preview min-evidence-count must be >= 1")
+    if args.frequent_threshold < 1:
+        raise ValueError("dogfood g4-review-queue-preview frequent-threshold must be >= 1")
+
+    lock_path = args.lock_path or args.db_path.with_suffix(".g4-review-queue-preview.lock")
+    dry_run = _consolidation_background_dry_run_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        min_evidence=args.min_evidence_count,
+        frequent_threshold=args.frequent_threshold,
+        output_path=None,
+        lock_path=lock_path,
+    )
+    reports = dry_run.get("reports", {}) if isinstance(dry_run.get("reports"), dict) else {}
+    reinforcement_report = reports.get("reinforcement", {}) if isinstance(reports.get("reinforcement"), dict) else {}
+    decay_report = reports.get("decay_risk", {}) if isinstance(reports.get("decay_risk"), dict) else {}
+
+    queue_entries: list[dict[str, Any]] = []
+    for index, candidate in enumerate(reinforcement_report.get("reinforcement_candidates", [])[: args.queue_limit], start=1):
+        if not isinstance(candidate, dict):
+            continue
+        memory_ref = candidate.get("memory_ref")
+        activation_ids = [f"activation:{value}" for value in candidate.get("sample_activation_ids", [])]
+        observation_ids = [f"observation:{value}" for value in candidate.get("sample_observation_ids", [])]
+        reason_codes = ["reinforcement_review_candidate"] + [str(value) for value in candidate.get("signals", [])]
+        queue_entries.append(
+            _g4_review_queue_entry(
+                queue_id=f"g4-review:reinforcement:{index}",
+                proposal_type="reinforcement_review",
+                memory_ref=str(memory_ref) if memory_ref is not None else None,
+                reason_codes=reason_codes,
+                priority_score=float(candidate.get("score", 0.0) or 0.0),
+                evidence_refs=activation_ids + observation_ids,
+                proposed_action="review_reinforcement_signal_only",
+                operator_commands=[
+                    f"agent-memory activations summary {args.db_path} --memory-ref {memory_ref}",
+                    f"agent-memory review explain {str(memory_ref).split(':', 1)[0]} {args.db_path} {str(memory_ref).split(':', 1)[1]}"
+                    if isinstance(memory_ref, str) and ':' in memory_ref
+                    else f"agent-memory graph inspect {args.db_path} {memory_ref} --depth 1",
+                ],
+                metadata={
+                    "score": candidate.get("score"),
+                    "activation_count": candidate.get("activation_count"),
+                    "current_status": candidate.get("current_status"),
+                },
+            )
+        )
+
+    remaining_slots = max(0, args.queue_limit - len(queue_entries))
+    for index, candidate in enumerate(decay_report.get("decay_risk_candidates", [])[:remaining_slots], start=1):
+        if not isinstance(candidate, dict):
+            continue
+        memory_ref = candidate.get("memory_ref")
+        ref_safe = candidate.get("ref_safe_evidence", {}) if isinstance(candidate.get("ref_safe_evidence"), dict) else {}
+        evidence_refs = [
+            f"activation:{value}" for value in ref_safe.get("sample_activation_ids", [])
+        ] + [f"observation:{value}" for value in ref_safe.get("sample_observation_ids", [])]
+        queue_entries.append(
+            _g4_review_queue_entry(
+                queue_id=f"g4-review:decay-risk:{index}",
+                proposal_type="decay_risk_review",
+                memory_ref=str(memory_ref) if memory_ref is not None else None,
+                reason_codes=["decay_risk_review_candidate"] + [str(value) for value in candidate.get("signals", [])],
+                priority_score=float(candidate.get("score", 0.0) or 0.0),
+                evidence_refs=evidence_refs,
+                proposed_action=str(candidate.get("resolution_hint") or "review_decay_risk_signal_only"),
+                operator_commands=(candidate.get("review_support", {}) or {}).get("operator_commands", [])
+                if isinstance(candidate.get("review_support"), dict)
+                else [f"agent-memory graph inspect {args.db_path} {memory_ref} --depth 1"],
+                metadata={
+                    "score": candidate.get("score"),
+                    "current_status": candidate.get("current_status"),
+                    "resolution_hint": candidate.get("resolution_hint"),
+                },
+            )
+        )
+
+    blocked_reasons: list[str] = []
+    if dry_run.get("status") != "completed":
+        blocked_reasons.append("background_dry_run_not_completed")
+    if not queue_entries:
+        blocked_reasons.append("no_review_queue_candidates")
+    quality_warnings = dry_run.get("scan", {}).get("quality_warnings", []) if isinstance(dry_run.get("scan"), dict) else []
+    if quality_warnings:
+        blocked_reasons.append("background_quality_warnings_present")
+
+    payload = {
+        "kind": "dogfood_g4_review_queue_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "mode": "preview_only",
+        "queue_contract_version": 1,
+        "background_dry_run_status": dry_run.get("status"),
+        "candidate_sources": ["reinforcement_candidates", "decay_risk_candidates"],
+        "queue_limit": args.queue_limit,
+        "queue_count": len(queue_entries),
+        "queue": queue_entries,
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "decision": "review_queue_ready_for_manual_review" if not blocked_reasons else "continue_read_only_dogfood_before_review_queue",
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "queue_persistence_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "aggregate_or_ref_only": True,
+        },
+        "suggested_next_steps": [
+            "Review queue entries manually; this command never persists or applies queue items.",
+            "Promote only through explicit follow-up commands that require actor, reason, policy, and evidence refs.",
+            "Keep broad G4 apply blocked until review queue persistence and rollback contracts have separate tests.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     epoch_start = _parse_epoch_start(args.epoch_start) if args.epoch_start else None
@@ -7183,6 +7360,18 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_telemetry_reset_preview_parser.add_argument("db_path", type=Path)
     dogfood_telemetry_reset_preview_parser.add_argument("--epoch-start", help="Optional ISO timestamp; preview deleting telemetry older than this while retaining fresh epoch rows.")
     dogfood_telemetry_reset_preview_parser.add_argument("--output", type=Path)
+    dogfood_g4_review_queue_preview_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-preview",
+        help="Build a read-only broad G4 review queue preview with ref-safe evidence and no queue persistence/apply.",
+    )
+    dogfood_g4_review_queue_preview_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--output", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_g4_review_queue_preview_parser.add_argument("--top", type=int, default=20)
+    dogfood_g4_review_queue_preview_parser.add_argument("--queue-limit", type=int, default=20)
+    dogfood_g4_review_queue_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_g4_review_queue_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_g4_review_queue_preview_parser.add_argument("--lock-path", type=Path)
     dogfood_scheduled_parser = dogfood_subparsers.add_parser(
         "scheduled-dry-run",
         help="Run a cron-friendly read-only G3e dogfood bundle before any G4 apply-mode plan.",
@@ -8082,6 +8271,11 @@ def main() -> None:
             return
         if args.dogfood_action == "telemetry-reset-preview":
             print(json.dumps(_dogfood_telemetry_reset_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-preview":
+            if args.queue_limit < 1:
+                raise ValueError("dogfood g4-review-queue-preview queue-limit must be >= 1")
+            print(json.dumps(_dogfood_g4_review_queue_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))
