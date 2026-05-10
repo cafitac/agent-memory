@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 06:58 KST
+Last updated: 2026-05-10 13:07 KST
 
 ## Trigger for the next session
 
@@ -28,7 +28,16 @@ Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, 
 
 Current slice completed: `feat/empty-response-mode` landed as PR #266 and is released/runtime-smoked through `v0.1.128` after the PR #268 CI stabilization. It verified installed hook linkage, changed future empty retrieval observations from ambiguous unknown/null-only diagnostics toward actionable metadata-only `retrieval_outcome`, and added ref-safe `review_support` commands for isolated approved decay-risk candidates such as `fact:1`.
 
-Next safe slice: dogfood enough new v0.1.128 Hermes turns to raise new-row activation trace-link coverage, then classify the remaining empty retrievals into expected misses vs query/scope gaps. In parallel, resolve `fact:1` by either adding a reviewed relation edge or explicitly confirming that the approved fact is intentionally isolated. Broad G4 apply still requires a separate review-queue apply contract and must stay blocked until trace quality, empty retrieval quality, and decay-risk blockers clear.
+Current slice: `dogfood fresh-epoch` is being added as a read-only way to judge v0.1.128+ telemetry apart from historical rows that were never semantically backfilled with observation links or `retrieval_outcome`. This does not delete/reset live data and does not enable telemetry reset apply.
+
+Target shape for this slice:
+
+- `agent-memory dogfood fresh-epoch <db> --epoch-start <ISO>` emits `dogfood_fresh_epoch_readiness` with `read_only=true`, `mutated=false`, and `automation_policy.apply_supported=false`.
+- The report excludes historical rows by timestamp and reports only aggregate counts for observation/trace/activation coverage, empty retrieval outcomes, trace distributions, candidate signals, and historical rows excluded.
+- No raw prompt/query/transcript/trace summary/sample values are printed.
+- The first live source smoke against `/Users/reddit/.agent-memory/memory.db` with epoch `2026-05-09T21:57:33Z` wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`: 21 observations, 21 traces, 21 activations, coverage ratio 0.2381, 10 empty retrievals, blocked by `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_unknown`; no mutation.
+
+Next safe slice after this lands: continue v0.1.128 dogfood until fresh-epoch coverage clears the threshold, then classify remaining empty retrievals into expected misses vs query/scope gaps. If the fresh epoch looks healthy but historical blockers still dominate scheduled-dry-run, design a separate `telemetry-only reset preview` corridor; do not add live reset apply in this slice. In parallel, resolve `fact:1` by either adding a reviewed relation edge or explicitly confirming that the approved fact is intentionally isolated. Broad G4 apply still requires a separate review-queue apply contract and must stay blocked until trace quality, empty retrieval quality, and decay-risk blockers clear.
 
 Recommended local backup commands before any future live mutation:
 

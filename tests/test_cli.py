@@ -2859,6 +2859,185 @@ def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_sig
 
 
 
+def test_python_module_cli_dogfood_fresh_epoch_filters_historical_telemetry_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "fresh-epoch.db"
+    initialize_database(db_path)
+    old_time = "2026-05-09 00:00:00"
+    epoch_start = "2026-05-10T00:00:00Z"
+    new_time = "2026-05-10 00:05:00"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', ?, '', 'project:old', 1, '["approved"]', '[]', NULL, NULL, ?)
+            """,
+            (old_time, "a" * 64, json.dumps({"hook_event_name": "pre_llm_call"})),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', ?, '', 'project:fresh', 1, '["approved"]', '["fact:1"]', 'fact:1', 'direct', ?)
+            """,
+            (
+                new_time,
+                "b" * 64,
+                json.dumps({"hook_event_name": "pre_llm_call", "retrieval_outcome": "retrieved_memory"}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (3, ?, 'hermes-pre-llm-hook', ?, '', 'project:fresh', 1, '["approved"]', '[]', NULL, 'verify_first', ?)
+            """,
+            (
+                new_time,
+                "c" * 64,
+                json.dumps({"hook_event_name": "pre_llm_call", "retrieval_outcome": "no_reliable_memory"}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, summary,
+                related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', 'turn', 'project:old', ?, NULL, '[]', '[]', 'ephemeral', '{}')
+            """,
+            (old_time, "d" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, summary,
+                related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', 'turn', 'project:fresh', ?, NULL, '["fact:1"]', '[2]', 'ephemeral', ?)
+            """,
+            (
+                new_time,
+                "e" * 64,
+                json.dumps({"trace_recording": "default_metadata_only", "candidate_policy": "evidence_only", "auto_approved": False}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, summary,
+                related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (3, ?, 'hermes-pre-llm-hook', 'turn', 'project:fresh', ?, NULL, '[]', '[3]', 'ephemeral', ?)
+            """,
+            (
+                new_time,
+                "f" * 64,
+                json.dumps({"trace_recording": "default_metadata_only", "candidate_policy": "evidence_only", "auto_approved": False}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, 1, NULL, 'project:old', '{}')
+            """,
+            (old_time,),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', 'retrieved', 'fact:1', 2, NULL, 'project:fresh', '{}')
+            """,
+            (new_time,),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json
+            ) VALUES (3, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, 3, NULL, 'project:fresh', '{}')
+            """,
+            (new_time,),
+        )
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    output_path = tmp_path / "fresh-epoch.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "fresh-epoch",
+            str(db_path),
+            "--epoch-start",
+            epoch_start,
+            "--output",
+            str(output_path),
+            "--min-trace-coverage",
+            "1.0",
+            "--min-evidence-count",
+            "1",
+            "--high-empty-threshold",
+            "0.75",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_fresh_epoch_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["epoch"]["started_at"] == "2026-05-10 00:00:00"
+    assert payload["epoch"]["historical_rows_excluded"] == {
+        "retrieval_observations": 1,
+        "memory_activations": 1,
+        "experience_traces": 1,
+    }
+    assert payload["coverage"] == {
+        "observation_count": 2,
+        "trace_count": 2,
+        "activation_count": 2,
+        "observations_linked_from_traces": 2,
+        "observation_trace_coverage_ratio": 1.0,
+    }
+    assert payload["coverage_diagnostics"]["activation_trace_link_coverage_ratio"] == 1.0
+    assert payload["coverage_diagnostics"]["likely_gap"] == "no_linkage_gap_detected"
+    assert payload["empty_retrieval_diagnostics"]["count"] == 1
+    assert payload["empty_retrieval_diagnostics"]["ratio"] == 0.5
+    assert payload["empty_retrieval_diagnostics"]["by_response_mode"] == {"verify_first": 1}
+    assert payload["empty_retrieval_diagnostics"]["by_retrieval_outcome"] == {"no_reliable_memory": 1}
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "fresh_epoch_ready_to_compare_against_historical",
+        "blocked_reasons": [],
+    }
+    assert payload["automation_policy"]["apply_supported"] is False
+    assert payload["automation_policy"]["telemetry_reset_apply_supported"] is False
+    assert payload["privacy"]["aggregate_only"] is True
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
     tmp_path: Path,
 ) -> None:

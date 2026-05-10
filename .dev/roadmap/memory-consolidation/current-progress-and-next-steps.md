@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 06:58 KST
+Last updated: 2026-05-10 13:07 KST
 
 ## Purpose
 
@@ -227,6 +227,20 @@ Next:
 2. Classify empty retrievals into expected misses vs query/scope gaps using the new `by_retrieval_outcome` diagnostics.
 3. Resolve `fact:1` via reviewed relation edge or explicit isolated-memory confirmation.
 4. Only after those blockers clear, turn the xfailed broad-G4 review-queue contract into a real preview/apply path; broad apply stays blocked until then.
+
+
+## Fresh epoch direction after v0.1.128
+
+Decision: prefer an epoch-filtered read-only report before any telemetry reset. Historical rows are preserved because they contain useful audit/release/safety evidence, but broad-G4 readiness can now be judged against a fresh v0.1.128+ telemetry window that excludes older rows missing observation links and `retrieval_outcome` backfill.
+
+Current implementation slice:
+
+- Add `agent-memory dogfood fresh-epoch <db> --epoch-start <ISO>`.
+- Output `dogfood_fresh_epoch_readiness` with `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, and no apply support.
+- Report aggregate-only epoch coverage, activation trace-link coverage, empty retrieval outcome breakdowns, trace distributions, candidate signals, and historical rows excluded.
+- Keep reset/delete/apply out of scope; if needed later, design telemetry-only reset as a separate preview/apply corridor with backup, actor, reason, policy, audit, and rollback.
+
+First live source smoke against `/Users/reddit/.agent-memory/memory.db` used epoch `2026-05-09T21:57:33Z` and wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`. It stayed read-only/no-mutation and showed 21 observations, 21 traces, 21 activations, coverage ratio `0.2381`, 5 linked observations, 10 empty retrievals, and blockers `low_epoch_observation_trace_coverage` plus `epoch_empty_retrieval_outcome_unknown`. This confirms the historical rows can be excluded safely, but the fresh epoch still needs more dogfood before broad G4 planning.
 
 ## Recommended next PR-sized slices
 
