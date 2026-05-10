@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import html
 import json
+import shutil
 import sqlite3
 import sys
 from collections import Counter, defaultdict
@@ -4058,6 +4059,14 @@ def _safe_json_list_from_db(value: str | None) -> list[Any]:
     return parsed if isinstance(parsed, list) else []
 
 
+def _safe_json_dict_from_db(value: str | None) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _dogfood_trace_quality_recommendation(
     *,
     observation_count: int,
@@ -5044,35 +5053,61 @@ def _dogfood_g4_review_queue_update_payload(args: argparse.Namespace) -> dict[st
         raise ValueError("dogfood g4-review-queue-update status must be approved or rejected")
     if not args.actor.strip() or not args.reason.strip():
         raise ValueError("dogfood g4-review-queue-update requires non-empty --actor and --reason")
+    policy = args.policy or "g4-review-queue-transition-v1"
+    expected_phrase = f"{args.status}-g4-review-queue-item-v1"
+    if args.approval_phrase is not None and args.approval_phrase != expected_phrase:
+        raise ValueError(f"dogfood g4-review-queue-update requires --approval-phrase {expected_phrase} when provided")
     reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
     with sqlite3.connect(args.db_path) as connection:
         connection.row_factory = sqlite3.Row
         _ensure_g4_review_queue_table(connection)
         row = connection.execute(
-            "SELECT audit_json FROM g4_review_queue_items WHERE queue_id = ?",
+            "SELECT status, proposal_type, target_ref, source_preview_sha256, audit_json FROM g4_review_queue_items WHERE queue_id = ?",
             (args.queue_id,),
         ).fetchone()
         if row is None:
             raise ValueError(f"review queue item not found: {args.queue_id}")
+        status_before = row["status"]
         audit = _safe_json_list_from_db(row["audit_json"])
-        audit.append({"action": args.status, "actor": args.actor.strip(), "reason_sha256": reason_sha256})
+        audit.append({
+            "action": args.status,
+            "actor": args.actor.strip(),
+            "policy": policy,
+            "reason_sha256": reason_sha256,
+            "source_queue_id": args.queue_id,
+            "status_before": status_before,
+            "status_after": args.status,
+            "target_ref": row["target_ref"],
+            "source_preview_sha256": row["source_preview_sha256"],
+        })
         connection.execute(
             """
             UPDATE g4_review_queue_items
             SET status = ?, updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ?
             WHERE queue_id = ?
             """,
-            (args.status, args.actor.strip(), reason_sha256, json.dumps(audit), args.queue_id),
+            (args.status, args.actor.strip(), reason_sha256, json.dumps(audit, sort_keys=True), args.queue_id),
         )
     return {
         "kind": "dogfood_g4_review_queue_update",
         "read_only": False,
-        "mutated": True,
+        "mutated": status_before != args.status,
         "default_retrieval_unchanged": True,
         "apply_supported": False,
         "queue_id": args.queue_id,
+        "status_before": status_before,
+        "status_after": args.status,
         "status": args.status,
+        "policy": policy,
+        "approval_phrase_matched": args.approval_phrase == expected_phrase if args.approval_phrase is not None else None,
         "reason_sha256": reason_sha256,
+        "ref_safe_audit": {
+            "target_ref": row["target_ref"],
+            "proposal_type": row["proposal_type"],
+            "source_preview_sha256": row["source_preview_sha256"],
+            "raw_content_included": False,
+            "sample_values_included": False,
+        },
         "privacy": {"raw_reason_included": False, "raw_content_included": False, "sample_values_included": False},
     }
 
@@ -5170,6 +5205,265 @@ def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[s
     _write_json_report(args.output, payload)
     return payload
 
+
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _default_backup_path(db_path: Path, *, label: str) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return db_path.with_name(f"{db_path.name}.bak-{label}-{stamp}")
+
+
+def _create_sqlite_backup(db_path: Path, backup_path: Path) -> dict[str, Any]:
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(db_path, backup_path)
+    return {
+        "path": str(backup_path),
+        "sha256": _sha256_file(backup_path),
+        "size_bytes": backup_path.stat().st_size,
+        "raw_content_included": False,
+    }
+
+
+def _dogfood_telemetry_reset_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "telemetry-reset-v1"
+    approval_phrase = "apply-telemetry-reset-v1"
+    if args.policy != policy:
+        raise ValueError(f"dogfood telemetry-reset-apply requires --policy {policy}")
+    if args.approval_phrase != approval_phrase:
+        raise ValueError(f"dogfood telemetry-reset-apply requires --approval-phrase {approval_phrase}")
+    if not args.epoch_start:
+        raise ValueError("dogfood telemetry-reset-apply requires --epoch-start")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood telemetry-reset-apply requires non-empty --actor and --reason")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+
+    preview = _dogfood_telemetry_reset_preview_payload(
+        argparse.Namespace(db_path=db_path, epoch_start=args.epoch_start, output=None)
+    )
+    candidate_total = _safe_int(preview.get("candidate_delete_total"))
+    backup_path = args.backup_path.expanduser().resolve(strict=False) if args.backup_path else _default_backup_path(db_path, label="telemetry-reset")
+    backup = _create_sqlite_backup(db_path, backup_path)
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    epoch_start = _parse_epoch_start(args.epoch_start)
+    telemetry_tables = ("retrieval_observations", "memory_activations", "experience_traces")
+    protected_tables = ("facts", "procedures", "episodes", "relations", "source_records", "memory_status_transitions", "g4_review_queue_items")
+
+    with sqlite3.connect(db_path) as connection:
+        protected_before = {
+            table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if _table_exists(connection, table) else 0
+            for table in protected_tables
+        }
+        deleted_by_table: dict[str, int] = {}
+        for table in telemetry_tables:
+            if not _table_exists(connection, table):
+                deleted_by_table[table] = 0
+                continue
+            before = connection.total_changes
+            connection.execute(f"DELETE FROM {table} WHERE created_at < ?", (epoch_start,))
+            deleted_by_table[table] = connection.total_changes - before
+        protected_after = {
+            table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if _table_exists(connection, table) else 0
+            for table in protected_tables
+        }
+    protected_unchanged = protected_before == protected_after
+    deleted_total = sum(deleted_by_table.values())
+    if not protected_unchanged:
+        raise RuntimeError("protected table counts changed during telemetry reset apply")
+    after_preview = _dogfood_telemetry_reset_preview_payload(
+        argparse.Namespace(db_path=db_path, epoch_start=args.epoch_start, output=None)
+    )
+    payload = {
+        "kind": "dogfood_telemetry_reset_apply",
+        "read_only": False,
+        "mutated": deleted_total > 0,
+        "db_path": str(db_path),
+        "policy": policy,
+        "approval_phrase_matched": True,
+        "actor": args.actor.strip(),
+        "reason_sha256": reason_sha256,
+        "backup": backup,
+        "reset_scope": "telemetry_only",
+        "epoch_filter": preview.get("epoch_filter", {}),
+        "candidate_delete_total": candidate_total,
+        "deleted_total": deleted_total,
+        "deleted_by_table": deleted_by_table,
+        "protected_tables_before": protected_before,
+        "protected_tables_after": protected_after,
+        "protected_memory_tables_mutated": False,
+        "default_retrieval_unchanged": True,
+        "post_apply_preview": {
+            "candidate_delete_total": after_preview.get("candidate_delete_total"),
+            "warnings": after_preview.get("warnings", []),
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "raw_reason_included": False,
+            "reason_stored_as_sha256": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _ensure_g4_review_queue_applications_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS g4_review_queue_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            queue_id TEXT NOT NULL,
+            proposal_type TEXT NOT NULL,
+            target_ref TEXT,
+            policy TEXT NOT NULL,
+            action TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason_sha256 TEXT NOT NULL,
+            source_preview_sha256 TEXT NOT NULL,
+            backup_path TEXT NOT NULL,
+            backup_sha256 TEXT NOT NULL,
+            rollback_hint_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(queue_id, policy)
+        )
+        """
+    )
+
+
+def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "g4-review-queue-apply-v1"
+    approval_phrase = "apply-approved-g4-review-queue-items-v1"
+    if args.policy != policy:
+        raise ValueError(f"dogfood g4-review-queue-apply requires --policy {policy}")
+    if args.approval_phrase != approval_phrase:
+        raise ValueError(f"dogfood g4-review-queue-apply requires --approval-phrase {approval_phrase}")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood g4-review-queue-apply requires non-empty --actor and --reason")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    backup_path = args.backup_path.expanduser().resolve(strict=False) if args.backup_path else _default_backup_path(db_path, label="g4-review-queue-apply")
+    backup = _create_sqlite_backup(db_path, backup_path)
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    queue_filter = list(args.queue_id or [])
+    applied: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_g4_review_queue_table(connection)
+        _ensure_g4_review_queue_applications_table(connection)
+        if queue_filter:
+            placeholders = ", ".join("?" for _ in queue_filter)
+            rows = connection.execute(
+                f"SELECT * FROM g4_review_queue_items WHERE queue_id IN ({placeholders}) ORDER BY queue_id",
+                tuple(queue_filter),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM g4_review_queue_items WHERE status = 'approved' ORDER BY queue_id"
+            ).fetchall()
+        found_ids = {row["queue_id"] for row in rows}
+        for missing in sorted(set(queue_filter) - found_ids):
+            skipped.append({"queue_id": missing, "reason": "not_found"})
+        for row in rows:
+            queue_id = row["queue_id"]
+            if row["status"] != "approved":
+                skipped.append({"queue_id": queue_id, "reason": f"status_{row['status']}"})
+                continue
+            proposal = _safe_json_dict_from_db(row["proposal_json"])
+            action = "record_review_outcome_only"
+            rollback_hint = {
+                "restore_backup_path": str(backup_path),
+                "queue_id": queue_id,
+                "policy": policy,
+                "memory_status_mutated": False,
+                "default_retrieval_mutated": False,
+            }
+            before = connection.total_changes
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO g4_review_queue_applications (
+                    queue_id, proposal_type, target_ref, policy, action, actor, reason_sha256,
+                    source_preview_sha256, backup_path, backup_sha256, rollback_hint_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    queue_id,
+                    row["proposal_type"],
+                    row["target_ref"],
+                    policy,
+                    action,
+                    args.actor.strip(),
+                    reason_sha256,
+                    row["source_preview_sha256"],
+                    str(backup_path),
+                    backup["sha256"],
+                    json.dumps(rollback_hint, sort_keys=True),
+                ),
+            )
+            inserted = connection.total_changes > before
+            audit = _safe_json_list_from_db(row["audit_json"])
+            audit.append({
+                "action": "apply" if inserted else "apply_already_recorded",
+                "actor": args.actor.strip(),
+                "policy": policy,
+                "reason_sha256": reason_sha256,
+                "application_action": action,
+            })
+            connection.execute(
+                "UPDATE g4_review_queue_items SET updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ? WHERE queue_id = ?",
+                (args.actor.strip(), reason_sha256, json.dumps(audit), queue_id),
+            )
+            applied.append({
+                "queue_id": queue_id,
+                "proposal_type": row["proposal_type"],
+                "target_ref": row["target_ref"],
+                "action": action,
+                "inserted": inserted,
+                "reason_codes": proposal.get("reason_codes", []) if isinstance(proposal.get("reason_codes"), list) else [],
+            })
+    payload = {
+        "kind": "dogfood_g4_review_queue_apply",
+        "read_only": False,
+        "mutated": any(item["inserted"] for item in applied),
+        "db_path": str(db_path),
+        "policy": policy,
+        "approval_phrase_matched": True,
+        "actor": args.actor.strip(),
+        "reason_sha256": reason_sha256,
+        "backup": backup,
+        "apply_mode": "approved_review_queue_items_only",
+        "applied_count": len([item for item in applied if item["inserted"]]),
+        "already_applied_count": len([item for item in applied if not item["inserted"]]),
+        "skipped_count": len(skipped),
+        "applied_items": applied,
+        "skipped_items": skipped,
+        "memory_status_mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "privacy": {
+            "proposal_json_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "raw_reason_included": False,
+            "reason_stored_as_sha256": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 def _ordinary_trace_metadata_cleanup_privacy_payload() -> dict[str, bool]:
     return {
@@ -7712,6 +8006,18 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_telemetry_reset_preview_parser.add_argument("db_path", type=Path)
     dogfood_telemetry_reset_preview_parser.add_argument("--epoch-start", help="Optional ISO timestamp; preview deleting telemetry older than this while retaining fresh epoch rows.")
     dogfood_telemetry_reset_preview_parser.add_argument("--output", type=Path)
+    dogfood_telemetry_reset_apply_parser = dogfood_subparsers.add_parser(
+        "telemetry-reset-apply",
+        help="Apply a guarded telemetry-only reset with backup, explicit phrase, actor, reason, and post-reset verification.",
+    )
+    dogfood_telemetry_reset_apply_parser.add_argument("db_path", type=Path)
+    dogfood_telemetry_reset_apply_parser.add_argument("--epoch-start", required=True)
+    dogfood_telemetry_reset_apply_parser.add_argument("--policy", required=True)
+    dogfood_telemetry_reset_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_telemetry_reset_apply_parser.add_argument("--actor", required=True)
+    dogfood_telemetry_reset_apply_parser.add_argument("--reason", required=True)
+    dogfood_telemetry_reset_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_telemetry_reset_apply_parser.add_argument("--output", type=Path)
     dogfood_g4_review_queue_preview_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-preview",
         help="Build a read-only broad G4 review queue preview with ref-safe evidence and no queue persistence/apply.",
@@ -7747,6 +8053,20 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_review_queue_update_parser.add_argument("--status", required=True, choices=["approved", "rejected"])
     dogfood_g4_review_queue_update_parser.add_argument("--actor", required=True)
     dogfood_g4_review_queue_update_parser.add_argument("--reason", required=True)
+    dogfood_g4_review_queue_update_parser.add_argument("--policy")
+    dogfood_g4_review_queue_update_parser.add_argument("--approval-phrase")
+    dogfood_g4_review_queue_apply_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-apply",
+        help="Apply approved G4 review queue items through a guarded audit-only corridor with backup and rollback hint.",
+    )
+    dogfood_g4_review_queue_apply_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_apply_parser.add_argument("--queue-id", action="append")
+    dogfood_g4_review_queue_apply_parser.add_argument("--policy", required=True)
+    dogfood_g4_review_queue_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_g4_review_queue_apply_parser.add_argument("--actor", required=True)
+    dogfood_g4_review_queue_apply_parser.add_argument("--reason", required=True)
+    dogfood_g4_review_queue_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_g4_review_queue_apply_parser.add_argument("--output", type=Path)
     dogfood_g4_review_queue_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_g4_review_queue_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_g4_review_queue_preview_parser.add_argument("--queue-limit", type=int, default=20)
@@ -8654,6 +8974,9 @@ def main() -> None:
         if args.dogfood_action == "telemetry-reset-preview":
             print(json.dumps(_dogfood_telemetry_reset_preview_payload(args), indent=2))
             return
+        if args.dogfood_action == "telemetry-reset-apply":
+            print(json.dumps(_dogfood_telemetry_reset_apply_payload(args), indent=2))
+            return
         if args.dogfood_action == "g4-review-queue-preview":
             if args.queue_limit < 1:
                 raise ValueError("dogfood g4-review-queue-preview queue-limit must be >= 1")
@@ -8671,6 +8994,9 @@ def main() -> None:
             return
         if args.dogfood_action == "g4-review-queue-update":
             print(json.dumps(_dogfood_g4_review_queue_update_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-apply":
+            print(json.dumps(_dogfood_g4_review_queue_apply_payload(args), indent=2))
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))
