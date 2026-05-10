@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 20:29 KST
+Last updated: 2026-05-10 20:48 KST
 
 ## Purpose
 
@@ -34,7 +34,7 @@ Final target:
 
 ## Current verified release state
 
-Latest completed release/runtime rollout: `v0.1.128`; current source target: `v0.1.135+`
+Latest completed release/runtime rollout: `v0.1.136`
 
 Released artifacts:
 
@@ -55,7 +55,7 @@ Current implementation interpretation:
 - The v0.1.123 live smoke wrote exactly one metadata-only restore audit trace (`experience_traces.id=1465`) when approval/preflight gates passed; duplicate rerun failed closed with no second row.
 - Live restore, broad consolidation apply mode, ordinary-conversation auto-approval, raw transcript storage, raw query-preview output, sample values, and default retrieval ranking changes remain disabled.
 - The v0.1.128 release includes the future Hermes hook trace-to-observation linkage, metadata-only `retrieval_outcome` split for empty/retrieved observations, ref-safe review support for isolated approved decay-risk candidates, and Linux/SQLite retrieval-eval CI stabilization.
-- The current v0.1.135+ source slice adds fallback trace linkage, fresh-vs-historical G4 warning resolution, persisted queue review state, and a first narrow approved `reinforcement_count` mutation for reviewed reinforcement items. Broad G4/background apply remains blocked and no ordinary conversation auto-approval is enabled.
+- The v0.1.136 release adds fallback trace linkage, fresh-vs-historical G4 warning resolution, persisted queue review state, and a first narrow approved `reinforcement_count` mutation for reviewed reinforcement items. It is installed at `/Users/reddit/.agent-memory/runtime/v0.1.136/.venv/bin/agent-memory`. Broad G4/background apply remains blocked and no ordinary conversation auto-approval is enabled.
 
 ## Current live dogfood health snapshot
 
@@ -244,23 +244,34 @@ Current implementation slice:
 First live source smoke against `/Users/reddit/.agent-memory/memory.db` used epoch `2026-05-09T21:57:33Z` and wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`. It stayed read-only/no-mutation and showed 21 observations, 21 traces, 21 activations, coverage ratio `0.2381`, 5 linked observations, 10 empty retrievals, and blockers `low_epoch_observation_trace_coverage` plus `epoch_empty_retrieval_outcome_unknown`. This confirms the historical rows can be excluded safely, but the fresh epoch still needs more dogfood before broad G4 planning.
 
 
-## v0.1.135+ source checkpoint and next move
+## v0.1.136 checkpoint and next move
 
-Completed in source, pending PR/release/runtime rollout:
+Completed and released/runtime-smoked:
 
 - Fresh trace linkage gap closed with tests for metadata-only empty retrieval turns, no-context injected turns, and same-query fallback linkage when `packet.retrieval_observation_id` is missing.
 - G4 quality gate now separates historical/reset-resolved warnings from fresh unresolved evidence under `g4-review-queue-preview --epoch-start <ISO>`; historical unknown/trace-gap evidence can be diagnostic-only when the fresh epoch is clean.
 - Persisted approved queue apply now has the first narrow guarded memory mutation: approved `reinforcement_review` queue items can increment only `reinforcement_count` on the target memory. It requires explicit policy, approval phrase, actor, reason hash, backup path, audit row, rollback hint, and leaves status/default retrieval/raw content unchanged.
-- Focused tests and full `uv run --python 3.11 pytest tests/ -q` are green (`285 passed, 1 xfailed`). PR, publish, runtime rollout, and live aggregate smoke remain before calling this release complete.
+- Focused tests and full `uv run --python 3.11 pytest tests/ -q` are green (`285 passed, 1 xfailed`). PR #285, release-sync PR #286, publish workflow, fresh npm/PyPI artifact smoke, installed runtime smoke, and live read-only aggregate preview are complete.
 
 Next:
 
-1. Run the full test suite and release-readiness checks from the source branch.
-2. Open/merge the PR for v0.1.135+.
-3. Verify release-sync, GitHub Release, npm, PyPI, and fresh artifact smokes.
-4. Install the published runtime and update Hermes hooks from the published artifact, not the source checkout.
-5. Smoke the installed hook and run live aggregate reports to confirm fresh linkage/background warning state. Use disposable DBs or explicit approval before any live `g4-review-queue-apply` mutation.
-6. Only after live v0.1.135+ evidence is healthy, decide whether the next slice is `fact:1` relation/isolated confirmation, more fresh dogfood, or a broader-but-still-policy-gated G4 apply preview. Broad background apply stays blocked until then.
+1. Dogfood more v0.1.136 Hermes turns so the fresh epoch has no unlinked observations.
+2. Re-run `dogfood g4-review-queue-preview --epoch-start <release_epoch>` from the installed runtime and verify whether `background_empty_retrieval_trace_linkage_gap` clears.
+3. Do not live-apply queue mutations without an explicit operator decision and fresh backup. If approved later, start with the persisted `fact:1` reinforcement-review item; this is still a narrow reinforcement marker, not broad consolidation apply.
+4. If the trace-linkage gap persists, design a reviewed telemetry backfill/reset corridor rather than silently deleting or rewriting live telemetry.
+5. Broad background apply stays blocked until trace quality, empty retrieval quality, and review/rollback behavior are all healthy under installed runtime evidence.
+
+
+Release/runtime verification details:
+
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.136`
+- npm: `@cafitac/agent-memory@0.1.136`
+- PyPI: `cafitac-agent-memory==0.1.136`
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.136/.venv/bin/agent-memory`
+- Hermes config backup: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.136-20260510T2044`
+- Hook smoke artifact: `/tmp/agent-memory-v0136-hook-smoke.json`
+- Live G4 preview artifact: `/tmp/agent-memory-v0136-g4-preview-live.json`
+- Disposable installed apply smoke artifact: `/tmp/agent-memory-v0136-installed-apply.json`
 
 ## Recommended next PR-sized slices
 
