@@ -577,3 +577,12 @@ Next after this release: handle `fact:1` isolated approved memory using relation
 - Added `dogfood g4-review-queue-preview` as read-only queue contract preview only; no queue persistence and no apply path.
 - Queue entries require human review and carry policy/audit/ref-safe-evidence/operator-command fields; raw source/query/trace/sample values are excluded.
 - Live source preview artifact: `/tmp/agent-memory-g4-review-queue-preview-source.json`; current DB produced 2 ref-only queue entries, but quality gate remains blocked by `background_quality_warnings_present`, so broad G4 apply remains blocked.
+
+
+### G4 background quality warning decomposition (2026-05-10 14:57 KST)
+
+- Branch: `feat/g4-warning-decomposition`.
+- Added ref-safe `background_quality_warning_analysis` to `dogfood g4-review-queue-preview`.
+- The old opaque `background_quality_warnings_present` gate is now decomposed into specific blocking reasons when applicable.
+- Live source smoke artifact: `/tmp/agent-memory-g4-warning-decomposition-source.json`. Current live result still blocks broad G4, but now specifically on `background_empty_retrieval_outcome_unknown` and `background_empty_retrieval_trace_linkage_gap` instead of the generic warning.
+- Output remains aggregate/ref-only with raw content/query/trace/sample values excluded.
