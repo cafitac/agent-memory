@@ -3634,6 +3634,199 @@ def test_python_module_cli_dogfood_g4_review_queue_persist_lists_and_updates_wit
         assert connection.execute("SELECT status FROM g4_review_queue_items WHERE queue_id = ?", (queue_id,)).fetchone()[0] == "approved"
 
 
+
+def test_python_module_cli_dogfood_telemetry_reset_apply_is_guarded_and_telemetry_only(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "telemetry-reset-apply.db"
+    backup_path = tmp_path / "telemetry-reset.backup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Telemetry reset apply SHOULD_NOT_LEAK protected content.",
+        metadata={"project": "telemetry-reset-apply"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Telemetry reset apply",
+        predicate="protects",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:telemetry-reset-apply",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (1, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                      'project:telemetry-reset-apply', 1, '["approved"]', '[]', NULL, 'direct', '{}')
+            """,
+            (hashlib.sha256(b"old").hexdigest(),),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (2, '2026-05-11 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                      'project:telemetry-reset-apply', 1, '["approved"]', '[]', NULL, 'direct', '{}')
+            """,
+            (hashlib.sha256(b"fresh").hexdigest(),),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+            ) VALUES (1, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', 'empty_retrieval', NULL, 1, NULL,
+                      'project:telemetry-reset-apply', 0.0, '{}')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, summary, metadata_json
+            ) VALUES (1, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', 'turn',
+                      'project:telemetry-reset-apply', ?, 'hash-only SHOULD_NOT_LEAK', '{}')
+            """
+        ,
+            (hashlib.sha256(b"trace").hexdigest(),),
+        )
+        protected_before = connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "telemetry-reset-apply", str(db_path),
+            "--epoch-start", "2026-05-10T00:00:00Z",
+            "--policy", "telemetry-reset-v1",
+            "--approval-phrase", "apply-telemetry-reset-v1",
+            "--actor", "pytest",
+            "--reason", "retire historical telemetry only",
+            "--backup-path", str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_telemetry_reset_apply"
+    assert payload["deleted_total"] == 3
+    assert payload["protected_memory_tables_mutated"] is False
+    assert payload["post_apply_preview"]["candidate_delete_total"] == 0
+    assert payload["backup"]["path"] == str(backup_path)
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == protected_before
+        assert connection.execute("SELECT COUNT(*) FROM retrieval_observations").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM memory_activations").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM experience_traces").fetchone()[0] == 0
+    assert backup_path.exists()
+
+
+def test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_without_memory_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-review-queue-apply.db"
+    backup_path = tmp_path / "g4-review-queue-apply.backup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="G4 apply sensitive SHOULD_NOT_LEAK content.",
+        metadata={"project": "g4-apply"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 apply",
+        predicate="safe_ref",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-apply",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        for index in range(1, 5):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-apply', 1, '["approved"]', ?, ?, 'direct', '{}')
+                """,
+                (index, hashlib.sha256(f"apply-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), f"fact:{fact.id}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', 'retrieved', ?, ?, NULL,
+                          'project:g4-apply', 1.0, '{}')
+                """,
+                (index, f"fact:{fact.id}", index),
+            )
+        before_facts = connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-persist", str(db_path),
+            "--limit", "20", "--top", "5", "--queue-limit", "5", "--frequent-threshold", "3",
+            "--actor", "pytest", "--reason", "persist queue for guarded apply",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist.returncode == 0, persist.stderr
+    listed = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-list", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    queue_id = json.loads(listed.stdout)["items"][0]["queue_id"]
+    updated = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-update", str(db_path), queue_id,
+            "--status", "approved", "--actor", "pytest", "--reason", "reviewed refs only",
+            "--approval-phrase", "approved-g4-review-queue-item-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert updated.returncode == 0, updated.stderr
+    applied = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-apply", str(db_path),
+            "--queue-id", queue_id,
+            "--policy", "g4-review-queue-apply-v1",
+            "--approval-phrase", "apply-approved-g4-review-queue-items-v1",
+            "--actor", "pytest", "--reason", "record approved g4 review outcome",
+            "--backup-path", str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert applied.returncode == 0, applied.stderr
+    payload = json.loads(applied.stdout)
+    assert payload["kind"] == "dogfood_g4_review_queue_apply"
+    assert payload["applied_count"] == 1
+    assert payload["memory_status_mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert "proposal_json_included" in applied.stdout
+    assert "SHOULD_NOT_LEAK" not in applied.stdout
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == before_facts
+        assert connection.execute("SELECT COUNT(*) FROM g4_review_queue_applications").fetchone()[0] == 1
+    assert backup_path.exists()
+
+
 def test_python_module_cli_dogfood_g4_review_queue_preview_decomposes_background_quality_warnings(
     tmp_path: Path,
 ) -> None:
