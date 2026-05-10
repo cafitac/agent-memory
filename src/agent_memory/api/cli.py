@@ -8,6 +8,7 @@ import json
 import sqlite3
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -4081,6 +4082,20 @@ def _dogfood_trace_quality_recommendation(
     return "continue_dogfooding"
 
 
+def _parse_epoch_start(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("dogfood fresh-epoch epoch-start must be non-empty")
+    parse_value = normalized[:-1] + "+00:00" if normalized.endswith("Z") else normalized
+    try:
+        parsed = datetime.fromisoformat(parse_value)
+    except ValueError as exc:
+        raise ValueError("dogfood fresh-epoch epoch-start must be ISO-8601, e.g. 2026-05-10T06:57:33Z") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     since_hours = args.since_hours
@@ -4267,6 +4282,233 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "warnings": warnings,
     }
+
+
+def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    epoch_start = _parse_epoch_start(args.epoch_start)
+    min_trace_coverage = args.min_trace_coverage
+    min_evidence_count = args.min_evidence_count
+    if not db_path.exists():
+        payload = {
+            "kind": "dogfood_fresh_epoch_readiness",
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+        _write_json_report(args.output, payload)
+        return payload
+
+    with _open_readonly_sqlite(db_path) as connection:
+        observation_rows = (
+            connection.execute(
+                """
+                SELECT id, created_at, surface, preferred_scope, retrieved_memory_refs_json, response_mode, metadata_json
+                FROM retrieval_observations
+                WHERE created_at >= ?
+                ORDER BY id ASC
+                """,
+                (epoch_start,),
+            ).fetchall()
+            if _table_exists(connection, "retrieval_observations")
+            else []
+        )
+        trace_rows = (
+            connection.execute(
+                """
+                SELECT id, created_at, surface, event_kind, scope, retention_policy,
+                       related_memory_refs_json, related_observation_ids_json, metadata_json
+                FROM experience_traces
+                WHERE created_at >= ?
+                ORDER BY id ASC
+                """,
+                (epoch_start,),
+            ).fetchall()
+            if _table_exists(connection, "experience_traces")
+            else []
+        )
+        activation_rows = (
+            connection.execute(
+                """
+                SELECT id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json
+                FROM memory_activations
+                WHERE created_at >= ?
+                ORDER BY id ASC
+                """,
+                (epoch_start,),
+            ).fetchall()
+            if _table_exists(connection, "memory_activations")
+            else []
+        )
+        historical_excluded = {
+            table: int(
+                connection.execute(f"SELECT COUNT(*) FROM {table} WHERE created_at < ?", (epoch_start,)).fetchone()[0]
+            )
+            if _table_exists(connection, table)
+            else 0
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+        latest_created_at = {
+            table: connection.execute(f"SELECT MAX(created_at) FROM {table}").fetchone()[0]
+            if _table_exists(connection, table)
+            else None
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    observation_count = len(observation_rows)
+    trace_count = len(trace_rows)
+    activation_count = len(activation_rows)
+    empty_observation_rows = [row for row in observation_rows if not _safe_json_list_from_db(row["retrieved_memory_refs_json"])]
+    empty_retrieval_count = len(empty_observation_rows)
+    empty_retrieval_ratio = round(empty_retrieval_count / observation_count, 4) if observation_count else 0.0
+
+    linked_observation_ids: set[int] = set()
+    trace_without_observation_link_count = 0
+    trace_event_kind_counts: Counter[str] = Counter()
+    trace_surface_counts: Counter[str] = Counter()
+    trace_retention_counts: Counter[str] = Counter()
+    related_memory_ref_counter: Counter[str] = Counter()
+    for row in trace_rows:
+        trace_event_kind_counts[str(row["event_kind"])] += 1
+        trace_surface_counts[str(row["surface"])] += 1
+        trace_retention_counts[str(row["retention_policy"])] += 1
+        related_ids = _safe_json_list_from_db(row["related_observation_ids_json"])
+        if not related_ids:
+            trace_without_observation_link_count += 1
+        for observation_id in related_ids:
+            if isinstance(observation_id, int):
+                linked_observation_ids.add(observation_id)
+        related_memory_ref_counter.update(str(ref) for ref in _safe_json_list_from_db(row["related_memory_refs_json"]))
+
+    activation_observation_ids = {
+        int(row["observation_id"])
+        for row in activation_rows
+        if row["observation_id"] is not None
+    }
+    activations_linked_to_traces = len(activation_observation_ids & linked_observation_ids)
+    activation_trace_link_coverage_ratio = (
+        round(activations_linked_to_traces / len(activation_observation_ids), 4) if activation_observation_ids else 0.0
+    )
+    observation_trace_coverage_ratio = round(len(linked_observation_ids) / observation_count, 4) if observation_count else 0.0
+    unlinked_observation_count = max(0, observation_count - len(linked_observation_ids))
+
+    empty_by_response_mode = Counter(str(row["response_mode"] or "unknown") for row in empty_observation_rows)
+    empty_by_surface = Counter(str(row["surface"] or "unknown") for row in empty_observation_rows)
+    empty_by_scope = Counter(str(row["preferred_scope"] or "none") for row in empty_observation_rows)
+    empty_by_hook_event_name: Counter[str] = Counter()
+    empty_by_retrieval_outcome: Counter[str] = Counter()
+    for row in empty_observation_rows:
+        metadata = _safe_metadata_from_json(row["metadata_json"])
+        empty_by_hook_event_name[str(metadata.get("hook_event_name") or "unknown")] += 1
+        empty_by_retrieval_outcome[str(metadata.get("retrieval_outcome") or "unknown")] += 1
+
+    retrieved_memory_ref_counter: Counter[str] = Counter()
+    for row in observation_rows:
+        retrieved_memory_ref_counter.update(str(ref) for ref in _safe_json_list_from_db(row["retrieved_memory_refs_json"]))
+
+    warnings: list[str] = []
+    if observation_count and observation_trace_coverage_ratio < min_trace_coverage:
+        warnings.append("low_epoch_observation_trace_coverage")
+    if not observation_count:
+        warnings.append("no_epoch_observations")
+    if not trace_count:
+        warnings.append("no_epoch_traces")
+    if empty_retrieval_ratio >= args.high_empty_threshold and observation_count:
+        warnings.append("high_epoch_empty_retrieval_ratio")
+    if any(empty_by_retrieval_outcome.get(key, 0) for key in ("unknown", "")):
+        warnings.append("epoch_empty_retrieval_outcome_unknown")
+
+    ready_for_reset_avoidance = bool(
+        observation_count
+        and trace_count
+        and observation_trace_coverage_ratio >= min_trace_coverage
+        and not empty_by_retrieval_outcome.get("unknown", 0)
+    )
+    decision = "fresh_epoch_ready_to_compare_against_historical" if ready_for_reset_avoidance else "continue_fresh_epoch_dogfooding"
+
+    payload = {
+        "kind": "dogfood_fresh_epoch_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "database": {"path": str(db_path), "exists": True},
+        "epoch": {
+            "started_at": epoch_start,
+            "historical_rows_excluded": historical_excluded,
+            "latest_created_at": latest_created_at,
+        },
+        "thresholds": {
+            "min_trace_coverage": min_trace_coverage,
+            "min_evidence_count": min_evidence_count,
+            "high_empty_threshold": args.high_empty_threshold,
+        },
+        "coverage": {
+            "observation_count": observation_count,
+            "trace_count": trace_count,
+            "activation_count": activation_count,
+            "observations_linked_from_traces": len(linked_observation_ids),
+            "observation_trace_coverage_ratio": observation_trace_coverage_ratio,
+        },
+        "coverage_diagnostics": {
+            "unlinked_observation_count": unlinked_observation_count,
+            "trace_without_observation_link_count": trace_without_observation_link_count,
+            "activation_count": activation_count,
+            "activations_linked_to_traces": activations_linked_to_traces,
+            "activation_trace_link_coverage_ratio": activation_trace_link_coverage_ratio,
+            "likely_gap": "no_linkage_gap_detected"
+            if not unlinked_observation_count and not trace_without_observation_link_count
+            else "fresh_epoch_linkage_gap_detected",
+        },
+        "empty_retrieval_diagnostics": {
+            "count": empty_retrieval_count,
+            "ratio": empty_retrieval_ratio,
+            "by_response_mode": {key: empty_by_response_mode[key] for key in sorted(empty_by_response_mode)},
+            "by_retrieval_outcome": {key: empty_by_retrieval_outcome[key] for key in sorted(empty_by_retrieval_outcome)},
+            "by_hook_event_name": {key: empty_by_hook_event_name[key] for key in sorted(empty_by_hook_event_name)},
+            "by_surface": {key: empty_by_surface[key] for key in sorted(empty_by_surface)},
+            "by_scope": {key: empty_by_scope[key] for key in sorted(empty_by_scope)},
+        },
+        "trace_distribution": {
+            "event_kind_counts": dict(sorted(trace_event_kind_counts.items())),
+            "surface_counts": dict(sorted(trace_surface_counts.items())),
+            "retention_policy_counts": dict(sorted(trace_retention_counts.items())),
+        },
+        "candidate_signals": {
+            "related_memory_ref_count": len(related_memory_ref_counter),
+            "retrieved_memory_ref_count": len(retrieved_memory_ref_counter),
+            "retrieved_memory_ref_repetition_count": sum(
+                1 for count in retrieved_memory_ref_counter.values() if count >= min_evidence_count
+            ),
+        },
+        "quality_gate": {
+            "pass": ready_for_reset_avoidance,
+            "decision": decision,
+            "blocked_reasons": warnings,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "telemetry_reset_apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "suggested_next_steps": [
+            "Use this epoch-filtered report before deleting telemetry; historical rows are excluded, not mutated.",
+            "If fresh-epoch linkage is healthy but historical blockers remain, design telemetry-only reset as a separate preview/apply corridor.",
+            "Keep broad G4 apply blocked until fresh-epoch empty retrievals and isolated decay-risk candidates are classified.",
+        ],
+        "warnings": warnings,
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 
 
@@ -6794,6 +7036,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_quality_parser.add_argument("--since-hours", type=int, default=24)
     dogfood_trace_quality_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_trace_quality_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
+        "fresh-epoch",
+        help="Build a read-only epoch-filtered readiness report so new telemetry can be judged apart from historical rows.",
+    )
+    dogfood_fresh_epoch_parser.add_argument("db_path", type=Path)
+    dogfood_fresh_epoch_parser.add_argument("--epoch-start", required=True, help="ISO timestamp for the fresh telemetry epoch.")
+    dogfood_fresh_epoch_parser.add_argument("--output", type=Path)
+    dogfood_fresh_epoch_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
+    dogfood_fresh_epoch_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_fresh_epoch_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
     dogfood_scheduled_parser = dogfood_subparsers.add_parser(
         "scheduled-dry-run",
         help="Run a cron-friendly read-only G3e dogfood bundle before any G4 apply-mode plan.",
@@ -7681,6 +7933,15 @@ def main() -> None:
             if args.min_evidence_count < 1:
                 raise ValueError("dogfood trace-quality min-evidence-count must be >= 1")
             print(json.dumps(_dogfood_trace_quality_payload(args), indent=2))
+            return
+        if args.dogfood_action == "fresh-epoch":
+            if not 0 <= args.min_trace_coverage <= 1:
+                raise ValueError("dogfood fresh-epoch min-trace-coverage must be between 0 and 1")
+            if args.min_evidence_count < 1:
+                raise ValueError("dogfood fresh-epoch min-evidence-count must be >= 1")
+            if not 0 <= args.high_empty_threshold <= 1:
+                raise ValueError("dogfood fresh-epoch high-empty-threshold must be between 0 and 1")
+            print(json.dumps(_dogfood_fresh_epoch_payload(args), indent=2))
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))
