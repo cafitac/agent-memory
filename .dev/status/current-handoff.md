@@ -1047,3 +1047,11 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 - New report fields: `empty_retrieval_diagnostics.by_likely_cause` and `unknown_outcome_drilldown`.
 - Source smoke on live DB wrote `/tmp/agent-memory-fresh-epoch-classified-source.json` with `read_only=true` and `mutated=false`; aggregate result: 50 observations/traces/activations since epoch, coverage 0.24, empty ratio 0.52, unknown outcomes classified as `legacy_missing_outcome_metadata_gap` with unresolved_count 0.
 - Still blocked: low fresh-epoch linkage, high empty ratio, and classified legacy metadata gap; broad G4 apply remains blocked.
+
+
+### Telemetry reset preview slice (2026-05-10 13:55 KST)
+
+- Branch: `feat/telemetry-reset-preview`.
+- Added `dogfood telemetry-reset-preview` as read-only aggregate preview only; no apply/delete path.
+- Guardrails: telemetry tables only (`retrieval_observations`, `memory_activations`, `experience_traces`), protected memory/source/relation/status tables are counted but not mutated, backup required before any future apply design.
+- Live source preview artifact: `/tmp/agent-memory-telemetry-reset-preview-source.json`; epoch `2026-05-09T21:57:33Z` would target 5,965 historical telemetry rows and retain 66 rows per telemetry table; protected tables remain out of scope.

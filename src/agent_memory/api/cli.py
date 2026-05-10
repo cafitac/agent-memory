@@ -4548,6 +4548,100 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 
+def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    epoch_start = _parse_epoch_start(args.epoch_start) if args.epoch_start else None
+    telemetry_tables = ("retrieval_observations", "memory_activations", "experience_traces")
+    protected_tables = ("facts", "procedures", "episodes", "relations", "source_records", "memory_status_transitions")
+    if not db_path.exists():
+        payload = {
+            "kind": "dogfood_telemetry_reset_preview",
+            "read_only": True,
+            "mutated": False,
+            "status": "error",
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+        _write_json_report(args.output, payload)
+        return payload
+
+    with _open_readonly_sqlite(db_path) as connection:
+        telemetry_preview: dict[str, Any] = {}
+        total_candidate_rows = 0
+        for table in telemetry_tables:
+            if not _table_exists(connection, table):
+                telemetry_preview[table] = {"exists": False, "candidate_rows": 0, "retained_rows": 0}
+                continue
+            total_rows = int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            if epoch_start is None:
+                candidate_rows = total_rows
+                retained_rows = 0
+                earliest = connection.execute(f"SELECT MIN(created_at) FROM {table}").fetchone()[0]
+                latest = connection.execute(f"SELECT MAX(created_at) FROM {table}").fetchone()[0]
+            else:
+                candidate_rows = int(connection.execute(f"SELECT COUNT(*) FROM {table} WHERE created_at < ?", (epoch_start,)).fetchone()[0])
+                retained_rows = total_rows - candidate_rows
+                earliest = connection.execute(f"SELECT MIN(created_at) FROM {table} WHERE created_at < ?", (epoch_start,)).fetchone()[0]
+                latest = connection.execute(f"SELECT MAX(created_at) FROM {table} WHERE created_at < ?", (epoch_start,)).fetchone()[0]
+            total_candidate_rows += candidate_rows
+            telemetry_preview[table] = {
+                "exists": True,
+                "candidate_rows": candidate_rows,
+                "retained_rows": retained_rows,
+                "total_rows": total_rows,
+                "candidate_earliest_created_at": earliest,
+                "candidate_latest_created_at": latest,
+            }
+        protected_counts = {
+            table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if _table_exists(connection, table) else 0
+            for table in protected_tables
+        }
+
+    warnings: list[str] = []
+    if total_candidate_rows == 0:
+        warnings.append("no_telemetry_rows_match_preview")
+    if epoch_start is None:
+        warnings.append("full_telemetry_reset_preview_no_epoch_filter")
+
+    payload = {
+        "kind": "dogfood_telemetry_reset_preview",
+        "read_only": True,
+        "mutated": False,
+        "database": {"path": str(db_path), "exists": True},
+        "mode": "preview_only",
+        "reset_scope": "telemetry_only",
+        "epoch_filter": {
+            "enabled": epoch_start is not None,
+            "retain_rows_created_at_gte": epoch_start,
+        },
+        "telemetry_tables": telemetry_preview,
+        "candidate_delete_total": total_candidate_rows,
+        "protected_tables": protected_counts,
+        "guardrails": {
+            "apply_supported": False,
+            "requires_backup_before_future_apply": True,
+            "default_retrieval_unchanged": True,
+            "protected_memory_tables_mutated": False,
+            "telemetry_tables_only": list(telemetry_tables),
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "suggested_next_steps": [
+            "Compare this preview against dogfood fresh-epoch before designing any apply command.",
+            "Future apply must require an explicit approval phrase and a verified backup path.",
+            "Never delete facts, procedures, episodes, relations, source records, or status history in telemetry-only reset.",
+        ],
+        "warnings": warnings,
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _ordinary_trace_metadata_cleanup_privacy_payload() -> dict[str, bool]:
     return {
         "raw_trace_content_included": False,
@@ -7082,6 +7176,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_fresh_epoch_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_fresh_epoch_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_fresh_epoch_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
+    dogfood_telemetry_reset_preview_parser = dogfood_subparsers.add_parser(
+        "telemetry-reset-preview",
+        help="Preview aggregate telemetry-only reset candidates without deleting or mutating rows.",
+    )
+    dogfood_telemetry_reset_preview_parser.add_argument("db_path", type=Path)
+    dogfood_telemetry_reset_preview_parser.add_argument("--epoch-start", help="Optional ISO timestamp; preview deleting telemetry older than this while retaining fresh epoch rows.")
+    dogfood_telemetry_reset_preview_parser.add_argument("--output", type=Path)
     dogfood_scheduled_parser = dogfood_subparsers.add_parser(
         "scheduled-dry-run",
         help="Run a cron-friendly read-only G3e dogfood bundle before any G4 apply-mode plan.",
@@ -7978,6 +8079,9 @@ def main() -> None:
             if not 0 <= args.high_empty_threshold <= 1:
                 raise ValueError("dogfood fresh-epoch high-empty-threshold must be between 0 and 1")
             print(json.dumps(_dogfood_fresh_epoch_payload(args), indent=2))
+            return
+        if args.dogfood_action == "telemetry-reset-preview":
+            print(json.dumps(_dogfood_telemetry_reset_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))

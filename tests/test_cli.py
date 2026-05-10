@@ -3147,6 +3147,133 @@ def test_python_module_cli_dogfood_fresh_epoch_classifies_unknown_empty_retrieva
 
 
 
+def test_python_module_cli_dogfood_telemetry_reset_preview_is_read_only_and_protects_memory_tables(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "telemetry-reset-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Telemetry reset preview protected memory SHOULD_NOT_LEAK.",
+        metadata={"project": "telemetry-reset-preview"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Telemetry reset preview",
+        predicate="protected",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:telemetry-reset-preview",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    old_time = "2026-05-09 00:00:00"
+    new_time = "2026-05-10 00:05:00"
+    epoch_start = "2026-05-10T00:00:00Z"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK', 'project:old', 1, '["approved"]', '[]', NULL, NULL, '{}')
+            """,
+            (old_time, "a" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK', 'project:new', 1, '["approved"]', '["fact:1"]', 'fact:1', 'direct', '{}')
+            """,
+            (new_time, "b" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json)
+            VALUES (1, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, 1, NULL, 'project:old', '{}'),
+                   (2, ?, 'hermes-pre-llm-hook', 'retrieved', 'fact:1', 2, NULL, 'project:new', '{}')
+            """,
+            (old_time, new_time),
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, summary,
+                related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', 'turn', 'project:old', ?, 'SHOULD_NOT_LEAK', '[]', '[1]', 'ephemeral', '{}'),
+                     (2, ?, 'hermes-pre-llm-hook', 'turn', 'project:new', ?, 'SHOULD_NOT_LEAK', '["fact:1"]', '[2]', 'ephemeral', '{}')
+            """,
+            (old_time, "c" * 64, new_time, "d" * 64),
+        )
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in (
+                "retrieval_observations",
+                "memory_activations",
+                "experience_traces",
+                "facts",
+                "source_records",
+                "relations",
+                "memory_status_transitions",
+            )
+        }
+
+    output_path = tmp_path / "telemetry-reset-preview.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "telemetry-reset-preview",
+            str(db_path),
+            "--epoch-start",
+            epoch_start,
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_telemetry_reset_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["reset_scope"] == "telemetry_only"
+    assert payload["epoch_filter"] == {"enabled": True, "retain_rows_created_at_gte": "2026-05-10 00:00:00"}
+    assert payload["candidate_delete_total"] == 3
+    assert payload["telemetry_tables"]["retrieval_observations"]["candidate_rows"] == 1
+    assert payload["telemetry_tables"]["memory_activations"]["candidate_rows"] == 1
+    assert payload["telemetry_tables"]["experience_traces"]["candidate_rows"] == 1
+    assert payload["guardrails"] == {
+        "apply_supported": False,
+        "requires_backup_before_future_apply": True,
+        "default_retrieval_unchanged": True,
+        "protected_memory_tables_mutated": False,
+        "telemetry_tables_only": ["retrieval_observations", "memory_activations", "experience_traces"],
+    }
+    assert payload["protected_tables"]["facts"] == 1
+    assert payload["protected_tables"]["source_records"] == 1
+    assert payload["privacy"]["aggregate_only"] is True
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in before_counts
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
     tmp_path: Path,
 ) -> None:
