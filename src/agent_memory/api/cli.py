@@ -4399,10 +4399,32 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
     empty_by_scope = Counter(str(row["preferred_scope"] or "none") for row in empty_observation_rows)
     empty_by_hook_event_name: Counter[str] = Counter()
     empty_by_retrieval_outcome: Counter[str] = Counter()
+    empty_by_likely_cause: Counter[str] = Counter()
+    empty_unknown_outcome_drilldown: Counter[str] = Counter()
     for row in empty_observation_rows:
         metadata = _safe_metadata_from_json(row["metadata_json"])
-        empty_by_hook_event_name[str(metadata.get("hook_event_name") or "unknown")] += 1
-        empty_by_retrieval_outcome[str(metadata.get("retrieval_outcome") or "unknown")] += 1
+        hook_event_name = str(metadata.get("hook_event_name") or "unknown")
+        response_mode = str(row["response_mode"] or "unknown")
+        retrieval_outcome = str(metadata.get("retrieval_outcome") or "unknown")
+        empty_by_hook_event_name[hook_event_name] += 1
+        empty_by_retrieval_outcome[retrieval_outcome] += 1
+        if retrieval_outcome == "no_reliable_memory":
+            likely_cause = "expected_no_reliable_memory"
+        elif retrieval_outcome == "retrieval_disabled_or_unavailable":
+            likely_cause = "retrieval_unavailable"
+        elif retrieval_outcome in {"query_scope_gap", "adapter_payload_gap"}:
+            likely_cause = retrieval_outcome
+        elif retrieval_outcome == "unknown" and hook_event_name == "pre_llm_call" and response_mode == "verify_first":
+            likely_cause = "legacy_missing_outcome_no_reliable_memory"
+        elif retrieval_outcome == "unknown" and hook_event_name == "pre_llm_call":
+            likely_cause = "legacy_missing_outcome_metadata_gap"
+        elif retrieval_outcome == "unknown":
+            likely_cause = "adapter_payload_gap"
+        else:
+            likely_cause = "other_empty_retrieval_outcome"
+        empty_by_likely_cause[likely_cause] += 1
+        if retrieval_outcome == "unknown":
+            empty_unknown_outcome_drilldown[likely_cause] += 1
 
     retrieved_memory_ref_counter: Counter[str] = Counter()
     for row in observation_rows:
@@ -4417,14 +4439,18 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("no_epoch_traces")
     if empty_retrieval_ratio >= args.high_empty_threshold and observation_count:
         warnings.append("high_epoch_empty_retrieval_ratio")
-    if any(empty_by_retrieval_outcome.get(key, 0) for key in ("unknown", "")):
+    unknown_empty_outcome_count = empty_by_retrieval_outcome.get("unknown", 0) + empty_by_retrieval_outcome.get("", 0)
+    unresolved_unknown_empty_outcome_count = empty_unknown_outcome_drilldown.get("adapter_payload_gap", 0)
+    if unresolved_unknown_empty_outcome_count:
         warnings.append("epoch_empty_retrieval_outcome_unknown")
+    elif unknown_empty_outcome_count:
+        warnings.append("epoch_empty_retrieval_outcome_metadata_gap_classified")
 
     ready_for_reset_avoidance = bool(
         observation_count
         and trace_count
         and observation_trace_coverage_ratio >= min_trace_coverage
-        and not empty_by_retrieval_outcome.get("unknown", 0)
+        and not unknown_empty_outcome_count
     )
     decision = "fresh_epoch_ready_to_compare_against_historical" if ready_for_reset_avoidance else "continue_fresh_epoch_dogfooding"
 
@@ -4466,6 +4492,16 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
             "ratio": empty_retrieval_ratio,
             "by_response_mode": {key: empty_by_response_mode[key] for key in sorted(empty_by_response_mode)},
             "by_retrieval_outcome": {key: empty_by_retrieval_outcome[key] for key in sorted(empty_by_retrieval_outcome)},
+            "by_likely_cause": {key: empty_by_likely_cause[key] for key in sorted(empty_by_likely_cause)},
+            "unknown_outcome_drilldown": {
+                "count": unknown_empty_outcome_count,
+                "unresolved_count": unresolved_unknown_empty_outcome_count,
+                "by_likely_cause": {
+                    key: empty_unknown_outcome_drilldown[key] for key in sorted(empty_unknown_outcome_drilldown)
+                },
+                "classification_rule": "metadata-only aggregate inference from hook_event_name and response_mode",
+                "next_action": "Prefer more v0.1.129+ dogfood or a targeted metadata backfill preview before telemetry reset.",
+            },
             "by_hook_event_name": {key: empty_by_hook_event_name[key] for key in sorted(empty_by_hook_event_name)},
             "by_surface": {key: empty_by_surface[key] for key in sorted(empty_by_surface)},
             "by_scope": {key: empty_by_scope[key] for key in sorted(empty_by_scope)},

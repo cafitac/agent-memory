@@ -3038,6 +3038,115 @@ def test_python_module_cli_dogfood_fresh_epoch_filters_historical_telemetry_with
 
 
 
+def test_python_module_cli_dogfood_fresh_epoch_classifies_unknown_empty_retrieval_outcomes(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "fresh-epoch-unknown.db"
+    initialize_database(db_path)
+    epoch_start = "2026-05-10T00:00:00Z"
+    created_at = "2026-05-10 00:05:00"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK', 'project:fresh', 1, '["approved"]', '[]', NULL, 'verify_first', ?)
+            """,
+            (created_at, "a" * 64, json.dumps({"hook_event_name": "pre_llm_call"})),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (2, ?, 'custom-adapter', ?, 'SHOULD_NOT_LEAK', 'project:fresh', 1, '["approved"]', '[]', NULL, NULL, '{}')
+            """,
+            (created_at, "b" * 64),
+        )
+        for trace_id, observation_id in [(1, 1), (2, 2)]:
+            connection.execute(
+                """
+                INSERT INTO experience_traces (
+                    id, created_at, surface, event_kind, scope, content_sha256, summary,
+                    related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+                ) VALUES (?, ?, 'hermes-pre-llm-hook', 'turn', 'project:fresh', ?, NULL, '[]', ?, 'ephemeral', ?)
+                """,
+                (
+                    trace_id,
+                    created_at,
+                    str(trace_id) * 64,
+                    json.dumps([observation_id]),
+                    json.dumps({"trace_recording": "default_metadata_only", "candidate_policy": "evidence_only", "auto_approved": False}),
+                ),
+            )
+        for activation_id, observation_id in [(1, 1), (2, 2)]:
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, metadata_json
+                ) VALUES (?, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, ?, NULL, 'project:fresh', '{}')
+                """,
+                (activation_id, created_at, observation_id),
+            )
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "fresh-epoch",
+            str(db_path),
+            "--epoch-start",
+            epoch_start,
+            "--min-trace-coverage",
+            "1.0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    diagnostics = payload["empty_retrieval_diagnostics"]
+    assert diagnostics["by_retrieval_outcome"] == {"unknown": 2}
+    assert diagnostics["by_likely_cause"] == {
+        "adapter_payload_gap": 1,
+        "legacy_missing_outcome_no_reliable_memory": 1,
+    }
+    assert diagnostics["unknown_outcome_drilldown"] == {
+        "count": 2,
+        "unresolved_count": 1,
+        "by_likely_cause": {
+            "adapter_payload_gap": 1,
+            "legacy_missing_outcome_no_reliable_memory": 1,
+        },
+        "classification_rule": "metadata-only aggregate inference from hook_event_name and response_mode",
+        "next_action": "Prefer more v0.1.129+ dogfood or a targeted metadata backfill preview before telemetry reset.",
+    }
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "continue_fresh_epoch_dogfooding",
+        "blocked_reasons": ["high_epoch_empty_retrieval_ratio", "epoch_empty_retrieval_outcome_unknown"],
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
     tmp_path: Path,
 ) -> None:
