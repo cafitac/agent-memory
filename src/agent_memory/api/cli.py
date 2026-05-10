@@ -4594,6 +4594,7 @@ def _g4_background_quality_warning_analysis(
     dry_run: dict[str, Any],
     *,
     queue_count: int,
+    fresh_epoch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reports = dry_run.get("reports", {}) if isinstance(dry_run.get("reports"), dict) else {}
     candidates_report = reports.get("candidates", {}) if isinstance(reports.get("candidates"), dict) else {}
@@ -4626,6 +4627,12 @@ def _g4_background_quality_warning_analysis(
     unknown_outcome_count = _safe_int(by_outcome.get("unknown"))
     unlinked_trace_count = _safe_int(trace_linkage.get("unlinked_to_trace_count"))
     linked_trace_count = _safe_int(trace_linkage.get("linked_to_trace_count"))
+    fresh_empty = (fresh_epoch or {}).get("empty_retrieval_diagnostics", {}) if isinstance(fresh_epoch, dict) else {}
+    fresh_unknown = (fresh_empty.get("unknown_outcome_drilldown", {}) if isinstance(fresh_empty.get("unknown_outcome_drilldown"), dict) else {})
+    fresh_unresolved_unknown = _safe_int(fresh_unknown.get("unresolved_count"))
+    fresh_classified_unknown = max(0, _safe_int(fresh_unknown.get("count")) - fresh_unresolved_unknown)
+    fresh_coverage = (fresh_epoch or {}).get("coverage_diagnostics", {}) if isinstance(fresh_epoch, dict) else {}
+    fresh_unlinked_observations = _safe_int(fresh_coverage.get("unlinked_observation_count"))
 
     analyses: list[dict[str, Any]] = []
     blocking_reasons: list[str] = []
@@ -4639,11 +4646,19 @@ def _g4_background_quality_warning_analysis(
         if warning == "high_empty_retrieval_activation_ratio":
             likely_causes = []
             if unknown_outcome_count:
-                likely_causes.append("unknown_empty_retrieval_outcome_rows")
-                blocking_reasons.append("background_empty_retrieval_outcome_unknown")
+                if fresh_epoch is not None and fresh_unresolved_unknown == 0:
+                    likely_causes.append("historical_or_classified_empty_retrieval_outcome_rows")
+                    blocking_reasons.append("background_empty_retrieval_outcome_classified_or_reset_previewable")
+                else:
+                    likely_causes.append("unknown_empty_retrieval_outcome_rows")
+                    blocking_reasons.append("background_empty_retrieval_outcome_unknown")
             if unlinked_trace_count:
-                likely_causes.append("empty_retrieval_observations_missing_trace_links")
-                blocking_reasons.append("background_empty_retrieval_trace_linkage_gap")
+                if fresh_epoch is not None and fresh_unlinked_observations == 0:
+                    likely_causes.append("historical_empty_retrieval_observation_trace_gap")
+                    blocking_reasons.append("background_empty_retrieval_trace_gap_reset_previewable")
+                else:
+                    likely_causes.append("empty_retrieval_observations_missing_trace_links")
+                    blocking_reasons.append("background_empty_retrieval_trace_linkage_gap")
             if _safe_int(by_outcome.get("no_reliable_memory")):
                 likely_causes.append("expected_no_reliable_memory_negative_evidence")
             if not likely_causes:
@@ -4657,6 +4672,14 @@ def _g4_background_quality_warning_analysis(
                 "trace_linkage": {
                     "linked_to_trace_count": linked_trace_count,
                     "unlinked_to_trace_count": unlinked_trace_count,
+                },
+                "fresh_epoch_comparison": {
+                    "enabled": fresh_epoch is not None,
+                    "fresh_unresolved_unknown_empty_outcome_count": fresh_unresolved_unknown,
+                    "fresh_classified_unknown_empty_outcome_count": fresh_classified_unknown,
+                    "fresh_unlinked_observation_count": fresh_unlinked_observations,
+                    "reset_resolution_hint": "telemetry_reset_preview_can_retire_historical_unknowns"
+                    if fresh_epoch is not None and fresh_unresolved_unknown == 0 else "collect_more_classified_fresh_epoch_evidence",
                 },
                 "sample_activation_ids": empty.get("sample_activation_ids", [])[:5] if isinstance(empty.get("sample_activation_ids"), list) else [],
                 "sample_observation_ids": empty.get("sample_observation_ids", [])[:5] if isinstance(empty.get("sample_observation_ids"), list) else [],
@@ -4749,6 +4772,18 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         raise ValueError("dogfood g4-review-queue-preview frequent-threshold must be >= 1")
 
     lock_path = args.lock_path or args.db_path.with_suffix(".g4-review-queue-preview.lock")
+    fresh_epoch_report = None
+    if getattr(args, "epoch_start", None):
+        fresh_epoch_report = _dogfood_fresh_epoch_payload(
+            argparse.Namespace(
+                db_path=args.db_path,
+                epoch_start=args.epoch_start,
+                output=None,
+                min_trace_coverage=0.25,
+                min_evidence_count=args.min_evidence_count,
+                high_empty_threshold=0.5,
+            )
+        )
     dry_run = _consolidation_background_dry_run_report(
         args.db_path,
         limit=args.limit,
@@ -4822,7 +4857,11 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
             )
         )
 
-    warning_analysis = _g4_background_quality_warning_analysis(dry_run, queue_count=len(queue_entries))
+    warning_analysis = _g4_background_quality_warning_analysis(
+        dry_run,
+        queue_count=len(queue_entries),
+        fresh_epoch=fresh_epoch_report,
+    )
     blocked_reasons: list[str] = []
     if dry_run.get("status") != "completed":
         blocked_reasons.append("background_dry_run_not_completed")
@@ -4840,6 +4879,7 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         "mode": "preview_only",
         "queue_contract_version": 1,
         "background_dry_run_status": dry_run.get("status"),
+        "fresh_epoch_comparison_enabled": fresh_epoch_report is not None,
         "candidate_sources": ["reinforcement_candidates", "decay_risk_candidates"],
         "queue_limit": args.queue_limit,
         "queue_count": len(queue_entries),
@@ -4872,6 +4912,169 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
     }
     _write_json_report(args.output, payload)
     return payload
+
+
+def _ensure_g4_review_queue_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS g4_review_queue_items (
+            queue_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+            proposal_type TEXT NOT NULL,
+            target_ref TEXT,
+            proposal_json TEXT NOT NULL,
+            source_preview_sha256 TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor TEXT NOT NULL,
+            reason_sha256 TEXT NOT NULL,
+            audit_json TEXT NOT NULL DEFAULT '[]'
+        )
+        """
+    )
+
+
+def _dogfood_g4_review_queue_persist_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood g4-review-queue-persist requires non-empty --actor and --reason")
+    preview = _dogfood_g4_review_queue_preview_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            limit=args.limit,
+            top=args.top,
+            queue_limit=args.queue_limit,
+            min_evidence_count=args.min_evidence_count,
+            frequent_threshold=args.frequent_threshold,
+            epoch_start=args.epoch_start,
+            output=None,
+            lock_path=args.lock_path,
+        )
+    )
+    source_preview_sha256 = hashlib.sha256(json.dumps(preview, sort_keys=True).encode("utf-8")).hexdigest()
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    inserted = 0
+    existing = 0
+    queue = preview.get("queue", []) if isinstance(preview.get("queue"), list) else []
+    with sqlite3.connect(args.db_path) as connection:
+        _ensure_g4_review_queue_table(connection)
+        for entry in queue:
+            if not isinstance(entry, dict):
+                continue
+            queue_id = str(entry.get("queue_id") or "")
+            if not queue_id:
+                continue
+            before = connection.total_changes
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO g4_review_queue_items (
+                    queue_id, status, proposal_type, target_ref, proposal_json, source_preview_sha256, actor, reason_sha256, audit_json
+                ) VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    queue_id,
+                    str(entry.get("proposal_type") or "unknown"),
+                    entry.get("target_ref"),
+                    json.dumps(entry, sort_keys=True),
+                    source_preview_sha256,
+                    args.actor.strip(),
+                    reason_sha256,
+                    json.dumps([{"action": "persist", "actor": args.actor.strip(), "reason_sha256": reason_sha256}]),
+                ),
+            )
+            if connection.total_changes > before:
+                inserted += 1
+            else:
+                existing += 1
+    payload = {
+        "kind": "dogfood_g4_review_queue_persist",
+        "read_only": False,
+        "mutated": inserted > 0,
+        "default_retrieval_unchanged": True,
+        "apply_supported": False,
+        "queue_persistence_supported": True,
+        "db_path": str(args.db_path),
+        "source_preview_sha256": source_preview_sha256,
+        "queue_count": len(queue),
+        "inserted_count": inserted,
+        "existing_count": existing,
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "reason_stored_as_sha256": True,
+        },
+        "quality_gate": preview.get("quality_gate", {}),
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_g4_review_queue_list_payload(args: argparse.Namespace) -> dict[str, Any]:
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_g4_review_queue_table(connection)
+        rows = connection.execute(
+            """
+            SELECT queue_id, status, proposal_type, target_ref, source_preview_sha256, created_at, updated_at
+            FROM g4_review_queue_items
+            WHERE (? IS NULL OR status = ?)
+            ORDER BY created_at DESC, queue_id
+            LIMIT ?
+            """,
+            (args.status, args.status, args.limit),
+        ).fetchall()
+    return {
+        "kind": "dogfood_g4_review_queue_list",
+        "read_only": True,
+        "mutated": False,
+        "db_path": str(args.db_path),
+        "count": len(rows),
+        "items": [dict(row) for row in rows],
+        "privacy": {
+            "proposal_json_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+        },
+    }
+
+
+def _dogfood_g4_review_queue_update_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.status not in {"approved", "rejected"}:
+        raise ValueError("dogfood g4-review-queue-update status must be approved or rejected")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood g4-review-queue-update requires non-empty --actor and --reason")
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_g4_review_queue_table(connection)
+        row = connection.execute(
+            "SELECT audit_json FROM g4_review_queue_items WHERE queue_id = ?",
+            (args.queue_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"review queue item not found: {args.queue_id}")
+        audit = _safe_json_list_from_db(row["audit_json"])
+        audit.append({"action": args.status, "actor": args.actor.strip(), "reason_sha256": reason_sha256})
+        connection.execute(
+            """
+            UPDATE g4_review_queue_items
+            SET status = ?, updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ?
+            WHERE queue_id = ?
+            """,
+            (args.status, args.actor.strip(), reason_sha256, json.dumps(audit), args.queue_id),
+        )
+    return {
+        "kind": "dogfood_g4_review_queue_update",
+        "read_only": False,
+        "mutated": True,
+        "default_retrieval_unchanged": True,
+        "apply_supported": False,
+        "queue_id": args.queue_id,
+        "status": args.status,
+        "reason_sha256": reason_sha256,
+        "privacy": {"raw_reason_included": False, "raw_content_included": False, "sample_values_included": False},
+    }
 
 
 def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -7515,11 +7718,41 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_g4_review_queue_preview_parser.add_argument("db_path", type=Path)
     dogfood_g4_review_queue_preview_parser.add_argument("--output", type=Path)
+    dogfood_g4_review_queue_persist_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-persist",
+        help="Persist preview queue items for manual approve/reject review without applying memory mutations.",
+    )
+    dogfood_g4_review_queue_persist_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_persist_parser.add_argument("--limit", type=int, default=200)
+    dogfood_g4_review_queue_persist_parser.add_argument("--top", type=int, default=20)
+    dogfood_g4_review_queue_persist_parser.add_argument("--queue-limit", type=int, default=20)
+    dogfood_g4_review_queue_persist_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_g4_review_queue_persist_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_g4_review_queue_persist_parser.add_argument("--epoch-start")
+    dogfood_g4_review_queue_persist_parser.add_argument("--lock-path", type=Path)
+    dogfood_g4_review_queue_persist_parser.add_argument("--actor", required=True)
+    dogfood_g4_review_queue_persist_parser.add_argument("--reason", required=True)
+    dogfood_g4_review_queue_persist_parser.add_argument("--output", type=Path)
+    dogfood_g4_review_queue_list_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-list", help="List persisted G4 review queue items without proposal raw JSON."
+    )
+    dogfood_g4_review_queue_list_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_list_parser.add_argument("--status", choices=["pending", "approved", "rejected"])
+    dogfood_g4_review_queue_list_parser.add_argument("--limit", type=int, default=50)
+    dogfood_g4_review_queue_update_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-update", help="Approve or reject a persisted G4 review queue item; does not apply it."
+    )
+    dogfood_g4_review_queue_update_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_update_parser.add_argument("queue_id")
+    dogfood_g4_review_queue_update_parser.add_argument("--status", required=True, choices=["approved", "rejected"])
+    dogfood_g4_review_queue_update_parser.add_argument("--actor", required=True)
+    dogfood_g4_review_queue_update_parser.add_argument("--reason", required=True)
     dogfood_g4_review_queue_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_g4_review_queue_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_g4_review_queue_preview_parser.add_argument("--queue-limit", type=int, default=20)
     dogfood_g4_review_queue_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_g4_review_queue_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_g4_review_queue_preview_parser.add_argument("--epoch-start", help="Optional ISO-8601 cutoff for fresh-epoch comparison of historical blockers.")
     dogfood_g4_review_queue_preview_parser.add_argument("--lock-path", type=Path)
     dogfood_scheduled_parser = dogfood_subparsers.add_parser(
         "scheduled-dry-run",
@@ -8425,6 +8658,19 @@ def main() -> None:
             if args.queue_limit < 1:
                 raise ValueError("dogfood g4-review-queue-preview queue-limit must be >= 1")
             print(json.dumps(_dogfood_g4_review_queue_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-persist":
+            if args.queue_limit < 1:
+                raise ValueError("dogfood g4-review-queue-persist queue-limit must be >= 1")
+            print(json.dumps(_dogfood_g4_review_queue_persist_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-list":
+            if args.limit < 1:
+                raise ValueError("dogfood g4-review-queue-list limit must be >= 1")
+            print(json.dumps(_dogfood_g4_review_queue_list_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-update":
+            print(json.dumps(_dogfood_g4_review_queue_update_payload(args), indent=2))
             return
         if args.dogfood_action == "scheduled-dry-run":
             print(json.dumps(_dogfood_scheduled_dry_run_payload(args), indent=2))

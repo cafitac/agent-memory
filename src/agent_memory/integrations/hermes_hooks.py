@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import shlex
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -443,6 +444,36 @@ def _contains_secret_like_text(text: str) -> bool:
     return any(pattern.search(text) is not None for pattern in _SECRET_LIKE_PATTERNS)
 
 
+def _resolve_related_observation_ids(
+    *,
+    options: HermesPreLlmHookOptions,
+    packet: MemoryPacket,
+    user_message: str,
+) -> list[int]:
+    if packet.retrieval_observation_id is not None:
+        return [packet.retrieval_observation_id]
+    query_sha256 = hashlib.sha256(user_message.encode("utf-8")).hexdigest()
+    try:
+        with sqlite3.connect(options.db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                """
+                SELECT id
+                FROM retrieval_observations
+                WHERE surface = 'hermes-pre-llm-hook'
+                  AND query_sha256 = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (query_sha256,),
+            ).fetchone()
+            if row is not None:
+                return [int(row["id"])]
+    except Exception:
+        return []
+    return []
+
+
 def _record_pre_llm_experience_trace(
     *,
     payload: HermesShellHookPayload,
@@ -477,7 +508,7 @@ def _record_pre_llm_experience_trace(
             salience=0.0,
             user_emphasis=1.0,
             related_memory_refs=_memory_refs_from_packet(packet),
-            related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
+            related_observation_ids=_resolve_related_observation_ids(options=options, packet=packet, user_message=user_message),
             retention_policy="ephemeral",
             metadata=metadata,
         )
@@ -503,7 +534,7 @@ def _record_pre_llm_experience_trace(
             salience=1.0,
             user_emphasis=1.0,
             related_memory_refs=_memory_refs_from_packet(packet),
-            related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
+            related_observation_ids=_resolve_related_observation_ids(options=options, packet=packet, user_message=user_message),
             retention_policy="review",
             metadata=metadata,
         )
@@ -520,7 +551,7 @@ def _record_pre_llm_experience_trace(
         salience=0.1,
         user_emphasis=0.0,
         related_memory_refs=_memory_refs_from_packet(packet),
-        related_observation_ids=[packet.retrieval_observation_id] if packet.retrieval_observation_id is not None else [],
+        related_observation_ids=_resolve_related_observation_ids(options=options, packet=packet, user_message=user_message),
         retention_policy="ephemeral",
         metadata={
             **_safe_hermes_trace_metadata(payload),

@@ -3392,6 +3392,248 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_is_ref_safe_and_read_
 
 
 
+def test_python_module_cli_dogfood_g4_review_queue_preview_splits_historical_unknowns_with_fresh_epoch(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-review-queue-fresh-split.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="G4 fresh split sensitive SHOULD_NOT_LEAK content.",
+        metadata={"project": "g4-fresh-split"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 fresh split",
+        predicate="safe_ref",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-fresh-split",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        for index in range(1, 5):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-fresh-split', 1, '["approved"]', ?, ?, 'direct', '{}')
+                """,
+                (index, hashlib.sha256(f"historical-hit-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), f"fact:{fact.id}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', 'retrieved', ?, ?, NULL,
+                          'project:g4-fresh-split', 1.0, '{}')
+                """,
+                (index, f"fact:{fact.id}", index),
+            )
+        for index in range(5, 11):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-fresh-split', 1, '["approved"]', '[]', NULL, NULL, '{}')
+                """,
+                (index, hashlib.sha256(f"historical-empty-{index}".encode()).hexdigest()),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-09 00:00:00', 'hermes-pre-llm-hook', 'empty_retrieval', NULL, ?, NULL,
+                          'project:g4-fresh-split', 0.0, '{}')
+                """,
+                (index, index),
+            )
+        for index in range(11, 14):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-10 06:30:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-fresh-split', 1, '["approved"]', ?, ?, 'direct',
+                          '{"retrieval_outcome":"retrieved_memory","hook_event_name":"pre_llm_call"}')
+                """,
+                (index, hashlib.sha256(f"fresh-hit-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), f"fact:{fact.id}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO experience_traces (
+                    id, created_at, surface, event_kind, content_sha256, summary, scope, session_ref,
+                    salience, user_emphasis, related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+                ) VALUES (?, '2026-05-10 06:30:00', 'hermes-pre-llm-hook', 'turn', ?, NULL,
+                          'project:g4-fresh-split', 'session:test', 0.1, 0.0, ?, ?, 'ephemeral', '{}')
+                """,
+                (index, hashlib.sha256(f"fresh-trace-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), json.dumps([index])),
+            )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-review-queue-preview",
+            str(db_path),
+            "--limit",
+            "30",
+            "--top",
+            "5",
+            "--queue-limit",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--epoch-start",
+            "2026-05-10T06:00:00Z",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["fresh_epoch_comparison_enabled"] is True
+    blockers = payload["quality_gate"]["blocked_reasons"]
+    assert "background_empty_retrieval_outcome_unknown" not in blockers
+    assert "background_empty_retrieval_outcome_classified_or_reset_previewable" in blockers
+    warning = payload["background_quality_warning_analysis"]["warnings"][0]
+    fresh = warning["ref_safe_metrics"]["fresh_epoch_comparison"]
+    assert fresh["enabled"] is True
+    assert fresh["fresh_unresolved_unknown_empty_outcome_count"] == 0
+    assert fresh["reset_resolution_hint"] == "telemetry_reset_preview_can_retire_historical_unknowns"
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+def test_hermes_pre_llm_hook_resolves_trace_link_when_packet_observation_id_is_missing(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-link-fallback.db"
+    initialize_database(db_path)
+    user_message = "Trace linkage fallback should use query sha only."
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, surface, query_sha256, query_preview, preferred_scope, limit_value, statuses_json,
+                retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (42, 'hermes-pre-llm-hook', ?, NULL, 'project:trace-link', 5, '["approved"]',
+                      '[]', NULL, 'verify_first', '{"retrieval_outcome":"no_reliable_memory"}')
+            """,
+            (hashlib.sha256(user_message.encode("utf-8")).hexdigest(),),
+        )
+
+    resolved = hermes_hooks._resolve_related_observation_ids(
+        options=HermesPreLlmHookOptions(db_path=db_path, preferred_scope="project:trace-link", record_trace=True),
+        packet=hermes_hooks.MemoryPacket(query=user_message),
+        user_message=user_message,
+    )
+
+    assert resolved == [42]
+
+
+def test_python_module_cli_dogfood_g4_review_queue_persist_lists_and_updates_without_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-review-queue-persist.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="G4 persist sensitive SHOULD_NOT_LEAK content.",
+        metadata={"project": "g4-persist"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 persist",
+        predicate="safe_ref",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-persist",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        for index in range(1, 5):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-persist', 1, '["approved"]', ?, ?, 'direct', '{}')
+                """,
+                (index, hashlib.sha256(f"persist-{index}".encode()).hexdigest(), json.dumps([f"fact:{fact.id}"]), f"fact:{fact.id}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-10 00:00:00', 'hermes-pre-llm-hook', 'retrieved', ?, ?, NULL,
+                          'project:g4-persist', 1.0, '{}')
+                """,
+                (index, f"fact:{fact.id}", index),
+            )
+        before_facts = connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-persist", str(db_path),
+            "--limit", "20", "--top", "5", "--queue-limit", "5", "--frequent-threshold", "3",
+            "--actor", "pytest", "--reason", "persist queue for review without apply",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist.returncode == 0, persist.stderr
+    persisted = json.loads(persist.stdout)
+    assert persisted["queue_persistence_supported"] is True
+    assert persisted["apply_supported"] is False
+    assert persisted["inserted_count"] >= 1
+    assert "SHOULD_NOT_LEAK" not in persist.stdout
+
+    listed = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-list", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert listed.returncode == 0, listed.stderr
+    list_payload = json.loads(listed.stdout)
+    queue_id = list_payload["items"][0]["queue_id"]
+    assert list_payload["items"][0]["status"] == "pending"
+    assert "proposal_json" not in list_payload["items"][0]
+
+    updated = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-update", str(db_path), queue_id,
+            "--status", "approved", "--actor", "pytest", "--reason", "reviewed aggregate refs only",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert updated.returncode == 0, updated.stderr
+    assert json.loads(updated.stdout)["apply_supported"] is False
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == before_facts
+        assert connection.execute("SELECT status FROM g4_review_queue_items WHERE queue_id = ?", (queue_id,)).fetchone()[0] == "approved"
+
+
 def test_python_module_cli_dogfood_g4_review_queue_preview_decomposes_background_quality_warnings(
     tmp_path: Path,
 ) -> None:
