@@ -4654,17 +4654,17 @@ def _g4_background_quality_warning_analysis(
 
         if warning == "high_empty_retrieval_activation_ratio":
             likely_causes = []
+            historical_unknown_resolved = fresh_epoch is not None and fresh_unresolved_unknown == 0
+            historical_trace_gap_resolved = fresh_epoch is not None and fresh_unlinked_observations == 0
             if unknown_outcome_count:
-                if fresh_epoch is not None and fresh_unresolved_unknown == 0:
+                if historical_unknown_resolved:
                     likely_causes.append("historical_or_classified_empty_retrieval_outcome_rows")
-                    blocking_reasons.append("background_empty_retrieval_outcome_classified_or_reset_previewable")
                 else:
                     likely_causes.append("unknown_empty_retrieval_outcome_rows")
                     blocking_reasons.append("background_empty_retrieval_outcome_unknown")
             if unlinked_trace_count:
-                if fresh_epoch is not None and fresh_unlinked_observations == 0:
+                if historical_trace_gap_resolved:
                     likely_causes.append("historical_empty_retrieval_observation_trace_gap")
-                    blocking_reasons.append("background_empty_retrieval_trace_gap_reset_previewable")
                 else:
                     likely_causes.append("empty_retrieval_observations_missing_trace_links")
                     blocking_reasons.append("background_empty_retrieval_trace_linkage_gap")
@@ -4672,8 +4672,9 @@ def _g4_background_quality_warning_analysis(
                 likely_causes.append("expected_no_reliable_memory_negative_evidence")
             if not likely_causes:
                 likely_causes.append("classified_empty_retrieval_negative_evidence")
-            severity = "blocking" if unknown_outcome_count or unlinked_trace_count else "diagnostic"
-            gate_effect = "blocks_until_unknown_or_unlinked_empty_evidence_is_resolved" if severity == "blocking" else "diagnostic_only_after_classification"
+            blocking = (unknown_outcome_count and not historical_unknown_resolved) or (unlinked_trace_count and not historical_trace_gap_resolved)
+            severity = "blocking" if blocking else "diagnostic"
+            gate_effect = "blocks_until_unknown_or_unlinked_empty_evidence_is_resolved" if severity == "blocking" else "diagnostic_only_after_fresh_epoch_resolution"
             ref_safe_metrics = {
                 "empty_retrieval_count": empty_count,
                 "empty_retrieval_ratio": round(_safe_float(empty.get("ratio")), 4),
@@ -4687,8 +4688,8 @@ def _g4_background_quality_warning_analysis(
                     "fresh_unresolved_unknown_empty_outcome_count": fresh_unresolved_unknown,
                     "fresh_classified_unknown_empty_outcome_count": fresh_classified_unknown,
                     "fresh_unlinked_observation_count": fresh_unlinked_observations,
-                    "reset_resolution_hint": "telemetry_reset_preview_can_retire_historical_unknowns"
-                    if fresh_epoch is not None and fresh_unresolved_unknown == 0 else "collect_more_classified_fresh_epoch_evidence",
+                    "reset_resolution_hint": "historical_telemetry_resolved_by_fresh_epoch_or_reset"
+                    if fresh_epoch is not None and fresh_unresolved_unknown == 0 and fresh_unlinked_observations == 0 else "collect_more_classified_fresh_epoch_evidence",
                 },
                 "sample_activation_ids": empty.get("sample_activation_ids", [])[:5] if isinstance(empty.get("sample_activation_ids"), list) else [],
                 "sample_observation_ids": empty.get("sample_observation_ids", [])[:5] if isinstance(empty.get("sample_observation_ids"), list) else [],
@@ -5382,12 +5383,14 @@ def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str
                 skipped.append({"queue_id": queue_id, "reason": f"status_{row['status']}"})
                 continue
             proposal = _safe_json_dict_from_db(row["proposal_json"])
-            action = "record_review_outcome_only"
+            parsed_target = _parse_memory_ref(str(row["target_ref"] or "")) if row["target_ref"] else None
+            action = "apply_reinforcement_marker" if row["proposal_type"] == "reinforcement_review" and parsed_target else "record_review_outcome_only"
             rollback_hint = {
                 "restore_backup_path": str(backup_path),
                 "queue_id": queue_id,
                 "policy": policy,
                 "memory_status_mutated": False,
+                "memory_reinforcement_mutated": action == "apply_reinforcement_marker",
                 "default_retrieval_mutated": False,
             }
             before = connection.total_changes
@@ -5413,6 +5416,21 @@ def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str
                 ),
             )
             inserted = connection.total_changes > before
+            reinforcement_mutated = False
+            if inserted and action == "apply_reinforcement_marker" and parsed_target is not None:
+                memory_type, memory_id = parsed_target
+                table_name = {"fact": "facts", "procedure": "procedures", "episode": "episodes"}[memory_type]
+                before_reinforcement = connection.total_changes
+                connection.execute(
+                    f"""
+                    UPDATE {table_name}
+                    SET reinforcement_count = COALESCE(reinforcement_count, 0.0) + 1.0,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (memory_id,),
+                )
+                reinforcement_mutated = connection.total_changes > before_reinforcement
             audit = _safe_json_list_from_db(row["audit_json"])
             audit.append({
                 "action": "apply" if inserted else "apply_already_recorded",
@@ -5420,6 +5438,7 @@ def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str
                 "policy": policy,
                 "reason_sha256": reason_sha256,
                 "application_action": action,
+                "memory_reinforcement_mutated": reinforcement_mutated,
             })
             connection.execute(
                 "UPDATE g4_review_queue_items SET updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ? WHERE queue_id = ?",
@@ -5431,6 +5450,7 @@ def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str
                 "target_ref": row["target_ref"],
                 "action": action,
                 "inserted": inserted,
+                "memory_reinforcement_mutated": reinforcement_mutated,
                 "reason_codes": proposal.get("reason_codes", []) if isinstance(proposal.get("reason_codes"), list) else [],
             })
     payload = {
@@ -5450,6 +5470,7 @@ def _dogfood_g4_review_queue_apply_payload(args: argparse.Namespace) -> dict[str
         "applied_items": applied,
         "skipped_items": skipped,
         "memory_status_mutated": False,
+        "memory_reinforcement_mutated": any(item.get("memory_reinforcement_mutated") for item in applied),
         "default_retrieval_unchanged": True,
         "ordinary_conversation_auto_approval": False,
         "privacy": {

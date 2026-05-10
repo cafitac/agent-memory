@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 15:23 KST
+Last updated: 2026-05-10 20:29 KST
 
 ## Trigger for the next session
 
@@ -16,19 +16,19 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently verified through `v0.1.128`: PR #266 classified empty retrieval outcomes and added ref-safe review support for isolated approved decay-risk candidates; PR #268 stabilized Linux/SQLite retrieval-eval bounds exposed after release-sync; release-sync PRs #267 and #269 published `v0.1.127` and `v0.1.128`. Main CI, auto-release, GitHub Release, npm, PyPI, fresh PyPI/npm smoke, and installed runtime smoke all passed for `v0.1.128`.
+agent-memory is currently released/runtime-verified through `v0.1.128`; the active source branch is `feat/g4-fresh-linkage-and-mutations` at package version `0.1.135`, with the next PR/release pending. Since v0.1.128, the source branch added fresh-epoch blocker comparison, a fallback trace-to-observation linkage path, persisted G4 review-queue review state, refined historical-vs-fresh background quality gates, and the first narrow approved-queue mutation (`apply_reinforcement_marker`) while keeping broad G4/background apply disabled.
 
-The live Hermes hook now points at `/Users/reddit/.agent-memory/runtime/v0.1.128/.venv/bin/agent-memory`. A v0.1.128 hook smoke inserted `retrieval_observations.id=2260` with `metadata_json` containing `retrieval_outcome=retrieved_memory` and `experience_traces.id=1543` with `related_observation_ids_json=[2260]`, proving the installed path links new metadata-only traces to retrieval observations.
+The installed live Hermes hook still points at `/Users/reddit/.agent-memory/runtime/v0.1.128/.venv/bin/agent-memory` until the v0.1.135+ PR/release/rollout finishes. Source tests now also cover the fresh fallback case where `packet.retrieval_observation_id` is absent: the hook links a metadata-only trace to the latest same-query retrieval observation by SHA-256 without storing raw prompts.
 
-Broad G4/background consolidation apply mode remains blocked. The latest v0.1.128 scheduled dry-run at `/tmp/agent-memory-v0128-after-hooks.json` stayed `read_only=true`, `mutated=false`, `automation_policy.apply_supported=false`, and returned `continue_scheduled_dry_run_dogfooding_before_g4` with blockers `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`. Coverage is improving only for new rows (`activation_trace_link_coverage_ratio=0.0098`, `activations_linked_to_traces=4`) because historical rows remain unlinked. Empty retrieval diagnostics are now split by hook event, response mode, retrieval outcome, scope, surface, and trace linkage; current live empties are still historical `unknown`. The isolated approved decay-risk candidate remains `fact:1` with resolution hint `add_relation_or_confirm_isolated_approved_memory` and raw-free evidence only.
+Broad G4/background consolidation apply mode remains blocked. The source branch now distinguishes historical/classified/reset-resolvable background warnings from fresh unresolved evidence when `--epoch-start` is provided, so historical empty retrieval unknowns no longer block if the fresh epoch has no unresolved unknowns or unlinked observations. The broad gate still requires release/runtime rollout and live aggregate verification before it can be considered healthy. The first mutating review-queue apply corridor is deliberately narrow: approved `reinforcement_review` items can increment only the target memory `reinforcement_count`; status/default retrieval/raw content remain unchanged, and every apply requires policy, approval phrase, actor, reason hash, backup path, audit row, and rollback hint.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later releases hardened only narrow cleanup/restore/audit safety corridors, blocker diagnostics, and future trace/observation quality; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Current slice completed: `feat/empty-response-mode` landed as PR #266 and is released/runtime-smoked through `v0.1.128` after the PR #268 CI stabilization. It verified installed hook linkage, changed future empty retrieval observations from ambiguous unknown/null-only diagnostics toward actionable metadata-only `retrieval_outcome`, and added ref-safe `review_support` commands for isolated approved decay-risk candidates such as `fact:1`.
+Completed release baseline: `feat/empty-response-mode` landed as PR #266 and is released/runtime-smoked through `v0.1.128` after PR #268 CI stabilization.
 
-Current slice: `dogfood fresh-epoch` is being added as a read-only way to judge v0.1.128+ telemetry apart from historical rows that were never semantically backfilled with observation links or `retrieval_outcome`. This does not delete/reset live data and does not enable telemetry reset apply.
+Current source slice: `feat/g4-fresh-linkage-and-mutations` targets v0.1.135+ and closes the next three blockers: fresh trace linkage fallback, historical-vs-fresh G4 quality gate refinement, and a first narrow approved review-queue mutation. It still does not enable broad background consolidation apply, telemetry reset apply, ordinary conversation auto-approval, raw transcript/query storage, or default retrieval ranking changes.
 
 Target shape for this slice:
 
@@ -37,7 +37,7 @@ Target shape for this slice:
 - No raw prompt/query/transcript/trace summary/sample values are printed.
 - The first live source smoke against `/Users/reddit/.agent-memory/memory.db` with epoch `2026-05-09T21:57:33Z` wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`: 21 observations, 21 traces, 21 activations, coverage ratio 0.2381, 10 empty retrievals, blocked by `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_unknown`; no mutation.
 
-Next safe slice after this lands: continue v0.1.128 dogfood until fresh-epoch coverage clears the threshold, then classify remaining empty retrievals into expected misses vs query/scope gaps. If the fresh epoch looks healthy but historical blockers still dominate scheduled-dry-run, design a separate `telemetry-only reset preview` corridor; do not add live reset apply in this slice. In parallel, resolve `fact:1` by either adding a reviewed relation edge or explicitly confirming that the approved fact is intentionally isolated. Broad G4 apply still requires a separate review-queue apply contract and must stay blocked until trace quality, empty retrieval quality, and decay-risk blockers clear.
+Next safe slice after this lands: open/merge the v0.1.135+ PR, publish release, install the published runtime into `/Users/reddit/.agent-memory/runtime/v0.1.135` or newer, run installed hook smoke, run source/published `g4-review-queue-preview --epoch-start <ISO>` and `g4-review-queue-apply` against a disposable or explicitly approved target, then verify live aggregate state. Only after that should the roadmap consider whether `fact:1` needs a relation/isolated confirmation or whether more fresh dogfood is required. Broad G4 apply remains a separate, still-blocked slice.
 
 Recommended local backup commands before any future live mutation:
 
@@ -64,7 +64,7 @@ Current branch expectation:
 - Latest merged G4a hardening PR: #257 `feat: write narrow restore audit trace`.
 - Latest merged docs checkpoint PR: #259 `docs: record v0.1.123 live audit smoke`.
 - Latest merged release-sync PR: #258 `chore: release v0.1.123 [skip release]`.
-- Latest completed release: `v0.1.128`.
+- Latest completed release/runtime rollout: `v0.1.128`; current source release target: `v0.1.135+`.
 
 Expected GitHub identity:
 
@@ -1083,3 +1083,17 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
   3. Adds persisted G4 review queue commands before any apply path: `g4-review-queue-persist`, `g4-review-queue-list`, and `g4-review-queue-update`. Persist/update mutate only the new `g4_review_queue_items` table, store operator reasons as SHA-256, omit proposal raw JSON from list output, and keep `apply_supported=false`.
 - Local verification passed: targeted G4/fallback tests and full `uv run --python 3.11 pytest tests/ -q` => `283 passed, 1 xfailed`.
 - Broad G4 apply is still intentionally blocked. Review queue persistence is not apply. Next release target: v0.1.134 after PR/CI/publish.
+
+
+### v0.1.135+ source checkpoint — fresh linkage, quality gate, narrow queue mutation (2026-05-10 20:29 KST)
+
+- Branch: `feat/g4-fresh-linkage-and-mutations`; package version: `0.1.135`; PR/release/runtime rollout still pending.
+- Implements the post-v0.1.134 follow-up while preserving hard blocks on broad G4 apply, ordinary conversation auto-approval, raw prompt/transcript/query persistence, telemetry reset apply, and default retrieval ranking changes.
+- Fresh trace linkage: Hermes pre-LLM hook now records a metadata-only trace even when no context is injected and can resolve the trace/observation link from the latest same-query retrieval observation if `packet.retrieval_observation_id` is missing.
+- G4 quality gate: `g4-review-queue-preview --epoch-start <ISO>` now treats historical/classified/reset-resolved empty-retrieval warnings as diagnostic-only when the fresh epoch has no unresolved unknown outcomes and no fresh unlinked observations; fresh unresolved evidence remains blocking.
+- Approved review queue apply: `g4-review-queue-apply` can perform the first narrow guarded memory mutation for approved `reinforcement_review` items by incrementing only `reinforcement_count` on the target fact/procedure/episode. It still leaves status, default retrieval behavior, and raw content untouched, requires explicit policy/approval/actor/reason/backup, writes `g4_review_queue_applications`, and reports rollback metadata.
+- Focused RED/GREEN verification passed so far:
+  - `uv run pytest tests/test_cli.py::test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_turn tests/test_cli.py::test_hermes_pre_llm_hook_records_trace_even_when_no_context_is_injected tests/test_cli.py::test_hermes_pre_llm_hook_resolves_trace_link_when_packet_observation_id_is_missing -q`
+  - `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_splits_historical_unknowns_with_fresh_epoch tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_without_memory_mutation -q`
+- Full-suite verification now passed: `uv run --python 3.11 pytest tests/ -q` => `285 passed, 1 xfailed`.
+- Remaining before handoff can call this released: update/open PR, merge, let release-sync/publish complete, install the published runtime, and perform live aggregate verification. Do not mark v0.1.135 as the latest completed release until this is done.
