@@ -3507,12 +3507,14 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_splits_historical_unk
     assert payload["fresh_epoch_comparison_enabled"] is True
     blockers = payload["quality_gate"]["blocked_reasons"]
     assert "background_empty_retrieval_outcome_unknown" not in blockers
-    assert "background_empty_retrieval_outcome_classified_or_reset_previewable" in blockers
+    assert "background_empty_retrieval_outcome_classified_or_reset_previewable" not in blockers
     warning = payload["background_quality_warning_analysis"]["warnings"][0]
+    assert warning["severity"] == "diagnostic"
+    assert warning["gate_effect"] == "diagnostic_only_after_fresh_epoch_resolution"
     fresh = warning["ref_safe_metrics"]["fresh_epoch_comparison"]
     assert fresh["enabled"] is True
     assert fresh["fresh_unresolved_unknown_empty_outcome_count"] == 0
-    assert fresh["reset_resolution_hint"] == "telemetry_reset_preview_can_retire_historical_unknowns"
+    assert fresh["reset_resolution_hint"] == "historical_telemetry_resolved_by_fresh_epoch_or_reset"
     assert "SHOULD_NOT_LEAK" not in result.stdout
 
 
@@ -3792,7 +3794,8 @@ def test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_
         [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-list", str(db_path)],
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
     )
-    queue_id = json.loads(listed.stdout)["items"][0]["queue_id"]
+    listed_payload = json.loads(listed.stdout)
+    queue_id = next(item["queue_id"] for item in listed_payload["items"] if item["proposal_type"] == "reinforcement_review")
     updated = subprocess.run(
         [
             sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-update", str(db_path), queue_id,
@@ -3818,12 +3821,16 @@ def test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_
     assert payload["kind"] == "dogfood_g4_review_queue_apply"
     assert payload["applied_count"] == 1
     assert payload["memory_status_mutated"] is False
+    assert payload["memory_reinforcement_mutated"] is True
     assert payload["default_retrieval_unchanged"] is True
+    assert payload["applied_items"][0]["action"] == "apply_reinforcement_marker"
     assert "proposal_json_included" in applied.stdout
     assert "SHOULD_NOT_LEAK" not in applied.stdout
     with sqlite3.connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == before_facts
         assert connection.execute("SELECT COUNT(*) FROM g4_review_queue_applications").fetchone()[0] == 1
+        row = connection.execute("SELECT reinforcement_count, retrieval_count FROM facts WHERE id = ?", (fact.id,)).fetchone()
+        assert row == (1.0, 0)
     assert backup_path.exists()
 
 
