@@ -1055,3 +1055,11 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 - Added `dogfood telemetry-reset-preview` as read-only aggregate preview only; no apply/delete path.
 - Guardrails: telemetry tables only (`retrieval_observations`, `memory_activations`, `experience_traces`), protected memory/source/relation/status tables are counted but not mutated, backup required before any future apply design.
 - Live source preview artifact: `/tmp/agent-memory-telemetry-reset-preview-source.json`; epoch `2026-05-09T21:57:33Z` would target 5,965 historical telemetry rows and retain 66 rows per telemetry table; protected tables remain out of scope.
+
+
+### Broad G4 review queue preview slice (2026-05-10 14:11 KST)
+
+- Branch: `feat/g4-review-queue-preview`.
+- Added `dogfood g4-review-queue-preview` as read-only queue contract preview only; no queue persistence and no apply path.
+- Queue entries require human review and carry policy/audit/ref-safe-evidence/operator-command fields; raw source/query/trace/sample values are excluded.
+- Live source preview artifact: `/tmp/agent-memory-g4-review-queue-preview-source.json`; current DB produced 2 ref-only queue entries, but quality gate remains blocked by `background_quality_warnings_present`, so broad G4 apply remains blocked.
