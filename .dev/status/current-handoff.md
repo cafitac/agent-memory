@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 20:29 KST
+Last updated: 2026-05-10 20:48 KST
 
 ## Trigger for the next session
 
@@ -16,19 +16,19 @@ read this file first. Do not ask the user to restate context. Verify repo state,
 
 ## Ready-to-say answer
 
-agent-memory is currently released/runtime-verified through `v0.1.128`; the active source branch is `feat/g4-fresh-linkage-and-mutations` at package version `0.1.135`, with the next PR/release pending. Since v0.1.128, the source branch added fresh-epoch blocker comparison, a fallback trace-to-observation linkage path, persisted G4 review-queue review state, refined historical-vs-fresh background quality gates, and the first narrow approved-queue mutation (`apply_reinforcement_marker`) while keeping broad G4/background apply disabled.
+agent-memory is currently released/runtime-verified through `v0.1.136`: PR #285 added fresh-epoch blocker comparison, fallback trace-to-observation linkage, persisted G4 review-queue review state, refined historical-vs-fresh background quality gates, and the first narrow approved-queue mutation (`apply_reinforcement_marker`) while keeping broad G4/background apply disabled. Release-sync PR #286 published `v0.1.136`; GitHub Release, npm, PyPI, main CI, publish, fresh artifact smoke, installed runtime smoke, and live aggregate read-only verification all passed.
 
-The installed live Hermes hook still points at `/Users/reddit/.agent-memory/runtime/v0.1.128/.venv/bin/agent-memory` until the v0.1.135+ PR/release/rollout finishes. Source tests now also cover the fresh fallback case where `packet.retrieval_observation_id` is absent: the hook links a metadata-only trace to the latest same-query retrieval observation by SHA-256 without storing raw prompts.
+The live Hermes hook now points at `/Users/reddit/.agent-memory/runtime/v0.1.136/.venv/bin/agent-memory` (config backup: `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.136-20260510T2044`). A v0.1.136 installed hook smoke wrote `/tmp/agent-memory-v0136-hook-smoke.json`, inserted `retrieval_observations.id=2438`, `experience_traces.id=1721`, and `memory_activations.id=2343`, with the trace linked to `related_observation_ids_json=[2438]` and observation metadata `retrieval_outcome=retrieved_memory`.
 
-Broad G4/background consolidation apply mode remains blocked. The source branch now distinguishes historical/classified/reset-resolvable background warnings from fresh unresolved evidence when `--epoch-start` is provided, so historical empty retrieval unknowns no longer block if the fresh epoch has no unresolved unknowns or unlinked observations. The broad gate still requires release/runtime rollout and live aggregate verification before it can be considered healthy. The first mutating review-queue apply corridor is deliberately narrow: approved `reinforcement_review` items can increment only the target memory `reinforcement_count`; status/default retrieval/raw content remain unchanged, and every apply requires policy, approval phrase, actor, reason hash, backup path, audit row, and rollback hint.
+Broad G4/background consolidation apply mode remains blocked. The latest v0.1.136 installed live preview at `/tmp/agent-memory-v0136-g4-preview-live.json` stayed `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`; it produced 2 ref-only queue entries but the quality gate still blocked on `background_empty_retrieval_trace_linkage_gap`. The first mutating review-queue apply corridor is deliberately narrow and was verified only on a disposable fixture at `/tmp/agent-memory-v0136-installed-apply-fixture.db`: approved `reinforcement_review` items incremented only `reinforcement_count`; status/default retrieval/raw content remained unchanged, with policy, approval phrase, actor, reason hash, backup path, audit row, and rollback hint required.
 
 Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, PR #204, v0.1.99 runtime `/Users/reddit/.agent-memory/runtime/v0.1.99/.venv/bin/agent-memory`, and report `/Users/reddit/.agent-memory/reports/v0.1.99-runtime-qa-20260507T074118` are retained as the broad-G4-blocked baseline. Later releases hardened only narrow cleanup/restore/audit safety corridors, blocker diagnostics, and future trace/observation quality; they did not enable broad background consolidation mutation.
 
 ## Current next slice
 
-Completed release baseline: `feat/empty-response-mode` landed as PR #266 and is released/runtime-smoked through `v0.1.128` after PR #268 CI stabilization.
+Completed release baseline: `feat/g4-fresh-linkage-and-mutations` landed as PR #285 and is released/runtime-smoked through `v0.1.136` after release-sync PR #286.
 
-Current source slice: `feat/g4-fresh-linkage-and-mutations` targets v0.1.135+ and closes the next three blockers: fresh trace linkage fallback, historical-vs-fresh G4 quality gate refinement, and a first narrow approved review-queue mutation. It still does not enable broad background consolidation apply, telemetry reset apply, ordinary conversation auto-approval, raw transcript/query storage, or default retrieval ranking changes.
+Current slice status: v0.1.136 is installed and live-smoked. It closes the planned three blockers at source/runtime level: fresh trace linkage fallback, historical-vs-fresh G4 quality gate refinement, and a first narrow approved review-queue mutation. It still does not enable broad background consolidation apply, telemetry reset apply, ordinary conversation auto-approval, raw transcript/query storage, or default retrieval ranking changes.
 
 Target shape for this slice:
 
@@ -37,7 +37,7 @@ Target shape for this slice:
 - No raw prompt/query/transcript/trace summary/sample values are printed.
 - The first live source smoke against `/Users/reddit/.agent-memory/memory.db` with epoch `2026-05-09T21:57:33Z` wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`: 21 observations, 21 traces, 21 activations, coverage ratio 0.2381, 10 empty retrievals, blocked by `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_unknown`; no mutation.
 
-Next safe slice after this lands: open/merge the v0.1.135+ PR, publish release, install the published runtime into `/Users/reddit/.agent-memory/runtime/v0.1.135` or newer, run installed hook smoke, run source/published `g4-review-queue-preview --epoch-start <ISO>` and `g4-review-queue-apply` against a disposable or explicitly approved target, then verify live aggregate state. Only after that should the roadmap consider whether `fact:1` needs a relation/isolated confirmation or whether more fresh dogfood is required. Broad G4 apply remains a separate, still-blocked slice.
+Next safe slice: continue fresh v0.1.136 dogfood until the remaining `background_empty_retrieval_trace_linkage_gap` clears or can be explained by a reviewed reset/backfill corridor. Do not live-apply queue mutations without an explicit operator decision; if approved later, start with the persisted `fact:1` reinforcement-review item and back up the DB first. Broad G4 apply remains a separate, still-blocked slice.
 
 Recommended local backup commands before any future live mutation:
 
@@ -64,7 +64,7 @@ Current branch expectation:
 - Latest merged G4a hardening PR: #257 `feat: write narrow restore audit trace`.
 - Latest merged docs checkpoint PR: #259 `docs: record v0.1.123 live audit smoke`.
 - Latest merged release-sync PR: #258 `chore: release v0.1.123 [skip release]`.
-- Latest completed release/runtime rollout: `v0.1.128`; current source release target: `v0.1.135+`.
+- Latest completed release/runtime rollout: `v0.1.136`.
 
 Expected GitHub identity:
 
@@ -75,10 +75,10 @@ Expected GitHub identity:
 
 Latest completed release:
 
-- `v0.1.128`
-- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.128`
-- npm package: `@cafitac/agent-memory@0.1.128`
-- PyPI package: `cafitac-agent-memory==0.1.128`
+- `v0.1.136`
+- GitHub release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.136`
+- npm package: `@cafitac/agent-memory@0.1.136`
+- PyPI package: `cafitac-agent-memory==0.1.136`
 
 Latest verified source/runtime snapshot, checked 2026-05-10 04:38 KST:
 
@@ -1097,3 +1097,15 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
   - `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_splits_historical_unknowns_with_fresh_epoch tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_without_memory_mutation -q`
 - Full-suite verification now passed: `uv run --python 3.11 pytest tests/ -q` => `285 passed, 1 xfailed`.
 - Remaining before handoff can call this released: update/open PR, merge, let release-sync/publish complete, install the published runtime, and perform live aggregate verification. Do not mark v0.1.135 as the latest completed release until this is done.
+
+
+### v0.1.136 release/runtime rollout checkpoint (2026-05-10 20:48 KST)
+
+- PR #285 `feat: apply narrow G4 reinforcement markers` merged after CI; release-sync PR #286 `chore: release v0.1.136 [skip release]` merged.
+- Main CI, release-sync CI, auto-release, and publish workflow completed successfully; GitHub Release `v0.1.136`, npm `@cafitac/agent-memory@0.1.136`, and PyPI `cafitac-agent-memory==0.1.136` are visible.
+- Fresh artifact smoke passed: npm tarball package version `0.1.136`; PyPI wheel `cafitac_agent_memory-0.1.136-py3-none-any.whl` downloaded; installed runtime import reports `agent_memory.__version__ == 0.1.136`.
+- Runtime installed at `/Users/reddit/.agent-memory/runtime/v0.1.136/.venv/bin/agent-memory`; Hermes config updated from v0.1.135 to v0.1.136 with backup `/Users/reddit/.hermes/config.yaml.bak-agent-memory-v0.1.136-20260510T2044`.
+- Installed hook smoke wrote `/tmp/agent-memory-v0136-hook-smoke.json`; latest smoke-linked ids were observation `2438`, trace `1721`, activation `2343`, with trace `related_observation_ids_json=[2438]` and observation `retrieval_outcome=retrieved_memory`.
+- Live installed G4 preview wrote `/tmp/agent-memory-v0136-g4-preview-live.json`; it stayed read-only/no-mutation and produced 2 ref-only queue entries. The old unknown-empty blocker is resolved/classified for the fresh window, but the broad gate remains blocked by `background_empty_retrieval_trace_linkage_gap` because the fresh comparison still has one fresh unlinked observation.
+- Installed queue-apply smoke was performed only on disposable fixture `/tmp/agent-memory-v0136-installed-apply-fixture.db`; it produced `applied_count=1`, `memory_reinforcement_mutated=true`, `memory_status_mutated=false`, `default_retrieval_unchanged=true`, and fact row `(reinforcement_count=1.0, retrieval_count=0)`. No live apply mutation was performed in this rollout.
+- Live aggregate after rollout: `facts=3`, `procedures=0`, `episodes=0`, `g4_review_queue_items=2`, `g4_review_queue_applications=2`, and the live telemetry tables continued to advance with the installed hook.

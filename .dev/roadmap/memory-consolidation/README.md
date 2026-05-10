@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-10 20:29 KST, runtime rollout is verified through v0.1.128 and the active source target is v0.1.135+.
-- `current-progress-and-next-steps.md` — current north-star progress plus the v0.1.135+ source checkpoint and next release/runtime rollout steps.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-10 20:48 KST, runtime rollout is verified through v0.1.136.
+- `current-progress-and-next-steps.md` — current north-star progress plus the v0.1.136 release/runtime checkpoint and next blocked-G4 steps.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
