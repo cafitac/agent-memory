@@ -54,6 +54,19 @@ The live installed G4 preview stayed read-only/no-mutation and produced queue en
 
 Fresh comparison has already separated old historical unknowns from new evidence, but there is still fresh unlinked observation evidence. That means broad G4/background apply must stay blocked.
 
+## Current implementation slice
+
+Branch `feat/g4-linkage-gap-diagnose` adds a read-only command:
+
+```bash
+agent-memory dogfood g4-linkage-gap-diagnose /Users/reddit/.agent-memory/memory.db \
+  --epoch-start 2026-05-10T11:40:00Z \
+  --surface hermes-pre-llm-hook \
+  --output /tmp/agent-memory-g4-linkage-gap-diagnose-source-live.json
+```
+
+The source-checkout live smoke kept `retrieval_observations`, `memory_activations`, and `experience_traces` counts unchanged and classified the selected fresh epoch as `hook_runtime_linkage_bug` because many trace rows still have empty `related_observation_ids_json` while matching observations/activations exist. Broad G4/background apply is still blocked.
+
 ## Recommended next work
 
 Best next PR-sized slice:

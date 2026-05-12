@@ -4557,6 +4557,215 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 
+def _classify_g4_linkage_gap(
+    *,
+    observation_row: Any,
+    trace_count: int,
+    latest_trace_created_at: str | None,
+) -> tuple[str, str]:
+    metadata = _safe_metadata_from_json(observation_row["metadata_json"])
+    retrieval_outcome = str(metadata.get("retrieval_outcome") or "unknown")
+    hook_event_name = str(metadata.get("hook_event_name") or "unknown")
+    response_mode = str(observation_row["response_mode"] or "unknown")
+    created_at = str(observation_row["created_at"])
+    if retrieval_outcome in {"adapter_payload_gap", "query_scope_gap", "retrieval_disabled_or_unavailable"}:
+        return "metadata_classification_gap", "empty observation carries adapter/scope payload-gap outcome metadata"
+    if retrieval_outcome == "unknown" and hook_event_name in {"unknown", ""}:
+        return "metadata_classification_gap", "empty observation is missing hook/outcome metadata needed for ref-safe linkage diagnosis"
+    if retrieval_outcome == "unknown" and hook_event_name == "pre_llm_call" and response_mode == "verify_first":
+        return "historical_or_rollout_telemetry", "legacy verify-first empty retrieval can be classified only by rollout-era metadata"
+    if not trace_count:
+        return "hook_runtime_linkage_bug", "fresh observations exist but no fresh trace rows were recorded"
+    if latest_trace_created_at is not None and created_at > latest_trace_created_at:
+        return "expected_race_or_window_artifact", "latest observation is newer than the latest trace in the selected epoch/window"
+    if retrieval_outcome == "no_reliable_memory":
+        return "hook_runtime_linkage_bug", "expected negative-evidence observation was not linked from any metadata-only trace"
+    return "hook_runtime_linkage_bug", "observation falls inside a traced epoch but is absent from trace related_observation_ids"
+
+
+
+def _dogfood_g4_linkage_gap_diagnose_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    epoch_start = _parse_epoch_start(args.epoch_start)
+    surface_filter = args.surface
+    if not db_path.exists():
+        payload = {
+            "kind": "g4_linkage_gap_diagnosis",
+            "read_only": True,
+            "mutated": False,
+            "database": {"path": str(db_path), "exists": False},
+            "warnings": ["database_missing"],
+        }
+        _write_json_report(args.output, payload)
+        return payload
+
+    with _open_readonly_sqlite(db_path) as connection:
+        surface_clause = "AND surface = ?" if surface_filter else ""
+        params: tuple[Any, ...] = (epoch_start, surface_filter) if surface_filter else (epoch_start,)
+        observation_rows = (
+            connection.execute(
+                f"""
+                SELECT id, created_at, surface, preferred_scope, retrieved_memory_refs_json, response_mode, metadata_json
+                FROM retrieval_observations
+                WHERE datetime(created_at) >= datetime(?) {surface_clause}
+                ORDER BY datetime(created_at) ASC, id ASC
+                """,
+                params,
+            ).fetchall()
+            if _table_exists(connection, "retrieval_observations")
+            else []
+        )
+        trace_rows = (
+            connection.execute(
+                f"""
+                SELECT id, created_at, surface, related_observation_ids_json, related_memory_refs_json
+                FROM experience_traces
+                WHERE datetime(created_at) >= datetime(?) {surface_clause}
+                ORDER BY datetime(created_at) ASC, id ASC
+                """,
+                params,
+            ).fetchall()
+            if _table_exists(connection, "experience_traces")
+            else []
+        )
+        activation_rows = (
+            connection.execute(
+                f"""
+                SELECT id, created_at, surface, activation_kind, memory_ref, observation_id
+                FROM memory_activations
+                WHERE datetime(created_at) >= datetime(?) {surface_clause}
+                ORDER BY datetime(created_at) ASC, id ASC
+                """,
+                params,
+            ).fetchall()
+            if _table_exists(connection, "memory_activations")
+            else []
+        )
+
+    observation_ids = {int(row["id"]) for row in observation_rows}
+    linked_observation_ids: set[int] = set()
+    trace_without_observation_link_count = 0
+    related_memory_ref_counter: Counter[str] = Counter()
+    for row in trace_rows:
+        related_ids = _safe_json_list_from_db(row["related_observation_ids_json"])
+        if not related_ids:
+            trace_without_observation_link_count += 1
+        for observation_id in related_ids:
+            if isinstance(observation_id, int):
+                linked_observation_ids.add(observation_id)
+        related_memory_ref_counter.update(str(ref) for ref in _safe_json_list_from_db(row["related_memory_refs_json"]))
+
+    linked_observation_ids &= observation_ids
+    unlinked_rows = [row for row in observation_rows if int(row["id"]) not in linked_observation_ids]
+    activation_refs_by_observation: dict[int, list[str]] = defaultdict(list)
+    activation_observation_ids: set[int] = set()
+    for row in activation_rows:
+        observation_id = row["observation_id"]
+        if observation_id is None:
+            continue
+        observation_id = int(observation_id)
+        activation_observation_ids.add(observation_id)
+        activation_refs_by_observation[observation_id].append(f"activation:{row['id']}")
+
+    latest_trace_created_at = max((str(row["created_at"]) for row in trace_rows), default=None)
+    classification_counts: Counter[str] = Counter()
+    unlinked_details: list[dict[str, Any]] = []
+    for row in unlinked_rows:
+        classification, classification_reason = _classify_g4_linkage_gap(
+            observation_row=row,
+            trace_count=len(trace_rows),
+            latest_trace_created_at=latest_trace_created_at,
+        )
+        classification_counts[classification] += 1
+        metadata = _safe_metadata_from_json(row["metadata_json"])
+        observation_id = int(row["id"])
+        unlinked_details.append(
+            {
+                "observation_ref": f"observation:{observation_id}",
+                "activation_refs": activation_refs_by_observation.get(observation_id, [])[:5],
+                "created_at": str(row["created_at"]),
+                "surface": str(row["surface"]),
+                "response_mode": str(row["response_mode"] or "unknown"),
+                "hook_event_name": str(metadata.get("hook_event_name") or "unknown"),
+                "retrieval_outcome": str(metadata.get("retrieval_outcome") or "unknown"),
+                "classification": classification,
+                "classification_reason": classification_reason,
+                "raw_content_included": False,
+                "sample_values_included": False,
+            }
+        )
+
+    latest_unlinked_observation = unlinked_details[-1] if unlinked_details else None
+    unlinked_observation_count = len(unlinked_rows)
+    blocked_reasons = ["fresh_trace_linkage_gap_present"] if unlinked_observation_count else []
+    if classification_counts.get("hook_runtime_linkage_bug"):
+        decision = "investigate_hook_runtime_linkage_before_g4_apply"
+    elif classification_counts.get("metadata_classification_gap"):
+        decision = "classify_or_backfill_metadata_before_g4_apply"
+    elif classification_counts.get("expected_race_or_window_artifact") and len(classification_counts) == 1:
+        decision = "collect_next_epoch_to_confirm_race_window_resolution"
+    elif unlinked_observation_count:
+        decision = "review_linkage_gap_classification_before_g4_apply"
+    else:
+        decision = "fresh_trace_linkage_gap_not_detected"
+
+    payload = {
+        "kind": "g4_linkage_gap_diagnosis",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "database": {"path": str(db_path), "exists": True},
+        "filters": {"epoch_start": epoch_start, "surface": surface_filter},
+        "coverage": {
+            "observation_count": len(observation_rows),
+            "trace_count": len(trace_rows),
+            "activation_count": len(activation_rows),
+            "linked_observation_count": len(linked_observation_ids),
+            "unlinked_observation_count": unlinked_observation_count,
+            "trace_without_observation_link_count": trace_without_observation_link_count,
+            "activation_trace_link_coverage_ratio": round(
+                len(activation_observation_ids & linked_observation_ids) / len(activation_observation_ids), 4
+            )
+            if activation_observation_ids
+            else 0.0,
+        },
+        "classification_counts": {key: classification_counts[key] for key in sorted(classification_counts)},
+        "latest_unlinked_observation": latest_unlinked_observation,
+        "sample_unlinked_observations": unlinked_details[: min(5, len(unlinked_details))],
+        "candidate_signals": {
+            "related_memory_ref_count": len(related_memory_ref_counter),
+            "linked_observation_refs": [f"observation:{value}" for value in sorted(linked_observation_ids)[:5]],
+            "unlinked_observation_refs": [f"observation:{int(row['id'])}" for row in unlinked_rows[:5]],
+        },
+        "quality_gate": {
+            "pass": not unlinked_observation_count,
+            "decision": decision,
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "telemetry_reset_apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+        "suggested_next_steps": [
+            "If hook_runtime_linkage_bug appears, inspect hook/runtime observation-to-trace propagation before any G4 apply.",
+            "If only expected_race_or_window_artifact appears, compare the next fresh epoch before changing telemetry.",
+            "If metadata_classification_gap or historical_or_rollout_telemetry appears, use a separate reviewed backfill/reset corridor; do not silently rewrite telemetry.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _g4_review_queue_entry(
     *,
     queue_id: str,
@@ -8095,6 +8304,14 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_review_queue_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
     dogfood_g4_review_queue_preview_parser.add_argument("--epoch-start", help="Optional ISO-8601 cutoff for fresh-epoch comparison of historical blockers.")
     dogfood_g4_review_queue_preview_parser.add_argument("--lock-path", type=Path)
+    dogfood_g4_linkage_gap_diagnose_parser = dogfood_subparsers.add_parser(
+        "g4-linkage-gap-diagnose",
+        help="Explain fresh trace-linkage gaps in aggregate/ref-only form before any broad G4 apply path.",
+    )
+    dogfood_g4_linkage_gap_diagnose_parser.add_argument("db_path", type=Path)
+    dogfood_g4_linkage_gap_diagnose_parser.add_argument("--epoch-start", required=True)
+    dogfood_g4_linkage_gap_diagnose_parser.add_argument("--surface")
+    dogfood_g4_linkage_gap_diagnose_parser.add_argument("--output", type=Path)
     dogfood_scheduled_parser = dogfood_subparsers.add_parser(
         "scheduled-dry-run",
         help="Run a cron-friendly read-only G3e dogfood bundle before any G4 apply-mode plan.",
@@ -9002,6 +9219,9 @@ def main() -> None:
             if args.queue_limit < 1:
                 raise ValueError("dogfood g4-review-queue-preview queue-limit must be >= 1")
             print(json.dumps(_dogfood_g4_review_queue_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-linkage-gap-diagnose":
+            print(json.dumps(_dogfood_g4_linkage_gap_diagnose_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-review-queue-persist":
             if args.queue_limit < 1:
