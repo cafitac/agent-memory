@@ -3940,6 +3940,124 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_decomposes_background
 
 
 
+def test_python_module_cli_dogfood_g4_linkage_gap_diagnose_is_read_only_ref_safe_and_classifies_latest_gap(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-linkage-gap-diagnose.db"
+    initialize_database(db_path)
+    with sqlite3.connect(db_path) as connection:
+        for observation_id, created_at, metadata_json in (
+            (
+                1,
+                "2026-05-10T11:45:00Z",
+                json.dumps({"hook_event_name": "pre_llm_call", "retrieval_outcome": "no_reliable_memory"}),
+            ),
+            (
+                2,
+                "2026-05-10T11:50:00Z",
+                json.dumps({"hook_event_name": "pre_llm_call", "retrieval_outcome": "adapter_payload_gap", "secret": "SHOULD_NOT_LEAK"}),
+            ),
+        ):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, ?, 'hermes-pre-llm-hook', ?, 'SHOULD_NOT_LEAK',
+                          'project:g4-linkage-gap-diagnose', 1, '["approved"]', '[]', NULL, 'verify_first', ?)
+                """,
+                (observation_id, created_at, hashlib.sha256(f"empty-{observation_id}".encode()).hexdigest(), metadata_json),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, ?, NULL,
+                          'project:g4-linkage-gap-diagnose', 1.0, '{}')
+                """,
+                (observation_id, created_at, observation_id),
+            )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, scope, content_sha256, related_memory_refs_json,
+                related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (1, '2026-05-10T11:46:00Z', 'hermes-pre-llm-hook', 'turn',
+                      'project:g4-linkage-gap-diagnose', ?, '[]', '[1]', 'ephemeral',
+                      '{"trace_recording":"default_metadata_only","raw_prompt":"SHOULD_NOT_LEAK"}')
+            """,
+            ("a" * 64,),
+        )
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    output_path = tmp_path / "g4-linkage-gap-diagnose.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-linkage-gap-diagnose",
+            str(db_path),
+            "--epoch-start",
+            "2026-05-10T11:40:00Z",
+            "--surface",
+            "hermes-pre-llm-hook",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "g4_linkage_gap_diagnosis"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["privacy"] == {
+        "raw_conversation_content_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "sample_values_included": False,
+        "aggregate_or_ref_only": True,
+    }
+    assert payload["filters"]["surface"] == "hermes-pre-llm-hook"
+    assert payload["coverage"]["observation_count"] == 2
+    assert payload["coverage"]["linked_observation_count"] == 1
+    assert payload["coverage"]["unlinked_observation_count"] == 1
+    assert payload["latest_unlinked_observation"] == {
+        "observation_ref": "observation:2",
+        "activation_refs": ["activation:2"],
+        "created_at": "2026-05-10T11:50:00Z",
+        "surface": "hermes-pre-llm-hook",
+        "response_mode": "verify_first",
+        "hook_event_name": "pre_llm_call",
+        "retrieval_outcome": "adapter_payload_gap",
+        "classification": "metadata_classification_gap",
+        "classification_reason": "empty observation carries adapter/scope payload-gap outcome metadata",
+        "raw_content_included": False,
+        "sample_values_included": False,
+    }
+    assert payload["classification_counts"] == {"metadata_classification_gap": 1}
+    assert payload["quality_gate"]["blocked_reasons"] == ["fresh_trace_linkage_gap_present"]
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "SHOULD_NOT_LEAK" not in output_path.read_text()
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
+
 def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_without_leaks(
     tmp_path: Path,
 ) -> None:

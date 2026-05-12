@@ -152,6 +152,7 @@ agent-memory dogfood ordinary-trace-metadata-cleanup "$DB"
 agent-memory dogfood trace-quality "$DB" --since-hours 24 --min-trace-coverage 0.25 --min-evidence-count 2
 agent-memory dogfood scheduled-dry-run "$DB" --output ~/.agent-memory/reports/scheduled-dry-run.json --since-hours 24
 agent-memory dogfood scheduled-compare --report ~/.agent-memory/reports/scheduled-dry-run-1.json --report ~/.agent-memory/reports/scheduled-dry-run-2.json --output ~/.agent-memory/reports/scheduled-compare.json
+agent-memory dogfood g4-linkage-gap-diagnose "$DB" --epoch-start 2026-05-10T11:40:00Z --surface hermes-pre-llm-hook --output ~/.agent-memory/reports/g4-linkage-gap-diagnose.json
 agent-memory consolidation explain "$DB" <candidate-id> --limit 200 --min-evidence 2
 agent-memory consolidation promote fact "$DB" <candidate-id> \
   --subject-ref "agent-memory" \
@@ -300,6 +301,17 @@ agent-memory dogfood scheduled-compare \
 ```
 
 The comparison emits `kind: dogfood_scheduled_dry_run_comparison`, per-report hashes and safe aggregate fields only: gate decisions, blocked reason names, storage/trace recommendations, trace coverage and empty retrieval ratios, candidate maxima, decay-risk maxima, remember-intent counts, and background warning names. It remains read-only and no-apply, never prints raw queries/prompts/transcripts/sample values, and a passing comparison only means a separate G4 plan may be drafted.
+
+G4 linkage-gap diagnosis explains the remaining fresh observation-to-trace blocker without mutating the live DB:
+
+```bash
+agent-memory dogfood g4-linkage-gap-diagnose "$DB" \
+  --epoch-start 2026-05-10T11:40:00Z \
+  --surface hermes-pre-llm-hook \
+  --output ~/.agent-memory/reports/g4-linkage-gap-diagnose.json
+```
+
+The report emits `kind: g4_linkage_gap_diagnosis`, opens SQLite read-only, and summarizes observation/trace/activation coverage, linked vs unlinked observation counts, trace rows missing observation links, classification counts, and ref-only samples such as `observation:<id>` and `activation:<id>`. It classifies the latest and sample unlinked observations as `hook_runtime_linkage_bug`, `expected_race_or_window_artifact`, `metadata_classification_gap`, or `historical_or_rollout_telemetry` using only aggregate/ref-safe metadata (`hook_event_name`, `retrieval_outcome`, `response_mode`). It never prints raw prompts, query text, query previews, trace summaries, raw metadata values, or sample content, and it does not enable any G4 apply path. Any unlinked observation keeps broad G4/background consolidation apply blocked until the cause is fixed or handled through a separate reviewed backfill/reset corridor.
 
 Stage C starts with `memory_activations`, a local-only internal substrate that distinguishes "a trace happened" from "a memory was retrieved/activated." Retrieval observations now bridge into activation events: selected memory refs create `retrieved` activations, while empty retrievals create `empty_retrieval` negative evidence. Activation rows store refs, observation links, scope, strength, and sanitized metadata only; they do not store raw queries or prompt previews, and they do not change retrieval ranking or long-term memory status.
 

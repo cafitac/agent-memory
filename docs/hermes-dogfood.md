@@ -142,6 +142,17 @@ The report emits `kind: memory_consolidation_background_dry_run`, takes a non-bl
 
 `dogfood scheduled-compare` is the G3f read-only comparison over saved scheduled dry-run JSON artifacts. It accepts repeated `--report` paths, writes the same safe summary to `--output` when provided, and emits `kind: dogfood_scheduled_dry_run_comparison`. The comparison includes per-report paths and SHA-256 hashes plus safe aggregate fields only: quality gate decision counts, blocked reason names, storage/trace recommendations, trace coverage and empty-retrieval ratio ranges, candidate and decay-risk maxima, remember-intent totals, and background warning names. It does not embed raw report bodies, raw queries, prompts, transcripts, trace summaries, sample values, secrets, or raw metadata; it does not mutate DB rows, ranking, or hook config. A passing comparison only means "draft a separate G4 plan"; warnings or unstable gates mean keep collecting scheduled reports.
 
+`dogfood g4-linkage-gap-diagnose` is the focused read-only diagnostic for a fresh G4 observation-to-trace blocker:
+
+```bash
+agent-memory dogfood g4-linkage-gap-diagnose ~/.agent-memory/memory.db \
+  --epoch-start 2026-05-10T11:40:00Z \
+  --surface hermes-pre-llm-hook \
+  --output ~/.agent-memory/reports/g4-linkage-gap-diagnose.json
+```
+
+It emits `kind: g4_linkage_gap_diagnosis`, opens SQLite read-only, and reports aggregate/ref-only observation, trace, activation, linked/unlinked observation, trace-without-observation-link, and classification counts. The latest/sample unlinked observations include only refs (`observation:<id>`, `activation:<id>`) plus safe metadata fields (`hook_event_name`, `retrieval_outcome`, `response_mode`) and a classification such as `hook_runtime_linkage_bug`, `expected_race_or_window_artifact`, `metadata_classification_gap`, or `historical_or_rollout_telemetry`. It never prints raw prompts, query values, query previews, trace summaries, raw metadata values, sample content, or secrets, and it does not apply, backfill, reset, or enable broad G4 consolidation. Any remaining unlinked observation keeps broad G4 apply blocked until fixed or handled through a separately reviewed telemetry backfill/reset corridor.
+
 Stage C starts with an internal `memory_activations` substrate. Retrieval observations now bridge into activation events without changing ranking: selected memory refs create `retrieved` events and empty retrievals create `empty_retrieval` negative evidence. Activation rows are local-only and secret-safe: memory refs, observation ids, scope, strength, and sanitized metadata only; no raw queries, prompts, query previews, transcripts, automatic long-term promotion, or prompt injection changes.
 
 `activations summary` is the first read-only Stage C dogfood report for this substrate. It summarizes activation counts, activation windows, surfaces/scopes, status counts for top refs, empty-retrieval evidence, and top refs with advisory signals such as `frequently_activated`, `likely_reinforcement_candidate`, `current_status_not_approved`, or `deprecated_activation`. Use it before reinforcement/decay scoring; it does not mutate memory status and does not affect ranking.
