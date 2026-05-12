@@ -9034,6 +9034,438 @@ def test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutatio
     assert "source text" not in result.stdout
 
 
+def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5 reviewed candidate seed source text must not leak.",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 candidate flow",
+        predicate="needs",
+        object_ref_or_value="reviewed promotion",
+        evidence_ids=[source.id],
+        scope="project:g5-candidates",
+        confidence=0.92,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    for index in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=f"g5{index}".encode().hex().ljust(64, "0")[:64],
+            summary=f"raw-secret-token g5 candidate summary {index}",
+            scope="project:g5-candidates",
+            related_memory_refs=[f"fact:{fact.id}"],
+            related_observation_ids=[index + 21],
+            retention_policy="ephemeral",
+            metadata={"trace_recording": "default_metadata_only", "candidate_policy": "evidence_only"},
+        )
+    return fact.id
+
+
+def test_dogfood_trace_candidate_review_flow_persists_lists_and_updates_without_promotion(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-candidate-flow.db"
+    initialize_database(db_path)
+    existing_fact_id = _seed_trace_cluster_for_candidate_flow(db_path)
+    before_counts = _table_counts(db_path, ["facts", "memory_status_transitions", "experience_traces"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "review candidate runway",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    persist_payload = json.loads(persist_result.stdout)
+    assert persist_payload["kind"] == "dogfood_trace_candidate_persist"
+    assert persist_payload["candidate_persistence_supported"] is True
+    assert persist_payload["promotion_supported"] is False
+    assert persist_payload["inserted_count"] == 1
+    assert persist_payload["privacy"] == {
+        "cluster_json_included": False,
+        "raw_content_included": False,
+        "safe_summaries_included": False,
+        "reason_stored_as_sha256": True,
+    }
+    candidate_id = persist_payload["candidate_ids"][0]
+
+    list_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "trace-candidate-list", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert list_result.returncode == 0, list_result.stderr
+    list_payload = json.loads(list_result.stdout)
+    assert list_payload["kind"] == "dogfood_trace_candidate_list"
+    assert list_payload["items"] == [
+        {
+            "candidate_id": candidate_id,
+            "status": "pending",
+            "proposal_type": "trace_cluster_review",
+            "target_ref": f"fact:{existing_fact_id}",
+            "cluster_sha256": persist_payload["source_preview_sha256"],
+        }
+    ]
+    assert list_payload["privacy"]["cluster_json_included"] is False
+
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "human reviewed promotion fields",
+            "--approval-phrase",
+            "approve-g5-trace-candidate-v1",
+            "--promotion-type",
+            "fact",
+            "--subject",
+            "G5 reviewed candidates",
+            "--predicate",
+            "require",
+            "--object",
+            "human-approved promotion fields",
+            "--scope",
+            "project:g5-candidates",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    update_payload = json.loads(update_result.stdout)
+    assert update_payload["kind"] == "dogfood_trace_candidate_update"
+    assert update_payload["status_before"] == "pending"
+    assert update_payload["status_after"] == "approved"
+    assert update_payload["proposal_type"] == "fact_promotion"
+    assert update_payload["promotion_ready"] is True
+    assert update_payload["apply_supported"] is False
+    assert update_payload["privacy"] == {"reviewed_payload_included": False, "raw_reason_included": False, "raw_content_included": False}
+    assert "raw-secret-token" not in persist_result.stdout + list_result.stdout + update_result.stdout
+    assert _table_counts(db_path, ["facts", "memory_status_transitions", "experience_traces"]) == before_counts
+
+
+def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_candidates(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-candidate-apply.db"
+    backup_path = tmp_path / "trace-candidate-apply.bak"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "persist before approval",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    before_pending_counts = _table_counts(db_path, ["facts", "memory_status_transitions"])
+
+    pending_apply = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--approval-phrase",
+            "apply-approved-g5-reviewed-candidates-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "should skip pending",
+            "--backup-path",
+            str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert pending_apply.returncode == 0, pending_apply.stderr
+    pending_payload = json.loads(pending_apply.stdout)
+    assert pending_payload["applied_count"] == 0
+    assert pending_payload["skipped_items"] == [{"candidate_id": candidate_id, "reason": "status_pending"}]
+    assert _table_counts(db_path, ["facts", "memory_status_transitions"]) == before_pending_counts
+
+    approve_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "approve explicit reviewed fact",
+            "--approval-phrase",
+            "approve-g5-trace-candidate-v1",
+            "--promotion-type",
+            "fact",
+            "--subject",
+            "Reviewed G5 candidate",
+            "--predicate",
+            "promotes_to",
+            "--object",
+            "approved fact memory",
+            "--scope",
+            "project:g5-candidates",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert approve_result.returncode == 0, approve_result.stderr
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--approval-phrase",
+            "apply-approved-g5-reviewed-candidates-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "apply explicit reviewed fact",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["kind"] == "dogfood_trace_candidate_apply"
+    assert payload["policy"] == "g5-reviewed-candidate-promotion-v1"
+    assert payload["applied_count"] == 1
+    assert payload["skipped_count"] == 0
+    assert payload["applied_items"][0]["action"] == "promote_reviewed_fact"
+    promoted_ref = payload["applied_items"][0]["promoted_ref"]
+    assert promoted_ref.startswith("fact:")
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT subject_ref, predicate, object_ref_or_value, status FROM facts WHERE id = ?", (int(promoted_ref.split(":")[1]),)).fetchone()
+    assert row == ("Reviewed G5 candidate", "promotes_to", "approved fact memory", "approved")
+    assert payload["memory_status_mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["privacy"]["reviewed_payload_included"] is False
+    assert "raw-secret-token" not in apply_result.stdout
+
+
+@pytest.mark.parametrize(
+    ("promotion_type", "update_args", "expected_action", "expected_ref_prefix", "table", "columns", "expected_row"),
+    [
+        (
+            "preference",
+            [
+                "--promotion-type",
+                "preference",
+                "--subject",
+                "user",
+                "--predicate",
+                "prefers",
+                "--object",
+                "explicit reviewed memory promotion",
+                "--scope",
+                "global",
+            ],
+            "promote_reviewed_preference",
+            "fact:",
+            "facts",
+            "subject_ref, predicate, object_ref_or_value, status",
+            ("user", "prefers", "explicit reviewed memory promotion", "approved"),
+        ),
+        (
+            "procedure",
+            [
+                "--promotion-type",
+                "procedure",
+                "--name",
+                "Run reviewed candidate promotion",
+                "--trigger-context",
+                "when a trace candidate is explicitly approved",
+                "--precondition",
+                "candidate status is approved",
+                "--step",
+                "create the reviewed durable memory",
+                "--step",
+                "record audit and rollback hints",
+                "--scope",
+                "project:g5-candidates",
+                "--success-rate",
+                "0.8",
+            ],
+            "promote_reviewed_procedure",
+            "procedure:",
+            "procedures",
+            "name, trigger_context, status",
+            ("Run reviewed candidate promotion", "when a trace candidate is explicitly approved", "approved"),
+        ),
+    ],
+)
+def test_dogfood_trace_candidate_apply_supports_reviewed_preference_and_procedure_promotions(
+    tmp_path: Path,
+    promotion_type: str,
+    update_args: list[str],
+    expected_action: str,
+    expected_ref_prefix: str,
+    table: str,
+    columns: str,
+    expected_row: tuple[str, ...],
+) -> None:
+    db_path = tmp_path / f"trace-candidate-{promotion_type}.db"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            f"persist {promotion_type}",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            f"approve reviewed {promotion_type}",
+            "--approval-phrase",
+            "approve-g5-trace-candidate-v1",
+            *update_args,
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    update_payload = json.loads(update_result.stdout)
+    assert update_payload["proposal_type"] == f"{promotion_type}_promotion"
+    assert update_payload["promotion_ready"] is True
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--approval-phrase",
+            "apply-approved-g5-reviewed-candidates-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            f"apply reviewed {promotion_type}",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    apply_payload = json.loads(apply_result.stdout)
+    assert apply_payload["applied_items"][0]["action"] == expected_action
+    promoted_ref = apply_payload["applied_items"][0]["promoted_ref"]
+    assert promoted_ref.startswith(expected_ref_prefix)
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(f"SELECT {columns} FROM {table} WHERE id = ?", (int(promoted_ref.split(":")[1]),)).fetchone()
+    assert row == expected_row
+    assert "raw-secret-token" not in update_result.stdout + apply_result.stdout
+
+
 def _table_counts(db_path: Path, tables: list[str]) -> dict[str, int]:
     with sqlite3.connect(db_path) as connection:
         return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}

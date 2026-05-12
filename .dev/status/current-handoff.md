@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 13:49 KST
+Last updated: 2026-05-12 14:16 KST
 
 ## v0.1.138 current checkpoint
 
@@ -15,7 +15,8 @@ Current verified state:
 - Fresh linkage diagnosis: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
 - Fresh epoch readiness: `fresh-epoch-v0138.json` passed with decision `fresh_epoch_ready_to_compare_against_historical`.
 - Fresh review queue preview: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
-- Source checkout G5a slice: `dogfood trace-cluster-preview` now builds a read-only/ref-safe trace-cluster preview for the reviewed-candidate runway; full tests pass locally with `290 passed, 1 xfailed`.
+- Source checkout G5a slice: `dogfood trace-cluster-preview` now builds a read-only/ref-safe trace-cluster preview for the reviewed-candidate runway; PR #294 opened; full tests pass locally with `290 passed, 1 xfailed`.
+- Local G5b branch: `g5b-reviewed-candidate-flow` adds `dogfood trace-candidate-persist/list/update/apply`; approved reviewed candidates can promote fact, preference-like fact, or procedure memories only with explicit policy/approval/actor/reason/backup/audit/rollback. Targeted tests pass with `4 passed`.
 - Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
 - broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
 
@@ -29,13 +30,13 @@ Current interpretation:
 
 - The fresh hook/runtime linkage blocker is resolved for v0.1.138 evidence.
 - Broad G4/background apply remains blocked; fresh readiness does not authorize automatic memory creation.
-- The next safe sequence is finish/push G5a trace-cluster preview, then G5b reviewed candidate flow; G4 broad apply and historical reconciliation remain separate guarded corridors.
+- The next safe sequence is finish G5b hardening/PR, then keep G4 broad apply and historical reconciliation as separate guarded corridors.
 - Existing broad-G4 baseline remains a docs/RED-test-only guardrail; do not advertise broad G4 consolidation apply mode as ready.
 
 Current safe mutation boundaries:
 
 - Historical telemetry reconciliation must use the reviewed telemetry-only `telemetry-reset-v1` corridor with epoch filter, backup, approval phrase, actor, reason hash, and protected-table preservation.
-- First narrow reviewed apply remains `g4-review-queue-apply-v1` over approved queue items only, with action `apply_reinforcement_marker` for reinforcement-review items.
+- First narrow reviewed apply remains `g4-review-queue-apply-v1` over approved queue items only, with action `apply_reinforcement_marker` for reinforcement-review items; the local G5b candidate-apply corridor additionally allows explicit reviewed fact/preference/procedure promotion behind `g5-reviewed-candidate-promotion-v1` but is not released yet.
 - Broad promotion, decay/delete, conflict supersession, ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain blocked.
 
 Brain-like next design axis:
