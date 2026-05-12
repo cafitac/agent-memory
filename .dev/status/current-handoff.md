@@ -17,6 +17,7 @@ Current verified state:
 - Fresh review queue preview: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
 - G5a/G5b/G5c source checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, and read-only trace-cluster scoring are merged through PR #294/#295/#297 and released through v0.1.140; approved reviewed candidates can promote fact, preference-like fact, or procedure memories only with explicit policy/approval/actor/reason/backup/audit/rollback.
 - G5c is merged/released via PR #297 and v0.1.140: `dogfood trace-cluster-preview` emits read-only `review_score` and `review_recommendation` for ref-safe trace clusters; it does not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, published-install smoke, and live Hermes runtime rollout passed.
+- G5d source slice on this branch: `dogfood reinforcement-refinement-preview` scores repeated activation -> reinforcement refinement candidates in read-only/ref-safe form; it writes JSON reports only, keeps `mutated=false`, and explicitly does not increment reinforcement counts or change retrieval defaults.
 - Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
 - broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
 
@@ -44,7 +45,8 @@ Brain-like next design axis:
 - `trace cluster -> consolidation candidate` is available as a ref-safe read-only preview, not an apply path.
 - `candidate -> reviewed fact/procedure/preference promotion` is available only through explicit G5b review/apply commands.
 - `trace cluster -> review-priority scoring` is current G5c source work and remains human-review-only.
-- repeated activation -> reinforcement.
+- `repeated activation -> reinforcement refinement preview` is current G5d source work and remains human-review-only; preview scores are not apply approval.
+- repeated activation -> reinforcement apply requires a later guarded policy if ever enabled.
 - stale weak evidence -> decay/summary candidate.
 - conflict -> supersession review.
 - retrieval ranking changes only behind opt-in eval before any default change.

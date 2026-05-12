@@ -47,6 +47,7 @@ Reasoning:
 - Fresh review queue preview: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-review-queue-preview-v0138-fresh.json`
 - Historical scheduled dry-run: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`
 - Source G5a/G5b/G5c checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, and read-only `review_score`/`review_recommendation` are merged through PR #294/#295/#297 and released through v0.1.140.
+- G5d source checkpoint on this branch: `dogfood reinforcement-refinement-preview` adds a read-only repeated activation -> reinforcement refinement preview. It reuses activation reinforcement evidence, emits ref-safe `review_score`/`review_recommendation`, and keeps mutation unsupported (`apply_supported=false`, `mutated=false`, default retrieval unchanged). It is intended for the next release after v0.1.140.
 - Release/published-install smoke passed; runtime rollout is doctor-green across default, personal-oss, earlypay, and infra-admin Hermes profiles.
 
 ## Current blocker
@@ -69,9 +70,9 @@ Interpretation: this is no longer a fresh hook linkage bug. It is historical tel
 
 Proceed in this sequence:
 
-1. Start the next G5d slice: repeated activation -> reinforcement refinement, still preview/review-first by default.
-2. Keep G5c semantics narrow in any follow-up: `review_score` and `review_recommendation` are only ref-safe review-priority signals; they do not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
-3. If G5d needs mutation, add only a separate explicit narrow apply policy with backup/audit/rollback; generic continuation does not authorize it.
+1. Land/release the G5d source slice: repeated activation -> reinforcement refinement preview, still preview/review-first by default.
+2. Keep G5d semantics narrow in any follow-up: `review_score` and `review_recommendation` are only ref-safe review-priority signals; they do not persist review state, increment reinforcement counts, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
+3. If a later G5d apply slice needs mutation, add only a separate explicit narrow apply policy with backup/audit/rollback; generic continuation does not authorize it.
 4. G4 broad apply contract remains blocked/guardrail-only. Required future shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
 5. Historical telemetry reconciliation remains a separate reviewed `telemetry-reset-v1` corridor for historical telemetry rows older than a chosen epoch; never delete facts/procedures/episodes/relations/source records/status history.
 

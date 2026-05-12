@@ -24,6 +24,7 @@ Fresh diagnostics:
 - `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
 - Source G5a/G5b/G5c: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, and read-only `review_score`/`review_recommendation` are merged through PR #294/#295/#297 and released through v0.1.140.
 - G5c scoring does not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, published-install smoke, and live Hermes runtime rollout passed.
+- G5d source slice on this branch adds `dogfood reinforcement-refinement-preview`: a read-only repeated activation -> reinforcement refinement preview that emits ref-safe `review_score`/`review_recommendation`, keeps `mutated=false`, writes only optional JSON reports, and does not increment reinforcement counts or change retrieval defaults.
 
 Progress estimate:
 
@@ -37,9 +38,9 @@ Fresh v0.1.140 evidence and merged G5a/G5b/G5c are healthy enough to continue th
 
 Recommended sequence from here:
 
-1. Start G5d: repeated activation -> reinforcement refinement, still preview/review-first.
-2. Preserve G5c safety shape: `review_score` and `review_recommendation` remain review-priority signals only; they must not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
-3. If G5d introduces mutation, keep it behind a separate explicit apply policy with backup, audit, approval phrase, actor, reason hash, and rollback.
+1. Land/release G5d: repeated activation -> reinforcement refinement preview, still preview/review-first.
+2. Preserve G5d safety shape: `review_score` and `review_recommendation` remain review-priority signals only; they must not persist review state, increment reinforcement counts, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
+3. If a later G5d slice introduces mutation, keep it behind a separate explicit apply policy with backup, audit, approval phrase, actor, reason hash, and rollback.
 4. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
 5. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
 
