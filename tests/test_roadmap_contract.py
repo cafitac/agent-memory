@@ -57,3 +57,35 @@ def test_current_handoff_does_not_advertise_broad_g4_apply_as_ready() -> None:
 
     assert "broad G4 consolidation apply mode remains blocked" in handoff
     assert "docs/RED-test-only" in handoff
+
+
+def test_v0138_status_docs_record_fresh_g4_sequence_and_next_brainlike_steps() -> None:
+    next_action = _read_doc(".dev/status/next-agent-memory-action.md")
+    handoff = _read_doc(".dev/status/current-handoff.md")
+    current_progress = _read_doc(".dev/roadmap/memory-consolidation/current-progress-and-next-steps.md")
+    roadmap = _read_doc(".dev/roadmap/roadmap-v0.md")
+    stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
+
+    for doc in (next_action, handoff, current_progress):
+        assert "v0.1.138" in doc
+        assert "/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory" in doc
+        assert "fresh_trace_linkage_gap_not_detected" in doc
+        assert "g4-v0138-20260512-132253" in doc
+        assert "Overall north-star: 50-55%" in doc
+        assert "broad G4/background apply remains blocked" in doc
+
+    assert "G4 broad apply contract" in next_action
+    assert "historical telemetry reconciliation" in next_action
+    assert "first narrow reviewed apply slice" in next_action
+    assert "trace cluster -> consolidation candidate" in next_action
+    assert "candidate -> reviewed fact/procedure/preference promotion" in next_action
+
+    assert "PR G4-fresh-contract" in roadmap
+    assert "PR G4-historical-reconcile" in roadmap
+    assert "PR G4-reviewed-apply-1" in roadmap
+    assert "PR G5-brainlike-consolidation-runway" in roadmap
+
+    assert "telemetry-reset-v1" in stage_g
+    assert "g4-review-queue-apply-v1" in stage_g
+    assert "apply_reinforcement_marker" in stage_g
+    assert "No ordinary conversation auto-approval" in stage_g

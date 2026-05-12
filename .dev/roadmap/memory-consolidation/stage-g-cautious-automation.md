@@ -256,9 +256,88 @@ Define the future contract for controlled background consolidation mutations bef
 - Every future mutation path has audit or reviewable operation records plus restore/rollback guidance.
 - Live Hermes runtime QA from the published artifact is required before any future broad apply slice is marked complete.
 
+## PR G4-fresh-contract: Reclassify v0.1.138 fresh G4 readiness before broad apply
+
+Status: Complete through the v0.1.138 release/runtime checkpoint. Fresh G4 linkage diagnostics are healthy, but broad G4/background apply remains blocked.
+
+### Implemented shape
+
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`.
+- Report directory: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
+- Fresh linkage diagnosis returns `fresh_trace_linkage_gap_not_detected`.
+- Fresh epoch readiness returns `fresh_epoch_ready_to_compare_against_historical`.
+- Fresh review queue preview returns `review_queue_ready_for_manual_review` with `read_only=true` and `mutated=false`.
+
+### Acceptance
+
+- Fresh v0.1.138 telemetry can be used for G4 planning.
+- Historical scheduled-dry-run debt is still treated separately.
+- Broad G4/background apply remains blocked.
+- No ordinary conversation auto-approval.
+- No raw transcript archive.
+- No default retrieval ranking change.
+
+## PR G4-historical-reconcile: Reviewed historical telemetry reconciliation corridor
+
+Status: Implemented as the `telemetry-reset-v1` preview/apply corridor. It is a telemetry-only reconciliation path, not broad G4 apply.
+
+### Implemented shape
+
+- Preview command: `agent-memory dogfood telemetry-reset-preview <db> --epoch-start <ISO>`.
+- Apply command requires `--policy telemetry-reset-v1`, `--approval-phrase apply-telemetry-reset-v1`, `--actor`, `--reason`, `--backup-path`, and `--epoch-start`.
+- Apply may delete only historical rows from `retrieval_observations`, `memory_activations`, and `experience_traces` older than the epoch filter.
+- Protected memory tables stay unchanged: facts, procedures, episodes, relations, source records, status history, and review queue state.
+
+### Acceptance
+
+- Historical reconciliation is explicit, backed up, aggregate-only, and reviewable.
+- Raw prompt/query/trace content and raw reason text are not printed.
+- Protected memory tables are verified unchanged.
+- Broad G4/background apply remains blocked.
+
+## PR G4-reviewed-apply-1: First narrow reviewed queue apply slice
+
+Status: Implemented as `g4-review-queue-apply-v1`. This is the first narrow reviewed mutation class and does not implement broad consolidation apply.
+
+### Implemented shape
+
+- Apply command: `agent-memory dogfood g4-review-queue-apply <db>`.
+- Required flags: `--policy g4-review-queue-apply-v1`, `--approval-phrase apply-approved-g4-review-queue-items-v1`, `--actor`, `--reason`, and backup path/default backup.
+- Eligible source rows: persisted queue items with `status='approved'`.
+- First mutating action: `apply_reinforcement_marker` for approved `reinforcement_review` items only.
+- Audit: writes `g4_review_queue_applications` with policy, action, actor, reason hash, backup path/hash, source preview hash, and rollback hint.
+
+### Acceptance
+
+- Memory status is not changed.
+- Default retrieval is unchanged.
+- Raw content/proposal JSON/sample values are not printed.
+- Decay/delete, promotion, supersession, and broad background consolidation remain blocked.
+- Ordinary conversation auto-approval remains forbidden.
+
+## PR G5-brainlike-consolidation-runway: Next human-memory-like automation design
+
+Status: Planned. This is the next safe north-star direction after the v0.1.138 docs/contract/reconciliation/reviewed-apply runway.
+
+### Planned sequence
+
+1. `trace cluster -> consolidation candidate`.
+2. `candidate -> reviewed fact/procedure/preference promotion`.
+3. repeated activation -> reinforcement.
+4. stale weak evidence -> decay/summary candidate.
+5. conflict -> supersession review.
+6. opt-in retrieval-ranking evaluation before any default behavior change.
+
+### Guardrails
+
+- No ordinary conversation auto-approval by default.
+- No raw transcript archive.
+- No default retrieval ranking change without opt-in eval and live evidence.
+- Every mutation remains explicit, audited, backed up or rollback-guided, and reviewable.
+
 ## PR G4: Add broader background consolidation apply mode behind explicit policy
 
-Status: Blocked. The narrow restore/audit corridor proved approval-token validation and one metadata-only audit trace write in `v0.1.123`, and v0.1.125 added aggregate blocker drilldowns, but scheduled-dry-run still blocks broad G4. The current readiness-blockers branch fixes future Hermes hook trace-to-observation linkage, splits empty-retrieval diagnostics, adds ref-safe decay-risk resolution hints, and keeps broad G4 apply as an intentionally xfailed RED contract; it does not authorize live broad apply.
+Status: Blocked. The narrow restore/audit corridor proved approval-token validation and one metadata-only audit trace write in `v0.1.123`; v0.1.138 resolves fresh hook linkage and adds the narrow reviewed `apply_reinforcement_marker` apply path, but historical scheduled-dry-run debt still blocks broad G4. The implemented telemetry reset and reviewed queue apply corridors are narrow safety slices; they do not authorize live broad apply.
 
 ### Objective
 
@@ -277,4 +356,4 @@ Allow controlled application only after dry-run output is trusted and the broade
 
 ## Current G4a safety hardening: restore dry-run check
 
-`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied, and `v0.1.123` added one live metadata-only restore audit trace write. `v0.1.125` shipped read-only blocker drilldowns. The current readiness-blockers branch makes new Hermes hook traces link to retrieval observations, adds empty-retrieval hook/response/linkage diagnostics, adds ref-safe decay-risk resolution hints, and preserves live query-preview restore and broad G4 apply blocks.
+`dogfood query-preview-cleanup --apply` remains the only live cleanup mutation that has been applied, and `v0.1.123` added one live metadata-only restore audit trace write. `v0.1.125` shipped read-only blocker drilldowns. The v0.1.138 checkpoint proves fresh Hermes hook traces link to retrieval observations and preserves live query-preview restore and broad G4 apply blocks while adding narrow historical reconciliation and reviewed reinforcement-marker corridors.

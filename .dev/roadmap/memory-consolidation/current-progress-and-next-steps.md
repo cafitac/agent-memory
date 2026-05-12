@@ -1,7 +1,47 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 21:14 KST
+Last updated: 2026-05-12 13:30 KST
+
+## v0.1.138 checkpoint and next five-step runway
+
+This document is the restartable checkpoint after the v0.1.138 release/runtime rollout and fresh G4 diagnostics.
+
+Current verified release state:
+
+- Release: `v0.1.138`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.138`.
+- npm: `@cafitac/agent-memory@0.1.138`.
+- PyPI: `cafitac-agent-memory==0.1.138`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`.
+- Report directory: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
+
+Fresh diagnostics:
+
+- `g4-linkage-gap-diagnose-v0138-fresh.json`: `quality_gate.pass=true`, decision `fresh_trace_linkage_gap_not_detected`, observation/trace linkage coverage `1.0`, unlinked observation count `0`.
+- `fresh-epoch-v0138.json`: `quality_gate.pass=true`, decision `fresh_epoch_ready_to_compare_against_historical`.
+- `g4-review-queue-preview-v0138-fresh.json`: `quality_gate.pass=true`, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
+- `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
+
+Progress estimate:
+
+- Overall north-star: 50-55%.
+- Substrate/evidence plumbing: about 70%.
+- Safe automatic mutation/promotion: about 30-35%.
+
+Current interpretation:
+
+Fresh v0.1.138 evidence is healthy enough to move from linkage-bug work into G4 planning. It is not approval for broad G4/background apply. broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
+
+Recommended sequence from here:
+
+1. Docs/status refresh: keep this file, `.dev/status/current-handoff.md`, `.dev/status/next-agent-memory-action.md`, `roadmap-v0.md`, and `stage-g-cautious-automation.md` aligned with v0.1.138.
+2. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
+3. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
+4. First narrow reviewed apply slice: only approved persisted review queue items may use `g4-review-queue-apply-v1`; the first mutating action remains `apply_reinforcement_marker`.
+5. Brain-like automation runway: implement the next north-star pieces as reviewed candidate flow, not broad auto-memory: `trace cluster -> consolidation candidate`, `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, conflict -> supersession review.
+
+---
 
 ## Purpose
 

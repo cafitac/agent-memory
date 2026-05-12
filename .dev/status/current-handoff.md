@@ -1,7 +1,52 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-10 21:14 KST
+Last updated: 2026-05-12 13:30 KST
+
+## v0.1.138 current checkpoint
+
+Use `.dev/status/next-agent-memory-action.md` as the shortest current source of truth.
+
+Current verified state:
+
+- Latest completed release/runtime rollout: `v0.1.138`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`.
+- Report directory: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
+- Fresh linkage diagnosis: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
+- Fresh epoch readiness: `fresh-epoch-v0138.json` passed with decision `fresh_epoch_ready_to_compare_against_historical`.
+- Fresh review queue preview: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
+- Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
+- broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
+
+Progress estimate:
+
+- Overall north-star: 50-55%.
+- Substrate/evidence plumbing: about 70%.
+- Safe automatic mutation/promotion: about 30-35%.
+
+Current interpretation:
+
+- The fresh hook/runtime linkage blocker is resolved for v0.1.138 evidence.
+- Broad G4/background apply remains blocked; fresh readiness does not authorize automatic memory creation.
+- The next safe sequence is G4 broad apply contract, historical telemetry reconciliation, first narrow reviewed apply slice, then the brain-like automation runway.
+- Existing broad-G4 baseline remains a docs/RED-test-only guardrail; do not advertise broad G4 consolidation apply mode as ready.
+
+Current safe mutation boundaries:
+
+- Historical telemetry reconciliation must use the reviewed telemetry-only `telemetry-reset-v1` corridor with epoch filter, backup, approval phrase, actor, reason hash, and protected-table preservation.
+- First narrow reviewed apply remains `g4-review-queue-apply-v1` over approved queue items only, with action `apply_reinforcement_marker` for reinforcement-review items.
+- Broad promotion, decay/delete, conflict supersession, ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain blocked.
+
+Brain-like next design axis:
+
+- `trace cluster -> consolidation candidate`.
+- `candidate -> reviewed fact/procedure/preference promotion`.
+- repeated activation -> reinforcement.
+- stale weak evidence -> decay/summary candidate.
+- conflict -> supersession review.
+- retrieval ranking changes only behind opt-in eval before any default change.
+
+---
 
 ## Trigger for the next session
 

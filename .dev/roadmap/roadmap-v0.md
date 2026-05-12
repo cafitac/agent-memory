@@ -257,6 +257,26 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: keep broad G4 apply blocked; advance only one safety contract at a time. After v0.1.122 approval-token validation, the current slice allows only a single metadata-only restore audit row write without live restore.
   - Acceptance: matching approval token plus expected hash is validated; the narrow restore audit row path can report `audit_write_apply_available=true`, `would_insert=true`, and `write_allowed=true` only for the single metadata-only audit trace insert while live restore and broad G4 apply stay blocked.
 
+- [x] PR G4-fresh-contract: Reclassify v0.1.138 fresh G4 readiness before broad apply
+  - Goal: move from linkage-bug work into explicit broad-apply planning only after fresh telemetry proves healthy.
+  - Scope: v0.1.138 release/runtime verification, fresh linkage diagnosis, fresh epoch report, fresh review queue preview, and docs/status refresh.
+  - Acceptance: fresh diagnostics report `fresh_trace_linkage_gap_not_detected`; broad G4/background apply remains blocked; ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain forbidden.
+
+- [x] PR G4-historical-reconcile: Add reviewed historical telemetry reconciliation corridor
+  - Goal: let historical telemetry debt be previewed and, when explicitly approved, retired without touching protected durable memory tables.
+  - Scope: `dogfood telemetry-reset-preview` and `dogfood telemetry-reset-apply` with `telemetry-reset-v1`, epoch filter, approval phrase, actor, reason hash, backup, and aggregate/ref-only output.
+  - Acceptance: only `retrieval_observations`, `memory_activations`, and `experience_traces` can be deleted; facts, procedures, episodes, relations, source records, status history, and review queue rows are protected; broad G4/background apply remains blocked.
+
+- [x] PR G4-reviewed-apply-1: Add first narrow reviewed queue apply slice
+  - Goal: apply exactly one low-risk reviewed action class before any broad consolidation mutation.
+  - Scope: `dogfood g4-review-queue-apply` with `g4-review-queue-apply-v1`, explicit approval phrase, actor, reason hash, backup, audit application row, rollback hint, expected queue ids, and aggregate/ref-only output.
+  - Acceptance: approved `reinforcement_review` items may only run `apply_reinforcement_marker`; memory status, default retrieval, raw content, decay/delete, promotion, supersession, and ordinary conversation auto-approval remain unchanged/blocked.
+
+- [ ] PR G5-brainlike-consolidation-runway: Turn healthy traces into reviewed human-memory-like consolidation flow
+  - Goal: advance the north-star after the safe mutation runway by turning repeated traces into reviewable durable-memory candidates.
+  - Scope: `trace cluster -> consolidation candidate`, `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, and conflict -> supersession review.
+  - Acceptance: candidates remain reviewable/explainable; no ordinary conversation auto-approval by default; retrieval-ranking changes stay opt-in/evaluated before any default change.
+
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions only after the narrow restore/audit corridor is trusted.
   - Scope: explicit `--apply` with policy file, audit trail, rollback instructions.
