@@ -2513,8 +2513,63 @@ def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min
     }
 
 
+def _trace_cluster_review_score(candidate: dict[str, Any]) -> dict[str, Any]:
+    evidence_count = _safe_int(candidate.get("evidence_count"))
+    related_observation_count = len(candidate.get("related_observation_ids", []) or [])
+    related_memory_ref_count = len(candidate.get("related_memory_refs", []) or [])
+    salience_total = round(_safe_float(candidate.get("salience_total")), 4)
+    user_emphasis_total = round(_safe_float(candidate.get("user_emphasis_total")), 4)
+    reinforcement = candidate.get("reinforcement") if isinstance(candidate.get("reinforcement"), dict) else {}
+    reinforcement_count = _safe_int(reinforcement.get("activation_count", 0))
+    risk_flags = candidate.get("risk_flags", []) if isinstance(candidate.get("risk_flags"), list) else []
+    risk_penalty = len(risk_flags) if any(flag != "low_evidence_count" for flag in risk_flags) else 0
+    score = max(
+        0,
+        int(
+            (evidence_count * 2)
+            + related_observation_count
+            + related_memory_ref_count
+            + min(salience_total, 5.0)
+            + min(user_emphasis_total, 5.0)
+            + min(reinforcement_count, 5)
+            - risk_penalty
+        ),
+    )
+    if score >= 7:
+        tier = "high"
+    elif score >= 4:
+        tier = "medium"
+    else:
+        tier = "low"
+    return {
+        "score": score,
+        "tier": tier,
+        "components": {
+            "evidence_count": evidence_count,
+            "related_observation_count": related_observation_count,
+            "related_memory_ref_count": related_memory_ref_count,
+            "salience_total": salience_total,
+            "user_emphasis_total": user_emphasis_total,
+            "reinforcement_count": reinforcement_count,
+            "risk_penalty": risk_penalty,
+        },
+    }
+
+
+def _trace_cluster_review_recommendation(review_score: dict[str, Any]) -> dict[str, Any]:
+    tier = str(review_score.get("tier") or "low")
+    return {
+        "decision": "ready_for_human_review" if tier in {"high", "medium"} else "continue_dogfooding_before_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
+
+
 def _ref_safe_trace_cluster(candidate: dict[str, Any]) -> dict[str, Any]:
     group_reason = _consolidation_group_reason(candidate)
+    review_score = _trace_cluster_review_score(candidate)
     group_reason.pop("cluster_key", None)
     group_reason.pop("summary_key", None)
     cluster_key = str(candidate["cluster_key"])
@@ -2536,6 +2591,8 @@ def _ref_safe_trace_cluster(candidate: dict[str, Any]) -> dict[str, Any]:
         "salience_total": candidate["salience_total"],
         "user_emphasis_total": candidate["user_emphasis_total"],
         "reinforcement": candidate["reinforcement"],
+        "review_score": review_score,
+        "review_recommendation": _trace_cluster_review_recommendation(review_score),
         "risk_flags": candidate["risk_flags"],
     }
 

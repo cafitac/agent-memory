@@ -9015,6 +9015,26 @@ def test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutatio
     assert cluster["evidence_count"] == 2
     assert cluster["related_memory_refs"] == [f"fact:{fact.id}"]
     assert cluster["related_observation_ids"] == [10, 11]
+    assert cluster["review_score"] == {
+        "score": 7,
+        "tier": "high",
+        "components": {
+            "evidence_count": 2,
+            "related_observation_count": 2,
+            "related_memory_ref_count": 1,
+            "salience_total": 0.0,
+            "user_emphasis_total": 0.0,
+            "reinforcement_count": 0,
+            "risk_penalty": 0,
+        },
+    }
+    assert cluster["review_recommendation"] == {
+        "decision": "ready_for_human_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
     assert "safe_summaries" not in cluster
     assert "cluster_key" not in cluster
     assert "cluster_key_sha256" in cluster
