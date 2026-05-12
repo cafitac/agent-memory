@@ -1,36 +1,36 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 21:31 KST
+Last updated: 2026-05-12 22:20 KST
 
-## v0.1.139 + G5c current checkpoint
+## v0.1.140 + G5c completed checkpoint
 
 Use `.dev/status/next-agent-memory-action.md` as the shortest current source of truth.
 
 Current verified state:
 
-- Latest completed release/runtime rollout: `v0.1.139`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.139/.venv/bin/agent-memory`.
+- Latest completed release/runtime rollout: `v0.1.140`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.140/.venv/bin/agent-memory`.
 - Report directory: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
 - Fresh epoch readiness: `fresh-epoch-v0138.json` passed with decision `fresh_epoch_ready_to_compare_against_historical`.
 - Fresh review queue preview: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
-- G5a/G5b source checkpoint: `dogfood trace-cluster-preview` plus `dogfood trace-candidate-persist/list/update/apply` are merged through PR #294/#295 and released through v0.1.139; approved reviewed candidates can promote fact, preference-like fact, or procedure memories only with explicit policy/approval/actor/reason/backup/audit/rollback.
-- Current G5c source branch: `g5c-trace-candidate-scoring` commit `aabc145` adds read-only `review_score` and `review_recommendation` to ref-safe trace clusters; it does not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full source suite: `294 passed, 1 xfailed`.
+- G5a/G5b/G5c source checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, and read-only trace-cluster scoring are merged through PR #294/#295/#297 and released through v0.1.140; approved reviewed candidates can promote fact, preference-like fact, or procedure memories only with explicit policy/approval/actor/reason/backup/audit/rollback.
+- G5c is merged/released via PR #297 and v0.1.140: `dogfood trace-cluster-preview` emits read-only `review_score` and `review_recommendation` for ref-safe trace clusters; it does not persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, published-install smoke, and live Hermes runtime rollout passed.
 - Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
 - broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
 
 Progress estimate:
 
-- Overall north-star: 56-59%.
-- Substrate/evidence plumbing: about 72%.
-- Safe automatic mutation/promotion: about 38-42%.
+- Overall north-star: 58-60%.
+- Substrate/evidence plumbing: about 73%.
+- Safe automatic mutation/promotion: about 40-43%.
 
 Current interpretation:
 
-- The fresh hook/runtime linkage blocker is resolved for v0.1.138/v0.1.139-era evidence.
+- The fresh hook/runtime linkage blocker is resolved for v0.1.138-v0.1.140-era evidence.
 - Broad G4/background apply remains blocked; fresh readiness, reviewed candidate apply support, and G5c scoring do not authorize automatic memory creation.
-- The next safe sequence is finish/push G5c, then continue repeated activation -> reinforcement as review/preview-first work; keep G4 broad apply and historical reconciliation as separate guarded corridors.
+- The next safe sequence is repeated activation -> reinforcement as review/preview-first G5d work; keep G4 broad apply and historical reconciliation as separate guarded corridors.
 - Existing broad-G4 baseline remains a docs/RED-test-only guardrail; do not advertise broad G4 consolidation apply mode as ready.
 
 Current safe mutation boundaries:
@@ -70,11 +70,11 @@ For prompts like "다음으로 뭐해야 해?" or "다음 할 거 추천해줘",
 
 - `.dev/status/next-agent-memory-action.md`
 
-Current recommendation: finish/push the current `g5c-trace-candidate-scoring` branch and open a PR for read-only trace-cluster review scoring/recommendations. Broad G4/background apply remains blocked by historical scheduled-dry-run debt and must not be enabled from a generic continuation prompt.
+Current recommendation: start the next G5d repeated activation -> reinforcement refinement slice as review/preview-first work. Broad G4/background apply remains blocked by historical scheduled-dry-run debt and must not be enabled from a generic continuation prompt.
 
 ## Ready-to-say answer
 
-agent-memory is currently released/runtime-verified through `v0.1.139`. The installed Hermes hooks point at `/Users/reddit/.agent-memory/runtime/v0.1.139/.venv/bin/agent-memory`; package smoke reports `agent_memory.__version__ == 0.1.139`. G5a/G5b are merged/released for ref-safe trace-cluster preview plus explicit reviewed trace-candidate persist/list/update/apply. The active source branch is `g5c-trace-candidate-scoring` at commit `aabc145`, adding only read-only `review_score` and `review_recommendation` to ref-safe clusters; full suite was `294 passed, 1 xfailed`.
+agent-memory is currently released/runtime-verified through `v0.1.140`. The installed Hermes hooks point at `/Users/reddit/.agent-memory/runtime/v0.1.140/.venv/bin/agent-memory`; package smoke reports `agent_memory.__version__ == 0.1.140`. G5a/G5b/G5c are merged/released for ref-safe trace-cluster preview, explicit reviewed trace-candidate persist/list/update/apply, and read-only `review_score`/`review_recommendation` signals for ref-safe clusters.
 
 Broad G4/background consolidation apply mode remains blocked. Fresh linkage diagnostics passed, but historical scheduled-dry-run still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`. The first mutating review-queue/candidate corridors remain deliberately narrow and require explicit policy, approval phrase, actor, reason hash, backup, audit row, and rollback hint.
 
@@ -82,9 +82,9 @@ Historical G4 contract checkpoint remains docs/RED-test-only: PR #200, PR #202, 
 
 ## Current next slice
 
-Completed release baseline: G4 fresh linkage/mutation safety landed by v0.1.136; G5a/G5b reviewed-candidate runway is released through v0.1.139; current active slice is G5c read-only trace-cluster review scoring.
+Completed release baseline: G4 fresh linkage/mutation safety landed by v0.1.136; G5a/G5b/G5c reviewed-candidate/scoring runway is released through v0.1.140; current active slice is the next G5d repeated activation -> reinforcement refinement, review/preview-first.
 
-Current slice status: v0.1.139 is installed and live-smoked. G5c is source-only and still read-only: it improves review prioritization for trace clusters without enabling broad background consolidation apply, telemetry reset apply, ordinary conversation auto-approval, raw transcript/query storage, or default retrieval ranking changes.
+Current slice status: v0.1.140 is installed and live-smoked. G5c is complete and still read-only: it improves review prioritization for trace clusters without enabling broad background consolidation apply, telemetry reset apply, ordinary conversation auto-approval, raw transcript/query storage, or default retrieval ranking changes.
 
 Target shape for this slice:
 
@@ -93,7 +93,7 @@ Target shape for this slice:
 - No raw prompt/query/transcript/trace summary/sample values are printed.
 - The first live source smoke against `/Users/reddit/.agent-memory/memory.db` with epoch `2026-05-09T21:57:33Z` wrote `/tmp/agent-memory-fresh-epoch-v0128-source.json`: 21 observations, 21 traces, 21 activations, coverage ratio 0.2381, 10 empty retrievals, blocked by `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_unknown`; no mutation.
 
-Next safe slice: push/open G5c as a read-only PR, then continue repeated activation -> reinforcement as preview/review-first work. Do not live-apply queue/candidate mutations without an explicit operator decision and the exact guarded command shape. Broad G4 apply remains a separate, still-blocked slice.
+Next safe slice: continue repeated activation -> reinforcement as preview/review-first G5d work. Do not live-apply queue/candidate mutations without an explicit operator decision and the exact guarded command shape. Broad G4 apply remains a separate, still-blocked slice.
 
 Recommended local backup commands before any future live mutation:
 
