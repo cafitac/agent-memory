@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 13:49 KST
+Last updated: 2026-05-12 14:16 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.138`; the installed Hermes hook is using `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`, fresh v0.1.138 linkage diagnostics report `fresh_trace_linkage_gap_not_detected`, and the source checkout now has the first G5a read-only `dogfood trace-cluster-preview` slice while broad G4/background apply remains blocked.
+`agent-memory` is released and live-runtime-smoked through `v0.1.138`; the installed Hermes hook is using `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`, fresh v0.1.138 linkage diagnostics report `fresh_trace_linkage_gap_not_detected`, G5a PR #294 added the read-only/ref-safe `dogfood trace-cluster-preview` slice, and the local `g5b-reviewed-candidate-flow` branch now has explicit reviewed trace-candidate persist/list/update/apply support for fact/preference/procedure promotions while broad G4/background apply remains blocked.
 
 ## Current progress estimate toward the north-star
 
@@ -30,7 +30,7 @@ Approximate progress:
 
 Reasoning:
 
-- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh v0.1.138 linkage health, and source-level G5a ref-safe trace-cluster preview.
+- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh v0.1.138 linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, and local G5b reviewed trace-candidate flow for explicit fact/preference/procedure promotion.
 - Not done: broad background consolidation apply, automatic long-term memory promotion, conflict-aware automatic supersession, weak-trace decay/collapse apply, graph-cluster-to-fact/procedure/preference generation, and large-scope rollback confidence.
 
 ## Latest verified checkpoint
@@ -46,7 +46,8 @@ Reasoning:
 - Fresh epoch readiness: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/fresh-epoch-v0138.json`
 - Fresh review queue preview: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-review-queue-preview-v0138-fresh.json`
 - Historical scheduled dry-run: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`
-- Source-only G5a checkpoint: `dogfood trace-cluster-preview` added on branch `g5a-trace-cluster-preview`; verified with full test suite `290 passed, 1 xfailed`.
+- Source-only G5a checkpoint: `dogfood trace-cluster-preview` added in PR #294 on branch `g5a-trace-cluster-preview`; verified with full test suite `290 passed, 1 xfailed`.
+- Local G5b branch checkpoint: `g5b-reviewed-candidate-flow` adds `dogfood trace-candidate-persist/list/update/apply`; targeted tests currently pass with `4 passed`.
 
 ## Current blocker
 
@@ -68,11 +69,11 @@ Interpretation: this is no longer a fresh hook linkage bug. It is historical tel
 
 Proceed in this sequence:
 
-1. Finish/push the current G5a source slice: `dogfood trace-cluster-preview` starts `trace cluster -> consolidation candidate` as a read-only, ref-safe preview; it strips summaries/cluster keys, writes optional JSON output, and keeps default retrieval/memory tables unchanged.
-2. Next G5b slice: reviewed candidate flow over the trace-cluster preview output. It should persist review state only, not promote long-term memory.
+1. Finish G5b hardening: run full tests, review the `g5b-reviewed-candidate-flow` diff, then commit/push and open a PR for the reviewed trace-candidate flow.
+2. Keep G5b semantics narrow: `trace-candidate-persist` stores explicit review state from trace-cluster previews; `trace-candidate-update` records reviewed fact/preference/procedure fields; `trace-candidate-apply` promotes only approved reviewed candidates with policy, approval phrase, actor, reason hash, backup, audit, and rollback hint.
 3. G4 broad apply contract remains blocked/guardrail-only. Required future shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
 4. Historical telemetry reconciliation remains a separate reviewed `telemetry-reset-v1` corridor for historical telemetry rows older than a chosen epoch; never delete facts/procedures/episodes/relations/source records/status history.
-5. Later brain-like automation runway: `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, and conflict -> supersession review. Retrieval ranking changes stay opt-in/evaluated before default.
+5. Later brain-like automation runway: `candidate -> reviewed fact/procedure/preference promotion` is now available only as explicit local G5b reviewed apply; next automation work is candidate generation/scoring, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, conflict -> supersession review, and opt-in/evaluated retrieval ranking before any default change.
 
 ## What not to do next
 

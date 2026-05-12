@@ -2611,6 +2611,406 @@ def _dogfood_trace_cluster_preview_payload(args: argparse.Namespace) -> dict[str
     return payload
 
 
+def _ensure_trace_candidate_review_tables(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS g5_trace_candidate_reviews (
+            candidate_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'promoted')),
+            proposal_type TEXT NOT NULL,
+            target_ref TEXT,
+            cluster_json TEXT NOT NULL,
+            cluster_sha256 TEXT NOT NULL,
+            reviewed_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor TEXT NOT NULL,
+            reason_sha256 TEXT NOT NULL,
+            audit_json TEXT NOT NULL DEFAULT '[]'
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS g5_trace_candidate_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_id TEXT NOT NULL,
+            proposal_type TEXT NOT NULL,
+            promoted_ref TEXT,
+            policy TEXT NOT NULL,
+            action TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            reason_sha256 TEXT NOT NULL,
+            backup_path TEXT NOT NULL,
+            backup_sha256 TEXT NOT NULL,
+            rollback_hint_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(candidate_id, policy)
+        )
+        """
+    )
+
+
+def _dogfood_trace_candidate_persist_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood trace-candidate-persist requires non-empty --actor and --reason")
+    preview = _dogfood_trace_cluster_preview_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            output=None,
+            limit=args.limit,
+            top=args.top,
+            min_evidence_count=args.min_evidence_count,
+        )
+    )
+    source_preview_sha256 = hashlib.sha256(json.dumps(preview, sort_keys=True).encode("utf-8")).hexdigest()
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    inserted = 0
+    existing = 0
+    candidate_ids: list[str] = []
+    clusters = preview.get("clusters", []) if isinstance(preview.get("clusters"), list) else []
+    with sqlite3.connect(args.db_path) as connection:
+        _ensure_trace_candidate_review_tables(connection)
+        for cluster in clusters:
+            if not isinstance(cluster, dict):
+                continue
+            candidate_id = str(cluster.get("candidate_id") or "")
+            if not candidate_id:
+                continue
+            candidate_ids.append(candidate_id)
+            target_refs = cluster.get("related_memory_refs") if isinstance(cluster.get("related_memory_refs"), list) else []
+            target_ref = str(target_refs[0]) if target_refs else None
+            before = connection.total_changes
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO g5_trace_candidate_reviews (
+                    candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                    actor, reason_sha256, audit_json
+                ) VALUES (?, 'pending', 'trace_cluster_review', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    candidate_id,
+                    target_ref,
+                    json.dumps(cluster, sort_keys=True),
+                    source_preview_sha256,
+                    args.actor.strip(),
+                    reason_sha256,
+                    json.dumps([{"action": "persist", "actor": args.actor.strip(), "reason_sha256": reason_sha256}]),
+                ),
+            )
+            if connection.total_changes > before:
+                inserted += 1
+            else:
+                existing += 1
+    payload = {
+        "kind": "dogfood_trace_candidate_persist",
+        "read_only": False,
+        "mutated": inserted > 0,
+        "default_retrieval_unchanged": True,
+        "candidate_persistence_supported": True,
+        "promotion_supported": False,
+        "db_path": str(args.db_path),
+        "source_preview_sha256": source_preview_sha256,
+        "candidate_count": len(candidate_ids),
+        "candidate_ids": candidate_ids,
+        "inserted_count": inserted,
+        "existing_count": existing,
+        "quality_gate": preview.get("quality_gate", {}),
+        "privacy": {
+            "cluster_json_included": False,
+            "raw_content_included": False,
+            "safe_summaries_included": False,
+            "reason_stored_as_sha256": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_trace_candidate_list_payload(args: argparse.Namespace) -> dict[str, Any]:
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_trace_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id, status, proposal_type, target_ref, cluster_sha256
+            FROM g5_trace_candidate_reviews
+            WHERE (? IS NULL OR status = ?)
+            ORDER BY created_at DESC, candidate_id
+            LIMIT ?
+            """,
+            (args.status, args.status, args.limit),
+        ).fetchall()
+    return {
+        "kind": "dogfood_trace_candidate_list",
+        "read_only": True,
+        "mutated": False,
+        "db_path": str(args.db_path),
+        "count": len(rows),
+        "items": [dict(row) for row in rows],
+        "privacy": {
+            "cluster_json_included": False,
+            "reviewed_payload_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+        },
+    }
+
+
+def _reviewed_promotion_payload_from_args(args: argparse.Namespace) -> dict[str, Any] | None:
+    if args.promotion_type is None:
+        return None
+    if args.promotion_type in {"fact", "preference"}:
+        if not args.subject or not args.predicate or not args.object:
+            raise ValueError(
+                "dogfood trace-candidate-update fact/preference promotion requires --subject, --predicate, and --object"
+            )
+        return {
+            "promotion_type": args.promotion_type,
+            "subject_ref": args.subject,
+            "predicate": args.predicate,
+            "object_ref_or_value": args.object,
+            "scope": args.scope,
+            "confidence": args.confidence,
+            "evidence_ids": [],
+        }
+    if args.promotion_type == "procedure":
+        if not args.name or not args.trigger_context or not args.step:
+            raise ValueError(
+                "dogfood trace-candidate-update procedure promotion requires --name, --trigger-context, and at least one --step"
+            )
+        return {
+            "promotion_type": "procedure",
+            "name": args.name,
+            "trigger_context": args.trigger_context,
+            "preconditions": list(args.precondition or []),
+            "steps": list(args.step or []),
+            "scope": args.scope,
+            "success_rate": args.success_rate,
+            "evidence_ids": [],
+        }
+    raise ValueError("unsupported trace candidate promotion type")
+
+
+def _dogfood_trace_candidate_update_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.status not in {"approved", "rejected"}:
+        raise ValueError("dogfood trace-candidate-update status must be approved or rejected")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood trace-candidate-update requires non-empty --actor and --reason")
+    expected_phrase = f"{args.status[:-1] if args.status.endswith('d') else args.status}-g5-trace-candidate-v1"
+    if args.approval_phrase != expected_phrase:
+        raise ValueError(f"dogfood trace-candidate-update requires --approval-phrase {expected_phrase}")
+    reviewed_payload = _reviewed_promotion_payload_from_args(args)
+    proposal_type = f"{reviewed_payload['promotion_type']}_promotion" if reviewed_payload is not None else "trace_cluster_review"
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_trace_candidate_review_tables(connection)
+        row = connection.execute(
+            "SELECT status, proposal_type, target_ref, audit_json FROM g5_trace_candidate_reviews WHERE candidate_id = ?",
+            (args.candidate_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"trace candidate not found: {args.candidate_id}")
+        status_before = row["status"]
+        audit = _safe_json_list_from_db(row["audit_json"])
+        audit.append({
+            "action": args.status,
+            "actor": args.actor.strip(),
+            "reason_sha256": reason_sha256,
+            "candidate_id": args.candidate_id,
+            "status_before": status_before,
+            "status_after": args.status,
+            "proposal_type": proposal_type,
+            "reviewed_payload_stored": reviewed_payload is not None,
+        })
+        connection.execute(
+            """
+            UPDATE g5_trace_candidate_reviews
+            SET status = ?, proposal_type = ?, reviewed_json = ?, updated_at = CURRENT_TIMESTAMP,
+                actor = ?, reason_sha256 = ?, audit_json = ?
+            WHERE candidate_id = ?
+            """,
+            (
+                args.status,
+                proposal_type,
+                json.dumps(reviewed_payload or {}, sort_keys=True),
+                args.actor.strip(),
+                reason_sha256,
+                json.dumps(audit, sort_keys=True),
+                args.candidate_id,
+            ),
+        )
+    return {
+        "kind": "dogfood_trace_candidate_update",
+        "read_only": False,
+        "mutated": status_before != args.status or proposal_type != row["proposal_type"],
+        "default_retrieval_unchanged": True,
+        "apply_supported": False,
+        "candidate_id": args.candidate_id,
+        "status_before": status_before,
+        "status_after": args.status,
+        "status": args.status,
+        "proposal_type": proposal_type,
+        "promotion_ready": args.status == "approved" and proposal_type in {"fact_promotion", "preference_promotion", "procedure_promotion"},
+        "reason_sha256": reason_sha256,
+        "privacy": {"reviewed_payload_included": False, "raw_reason_included": False, "raw_content_included": False},
+    }
+
+
+def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "g5-reviewed-candidate-promotion-v1"
+    approval_phrase = "apply-approved-g5-reviewed-candidates-v1"
+    if args.policy != policy:
+        raise ValueError(f"dogfood trace-candidate-apply requires --policy {policy}")
+    if args.approval_phrase != approval_phrase:
+        raise ValueError(f"dogfood trace-candidate-apply requires --approval-phrase {approval_phrase}")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood trace-candidate-apply requires non-empty --actor and --reason")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    backup_path = args.backup_path.expanduser().resolve(strict=False) if args.backup_path else _default_backup_path(db_path, label="g5-trace-candidate-apply")
+    backup = _create_sqlite_backup(db_path, backup_path)
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    candidate_filter = list(args.candidate_id or [])
+    applied: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_trace_candidate_review_tables(connection)
+        if candidate_filter:
+            placeholders = ", ".join("?" for _ in candidate_filter)
+            rows = connection.execute(
+                f"SELECT * FROM g5_trace_candidate_reviews WHERE candidate_id IN ({placeholders}) ORDER BY candidate_id",
+                tuple(candidate_filter),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM g5_trace_candidate_reviews WHERE status = 'approved' ORDER BY candidate_id"
+            ).fetchall()
+        found_ids = {row["candidate_id"] for row in rows}
+        for missing in sorted(set(candidate_filter) - found_ids):
+            skipped.append({"candidate_id": missing, "reason": "not_found"})
+
+    for row in rows:
+        candidate_id = row["candidate_id"]
+        if row["status"] != "approved":
+            skipped.append({"candidate_id": candidate_id, "reason": f"status_{row['status']}"})
+            continue
+        if row["proposal_type"] not in {"fact_promotion", "preference_promotion", "procedure_promotion"}:
+            skipped.append({"candidate_id": candidate_id, "reason": f"proposal_type_{row['proposal_type']}"})
+            continue
+        with sqlite3.connect(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            existing = connection.execute(
+                "SELECT promoted_ref FROM g5_trace_candidate_applications WHERE candidate_id = ? AND policy = ?",
+                (candidate_id, policy),
+            ).fetchone()
+        reviewed = _safe_json_dict_from_db(row["reviewed_json"])
+        promotion_type = str(reviewed.get("promotion_type") or "")
+        action = f"promote_reviewed_{promotion_type}"
+        if existing is not None:
+            applied.append({"candidate_id": candidate_id, "action": action, "inserted": False, "promoted_ref": existing["promoted_ref"]})
+            continue
+        if promotion_type in {"fact", "preference"}:
+            fact = create_candidate_fact(
+                db_path=db_path,
+                subject_ref=str(reviewed["subject_ref"]),
+                predicate=str(reviewed["predicate"]),
+                object_ref_or_value=str(reviewed["object_ref_or_value"]),
+                evidence_ids=[int(value) for value in reviewed.get("evidence_ids", [])],
+                scope=str(reviewed.get("scope") or "global"),
+                confidence=float(reviewed.get("confidence") or 0.5),
+            )
+            approve_fact(db_path=db_path, fact_id=fact.id)
+            promoted_ref = f"fact:{fact.id}"
+        elif promotion_type == "procedure":
+            procedure = create_candidate_procedure(
+                db_path=db_path,
+                name=str(reviewed["name"]),
+                trigger_context=str(reviewed["trigger_context"]),
+                preconditions=[str(value) for value in reviewed.get("preconditions", [])],
+                steps=[str(value) for value in reviewed.get("steps", [])],
+                evidence_ids=[int(value) for value in reviewed.get("evidence_ids", [])],
+                scope=str(reviewed.get("scope") or "global"),
+                success_rate=float(reviewed.get("success_rate") or 0.0),
+            )
+            approve_procedure(db_path=db_path, procedure_id=procedure.id)
+            promoted_ref = f"procedure:{procedure.id}"
+        else:
+            skipped.append({"candidate_id": candidate_id, "reason": f"reviewed_payload_not_promotable_{promotion_type or 'missing'}"})
+            continue
+        rollback_hint = {
+            "restore_backup_path": str(backup_path),
+            "candidate_id": candidate_id,
+            "policy": policy,
+            "promoted_ref": promoted_ref,
+            "default_retrieval_mutated": False,
+        }
+        with sqlite3.connect(db_path) as connection:
+            _ensure_trace_candidate_review_tables(connection)
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_applications (
+                    candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                    backup_path, backup_sha256, rollback_hint_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    candidate_id,
+                    row["proposal_type"],
+                    promoted_ref,
+                    policy,
+                    action,
+                    args.actor.strip(),
+                    reason_sha256,
+                    str(backup_path),
+                    backup["sha256"],
+                    json.dumps(rollback_hint, sort_keys=True),
+                ),
+            )
+            audit = _safe_json_list_from_db(row["audit_json"])
+            audit.append({"action": "apply", "actor": args.actor.strip(), "policy": policy, "reason_sha256": reason_sha256, "promoted_ref": promoted_ref})
+            connection.execute(
+                "UPDATE g5_trace_candidate_reviews SET status = 'promoted', updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ? WHERE candidate_id = ?",
+                (args.actor.strip(), reason_sha256, json.dumps(audit, sort_keys=True), candidate_id),
+            )
+        applied.append({"candidate_id": candidate_id, "action": action, "inserted": True, "promoted_ref": promoted_ref})
+
+    payload = {
+        "kind": "dogfood_trace_candidate_apply",
+        "read_only": False,
+        "mutated": any(item.get("inserted") for item in applied),
+        "db_path": str(db_path),
+        "policy": policy,
+        "approval_phrase_matched": True,
+        "actor": args.actor.strip(),
+        "reason_sha256": reason_sha256,
+        "backup": backup,
+        "apply_mode": "approved_reviewed_trace_candidates_only",
+        "applied_count": len([item for item in applied if item.get("inserted")]),
+        "already_applied_count": len([item for item in applied if not item.get("inserted")]),
+        "skipped_count": len(skipped),
+        "applied_items": applied,
+        "skipped_items": skipped,
+        "memory_status_mutated": any(item.get("inserted") for item in applied),
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "privacy": {
+            "cluster_json_included": False,
+            "reviewed_payload_included": False,
+            "raw_content_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "raw_reason_included": False,
+            "reason_stored_as_sha256": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
     if path is None:
         return
@@ -8352,6 +8752,54 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_cluster_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_trace_cluster_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_trace_cluster_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-persist",
+        help="Persist G5 trace-cluster candidates for explicit human review without promoting memories.",
+    )
+    dogfood_trace_candidate_persist_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_persist_parser.add_argument("--actor", required=True)
+    dogfood_trace_candidate_persist_parser.add_argument("--reason", required=True)
+    dogfood_trace_candidate_persist_parser.add_argument("--output", type=Path)
+    dogfood_trace_candidate_persist_parser.add_argument("--limit", type=int, default=200)
+    dogfood_trace_candidate_persist_parser.add_argument("--top", type=int, default=20)
+    dogfood_trace_candidate_persist_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_trace_candidate_list_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-list", help="List persisted G5 trace candidates without raw cluster/review payloads."
+    )
+    dogfood_trace_candidate_list_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_list_parser.add_argument("--status", choices=["pending", "approved", "rejected", "promoted"])
+    dogfood_trace_candidate_list_parser.add_argument("--limit", type=int, default=50)
+    dogfood_trace_candidate_update_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-update", help="Approve or reject a persisted G5 trace candidate; does not apply promotion."
+    )
+    dogfood_trace_candidate_update_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_update_parser.add_argument("candidate_id")
+    dogfood_trace_candidate_update_parser.add_argument("--status", required=True, choices=["approved", "rejected"])
+    dogfood_trace_candidate_update_parser.add_argument("--actor", required=True)
+    dogfood_trace_candidate_update_parser.add_argument("--reason", required=True)
+    dogfood_trace_candidate_update_parser.add_argument("--approval-phrase", required=True)
+    dogfood_trace_candidate_update_parser.add_argument("--promotion-type", choices=["fact", "preference", "procedure"])
+    dogfood_trace_candidate_update_parser.add_argument("--subject")
+    dogfood_trace_candidate_update_parser.add_argument("--predicate")
+    dogfood_trace_candidate_update_parser.add_argument("--object")
+    dogfood_trace_candidate_update_parser.add_argument("--name")
+    dogfood_trace_candidate_update_parser.add_argument("--trigger-context")
+    dogfood_trace_candidate_update_parser.add_argument("--precondition", action="append")
+    dogfood_trace_candidate_update_parser.add_argument("--step", action="append")
+    dogfood_trace_candidate_update_parser.add_argument("--success-rate", type=float, default=0.0)
+    dogfood_trace_candidate_update_parser.add_argument("--scope", default="global")
+    dogfood_trace_candidate_update_parser.add_argument("--confidence", type=float, default=0.7)
+    dogfood_trace_candidate_apply_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-apply", help="Promote approved reviewed G5 trace candidates with explicit policy and backup."
+    )
+    dogfood_trace_candidate_apply_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_apply_parser.add_argument("--candidate-id", action="append")
+    dogfood_trace_candidate_apply_parser.add_argument("--policy", required=True)
+    dogfood_trace_candidate_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_trace_candidate_apply_parser.add_argument("--actor", required=True)
+    dogfood_trace_candidate_apply_parser.add_argument("--reason", required=True)
+    dogfood_trace_candidate_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_trace_candidate_apply_parser.add_argument("--output", type=Path)
     dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
         "fresh-epoch",
         help="Build a read-only epoch-filtered readiness report so new telemetry can be judged apart from historical rows.",
@@ -9335,6 +9783,20 @@ def main() -> None:
             return
         if args.dogfood_action == "trace-cluster-preview":
             print(json.dumps(_dogfood_trace_cluster_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-candidate-persist":
+            print(json.dumps(_dogfood_trace_candidate_persist_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-candidate-list":
+            if args.limit < 1:
+                raise ValueError("dogfood trace-candidate-list limit must be >= 1")
+            print(json.dumps(_dogfood_trace_candidate_list_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-candidate-update":
+            print(json.dumps(_dogfood_trace_candidate_update_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-candidate-apply":
+            print(json.dumps(_dogfood_trace_candidate_apply_payload(args), indent=2))
             return
         if args.dogfood_action == "fresh-epoch":
             if not 0 <= args.min_trace_coverage <= 1:
