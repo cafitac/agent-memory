@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 13:30 KST
+Last updated: 2026-05-12 13:49 KST
 
 ## v0.1.138 checkpoint and next five-step runway
 
@@ -22,24 +22,25 @@ Fresh diagnostics:
 - `fresh-epoch-v0138.json`: `quality_gate.pass=true`, decision `fresh_epoch_ready_to_compare_against_historical`.
 - `g4-review-queue-preview-v0138-fresh.json`: `quality_gate.pass=true`, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
 - `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
+- Source-only G5a: `dogfood trace-cluster-preview` has been added on branch `g5a-trace-cluster-preview` as a read-only/ref-safe preview that strips summaries and raw cluster keys; local full suite: `290 passed, 1 xfailed`.
 
 Progress estimate:
 
-- Overall north-star: 50-55%.
+- Overall north-star: 52-56%.
 - Substrate/evidence plumbing: about 70%.
 - Safe automatic mutation/promotion: about 30-35%.
 
 Current interpretation:
 
-Fresh v0.1.138 evidence is healthy enough to move from linkage-bug work into G4 planning. It is not approval for broad G4/background apply. broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
+Fresh v0.1.138 evidence is healthy enough to move from linkage-bug work into reviewed candidate planning. It is not approval for broad G4/background apply. broad G4/background apply remains blocked; the current safe source slice starts G5 with read-only trace-cluster preview only.
 
 Recommended sequence from here:
 
-1. Docs/status refresh: keep this file, `.dev/status/current-handoff.md`, `.dev/status/next-agent-memory-action.md`, `roadmap-v0.md`, and `stage-g-cautious-automation.md` aligned with v0.1.138.
-2. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
-3. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
-4. First narrow reviewed apply slice: only approved persisted review queue items may use `g4-review-queue-apply-v1`; the first mutating action remains `apply_reinforcement_marker`.
-5. Brain-like automation runway: implement the next north-star pieces as reviewed candidate flow, not broad auto-memory: `trace cluster -> consolidation candidate`, `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, conflict -> supersession review.
+1. Finish/push G5a: keep `dogfood trace-cluster-preview` read-only/ref-safe, with optional JSON output and no memory/status/retrieval mutation.
+2. G5b reviewed candidate flow: persist explicit review state from trace-cluster previews only; no long-term memory promotion yet.
+3. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
+4. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
+5. Later brain-like automation runway: `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, conflict -> supersession review.
 
 ---
 

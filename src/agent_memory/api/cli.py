@@ -2513,6 +2513,104 @@ def _consolidation_candidates_report(db_path: Path, *, limit: int, top: int, min
     }
 
 
+def _ref_safe_trace_cluster(candidate: dict[str, Any]) -> dict[str, Any]:
+    group_reason = _consolidation_group_reason(candidate)
+    group_reason.pop("cluster_key", None)
+    group_reason.pop("summary_key", None)
+    cluster_key = str(candidate["cluster_key"])
+    return {
+        "candidate_id": candidate["candidate_id"],
+        "fingerprint": candidate["fingerprint"],
+        "cluster_key_sha256": hashlib.sha256(cluster_key.encode("utf-8")).hexdigest(),
+        "group_reason": group_reason,
+        "guessed_memory_type": candidate["guessed_memory_type"],
+        "evidence_count": candidate["evidence_count"],
+        "evidence_trace_ids": candidate["evidence_trace_ids"],
+        "evidence_window": candidate["evidence_window"],
+        "surfaces": candidate["surfaces"],
+        "scopes": candidate["scopes"],
+        "event_kind_counts": candidate["event_kind_counts"],
+        "retention_policy_counts": candidate["retention_policy_counts"],
+        "related_memory_refs": candidate["related_memory_refs"],
+        "related_observation_ids": candidate["related_observation_ids"],
+        "salience_total": candidate["salience_total"],
+        "user_emphasis_total": candidate["user_emphasis_total"],
+        "reinforcement": candidate["reinforcement"],
+        "risk_flags": candidate["risk_flags"],
+    }
+
+
+def _dogfood_trace_cluster_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood trace-cluster-preview limit must be >= 1")
+    if args.top < 1:
+        raise ValueError("dogfood trace-cluster-preview top must be >= 1")
+    if args.min_evidence_count < 1:
+        raise ValueError("dogfood trace-cluster-preview min-evidence-count must be >= 1")
+
+    report = _consolidation_candidates_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        min_evidence=args.min_evidence_count,
+    )
+    clusters = [_ref_safe_trace_cluster(candidate) for candidate in report["candidates"]]
+    blocked_reasons: list[str] = []
+    if not clusters:
+        blocked_reasons.append("no_trace_clusters_ready")
+    if report.get("quality_warnings"):
+        blocked_reasons.append("trace_cluster_quality_warnings_present")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_trace_cluster_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "scan": {
+            "limit": args.limit,
+            "top": args.top,
+            "min_evidence_count": args.min_evidence_count,
+            "source_trace_count": report["trace_count"],
+            "quality_warnings": report["quality_warnings"],
+        },
+        "cluster_count": len(clusters),
+        "clusters": clusters,
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "trace_cluster_preview_ready_for_reviewed_candidate_flow"
+                if passed
+                else "continue_trace_cluster_dogfooding_before_reviewed_candidate_flow"
+            ),
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "mutation_contract": {
+                "writes_review_queue": False,
+                "promotes_long_term_memory": False,
+                "raw_content_allowed": False,
+            },
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "safe_summaries_included": False,
+        },
+        "suggested_next_steps": [
+            "Use these ref-safe clusters as the first G5 reviewed-candidate runway signal only.",
+            "Do not persist review queue items or promote long-term memories from this preview command.",
+            "Next slice should add explicit reviewed candidate flow with RED-tested audit and rollback contracts.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
     if path is None:
         return
@@ -8245,6 +8343,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_quality_parser.add_argument("--since-hours", type=int, default=24)
     dogfood_trace_quality_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_trace_quality_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_trace_cluster_preview_parser = dogfood_subparsers.add_parser(
+        "trace-cluster-preview",
+        help="Build a read-only ref-safe preview of trace clusters for the G5 reviewed-candidate runway.",
+    )
+    dogfood_trace_cluster_preview_parser.add_argument("db_path", type=Path)
+    dogfood_trace_cluster_preview_parser.add_argument("--output", type=Path)
+    dogfood_trace_cluster_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_trace_cluster_preview_parser.add_argument("--top", type=int, default=20)
+    dogfood_trace_cluster_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
         "fresh-epoch",
         help="Build a read-only epoch-filtered readiness report so new telemetry can be judged apart from historical rows.",
@@ -9225,6 +9332,9 @@ def main() -> None:
             if args.min_evidence_count < 1:
                 raise ValueError("dogfood trace-quality min-evidence-count must be >= 1")
             print(json.dumps(_dogfood_trace_quality_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-cluster-preview":
+            print(json.dumps(_dogfood_trace_cluster_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "fresh-epoch":
             if not 0 <= args.min_trace_coverage <= 1:

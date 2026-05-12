@@ -317,11 +317,11 @@ Status: Implemented as `g4-review-queue-apply-v1`. This is the first narrow revi
 
 ## PR G5-brainlike-consolidation-runway: Next human-memory-like automation design
 
-Status: Planned. This is the next safe north-star direction after the v0.1.138 docs/contract/reconciliation/reviewed-apply runway.
+Status: Started in source on branch `g5a-trace-cluster-preview`. The first slice is read-only `dogfood trace-cluster-preview`, which exposes ref-safe trace-cluster evidence without raw summaries, queue persistence, or memory promotion.
 
 ### Planned sequence
 
-1. `trace cluster -> consolidation candidate`.
+1. `trace cluster -> consolidation candidate` read-only preview. Started as `dogfood trace-cluster-preview`; no mutation, no default retrieval change, no raw summaries or raw cluster keys in output.
 2. `candidate -> reviewed fact/procedure/preference promotion`.
 3. repeated activation -> reinforcement.
 4. stale weak evidence -> decay/summary candidate.

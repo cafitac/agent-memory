@@ -71,12 +71,13 @@ def test_v0138_status_docs_record_fresh_g4_sequence_and_next_brainlike_steps() -
         assert "/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
-        assert "Overall north-star: 50-55%" in doc
+        assert "Overall north-star: 52-56%" in doc
         assert "broad G4/background apply remains blocked" in doc
 
+    assert "dogfood trace-cluster-preview" in next_action
+    assert "G5b" in next_action
     assert "G4 broad apply contract" in next_action
     assert "historical telemetry reconciliation" in next_action
-    assert "first narrow reviewed apply slice" in next_action
     assert "trace cluster -> consolidation candidate" in next_action
     assert "candidate -> reviewed fact/procedure/preference promotion" in next_action
 

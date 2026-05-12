@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 13:30 KST
+Last updated: 2026-05-12 13:49 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.138`; the installed Hermes hook is using `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`, fresh v0.1.138 linkage diagnostics report `fresh_trace_linkage_gap_not_detected`, and broad G4/background apply remains blocked while historical telemetry debt and narrow reviewed-apply contracts are handled explicitly.
+`agent-memory` is released and live-runtime-smoked through `v0.1.138`; the installed Hermes hook is using `/Users/reddit/.agent-memory/runtime/v0.1.138/.venv/bin/agent-memory`, fresh v0.1.138 linkage diagnostics report `fresh_trace_linkage_gap_not_detected`, and the source checkout now has the first G5a read-only `dogfood trace-cluster-preview` slice while broad G4/background apply remains blocked.
 
 ## Current progress estimate toward the north-star
 
@@ -24,13 +24,13 @@ The north-star is a human-memory-like, mostly automatic, graph-based memory cons
 
 Approximate progress:
 
-- Overall north-star: 50-55%.
+- Overall north-star: 52-56%.
 - Substrate/evidence plumbing: about 70%.
 - Safe automatic mutation/promotion: about 30-35%.
 
 Reasoning:
 
-- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), and fresh v0.1.138 linkage health.
+- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh v0.1.138 linkage health, and source-level G5a ref-safe trace-cluster preview.
 - Not done: broad background consolidation apply, automatic long-term memory promotion, conflict-aware automatic supersession, weak-trace decay/collapse apply, graph-cluster-to-fact/procedure/preference generation, and large-scope rollback confidence.
 
 ## Latest verified checkpoint
@@ -46,6 +46,7 @@ Reasoning:
 - Fresh epoch readiness: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/fresh-epoch-v0138.json`
 - Fresh review queue preview: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-review-queue-preview-v0138-fresh.json`
 - Historical scheduled dry-run: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`
+- Source-only G5a checkpoint: `dogfood trace-cluster-preview` added on branch `g5a-trace-cluster-preview`; verified with full test suite `290 passed, 1 xfailed`.
 
 ## Current blocker
 
@@ -67,11 +68,11 @@ Interpretation: this is no longer a fresh hook linkage bug. It is historical tel
 
 Proceed in this sequence:
 
-1. Docs/status refresh: keep `.dev/status/current-handoff.md`, this file, and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md` aligned to the v0.1.138 runtime, fresh-linkage result, and 50-55% north-star estimate.
-2. G4 broad apply contract: keep broad apply as a contract/guardrail surface first. Required shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
-3. Historical telemetry reconciliation: prefer reviewed `telemetry-reset-v1` preview/apply only for historical telemetry rows older than a chosen epoch; never delete facts/procedures/episodes/relations/source records/status history.
-4. first narrow reviewed apply slice: only approved persisted review-queue items may use `g4-review-queue-apply-v1`, and the first mutation class remains `apply_reinforcement_marker`; decay, promotion, supersession, and broad consolidation remain blocked.
-5. Brain-like automation runway: next safe design axis is `trace cluster -> consolidation candidate`, `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, and conflict -> supersession review. Retrieval ranking changes stay opt-in/evaluated before default.
+1. Finish/push the current G5a source slice: `dogfood trace-cluster-preview` starts `trace cluster -> consolidation candidate` as a read-only, ref-safe preview; it strips summaries/cluster keys, writes optional JSON output, and keeps default retrieval/memory tables unchanged.
+2. Next G5b slice: reviewed candidate flow over the trace-cluster preview output. It should persist review state only, not promote long-term memory.
+3. G4 broad apply contract remains blocked/guardrail-only. Required future shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
+4. Historical telemetry reconciliation remains a separate reviewed `telemetry-reset-v1` corridor for historical telemetry rows older than a chosen epoch; never delete facts/procedures/episodes/relations/source records/status history.
+5. Later brain-like automation runway: `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, and conflict -> supersession review. Retrieval ranking changes stay opt-in/evaluated before default.
 
 ## What not to do next
 
