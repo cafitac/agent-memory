@@ -9215,6 +9215,141 @@ def test_dogfood_reinforcement_refinement_preview_scores_repeated_activation_wit
     assert "query_preview" not in result.stdout
 
 
+def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "decay-collapse-preview.db"
+    output_path = tmp_path / "decay-collapse-preview.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5e decay collapse source text and token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5e-decay"},
+    )
+    stale_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5e stale weak evidence",
+        predicate="needs",
+        object_ref_or_value="collapse review preview",
+        evidence_ids=[source.id],
+        scope="project:g5e-decay",
+        confidence=0.41,
+    )
+    fresh_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5e fresh evidence",
+        predicate="needs",
+        object_ref_or_value="protection from stale-only cleanup",
+        evidence_ids=[source.id],
+        scope="project:g5e-decay",
+        confidence=0.94,
+    )
+    approve_fact(db_path=db_path, fact_id=fresh_fact.id)
+    record_retrieval_observation(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        query="SHOULD_NOT_LEAK stale weak collapse query",
+        preferred_scope="project:g5e-decay",
+        limit=5,
+        statuses=("approved", "candidate"),
+        retrieval_trace=[_fact_trace(stale_fact.id, label="stale weak candidate")],
+        response_mode="verify_first",
+        metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": "g5e-stale"},
+    )
+    for index in range(4):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK fresh decay spacing query",
+            preferred_scope="project:g5e-decay",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fresh_fact.id, label="fresh protected target")],
+            response_mode="verify_first",
+            metadata={"raw_prompt": "SHOULD_NOT_LEAK", "session_id": f"g5e-fresh-{index}"},
+        )
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "decay-collapse-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--min-decay-score",
+            "0.5",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_decay_collapse_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "mutation_contract": {
+            "writes_review_queue": False,
+            "deprecates_or_deletes_memory": False,
+            "collapses_memory": False,
+            "raw_content_allowed": False,
+        },
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "decay_collapse_preview_ready_for_human_review",
+        "blocked_reasons": [],
+    }
+    assert payload["candidate_count"] == 1
+    candidate = payload["decay_collapse_candidates"][0]
+    assert candidate["memory_ref"] == f"fact:{stale_fact.id}"
+    assert candidate["current_status"] == "candidate"
+    assert candidate["decay_score"] >= 0.5
+    assert candidate["collapse_review"]["candidate_action"] == "consider_decay_or_collapse_after_review"
+    assert candidate["collapse_review"]["apply_path"] == "not_supported_by_preview"
+    assert candidate["collapse_review"]["requires_separate_guarded_policy"] is True
+    assert candidate["review_recommendation"] == {
+        "decision": "ready_for_decay_collapse_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
+    assert candidate["ref_safe_evidence"]["content_included"] is False
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
+    assert "query_preview" not in result.stdout
+
+
 def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:
     source = ingest_source_text(
         db_path=db_path,
