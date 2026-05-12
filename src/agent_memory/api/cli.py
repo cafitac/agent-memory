@@ -4562,6 +4562,7 @@ def _classify_g4_linkage_gap(
     observation_row: Any,
     trace_count: int,
     latest_trace_created_at: str | None,
+    has_later_linked_observation: bool = False,
 ) -> tuple[str, str]:
     metadata = _safe_metadata_from_json(observation_row["metadata_json"])
     retrieval_outcome = str(metadata.get("retrieval_outcome") or "unknown")
@@ -4572,10 +4573,17 @@ def _classify_g4_linkage_gap(
         return "metadata_classification_gap", "empty observation carries adapter/scope payload-gap outcome metadata"
     if retrieval_outcome == "unknown" and hook_event_name in {"unknown", ""}:
         return "metadata_classification_gap", "empty observation is missing hook/outcome metadata needed for ref-safe linkage diagnosis"
+    if retrieval_outcome == "unknown" and hook_event_name == "pre_llm_call" and response_mode == "unknown":
+        return (
+            "metadata_classification_gap",
+            "hook observation is missing retrieval outcome/response mode metadata needed for ref-safe linkage diagnosis",
+        )
     if retrieval_outcome == "unknown" and hook_event_name == "pre_llm_call" and response_mode == "verify_first":
         return "historical_or_rollout_telemetry", "legacy verify-first empty retrieval can be classified only by rollout-era metadata"
     if not trace_count:
         return "hook_runtime_linkage_bug", "fresh observations exist but no fresh trace rows were recorded"
+    if has_later_linked_observation:
+        return "historical_or_rollout_telemetry", "older unlinked observation is followed by later linked hook telemetry in the same selected epoch/window"
     if latest_trace_created_at is not None and created_at > latest_trace_created_at:
         return "expected_race_or_window_artifact", "latest observation is newer than the latest trace in the selected epoch/window"
     if retrieval_outcome == "no_reliable_memory":
@@ -4668,13 +4676,20 @@ def _dogfood_g4_linkage_gap_diagnose_payload(args: argparse.Namespace) -> dict[s
         activation_refs_by_observation[observation_id].append(f"activation:{row['id']}")
 
     latest_trace_created_at = max((str(row["created_at"]) for row in trace_rows), default=None)
+    linked_observation_created_ats = [
+        str(row["created_at"])
+        for row in observation_rows
+        if int(row["id"]) in linked_observation_ids
+    ]
     classification_counts: Counter[str] = Counter()
     unlinked_details: list[dict[str, Any]] = []
     for row in unlinked_rows:
+        created_at = str(row["created_at"])
         classification, classification_reason = _classify_g4_linkage_gap(
             observation_row=row,
             trace_count=len(trace_rows),
             latest_trace_created_at=latest_trace_created_at,
+            has_later_linked_observation=any(linked_created_at > created_at for linked_created_at in linked_observation_created_ats),
         )
         classification_counts[classification] += 1
         metadata = _safe_metadata_from_json(row["metadata_json"])
@@ -4697,11 +4712,22 @@ def _dogfood_g4_linkage_gap_diagnose_payload(args: argparse.Namespace) -> dict[s
 
     latest_unlinked_observation = unlinked_details[-1] if unlinked_details else None
     unlinked_observation_count = len(unlinked_rows)
-    blocked_reasons = ["fresh_trace_linkage_gap_present"] if unlinked_observation_count else []
+    only_resolved_rollout_telemetry = bool(unlinked_observation_count) and set(classification_counts) == {
+        "historical_or_rollout_telemetry"
+    }
+    blocked_reasons = (
+        ["resolved_rollout_telemetry_requires_review"]
+        if only_resolved_rollout_telemetry
+        else ["fresh_trace_linkage_gap_present"]
+        if unlinked_observation_count
+        else []
+    )
     if classification_counts.get("hook_runtime_linkage_bug"):
         decision = "investigate_hook_runtime_linkage_before_g4_apply"
     elif classification_counts.get("metadata_classification_gap"):
         decision = "classify_or_backfill_metadata_before_g4_apply"
+    elif only_resolved_rollout_telemetry:
+        decision = "review_resolved_rollout_telemetry_before_g4_apply"
     elif classification_counts.get("expected_race_or_window_artifact") and len(classification_counts) == 1:
         decision = "collect_next_epoch_to_confirm_race_window_resolution"
     elif unlinked_observation_count:
