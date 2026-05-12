@@ -1,20 +1,20 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 00:07 KST
+Last updated: 2026-05-13 00:53 KST
 
-## v0.1.141 + G5d completed checkpoint and next five-step runway
+## v0.1.142 + G5e completed checkpoint and next five-step runway
 
-This document is the restartable checkpoint after the v0.1.141 release/runtime rollout, fresh G4 diagnostics, merged G5a/G5b/G5c reviewed-candidate/scoring runway, and completed G5d read-only repeated activation -> reinforcement refinement preview.
+This document is the restartable checkpoint after the v0.1.142 release/runtime rollout, fresh G4 diagnostics, merged G5a/G5b/G5c/G5d reviewed-candidate/scoring/reinforcement runway, and completed G5e read-only stale weak evidence -> decay/collapse candidate preview.
 
 Current verified release state:
 
-- Release: `v0.1.141`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.141`.
-- npm: `@cafitac/agent-memory@0.1.141`.
-- PyPI: `cafitac-agent-memory==0.1.141`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.141/.venv/bin/agent-memory`.
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.141/g5d-live-smoke.json`.
+- Release: `v0.1.142`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.142`.
+- npm: `@cafitac/agent-memory@0.1.142`.
+- PyPI: `cafitac-agent-memory==0.1.142`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.142/.venv/bin/agent-memory`.
+- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.142/g5e-live-smoke.json`.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
@@ -23,25 +23,25 @@ Fresh diagnostics:
 - `fresh-epoch-v0138.json`: `quality_gate.pass=true`, decision `fresh_epoch_ready_to_compare_against_historical`.
 - `g4-review-queue-preview-v0138-fresh.json`: `quality_gate.pass=true`, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
 - `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
-- G5a/G5b/G5c/G5d: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, and `dogfood reinforcement-refinement-preview` are merged/released through v0.1.141.
-- G5d reinforcement-refinement preview does not persist review state, increment reinforcement counts, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, manual true-distribution smoke, and live Hermes runtime rollout passed.
+- G5a/G5b/G5c/G5d/G5e: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, and `dogfood decay-collapse-preview` are merged/released through v0.1.142.
+- G5e decay-collapse preview does not persist review state, delete/deprecate/collapse memories, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, manual true-distribution smoke, and live Hermes runtime rollout passed.
 
 Progress estimate:
 
-- Overall north-star: 60-62%.
-- Substrate/evidence plumbing: about 74-76%.
-- Safe automatic mutation/promotion: about 42-45%.
-- Remaining work: about 38-40% overall.
+- Overall north-star: 62-64%.
+- Substrate/evidence plumbing: about 75-77%.
+- Safe automatic mutation/promotion: about 43-46%.
+- Remaining work: about 36-38% overall.
 
 Current interpretation:
 
-Fresh v0.1.141 evidence and merged G5a/G5b/G5c/G5d are healthy enough to continue the brain-like reviewed-candidate runway. Broad G4/background apply remains blocked. G5d added repeated activation -> reinforcement refinement candidates as a ref-safe preview only; it is not approval for persistence, promotion, auto-approval, reinforcement mutation, decay, supersession, or retrieval-default changes.
+Fresh v0.1.142 evidence and merged G5a/G5b/G5c/G5d/G5e are healthy enough to continue the brain-like reviewed-candidate runway. Broad G4/background apply remains blocked. G5e added stale weak evidence -> decay/collapse candidates as a ref-safe preview only; it is not approval for persistence, promotion, auto-approval, reinforcement mutation, decay/collapse mutation, supersession, or retrieval-default changes.
 
 Recommended sequence from here:
 
-1. Start G5e: stale weak evidence -> decay/collapse candidate preview, still preview/review-first and read-only.
-2. Preserve G5e safety shape: review scores and recommendations remain review-priority signals only; they must not delete, decay, collapse, persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
-3. If a later G5d/G5e slice introduces mutation, keep it behind a separate explicit apply policy with backup, audit, approval phrase, actor, reason hash, and rollback.
+1. Start conflict -> supersession/replacement candidate preview, still preview/review-first and read-only.
+2. Preserve G5d/G5e safety shape: review scores/recommendations, reinforcement refinement, and decay/collapse candidates remain review-priority signals only; they must not delete, decay, collapse, persist review state, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
+3. If a later conflict/supersession or decay/collapse slice introduces mutation, keep it behind a separate explicit apply policy with backup, audit, approval phrase, actor, reason hash, and rollback.
 4. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
 5. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
 
