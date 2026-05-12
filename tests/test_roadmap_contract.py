@@ -67,8 +67,8 @@ def test_v0142_status_docs_record_g5e_completion_and_next_brainlike_steps() -> N
     stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
 
     for doc in (next_action, handoff, current_progress):
-        assert "v0.1.142" in doc
-        assert "/Users/reddit/.agent-memory/runtime/v0.1.142/.venv/bin/agent-memory" in doc
+        assert "v0.1.143" in doc
+        assert "/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
         assert "Overall north-star: 62-64%" in doc
