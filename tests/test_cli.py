@@ -8919,6 +8919,121 @@ def test_dogfood_background_dry_run_quality_gates_block_g4_when_reports_are_nois
     assert "Do not enable background apply mode from this report." in payload["suggested_next_steps"]
 
 
+def test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-cluster-preview.db"
+    output_path = tmp_path / "trace-cluster-preview.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Trace cluster preview source text should never appear in preview output.",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Trace cluster preview",
+        predicate="prefers",
+        object_ref_or_value="ref safe reports",
+        evidence_ids=[source.id],
+        scope="project:trace-cluster-preview",
+        confidence=0.91,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    for index in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=f"{index + 1}" * 64,
+            summary=f"token=SHOULD_NOT_LEAK cluster preview secret {index}",
+            scope="project:trace-cluster-preview",
+            related_memory_refs=[f"fact:{fact.id}"],
+            related_observation_ids=[index + 10],
+            retention_policy="ephemeral",
+            metadata={
+                "trace_recording": "default_metadata_only",
+                "candidate_policy": "evidence_only",
+                "auto_approved": False,
+            },
+        )
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "source_records", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-cluster-preview",
+            str(db_path),
+            "--min-evidence-count",
+            "2",
+            "--top",
+            "5",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_trace_cluster_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["cluster_count"] == 1
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "trace_cluster_preview_ready_for_reviewed_candidate_flow",
+        "blocked_reasons": [],
+    }
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "mutation_contract": {
+            "writes_review_queue": False,
+            "promotes_long_term_memory": False,
+            "raw_content_allowed": False,
+        },
+    }
+    cluster = payload["clusters"][0]
+    assert cluster["candidate_id"].startswith("candidate:")
+    assert cluster["group_reason"] == {
+        "reason": "shared_related_memory_ref",
+        "shared_memory_ref": f"fact:{fact.id}",
+        "shared_scope": "project:trace-cluster-preview",
+    }
+    assert cluster["evidence_count"] == 2
+    assert cluster["related_memory_refs"] == [f"fact:{fact.id}"]
+    assert cluster["related_observation_ids"] == [10, 11]
+    assert "safe_summaries" not in cluster
+    assert "cluster_key" not in cluster
+    assert "cluster_key_sha256" in cluster
+    assert payload["privacy"] == {
+        "raw_conversation_content_included": False,
+        "sample_values_included": False,
+        "safe_summaries_included": False,
+    }
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "source_records", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+    assert "source text" not in result.stdout
+
+
 def _table_counts(db_path: Path, tables: list[str]) -> dict[str, int]:
     with sqlite3.connect(db_path) as connection:
         return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}

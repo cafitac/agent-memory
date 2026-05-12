@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-12 13:30 KST
+Last updated: 2026-05-12 13:49 KST
 
 ## v0.1.138 current checkpoint
 
@@ -15,12 +15,13 @@ Current verified state:
 - Fresh linkage diagnosis: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
 - Fresh epoch readiness: `fresh-epoch-v0138.json` passed with decision `fresh_epoch_ready_to_compare_against_historical`.
 - Fresh review queue preview: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
+- Source checkout G5a slice: `dogfood trace-cluster-preview` now builds a read-only/ref-safe trace-cluster preview for the reviewed-candidate runway; full tests pass locally with `290 passed, 1 xfailed`.
 - Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
 - broad G4/background apply remains blocked until the contract, historical reconciliation, and narrow reviewed-apply runway are verified.
 
 Progress estimate:
 
-- Overall north-star: 50-55%.
+- Overall north-star: 52-56%.
 - Substrate/evidence plumbing: about 70%.
 - Safe automatic mutation/promotion: about 30-35%.
 
@@ -28,7 +29,7 @@ Current interpretation:
 
 - The fresh hook/runtime linkage blocker is resolved for v0.1.138 evidence.
 - Broad G4/background apply remains blocked; fresh readiness does not authorize automatic memory creation.
-- The next safe sequence is G4 broad apply contract, historical telemetry reconciliation, first narrow reviewed apply slice, then the brain-like automation runway.
+- The next safe sequence is finish/push G5a trace-cluster preview, then G5b reviewed candidate flow; G4 broad apply and historical reconciliation remain separate guarded corridors.
 - Existing broad-G4 baseline remains a docs/RED-test-only guardrail; do not advertise broad G4 consolidation apply mode as ready.
 
 Current safe mutation boundaries:
@@ -39,7 +40,7 @@ Current safe mutation boundaries:
 
 Brain-like next design axis:
 
-- `trace cluster -> consolidation candidate`.
+- `trace cluster -> consolidation candidate` is started as a ref-safe read-only preview, not an apply path.
 - `candidate -> reviewed fact/procedure/preference promotion`.
 - repeated activation -> reinforcement.
 - stale weak evidence -> decay/summary candidate.
