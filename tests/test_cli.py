@@ -12,6 +12,7 @@ import pytest
 from agent_memory.api.cli import main
 from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
+from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.core.retrieval import retrieve_memory_packet
 from agent_memory.integrations import hermes_hooks
 from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
@@ -22,8 +23,22 @@ from agent_memory.storage.sqlite import (
     list_experience_traces,
     list_retrieval_observations,
     record_memory_retrieval,
+    record_retrieval_observation,
     update_memory_status,
 )
+
+
+def _fact_trace(memory_id: int, *, label: str = "Agent Memory project fact") -> RetrievalTraceEntry:
+    return RetrievalTraceEntry(
+        memory_type="fact",
+        memory_id=memory_id,
+        label=label,
+        scope="project:agent-memory",
+        scope_priority=0,
+        text_match_count=1,
+        rank_value=1.0,
+        total_score=1.0,
+    )
 
 
 def test_python_module_cli_backup_export_inspect_restore_round_trip(tmp_path: Path) -> None:
@@ -9052,6 +9067,152 @@ def test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutatio
     assert "SHOULD_NOT_LEAK" not in result.stdout
     assert "token=" not in result.stdout
     assert "source text" not in result.stdout
+
+
+def test_dogfood_reinforcement_refinement_preview_scores_repeated_activation_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "reinforcement-refinement-preview.db"
+    output_path = tmp_path / "reinforcement-refinement-preview.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5d reinforcement refinement source text must not leak.",
+        metadata={"project": "g5d-reinforcement"},
+    )
+    repeated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5d reinforcement",
+        predicate="needs",
+        object_ref_or_value="preview-first refinement",
+        evidence_ids=[source.id],
+        scope="project:g5d-reinforcement",
+        confidence=0.93,
+    )
+    approve_fact(db_path=db_path, fact_id=repeated_fact.id)
+    weak_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5d weak candidate",
+        predicate="has",
+        object_ref_or_value="single activation",
+        evidence_ids=[source.id],
+        scope="project:g5d-reinforcement",
+        confidence=0.7,
+    )
+    approve_fact(db_path=db_path, fact_id=weak_fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{repeated_fact.id}",
+        relation_type="supports",
+        to_ref="concept:g5d-reinforcement",
+        evidence_ids=[source.id],
+        weight=0.8,
+        confidence=0.8,
+    )
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes-pre-llm-hook" if index < 2 else "cli",
+            query="SHOULD_NOT_LEAK repeated reinforcement query",
+            preferred_scope="project:g5d-reinforcement",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(repeated_fact.id, label="repeated reinforcement target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": f"g5d-{index}"},
+        )
+    record_retrieval_observation(
+        db_path,
+        surface="cli",
+        query="SHOULD_NOT_LEAK single reinforcement query",
+        preferred_scope="project:g5d-reinforcement",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[_fact_trace(weak_fact.id, label="weak reinforcement target")],
+        response_mode="verify_first",
+        metadata={"raw_prompt": "SHOULD_NOT_LEAK"},
+    )
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "reinforcement-refinement-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_reinforcement_refinement_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "g5c_review_score_is_apply_approval": False,
+        "mutation_contract": {
+            "writes_review_queue": False,
+            "increments_reinforcement_count": False,
+            "promotes_long_term_memory": False,
+            "raw_content_allowed": False,
+        },
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "reinforcement_refinement_preview_ready_for_human_review",
+        "blocked_reasons": [],
+    }
+    candidates = {candidate["memory_ref"]: candidate for candidate in payload["reinforcement_candidates"]}
+    repeated = candidates[f"fact:{repeated_fact.id}"]
+    assert repeated["activation_count"] == 3
+    assert repeated["current_status"] == "approved"
+    assert repeated["review_score"]["tier"] == "high"
+    assert repeated["review_recommendation"] == {
+        "decision": "ready_for_reinforcement_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
+    assert repeated["refinement"] == {
+        "candidate_action": "consider_reinforcement_marker_after_review",
+        "apply_path": "not_supported_by_preview",
+        "requires_separate_guarded_policy": True,
+    }
+    assert candidates[f"fact:{weak_fact.id}"]["review_recommendation"]["decision"] == "continue_dogfooding_before_review"
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
+    assert "query_preview" not in result.stdout
 
 
 def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:

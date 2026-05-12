@@ -1780,6 +1780,152 @@ def _activation_reinforcement_report(db_path: Path, *, limit: int, top: int, fre
     }
 
 
+def _reinforcement_refinement_review_score(
+    candidate: dict[str, Any], *, frequent_threshold: int
+) -> dict[str, Any]:
+    activation_count = _safe_int(candidate.get("activation_count"))
+    base_score = round(_safe_float(candidate.get("score")), 4)
+    current_status = str(candidate.get("current_status") or "missing")
+    signals = candidate.get("signals") if isinstance(candidate.get("signals"), list) else []
+    penalties = candidate.get("penalties") if isinstance(candidate.get("penalties"), dict) else {}
+    repeated_activation = activation_count >= frequent_threshold
+    approved = current_status == "approved"
+    connected = "connected_memory" in signals
+    penalty_count = len(penalties)
+    score = max(
+        0,
+        int(
+            round(base_score * 10)
+            + (2 if repeated_activation else 0)
+            + (1 if approved else 0)
+            + (1 if connected else 0)
+            - penalty_count
+        ),
+    )
+    if approved and repeated_activation and score >= 10:
+        tier = "high"
+    elif approved and repeated_activation and score >= 7:
+        tier = "medium"
+    else:
+        tier = "low"
+    return {
+        "score": score,
+        "tier": tier,
+        "components": {
+            "base_reinforcement_score": base_score,
+            "activation_count": activation_count,
+            "frequent_threshold": frequent_threshold,
+            "repeated_activation": repeated_activation,
+            "current_status": current_status,
+            "connected_memory": connected,
+            "penalty_count": penalty_count,
+        },
+    }
+
+
+def _reinforcement_refinement_recommendation(review_score: dict[str, Any]) -> dict[str, Any]:
+    tier = str(review_score.get("tier") or "low")
+    return {
+        "decision": "ready_for_reinforcement_review" if tier in {"high", "medium"} else "continue_dogfooding_before_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
+
+
+def _ref_safe_reinforcement_refinement_candidate(
+    candidate: dict[str, Any], *, frequent_threshold: int
+) -> dict[str, Any]:
+    review_score = _reinforcement_refinement_review_score(candidate, frequent_threshold=frequent_threshold)
+    return {
+        "memory_ref": candidate["memory_ref"],
+        "current_status": candidate["current_status"],
+        "activation_count": candidate["activation_count"],
+        "total_strength": candidate["total_strength"],
+        "signals": candidate["signals"],
+        "penalties": sorted(candidate.get("penalties", {}).keys()),
+        "sample_activation_ids": candidate["sample_activation_ids"],
+        "sample_observation_ids": candidate["sample_observation_ids"],
+        "activation_window": candidate["activation_window"],
+        "review_score": review_score,
+        "review_recommendation": _reinforcement_refinement_recommendation(review_score),
+        "refinement": {
+            "candidate_action": "consider_reinforcement_marker_after_review",
+            "apply_path": "not_supported_by_preview",
+            "requires_separate_guarded_policy": True,
+        },
+    }
+
+
+def _dogfood_reinforcement_refinement_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    report = _activation_reinforcement_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+    )
+    candidates = [
+        _ref_safe_reinforcement_refinement_candidate(candidate, frequent_threshold=args.frequent_threshold)
+        for candidate in report["reinforcement_candidates"]
+    ]
+    blocked_reasons: list[str] = []
+    if not candidates:
+        blocked_reasons.append("no_reinforcement_candidates_ready")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_reinforcement_refinement_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "activation_count": report["activation_count"],
+        "negative_evidence": report["negative_evidence"],
+        "scan": {
+            "limit": args.limit,
+            "top": args.top,
+            "frequent_threshold": args.frequent_threshold,
+            "quality_warnings": report["quality_warnings"],
+        },
+        "candidate_count": len(candidates),
+        "reinforcement_candidates": candidates,
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "reinforcement_refinement_preview_ready_for_human_review"
+                if passed
+                else "continue_reinforcement_dogfooding_before_refinement_review"
+            ),
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "g5c_review_score_is_apply_approval": False,
+            "mutation_contract": {
+                "writes_review_queue": False,
+                "increments_reinforcement_count": False,
+                "promotes_long_term_memory": False,
+                "raw_content_allowed": False,
+            },
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "safe_summaries_included": False,
+        },
+        "suggested_next_steps": [
+            "Review repeated activation candidates before any reinforcement marker apply corridor.",
+            "Keep this preview read-only; do not treat G5c/G5d scores as approval.",
+            "Use a separate guarded policy with backup/audit/rollback for any future mutation slice.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _decay_risk_scoring_contract() -> dict[str, Any]:
     return {
         "max_score": 1.0,
@@ -8809,6 +8955,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_cluster_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_trace_cluster_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_trace_cluster_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_reinforcement_refinement_preview_parser = dogfood_subparsers.add_parser(
+        "reinforcement-refinement-preview",
+        help="Build a read-only G5d preview of repeated activation -> reinforcement refinement candidates.",
+    )
+    dogfood_reinforcement_refinement_preview_parser.add_argument("db_path", type=Path)
+    dogfood_reinforcement_refinement_preview_parser.add_argument("--output", type=Path)
+    dogfood_reinforcement_refinement_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_reinforcement_refinement_preview_parser.add_argument("--top", type=int, default=20)
+    dogfood_reinforcement_refinement_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
     dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
         "trace-candidate-persist",
         help="Persist G5 trace-cluster candidates for explicit human review without promoting memories.",
@@ -9840,6 +9995,9 @@ def main() -> None:
             return
         if args.dogfood_action == "trace-cluster-preview":
             print(json.dumps(_dogfood_trace_cluster_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "reinforcement-refinement-preview":
+            print(json.dumps(_dogfood_reinforcement_refinement_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "trace-candidate-persist":
             print(json.dumps(_dogfood_trace_candidate_persist_payload(args), indent=2))
