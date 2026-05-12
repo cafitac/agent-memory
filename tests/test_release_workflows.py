@@ -52,7 +52,8 @@ def test_auto_release_fallback_dispatches_release_sync_ci_validation() -> None:
     assert "gh workflow run ci.yml --ref \"${RELEASE_SYNC_BRANCH}\"" in workflow
     assert "release_sync_pr_url" in workflow
     assert "Release sync validation CI was dispatched" in workflow
-    assert "wait for the dispatched `ci.yml` run before merging" in workflow
+    assert "wait for the dispatched ci.yml run before merging" in workflow
+    assert "dispatched `ci.yml`" not in workflow
 
 
 def test_publish_workflow_remains_tag_driven_only() -> None:
