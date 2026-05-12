@@ -1926,6 +1926,108 @@ def _dogfood_reinforcement_refinement_preview_payload(args: argparse.Namespace) 
     return payload
 
 
+def _ref_safe_decay_collapse_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "memory_ref": candidate["memory_ref"],
+        "current_status": candidate["current_status"],
+        "decay_score": candidate["score"],
+        "activation_count": candidate["activation_count"],
+        "total_strength": candidate["total_strength"],
+        "signals": candidate["signals"],
+        "factor_breakdown": candidate["factor_breakdown"],
+        "ref_safe_evidence": candidate["ref_safe_evidence"],
+        "resolution_hint": candidate["resolution_hint"],
+        "review_support": candidate["review_support"],
+        "sample_activation_ids": candidate["sample_activation_ids"],
+        "sample_observation_ids": candidate["sample_observation_ids"],
+        "activation_window": candidate["activation_window"],
+        "review_recommendation": {
+            "decision": "ready_for_decay_collapse_review",
+            "automation": "human_review_only",
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_unchanged": True,
+            "mutation_supported": False,
+        },
+        "collapse_review": {
+            "candidate_action": "consider_decay_or_collapse_after_review",
+            "apply_path": "not_supported_by_preview",
+            "requires_separate_guarded_policy": True,
+        },
+    }
+
+
+def _dogfood_decay_collapse_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_decay_score < 0:
+        raise ValueError("dogfood decay-collapse-preview min-decay-score must be >= 0")
+    report = _activation_decay_risk_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+    )
+    candidates = [
+        _ref_safe_decay_collapse_candidate(candidate)
+        for candidate in report["decay_risk_candidates"]
+        if candidate["score"] >= args.min_decay_score
+    ]
+    blocked_reasons: list[str] = []
+    if not candidates:
+        blocked_reasons.append("no_decay_collapse_candidates_ready")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_decay_collapse_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "activation_count": report["activation_count"],
+        "negative_evidence": report["negative_evidence"],
+        "scan": {
+            "limit": args.limit,
+            "top": args.top,
+            "frequent_threshold": args.frequent_threshold,
+            "min_decay_score": args.min_decay_score,
+            "quality_warnings": report["quality_warnings"],
+        },
+        "candidate_decomposition": report["candidate_decomposition"],
+        "candidate_count": len(candidates),
+        "decay_collapse_candidates": candidates,
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "decay_collapse_preview_ready_for_human_review"
+                if passed
+                else "continue_decay_collapse_dogfooding_before_review"
+            ),
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "mutation_contract": {
+                "writes_review_queue": False,
+                "deprecates_or_deletes_memory": False,
+                "collapses_memory": False,
+                "raw_content_allowed": False,
+            },
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "safe_summaries_included": False,
+        },
+        "suggested_next_steps": [
+            "Review stale weak-evidence candidates before any decay/collapse apply corridor.",
+            "Keep this preview read-only; do not delete, deprecate, or collapse memories from score alone.",
+            "Use a separate guarded policy with backup/audit/rollback for any future mutation slice.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _decay_risk_scoring_contract() -> dict[str, Any]:
     return {
         "max_score": 1.0,
@@ -8964,6 +9066,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_reinforcement_refinement_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_reinforcement_refinement_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_reinforcement_refinement_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_decay_collapse_preview_parser = dogfood_subparsers.add_parser(
+        "decay-collapse-preview",
+        help="Build a read-only G5e preview of stale weak-evidence decay/collapse candidates.",
+    )
+    dogfood_decay_collapse_preview_parser.add_argument("db_path", type=Path)
+    dogfood_decay_collapse_preview_parser.add_argument("--output", type=Path)
+    dogfood_decay_collapse_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_decay_collapse_preview_parser.add_argument("--top", type=int, default=20)
+    dogfood_decay_collapse_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_decay_collapse_preview_parser.add_argument("--min-decay-score", type=float, default=0.5)
     dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
         "trace-candidate-persist",
         help="Persist G5 trace-cluster candidates for explicit human review without promoting memories.",
@@ -9998,6 +10110,9 @@ def main() -> None:
             return
         if args.dogfood_action == "reinforcement-refinement-preview":
             print(json.dumps(_dogfood_reinforcement_refinement_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "decay-collapse-preview":
+            print(json.dumps(_dogfood_decay_collapse_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "trace-candidate-persist":
             print(json.dumps(_dogfood_trace_candidate_persist_payload(args), indent=2))
