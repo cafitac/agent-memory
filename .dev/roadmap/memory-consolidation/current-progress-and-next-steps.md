@@ -3,18 +3,18 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-13 01:10 KST
 
-## v0.1.143 + G5e completed checkpoint and next five-step runway
+## v0.1.144 + local G5g checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.143 release/runtime rollout, fresh G4 diagnostics, merged G5a/G5b/G5c/G5d reviewed-candidate/scoring/reinforcement runway, and completed G5e read-only stale weak evidence -> decay/collapse candidate preview.
+This document is the restartable checkpoint after the v0.1.144 release/runtime rollout and local G5g implementation: reviewed decay deprecate apply corridor, enriched supersession evidence, graph-cluster candidate skeleton generation, retrieval-ranking eval gate, and rollback confidence inspection.
 
 Current verified release state:
 
-- Release: `v0.1.143`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.143`.
+- Release: `v0.1.144`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.144`.
 - npm: `@cafitac/agent-memory@0.1.143`.
 - PyPI: `cafitac-agent-memory==0.1.143`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/agent-memory`.
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.143/g5e-live-smoke.json`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.144/.venv/bin/agent-memory`.
+- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.144/g5f-live-smoke.json`.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
@@ -23,19 +23,19 @@ Fresh diagnostics:
 - `fresh-epoch-v0138.json`: `quality_gate.pass=true`, decision `fresh_epoch_ready_to_compare_against_historical`.
 - `g4-review-queue-preview-v0138-fresh.json`: `quality_gate.pass=true`, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
 - `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
-- G5a/G5b/G5c/G5d/G5e: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, and `dogfood decay-collapse-preview` are merged/released through v0.1.143.
+- G5a/G5b/G5c/G5d/G5e/G5f: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, and bounded partial automation are merged/released through v0.1.144.
 - G5e decay-collapse preview does not persist review state, delete/deprecate/collapse memories, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, manual true-distribution smoke, and live Hermes runtime rollout passed.
 
 Progress estimate:
 
-- Overall north-star: 66-68%.
-- Substrate/evidence plumbing: about 75-77%.
-- Safe automatic mutation/promotion: about 50-53%.
-- Remaining work: about 36-38% overall.
+- Overall north-star: 69-71%.
+- Substrate/evidence plumbing: about 78-80%.
+- Safe automatic mutation/promotion: about 55-58%.
+- Remaining work: about 29-31% overall.
 
 Current interpretation:
 
-Fresh v0.1.143 evidence and merged G5a/G5b/G5c/G5d/G5e are healthy enough to continue the brain-like reviewed-candidate runway. Broad G4/background apply remains blocked. G5e added stale weak evidence -> decay/collapse candidates as a ref-safe preview only; it is not approval for persistence, promotion, auto-approval, reinforcement mutation, decay/collapse mutation, supersession, or retrieval-default changes.
+Fresh v0.1.144 evidence and merged G5a-G5f are healthy enough to continue the brain-like reviewed-candidate runway. Broad G4/background apply remains blocked. Local G5g adds narrow reviewed decay deprecate apply, richer supersession evidence, candidate skeleton generation, retrieval-ranking gate, and rollback confidence inspection; it is not approval for broad/background apply or ordinary conversation auto-approval.
 
 Recommended sequence from here:
 
