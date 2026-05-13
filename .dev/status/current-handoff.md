@@ -1,23 +1,23 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 16:32 KST
+Last updated: 2026-05-13 17:09 KST
 
-## v0.1.152 released runtime checkpoint
+## v0.1.153 released runtime checkpoint
 
 Use `.dev/status/next-agent-memory-action.md` as the shortest current source of truth.
 
 Current verified state:
 
-- Latest completed release/runtime rollout: `v0.1.152`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.152/.venv/bin/agent-memory`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.152`.
-- npm/PyPI latest verified as `0.1.152`.
-- Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.152 runtime.
+- Latest completed release/runtime rollout: `v0.1.153`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.153/.venv/bin/agent-memory`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.153`.
+- npm/PyPI latest verified as `0.1.153`.
+- Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.153 runtime.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained from G4 diagnostics: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
-- Current v0.1.152 source/runtime runway now includes a 50-task expanded retrieval fixture gate (`live-compatible-50-gate.json`), 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with relation-equivalence/supersession-chain evidence, one fresh live G5 reviewed-candidate promotion (`candidate:29db0390b2f81bdb` -> `fact:4`) with backup/hash evidence, one guarded live reviewed procedure/episode promotion pair (`candidate:3435fe1db562aaf2` -> `procedure:1`, `candidate:4a35c03e7130fdec` -> `episode:1`) with backup/hash evidence, idempotent live G4 queue apply evidence, the explicit default-ranking opt-in-to-default migration plan at `.dev/roadmap/memory-consolidation/default-ranking-opt-in-to-default-migration.md`, and the released default-ranking migration mechanics.
-- Default-ranking migration mechanics are now released in v0.1.152: named `conservative_legacy`/`graph_reinforced_v1`/`shadow_compare` policy diagnostics, shadow compare on `retrieval-ranking-experiment`, and approval-gated config-only `retrieval-ranking-migrate-default` with protected table hash proof plus rollback metadata. Live Hermes remains on `conservative_legacy`; live shadow reports under `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/` include a 50-task representative live-Hermes-DB fact corpus and a 50-task mixed fact/procedure/episode corpus, both with 50/50 pass, zero baseline regressions, protected default order, and no durable ranking mutation. The checked-in expanded 50-task source fixture still fails against the tiny live DB because project-M1 references are absent; the gap artifact is `checked-in-expanded-50-live-gap.stderr.txt`.
+- Current v0.1.153 source/runtime runway now includes a 50-task expanded retrieval fixture gate (`live-compatible-50-gate.json`), 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with relation-equivalence/supersession-chain evidence, one fresh live G5 reviewed-candidate promotion (`candidate:29db0390b2f81bdb` -> `fact:4`) with backup/hash evidence, one guarded live reviewed procedure/episode promotion pair (`candidate:3435fe1db562aaf2` -> `procedure:1`, `candidate:4a35c03e7130fdec` -> `episode:1`) with backup/hash evidence, idempotent live G4 queue apply evidence, the explicit default-ranking opt-in-to-default migration plan at `.dev/roadmap/memory-consolidation/default-ranking-opt-in-to-default-migration.md`, and the released default-ranking migration mechanics.
+- Default-ranking migration mechanics are now released through v0.1.153: named `conservative_legacy`/`graph_reinforced_v1`/`shadow_compare` policy diagnostics, shadow compare on `retrieval-ranking-experiment`, and approval-gated config-only `retrieval-ranking-migrate-default` with protected table hash proof plus rollback metadata. Live Hermes remains on `conservative_legacy`; live shadow reports under `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/` include a 50-task representative live-Hermes-DB fact corpus and a 50-task mixed fact/procedure/episode corpus, both with 50/50 pass, zero baseline regressions, protected default order, and no durable ranking mutation. The checked-in expanded 50-task source fixture still fails against the tiny live DB because project-M1 references are absent; the gap artifact is `checked-in-expanded-50-live-gap.stderr.txt`.
 - Broad G4/background apply remains blocked; default retrieval ranking changes, collapse/delete apply, live telemetry reset, and ordinary conversation auto-approval remain blocked. The new fact `fact:4` also records this guardrail in the live memory DB.
 
 Progress estimate:
@@ -30,9 +30,9 @@ Progress estimate:
 Current interpretation:
 
 - The trace/retrieval/candidate/proof substrate is healthy enough for the next safety runway.
-- Completed in the current runway: expanded retrieval gate to 50 tasks, proved the checked-in fixture directory at 75/75 pass, moved collapse proof to `satisfied` with supersession-chain evidence while keeping collapse/delete disabled, ran one fresh non-idempotent narrow live reviewed-candidate fact promotion plus one guarded reviewed procedure/episode promotion pair with backup/hash verification, released/runtime-smoked v0.1.151, documented the explicit default-ranking opt-in-to-default migration plan, implemented and released the named-policy/shadow-compare/config-only migrate/rollback command path in v0.1.152, and smoke-tested live shadow comparison plus both 50-task representative live fact and mixed corpora without changing the live default.
+- Completed in the current runway: expanded retrieval gate to 50 tasks, proved the checked-in fixture directory at 75/75 pass, moved collapse proof to `satisfied` with supersession-chain evidence while keeping collapse/delete disabled, ran one fresh non-idempotent narrow live reviewed-candidate fact promotion plus one guarded reviewed procedure/episode promotion pair with backup/hash verification, released/runtime-smoked through v0.1.153, documented the explicit default-ranking opt-in-to-default migration plan, implemented and released the named-policy/shadow-compare/config-only migrate/rollback command path in v0.1.152, and smoke-tested live shadow comparison plus both 50-task representative live fact and mixed corpora without changing the live default.
 - Broad G4/background apply remains blocked; existing docs/RED-test-only broad-G4 baseline must not be advertised as ready.
-- Retrieval ranking changes remain opt-in experiments only; the expanded 50-task source experiment, the representative 50-task live-Hermes-DB fact corpus, and the representative 50-task mixed fact/procedure/episode corpus all passed as read-only comparisons with no durable ranking mutation. v0.1.152 adds released migration mechanics, but live default enablement still requires fresh-epoch telemetry green, the exact approval phrase, and explicit operator approval.
+- Retrieval ranking changes remain opt-in experiments only; the expanded 50-task source experiment, the representative 50-task live-Hermes-DB fact corpus, and the representative 50-task mixed fact/procedure/episode corpus all passed as read-only comparisons with no durable ranking mutation. v0.1.153 carries the released migration mechanics, but live default enablement still requires fresh-epoch telemetry green, the exact approval phrase, and explicit operator approval.
 
 Current safe mutation boundaries:
 
