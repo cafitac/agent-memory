@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 15:12 KST
+Last updated: 2026-05-13 15:48 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.152`; the `personal-oss` Hermes hook is healthy on the v0.1.152 runtime. The current verified runway now has a 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit-approval corridor evidence, an idempotent live G4 queue apply, named ranking policy/shadow-compare diagnostics, and approval-gated config-only default-ranking migrate/rollback mechanics. Broad G4/background apply, collapse/delete apply, live telemetry reset, and ordinary conversation auto-approval remain blocked. Live default ranking remains `conservative_legacy`.
+`agent-memory` is released and live-runtime-smoked through `v0.1.152`; the `personal-oss` Hermes hook is healthy on the v0.1.152 runtime. The current verified runway now has a 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit-approval corridor evidence, an idempotent live G4 queue apply, named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and a live Hermes DB 50-task representative shadow corpus. Broad G4/background apply, collapse/delete apply, live telemetry reset, default ranking migration, and ordinary conversation auto-approval remain blocked. Live default ranking remains `conservative_legacy`.
 
 ## Current progress estimate toward the north-star
 
@@ -50,26 +50,26 @@ Reasoning:
 - Historical scheduled dry-run retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`.
 - Source G5a-G5i checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, decay deprecate apply, ranking gate/experiment, rollback confidence, `rollback-replay-validate`, `retrieval-ranking-experiment`, `decay-collapse-decision`, `telemetry-reconciliation`, telemetry reconciliation/reset safety reporting, and G4 reviewed queue preview/persist/update/apply are merged and released through v0.1.150.
 - Current local follow-up evidence: expanded fixture file `tests/fixtures/retrieval_eval/expanded/live-compatible-50-gate.json` has 50 live-compatible tasks; checked-in fixture directory evaluates at 75/75 pass; opt-in ranking experiment report `/Users/reddit/.agent-memory/reports/g5i-ranking-experiment-expanded-50-20260513T1355/ranking-experiment-expanded-50.json` is read-only with `expanded_fixture_gate_met=true`, `eval_gate_pass=true`, and `default_ranking_mutated=false`; fresh live reviewed candidate `candidate:29db0390b2f81bdb` promoted to `fact:4` only through the guarded explicit-approval corridor.
-- Current source/runtime ranking evidence: `retrieval-ranking-experiment` has named policy/shadow-compare diagnostics; `retrieval-ranking-migrate-default` provides an approval-gated config-only migration with protected table hashes, audit output, and rollback metadata. v0.1.152 published and installed this path. Live shadow smoke report `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/live-fact4-shadow.json` preserved `conservative_legacy` as active policy, compared `graph_reinforced_v1` as candidate, returned zero baseline regressions, and did not mutate durable memory. The checked-in 50-task fixture is not directly runnable against the tiny live Hermes DB because project-M1 references are absent there; it remains covered by checked-in/source tests.
+- Current source/runtime ranking evidence: `retrieval-ranking-experiment` has named policy/shadow-compare diagnostics; `retrieval-ranking-migrate-default` provides an approval-gated config-only migration with protected table hashes, audit output, and rollback metadata. v0.1.152 published and installed this path. Live default remains `conservative_legacy`. Live shadow reports under `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/` include `live-fact4-shadow.json` and `live-hermes-approved-fact-50-corpus-v1-shadow.json`; the latter replayed 50 representative tasks against the tiny live Hermes DB with 50/50 pass, zero baseline regressions, protected default order, and no durable mutation. The checked-in 50-task fixture still is not directly runnable against the tiny live Hermes DB because project-M1 references are absent there; the gap artifact is `checked-in-expanded-50-live-gap.stderr.txt`.
 
 ## Current blocker
 
 The v0.1.152 runtime is healthy, but broad brain-like automation is still intentionally blocked:
 
-- Fresh epoch report `/tmp/agent-memory-fresh-epoch-v0149/fresh-epoch.json`: quality gate fails with `high_epoch_empty_retrieval_ratio` and `epoch_empty_retrieval_outcome_metadata_gap_classified`; continue dogfooding before trusting epoch-wide automation.
+- Fresh epoch report `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/fresh-epoch-since-v0152.json`: quality gate still fails with `epoch_empty_retrieval_outcome_metadata_gap_classified`; continue dogfooding before trusting epoch-wide automation.
 - G4 review queue copy/live-safe smoke `/tmp/agent-memory-apply-corridor-v0150/`: live preview/list/reconciliation were read-only; copy telemetry reset and copy G4 queue apply preserved durable memory (`mutated=false`); live G4 queue apply was idempotent with `applied_count=0`, `already_applied_count=1`, `mutated=false`, and `default_retrieval_unchanged=true`.
 - Historical telemetry reconciliation via the telemetry reset copy smoke `/tmp/agent-memory-telemetry-reset-decision/copy-apply.json`: deleting 1773 historical telemetry rows on a DB copy passed with protected durable memory tables unchanged. Live DB was not reset because the fresh epoch gate still fails; live reset remains manual-only behind `telemetry-reset-v1` and `apply-telemetry-reset-v1`.
 - Collapse proof is evidence-driven and can persist/replay per-candidate proof artifacts. The current local proof path can reach `satisfied` when supersession-chain/relation evidence exists, but collapse/delete apply remains disabled even after proof satisfaction.
-- Retrieval fixture coverage now includes a 50-task live-compatible expanded gate and 75 checked-in eval tasks across the directory. The opt-in ranking experiment passed the expanded gate as a read-only comparison, but default retrieval ranking is still unchanged and blocked until a separate default-rollout decision is made.
+- Retrieval fixture coverage now includes a 50-task live-compatible expanded source gate, 75 checked-in eval tasks across the directory, and a live-Hermes-DB representative 50-task fact corpus. The opt-in ranking experiments passed as read-only comparisons, but default retrieval ranking is still unchanged and blocked until a separate explicit default-rollout decision is made after fresh-epoch telemetry is green.
 - G4 broad apply contract remains blocked by policy even when a report is individually green. The guardrail now requires all of these to be green on real runtime evidence before reconsideration: retrieval ranking gate, rollback replay validation, live telemetry reconciliation, and human-reviewed queue approval; ordinary conversation auto-approval remains false.
 
 ## Recommended next work
 
 Proceed in this sequence:
 
-1. Keep live default ranking on `conservative_legacy` while collecting more shadow evidence from real runtime traffic/fixtures.
-2. Fix the live-compatible expanded fixture gap or seed a representative live shadow fixture corpus so the 50-task gate can be replayed against the live Hermes DB instead of only source fixtures.
-3. Continue telemetry/fresh-epoch reconciliation before trusting epoch-wide automation.
+1. Keep live default ranking on `conservative_legacy`; do not run `retrieval-ranking-migrate-default` against the live profile until an operator gives the exact approval phrase and fresh-epoch telemetry is green.
+2. Improve live fixture coverage beyond fact-only replay: seed or approve representative procedure/episode memories in a guarded corridor, then extend the live shadow corpus beyond the current 50 fact tasks.
+3. Continue telemetry/fresh-epoch reconciliation; current post-v0.1.152 telemetry reconciliation is green as telemetry-only, but fresh-epoch still blocks on `epoch_empty_retrieval_outcome_metadata_gap_classified`.
 4. Keep fresh reviewed candidate promotion limited to the guarded explicit-approval corridor.
 5. Keep broad G4/background apply blocked until ranking gate, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
 
@@ -87,7 +87,7 @@ Do not silently delete, reset, or rewrite telemetry. Historical reconciliation m
 
 If asked "다음으로 뭐해야 해?", answer:
 
-> 지금은 v0.1.152까지 릴리즈/설치/스모크가 끝났고 `personal-oss` Hermes hook도 doctor-green입니다. 전체 목표 대비 대략 76-78% 정도 왔습니다. retrieval eval은 expanded 50-task gate / checked-in 75-task pass까지 올라갔고, default-ranking migration의 첫 구현도 릴리즈됐습니다: named policy, shadow compare, approval-gated config-only migrate/rollback command입니다. live Hermes default는 여전히 `conservative_legacy`이고, v0.1.152 live shadow smoke는 `graph_reinforced_v1` 후보 비교에서 zero baseline regression/no mutation으로 통과했습니다. 다만 50-task expanded fixture는 현재 tiny live Hermes DB에 project-M1 reference facts가 없어서 직접 live replay가 막힙니다. 다음은 live shadow fixture corpus를 보강하고 telemetry/fresh-epoch reconciliation을 계속하는 순서입니다. broad G4/background apply, collapse/delete apply, ordinary conversation auto-approval은 아직 금지입니다.
+> 지금은 v0.1.152까지 릴리즈/설치/스모크가 끝났고 `personal-oss` Hermes hook도 doctor-green입니다. 전체 목표 대비 대략 76-78% 정도 왔습니다. live Hermes default는 여전히 `conservative_legacy`이고, `graph_reinforced_v1`은 shadow 후보로만 비교했습니다. 새 live-Hermes-DB 50-task representative fact corpus는 50/50 pass, zero baseline regression, no mutation으로 통과했습니다. 하지만 checked-in expanded 50-task fixture는 live DB에 project-M1 reference facts/procedures/episodes가 없어서 직접 replay는 아직 불가하고, post-v0.1.152 fresh-epoch도 `epoch_empty_retrieval_outcome_metadata_gap_classified`로 계속 block입니다. 다음은 live fixture coverage를 fact-only에서 procedure/episode까지 넓히고 fresh-epoch telemetry를 더 dogfood하는 순서입니다. broad G4/background apply, collapse/delete apply, ordinary conversation auto-approval, default ranking migration은 아직 금지입니다.
 
 ## Quick verification commands
 

@@ -1,11 +1,11 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 15:12 KST
+Last updated: 2026-05-13 15:48 KST
 
 ## v0.1.152 released runtime checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.152 release/runtime rollout: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, v0.1.152 `personal-oss` Hermes hook rollout, released named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and one live shadow smoke while keeping `conservative_legacy` as the live default.
+This document is the restartable checkpoint after the v0.1.152 release/runtime rollout: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, v0.1.152 `personal-oss` Hermes hook rollout, released named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and 50-task live-Hermes-DB representative shadow corpus evidence while keeping `conservative_legacy` as the live default.
 
 Current verified release state:
 
@@ -20,10 +20,10 @@ Current verified release state:
 Fresh diagnostics:
 
 - `g4-linkage-gap-diagnose-v0138-fresh.json`: decision `fresh_trace_linkage_gap_not_detected`.
-- `/tmp/agent-memory-fresh-epoch-v0149/fresh-epoch.json`: still blocks epoch-wide automation on high empty retrieval and metadata classification gaps.
+- `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/fresh-epoch-since-v0152.json`: still blocks epoch-wide automation on `epoch_empty_retrieval_outcome_metadata_gap_classified`.
 - `/tmp/agent-memory-apply-corridor-v0150/`: copy/live-safe explicit approval corridor smoke passed without unintended durable-memory mutation; live apply was idempotent.
 - `/tmp/agent-memory-telemetry-reset-decision/copy-apply.json`: copy telemetry reset passed with protected durable memory tables unchanged; live telemetry reset remains blocked.
-- 50-task expanded retrieval fixture gate exists and the checked-in fixture directory now evaluates at 75/75 pass; default ranking remains unchanged until a separate default-rollout decision.
+- 50-task expanded retrieval source fixture gate exists, the checked-in fixture directory evaluates at 75/75 pass, and the live-Hermes-DB representative 50-task fact corpus passes with zero shadow regressions/no durable mutation. The checked-in expanded fixture is still not directly replayable against the tiny live DB because project-M1 references are absent; default ranking remains unchanged until a separate explicit default-rollout decision.
 - Collapse proof artifacts can be persisted/replayed and can reach `satisfied` with reviewed supersession-chain/relation evidence, but collapse/delete apply remains disabled.
 
 Progress estimate:
@@ -35,13 +35,13 @@ Progress estimate:
 
 Current interpretation:
 
-Fresh v0.1.152 evidence and merged G5a-G5i plus default-ranking migration mechanics are healthy enough to continue the brain-like reviewed-candidate runway. The current runway has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate promotion, the explicit default-ranking opt-in-to-default migration design, released named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics, and a live shadow smoke preserving `conservative_legacy`. Broad G4/background apply remains blocked. Current next work is to build a representative live shadow fixture corpus or fix the live fixture reference gap, continue telemetry/fresh-epoch reconciliation, and only then consider explicit operator-approved default ranking migration.
+Fresh v0.1.152 evidence and merged G5a-G5i plus default-ranking migration mechanics are healthy enough to continue the brain-like reviewed-candidate runway. The current runway has completed the expanded retrieval source fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate promotion, the explicit default-ranking opt-in-to-default migration design, released named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics, and representative live-Hermes-DB shadow evidence preserving `conservative_legacy`. Broad G4/background apply remains blocked. Current next work is to broaden live shadow fixture coverage beyond facts into procedure/episode surfaces, continue telemetry/fresh-epoch reconciliation, and only then consider explicit operator-approved default ranking migration.
 
 Recommended sequence from here:
 
-1. Keep live default ranking on `conservative_legacy` while collecting more shadow evidence from real runtime traffic/fixtures.
-2. Fix the live-compatible expanded fixture gap or seed a representative live shadow fixture corpus so the 50-task gate can be replayed against the live Hermes DB instead of only source fixtures.
-3. Continue telemetry/fresh-epoch reconciliation before trusting epoch-wide automation.
+1. Keep live default ranking on `conservative_legacy`; do not run live `retrieval-ranking-migrate-default` until the operator gives the exact approval phrase and fresh-epoch telemetry is green.
+2. Broaden live shadow fixture coverage beyond the current 50 approved-fact tasks by seeding/approving representative procedure and episode memories through guarded review corridors.
+3. Continue telemetry/fresh-epoch reconciliation; current post-v0.1.152 telemetry-only reconciliation is green, but fresh-epoch still blocks on `epoch_empty_retrieval_outcome_metadata_gap_classified`.
 4. Keep collapse proof evidence-driven: `satisfied` requires supersession-chain/relation evidence, and collapse/delete apply remains disabled.
 5. Keep fresh reviewed candidate promotion limited to the explicit guarded corridor with backup/hash/actor/reason/approval evidence; do not use broad apply.
 6. Preserve broad G4/background apply as blocked until ranking, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
