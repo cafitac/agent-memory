@@ -59,7 +59,7 @@ def test_current_handoff_does_not_advertise_broad_g4_apply_as_ready() -> None:
     assert "docs/RED-test-only" in handoff
 
 
-def test_v0144_status_docs_record_g5g_local_slice_and_next_brainlike_steps() -> None:
+def test_v0146_status_docs_record_g5h_local_slice_and_next_brainlike_steps() -> None:
     next_action = _read_doc(".dev/status/next-agent-memory-action.md")
     handoff = _read_doc(".dev/status/current-handoff.md")
     current_progress = _read_doc(".dev/roadmap/memory-consolidation/current-progress-and-next-steps.md")
@@ -67,11 +67,11 @@ def test_v0144_status_docs_record_g5g_local_slice_and_next_brainlike_steps() -> 
     stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
 
     for doc in (next_action, handoff, current_progress):
-        assert "v0.1.144" in doc
-        assert "/Users/reddit/.agent-memory/runtime/v0.1.144/.venv/bin/agent-memory" in doc
+        assert "v0.1.146" in doc
+        assert "/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
-        assert "Overall north-star: 69-71%" in doc
+        assert "Overall north-star: 71-73%" in doc
         assert "broad g4/background apply" in doc.lower()
 
     assert "dogfood trace-cluster-preview" in next_action
@@ -80,6 +80,8 @@ def test_v0144_status_docs_record_g5g_local_slice_and_next_brainlike_steps() -> 
     assert "G5d" in next_action
     assert "G5e" in next_action
     assert "G5f" in next_action
+    assert "G5g" in next_action
+    assert "G5h" in next_action
     assert "review_score" in next_action
     assert "dogfood reinforcement-refinement-preview" in next_action
     assert "dogfood decay-collapse-preview" in next_action
@@ -87,8 +89,12 @@ def test_v0144_status_docs_record_g5g_local_slice_and_next_brainlike_steps() -> 
     assert "stale weak evidence -> decay/collapse candidate preview" in next_action
     assert "conflict -> supersession/replacement candidate preview" in next_action
     assert "reviewed decay deprecate" in next_action
-    assert "retrieval-ranking gate" in next_action
+    assert "retrieval-ranking" in next_action
     assert "rollback confidence" in next_action
+    assert "rollback-replay-validate" in next_action
+    assert "retrieval-ranking-experiment" in next_action
+    assert "decay-collapse-decision" in next_action
+    assert "telemetry-reconciliation" in next_action
     assert "G4 broad apply contract" in next_action
     assert "historical telemetry reconciliation" in next_action.lower()
     assert "trace cluster -> consolidation candidate" in stage_g
