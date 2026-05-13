@@ -2875,6 +2875,111 @@ def test_python_module_cli_dogfood_trace_quality_reports_read_only_aggregate_sig
 
 
 
+def test_python_module_cli_dogfood_trace_quality_epoch_start_filters_legacy_rows(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "trace-quality-epoch.db"
+    initialize_database(db_path)
+    old_time = "2026-05-09 00:00:00"
+    epoch_start = "2026-05-10T00:00:00Z"
+    fresh_time = "2026-05-10 00:05:00"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', ?, '', 'project:legacy', 1, '["approved"]', '[]', NULL, NULL, ?)
+            """,
+            (old_time, "a" * 64, json.dumps({"hook_event_name": "pre_llm_call"})),
+        )
+        connection.execute(
+            """
+            INSERT INTO retrieval_observations (
+                id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', ?, '', 'project:fresh', 1, '["approved"]', '["fact:1"]', 'fact:1', 'direct', ?)
+            """,
+            (fresh_time, "b" * 64, json.dumps({"hook_event_name": "pre_llm_call", "retrieval_outcome": "retrieved_memory"})),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, strength, scope, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', 'empty_retrieval', NULL, 1, NULL, 0.0, 'project:legacy', '{}')
+            """,
+            (old_time,),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, strength, scope, metadata_json
+            ) VALUES (2, ?, 'hermes-pre-llm-hook', 'retrieved', 'fact:1', 2, 1, 1.0, 'project:fresh', '{}')
+            """,
+            (fresh_time,),
+        )
+        connection.execute(
+            """
+            INSERT INTO experience_traces (
+                id, created_at, surface, event_kind, content_sha256, summary, scope,
+                related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+            ) VALUES (1, ?, 'hermes-pre-llm-hook', 'turn', ?, NULL, 'project:fresh', '["fact:1"]', '[2]', 'ephemeral', ?)
+            """,
+            (fresh_time, "c" * 64, json.dumps({"trace_recording": "default_metadata_only", "candidate_policy": "evidence_only", "auto_approved": False})),
+        )
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-quality",
+            str(db_path),
+            "--epoch-start",
+            epoch_start,
+            "--min-trace-coverage",
+            "0.95",
+            "--min-evidence-count",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_trace_quality"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["time_window"]["epoch_start"] == "2026-05-10 00:00:00"
+    assert payload["time_window"]["historical_rows_excluded"] == {
+        "experience_traces": 0,
+        "memory_activations": 1,
+        "retrieval_observations": 1,
+    }
+    assert payload["coverage"]["observation_count"] == 1
+    assert payload["coverage"]["trace_count"] == 1
+    assert payload["coverage"]["observation_trace_coverage_ratio"] == 1.0
+    assert payload["retrieval_quality"]["empty_retrieval_count"] == 0
+    assert payload["warnings"] == []
+    assert payload["privacy"]["aggregate_only"] is True
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("retrieval_observations", "memory_activations", "experience_traces")
+        }
+    assert after_counts == before_counts
+
+
 def test_python_module_cli_dogfood_fresh_epoch_filters_historical_telemetry_without_mutation(
     tmp_path: Path,
 ) -> None:
@@ -4344,6 +4449,8 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
             str(output_path),
             "--since-hours",
             "24",
+            "--epoch-start",
+            "2000-01-01T00:00:00Z",
             "--min-trace-coverage",
             "0.25",
             "--min-evidence-count",
@@ -4371,6 +4478,8 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
     assert payload["reports"]["storage_health"]["status"] == "healthy"
     assert "storage_health_not_clean" not in payload["quality_gate"]["blocked_reasons"]
     assert payload["reports"]["trace_quality"]["kind"] == "dogfood_trace_quality"
+    assert payload["reports"]["trace_quality"]["time_window"]["epoch_start"] == "2000-01-01 00:00:00"
+    assert payload["thresholds"]["epoch_start"] == "2000-01-01T00:00:00Z"
     assert payload["reports"]["remember_intent"]["kind"] == "remember_intent_dogfood_report"
     assert payload["reports"]["background_dry_run"]["kind"] == "memory_consolidation_background_dry_run"
     assert payload["quality_gate"]["decision"] in {

@@ -1,11 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 18:19 KST
+Last updated: 2026-05-13 21:23 KST
 
 
 
 
+
+## v0.1.154 continuation / v0.1.155 source checkpoint
+
+- Continuation report directory: `/Users/reddit/.agent-memory/reports/v0.1.154-continuation-20260513T120215/`.
+- Fresh post-v0.1.154 runtime window using the released v0.1.154 CLI still showed that the old `scheduled-dry-run --since-hours` path can be blocked by historical rows in the lookback window.
+- Source now adds `--epoch-start` to `dogfood trace-quality` and propagates it through `dogfood scheduled-dry-run`, so scheduled bundles can measure the same fresh epoch boundary as `dogfood fresh-epoch` instead of mixing in legacy rows.
+- Repo-run evidence with `--epoch-start 2026-05-13T09:18:00Z` is green/read-only/no-mutation: `trace-quality-epoch-start-repo.json` has coverage `0.96`, no trace-quality warnings, empty retrieval ratio `0.32`, and historical excluded counts for retrieval observations/memory activations/experience traces; `scheduled-dry-run-epoch-start-repo.json` has decision `scheduled_dry_run_quality_gate_passed_plan_g4_only`.
+- This does not enable broad G4/background apply. It only removes a measurement ambiguity so fresh-epoch scheduled evidence can be compared safely. Default ranking migration, collapse/delete apply, ordinary conversation auto-approval, and telemetry reset remain blocked without explicit approval corridors.
+- Local full suite after the source slice: `uv run --python 3.11 pytest tests/ -q` -> `307 passed, 1 xfailed`.
 
 ## v0.1.154 active runtime checkpoint
 

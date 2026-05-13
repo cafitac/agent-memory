@@ -5444,6 +5444,7 @@ def _dogfood_scheduled_dry_run_payload(args: argparse.Namespace) -> dict[str, An
         argparse.Namespace(
             db_path=args.db_path,
             since_hours=args.since_hours,
+            epoch_start=getattr(args, "epoch_start", None),
             min_trace_coverage=args.min_trace_coverage,
             min_evidence_count=args.min_evidence_count,
         )
@@ -5485,6 +5486,7 @@ def _dogfood_scheduled_dry_run_payload(args: argparse.Namespace) -> dict[str, An
         },
         "thresholds": {
             "since_hours": args.since_hours,
+            "epoch_start": getattr(args, "epoch_start", None),
             "min_trace_coverage": args.min_trace_coverage,
             "min_evidence_count": args.min_evidence_count,
             "candidate_min": args.candidate_min,
@@ -6571,6 +6573,7 @@ def _parse_epoch_start(value: str) -> str:
 
 def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
+    epoch_start = _parse_epoch_start(args.epoch_start) if getattr(args, "epoch_start", None) else None
     since_hours = args.since_hours
     min_trace_coverage = args.min_trace_coverage
     min_evidence_count = args.min_evidence_count
@@ -6584,47 +6587,63 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
             "warnings": ["database_missing"],
         }
 
-    since_modifier = f"-{since_hours} hours"
+    if epoch_start:
+        time_filter_sql = "created_at >= ?"
+        time_filter_params = (epoch_start,)
+        time_window = {"epoch_start": epoch_start}
+    else:
+        since_modifier = f"-{since_hours} hours"
+        time_filter_sql = "created_at >= datetime('now', ?)"
+        time_filter_params = (since_modifier,)
+        time_window = {"since_hours": since_hours, "sqlite_since_modifier": since_modifier}
+
     with _open_readonly_sqlite(db_path) as connection:
         observation_rows = (
             connection.execute(
-                """
+                f"""
                 SELECT id, retrieved_memory_refs_json
                 FROM retrieval_observations
-                WHERE created_at >= datetime('now', ?)
+                WHERE {time_filter_sql}
                 ORDER BY id ASC
                 """,
-                (since_modifier,),
+                time_filter_params,
             ).fetchall()
             if _table_exists(connection, "retrieval_observations")
             else []
         )
         trace_rows = (
             connection.execute(
-                """
+                f"""
                 SELECT event_kind, retention_policy, related_memory_refs_json, related_observation_ids_json
                 FROM experience_traces
-                WHERE created_at >= datetime('now', ?)
+                WHERE {time_filter_sql}
                 ORDER BY id ASC
                 """,
-                (since_modifier,),
+                time_filter_params,
             ).fetchall()
             if _table_exists(connection, "experience_traces")
             else []
         )
         activation_rows = (
             connection.execute(
-                """
+                f"""
                 SELECT activation_kind, memory_ref, observation_id
                 FROM memory_activations
-                WHERE created_at >= datetime('now', ?)
+                WHERE {time_filter_sql}
                 ORDER BY id ASC
                 """,
-                (since_modifier,),
+                time_filter_params,
             ).fetchall()
             if _table_exists(connection, "memory_activations")
             else []
         )
+        if epoch_start:
+            time_window["historical_rows_excluded"] = {
+                table: int(connection.execute(f"SELECT COUNT(*) FROM {table} WHERE created_at < ?", (epoch_start,)).fetchone()[0])
+                if _table_exists(connection, table)
+                else 0
+                for table in ("experience_traces", "memory_activations", "retrieval_observations")
+            }
         ordinary_invariant = _ordinary_trace_metadata_only_invariant(connection)
         metadata_invariant = _metadata_json_validity(connection)
 
@@ -6702,10 +6721,7 @@ def _dogfood_trace_quality_payload(args: argparse.Namespace) -> dict[str, Any]:
         "mutated": False,
         "status": "healthy" if not warnings else "warning",
         "database": {"path": str(db_path), "exists": True},
-        "time_window": {
-            "since_hours": since_hours,
-            "sqlite_since_modifier": since_modifier,
-        },
+        "time_window": time_window,
         "thresholds": {
             "min_trace_coverage": min_trace_coverage,
             "min_evidence_count": min_evidence_count,
@@ -10761,6 +10777,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_trace_quality_parser.add_argument("db_path", type=Path)
     dogfood_trace_quality_parser.add_argument("--since-hours", type=int, default=24)
+    dogfood_trace_quality_parser.add_argument("--epoch-start", help="Optional ISO-8601 cutoff for fresh-epoch trace quality measurement.")
     dogfood_trace_quality_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_trace_quality_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_trace_cluster_preview_parser = dogfood_subparsers.add_parser(
@@ -11098,6 +11115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_scheduled_parser.add_argument("--output", type=Path)
     dogfood_scheduled_parser.add_argument("--hermes-config", type=Path)
     dogfood_scheduled_parser.add_argument("--since-hours", type=int, default=24)
+    dogfood_scheduled_parser.add_argument("--epoch-start", help="Optional ISO-8601 cutoff for fresh-epoch trace quality inside the scheduled bundle.")
     dogfood_scheduled_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_scheduled_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_scheduled_parser.add_argument("--limit", type=int, default=200)
@@ -11983,6 +12001,8 @@ def main() -> None:
         if args.dogfood_action == "trace-quality":
             if args.since_hours < 1:
                 raise ValueError("dogfood trace-quality since-hours must be >= 1")
+            if getattr(args, "epoch_start", None):
+                _parse_epoch_start(args.epoch_start)
             if not 0 <= args.min_trace_coverage <= 1:
                 raise ValueError("dogfood trace-quality min-trace-coverage must be between 0 and 1")
             if args.min_evidence_count < 1:
