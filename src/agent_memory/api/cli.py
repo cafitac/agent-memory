@@ -8,6 +8,7 @@ import json
 import shutil
 import sqlite3
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3426,8 +3427,121 @@ def _rollback_confidence_for_backup(backup_path: str, expected_sha256: str | Non
         "backup_path": str(path),
         "backup_exists": exists,
         "backup_sha256_matches": bool(expected_sha256 and actual_sha256 == expected_sha256),
-        "restore_command": f"agent-memory backup restore {path} <target-db>" if exists else None,
+        "restore_command": f"cp {path} <target-db>" if exists else None,
     }
+
+
+def _sqlite_table_counts_for_tables(db_path: Path, tables: tuple[str, ...]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    with sqlite3.connect(db_path) as connection:
+        for table in tables:
+            counts[table] = int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if _table_exists(connection, table) else 0
+    return counts
+
+
+def _validate_sqlite_backup_restore(backup_path: str, expected_sha256: str | None, *, temp_dir: Path) -> dict[str, Any]:
+    path = Path(backup_path).expanduser().resolve(strict=False)
+    confidence = _rollback_confidence_for_backup(str(path), expected_sha256)
+    validation: dict[str, Any] = {
+        **confidence,
+        "restore_replay_checked": False,
+        "restored_db_opened": False,
+        "schema_initialized": False,
+        "table_counts_match_backup": False,
+        "raw_content_included": False,
+    }
+    if not path.exists() or not confidence["backup_sha256_matches"]:
+        return validation
+    restore_path = temp_dir / f"restore-{hashlib.sha256(str(path).encode('utf-8')).hexdigest()[:12]}.db"
+    shutil.copy2(path, restore_path)
+    try:
+        initialize_database(restore_path)
+        tables = (
+            "source_records",
+            "facts",
+            "procedures",
+            "episodes",
+            "relations",
+            "memory_status_transitions",
+            "retrieval_observations",
+            "experience_traces",
+            "memory_activations",
+        )
+        original_counts = _sqlite_table_counts_for_tables(path, tables)
+        restored_counts = _sqlite_table_counts_for_tables(restore_path, tables)
+        validation.update(
+            {
+                "restore_replay_checked": True,
+                "restored_db_opened": True,
+                "schema_initialized": True,
+                "table_counts_match_backup": original_counts == restored_counts,
+                "restored_table_counts": restored_counts,
+            }
+        )
+    except sqlite3.DatabaseError as exc:
+        validation["restore_error"] = type(exc).__name__
+    finally:
+        if restore_path.exists():
+            restore_path.unlink()
+    return validation
+
+
+def _dogfood_rollback_replay_validate_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id, proposal_type, promoted_ref, policy, action, backup_path, backup_sha256, rollback_hint_json, created_at
+            FROM g5_trace_candidate_applications
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        ).fetchall()
+    applications: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory() as temp_dir_raw:
+        temp_dir = Path(temp_dir_raw)
+        for row in rows:
+            replay = _validate_sqlite_backup_restore(row["backup_path"], row["backup_sha256"], temp_dir=temp_dir)
+            applications.append(
+                {
+                    "candidate_id": row["candidate_id"],
+                    "proposal_type": row["proposal_type"],
+                    "policy": row["policy"],
+                    "action": row["action"],
+                    "promoted_ref": row["promoted_ref"],
+                    "created_at": row["created_at"],
+                    "rollback_hint": _safe_json_dict_from_db(row["rollback_hint_json"]),
+                    "rollback_replay_validation": replay,
+                }
+            )
+    blocked_reasons: list[str] = []
+    if any(not app["rollback_replay_validation"]["backup_exists"] for app in applications):
+        blocked_reasons.append("missing_backup")
+    if any(not app["rollback_replay_validation"]["backup_sha256_matches"] for app in applications):
+        blocked_reasons.append("backup_checksum_mismatch")
+    if any(not app["rollback_replay_validation"]["restored_db_opened"] for app in applications):
+        blocked_reasons.append("restore_open_failed")
+    if any(not app["rollback_replay_validation"]["table_counts_match_backup"] for app in applications):
+        blocked_reasons.append("restore_table_count_mismatch")
+    payload = {
+        "kind": "dogfood_rollback_replay_validate",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "application_count": len(applications),
+        "applications": applications,
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "blocked_reasons": blocked_reasons,
+            "decision": "rollback_restore_replay_sufficient_for_bounded_partial_automation" if not blocked_reasons else "fix_restore_replay_before_broader_automation",
+        },
+        "privacy": {"raw_content_included": False, "backup_content_included": False},
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -3648,10 +3762,33 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
                 ),
                 "safe_evidence": {
                     "evidence_trace_ids": cluster.get("evidence_trace_ids", []),
+                    "evidence_trace_count": len(cluster.get("evidence_trace_ids", []) if isinstance(cluster.get("evidence_trace_ids"), list) else []),
                     "related_memory_refs": cluster.get("related_memory_refs", []),
+                    "related_memory_count": len(cluster.get("related_memory_refs", []) if isinstance(cluster.get("related_memory_refs"), list) else []),
                     "related_observation_ids": cluster.get("related_observation_ids", []),
+                    "related_observation_count": len(cluster.get("related_observation_ids", []) if isinstance(cluster.get("related_observation_ids"), list) else []),
                     "raw_content_included": False,
                 },
+                "classification_signals": {
+                    "guessed_memory_type": guessed_type,
+                    "proposal_type": proposal_type,
+                    "has_related_memory": bool(cluster.get("related_memory_refs")),
+                    "has_observations": bool(cluster.get("related_observation_ids")),
+                },
+                "quality_annotations": {
+                    "confidence_band": "reviewable" if cluster.get("review_score") else "needs_more_evidence",
+                    "missing_human_fields": (
+                        ["subject", "predicate", "object", "scope", "confidence"]
+                        if proposal_type in {"fact", "preference"}
+                        else ["name", "trigger_context", "step", "scope", "confidence"]
+                    ),
+                    "auto_promotion_allowed": False,
+                },
+                "promotion_template": (
+                    {"promotion_type": proposal_type, "subject": None, "predicate": None, "object": None, "scope": "global", "confidence": 0.7}
+                    if proposal_type in {"fact", "preference"}
+                    else {"promotion_type": proposal_type, "name": None, "trigger_context": None, "precondition": [], "step": [], "scope": "global", "confidence": 0.7}
+                ),
                 "next_review_command": "agent-memory dogfood trace-candidate-update ... --promotion-type " + proposal_type,
             }
         )
@@ -3707,6 +3844,134 @@ def _dogfood_retrieval_ranking_gate_payload(args: argparse.Namespace) -> dict[st
         "baseline_regression_count": baseline_regression_count,
         "max_baseline_regressions": args.max_baseline_regressions,
         "policy": "ranking changes require passing retrieval eval gate before implementation",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _fixture_tasks_for_preview(fixtures_path: Path) -> list[dict[str, Any]]:
+    data = json.loads(fixtures_path.read_text())
+    tasks = data.get("tasks", []) if isinstance(data, dict) else []
+    return [task for task in tasks if isinstance(task, dict)]
+
+
+def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> dict[str, Any]:
+    gate = _dogfood_retrieval_ranking_gate_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            fixtures=args.fixtures,
+            baseline_mode=args.baseline_mode,
+            max_baseline_regressions=args.max_baseline_regressions,
+            output=None,
+        )
+    )
+    previews: list[dict[str, Any]] = []
+    if gate["ranking_change_allowed"]:
+        for task in _fixture_tasks_for_preview(args.fixtures)[: args.max_tasks]:
+            query = str(task.get("query") or "")
+            if not query:
+                continue
+            previews.append(
+                _retrieval_ranker_preview(
+                    args.db_path,
+                    query=query,
+                    limit=_safe_int(task.get("limit", args.limit)) or args.limit,
+                    preferred_scope=task.get("preferred_scope"),
+                    reinforcement_weight=args.reinforcement_weight,
+                    reinforcement_cap=args.reinforcement_cap,
+                )
+            )
+    rank_change_count = sum(len(preview.get("rank_changes", [])) for preview in previews)
+    payload = {
+        "kind": "dogfood_retrieval_ranking_experiment",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "experiment_mode": "eval_gated_opt_in_ranker_preview_only",
+        "gate": gate,
+        "preview_count": len(previews),
+        "rank_change_count": rank_change_count,
+        "previews": previews,
+        "promotion_policy": {
+            "default_ranking_mutated": False,
+            "requires_gate_pass": True,
+            "requires_live_e2e_before_default": True,
+            "ordinary_conversation_auto_enable": False,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[str, Any]:
+    preview = _dogfood_decay_collapse_preview_payload(args)
+    candidate_count = _safe_int(preview.get("candidate_count", 0))
+    payload = {
+        "kind": "dogfood_decay_collapse_decision",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "candidate_count": candidate_count,
+        "preview_quality_gate": preview.get("quality_gate", {}),
+        "decision": {
+            "deprecate_corridor": "supported_for_reviewed_approved_decay_candidates",
+            "collapse_corridor": "blocked_until_restore_replay_and_relation_equivalence_are_green",
+            "delete_corridor": "blocked_no_delete_apply_path",
+            "broader_background_apply": "blocked",
+        },
+        "allowed_next_policy": "g5-lifecycle-decay-deprecate-apply-v1",
+        "blocked_policies": ["g5-lifecycle-collapse-apply-v1", "g5-lifecycle-delete-apply-v1"],
+        "required_evidence_before_collapse": [
+            "rollback_replay_validate_pass",
+            "relation_equivalence_or_supersession_chain",
+            "retrieval_eval_gate_pass",
+            "human_reviewed_candidate_payload",
+        ],
+        "privacy": {"raw_content_included": False, "sample_values_included": False},
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_telemetry_reconciliation_payload(args: argparse.Namespace) -> dict[str, Any]:
+    fresh = _dogfood_fresh_epoch_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            epoch_start=args.epoch_start,
+            output=None,
+            min_trace_coverage=args.min_trace_coverage,
+            min_evidence_count=args.min_evidence_count,
+            high_empty_threshold=args.high_empty_threshold,
+        )
+    )
+    reset_preview = _dogfood_telemetry_reset_preview_payload(
+        argparse.Namespace(db_path=args.db_path, epoch_start=args.epoch_start, output=None)
+    )
+    payload = {
+        "kind": "dogfood_telemetry_reconciliation",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "reconciliation_mode": "historical_telemetry_only_corridor",
+        "fresh_epoch_quality_gate": fresh.get("quality_gate", {}),
+        "telemetry_reset_preview": {
+            "candidate_delete_total": reset_preview.get("candidate_delete_total"),
+            "candidate_delete_by_table": reset_preview.get("candidate_delete_by_table"),
+            "protected_memory_tables_mutated": False,
+            "warnings": reset_preview.get("warnings", []),
+        },
+        "apply_corridor": {
+            "supported_command": "dogfood telemetry-reset-apply",
+            "policy": "telemetry-reset-v1",
+            "approval_phrase": "apply-telemetry-reset-v1",
+            "protected_memory_tables_mutated": False,
+            "ordinary_conversation_auto_apply": False,
+        },
+        "quality_gate": {
+            "pass": bool(reset_preview.get("candidate_delete_total", 0) is not None),
+            "decision": "telemetry_only_reconciliation_ready_for_manual_apply"
+        },
+        "privacy": {"raw_content_included": False, "raw_query_text_included": False, "sample_values_included": False},
     }
     _write_json_report(args.output, payload)
     return payload
@@ -10077,6 +10342,36 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_rollback_confidence_parser.add_argument("db_path", type=Path)
     dogfood_rollback_confidence_parser.add_argument("--limit", type=int, default=50)
     dogfood_rollback_confidence_parser.add_argument("--output", type=Path)
+    dogfood_rollback_replay_validate_parser = dogfood_subparsers.add_parser(
+        "rollback-replay-validate",
+        help="Replay lifecycle application backups into temporary SQLite restores and verify rollback readiness without mutation.",
+    )
+    dogfood_rollback_replay_validate_parser.add_argument("db_path", type=Path)
+    dogfood_rollback_replay_validate_parser.add_argument("--limit", type=int, default=50)
+    dogfood_rollback_replay_validate_parser.add_argument("--output", type=Path)
+    dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
+        "retrieval-ranking-experiment",
+        help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
+    )
+    dogfood_retrieval_ranking_experiment_parser.add_argument("db_path", type=Path)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--fixtures", type=Path, required=True)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--baseline-mode")
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--max-baseline-regressions", type=int, default=0)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--max-tasks", type=int, default=5)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--limit", type=int, default=5)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--reinforcement-weight", type=float, default=1.5)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--reinforcement-cap", type=float, default=1.0)
+    dogfood_retrieval_ranking_experiment_parser.add_argument("--output", type=Path)
+    dogfood_decay_collapse_decision_parser = dogfood_subparsers.add_parser(
+        "decay-collapse-decision",
+        help="Summarize the safe decision boundary after decay/collapse preview: deprecate only; collapse/delete blocked.",
+    )
+    dogfood_decay_collapse_decision_parser.add_argument("db_path", type=Path)
+    dogfood_decay_collapse_decision_parser.add_argument("--limit", type=int, default=200)
+    dogfood_decay_collapse_decision_parser.add_argument("--top", type=int, default=20)
+    dogfood_decay_collapse_decision_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_decay_collapse_decision_parser.add_argument("--min-decay-score", type=float, default=0.5)
+    dogfood_decay_collapse_decision_parser.add_argument("--output", type=Path)
     dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
         "trace-candidate-persist",
         help="Persist G5 trace-cluster candidates for explicit human review without promoting memories.",
@@ -10154,6 +10449,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_telemetry_reset_apply_parser.add_argument("--reason", required=True)
     dogfood_telemetry_reset_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_telemetry_reset_apply_parser.add_argument("--output", type=Path)
+    dogfood_telemetry_reconciliation_parser = dogfood_subparsers.add_parser(
+        "telemetry-reconciliation",
+        help="Build a read-only historical telemetry reconciliation report and telemetry-only apply corridor summary.",
+    )
+    dogfood_telemetry_reconciliation_parser.add_argument("db_path", type=Path)
+    dogfood_telemetry_reconciliation_parser.add_argument("--epoch-start", required=True)
+    dogfood_telemetry_reconciliation_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
+    dogfood_telemetry_reconciliation_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_telemetry_reconciliation_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
+    dogfood_telemetry_reconciliation_parser.add_argument("--output", type=Path)
     dogfood_g4_review_queue_preview_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-preview",
         help="Build a read-only broad G4 review queue preview with ref-safe evidence and no queue persistence/apply.",
@@ -11153,6 +11458,15 @@ def main() -> None:
         if args.dogfood_action == "rollback-confidence":
             print(json.dumps(_dogfood_rollback_confidence_payload(args), indent=2))
             return
+        if args.dogfood_action == "rollback-replay-validate":
+            print(json.dumps(_dogfood_rollback_replay_validate_payload(args), indent=2))
+            return
+        if args.dogfood_action == "retrieval-ranking-experiment":
+            print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))
+            return
+        if args.dogfood_action == "decay-collapse-decision":
+            print(json.dumps(_dogfood_decay_collapse_decision_payload(args), indent=2))
+            return
         if args.dogfood_action == "trace-candidate-persist":
             print(json.dumps(_dogfood_trace_candidate_persist_payload(args), indent=2))
             return
@@ -11181,6 +11495,9 @@ def main() -> None:
             return
         if args.dogfood_action == "telemetry-reset-apply":
             print(json.dumps(_dogfood_telemetry_reset_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "telemetry-reconciliation":
+            print(json.dumps(_dogfood_telemetry_reconciliation_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-review-queue-preview":
             if args.queue_limit < 1:

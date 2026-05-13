@@ -10007,6 +10007,166 @@ def test_dogfood_new_brainlike_readiness_commands_are_safe_and_helpful(tmp_path:
 
 
 
+def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Path) -> None:
+    db_path = tmp_path / "g5h-next-steps.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5h next-step source token=SHOULD_NOT_LEAK must stay private. Project G5h uses rollback replay before automation.",
+        metadata={"project": "g5h"},
+    )
+    stale_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project G5h stale memory",
+        predicate="needs",
+        object_ref_or_value="reviewed deprecation",
+        evidence_ids=[source.id],
+        scope="project:g5h",
+        confidence=0.42,
+    )
+    ranked_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project G5h ranking",
+        predicate="requires",
+        object_ref_or_value="eval backed experiment",
+        evidence_ids=[source.id],
+        scope="project:g5h",
+        confidence=0.96,
+    )
+    approve_fact(db_path=db_path, fact_id=ranked_fact.id)
+    record_retrieval_observation(
+        db_path,
+        surface="cli",
+        query="SHOULD_NOT_LEAK stale g5h decay query",
+        preferred_scope="project:g5h",
+        limit=5,
+        statuses=("approved", "candidate"),
+        retrieval_trace=[_fact_trace(stale_fact.id, label="g5h stale candidate")],
+        response_mode="verify_first",
+        metadata={"session_id": "g5h-stale", "raw_prompt": "SHOULD_NOT_LEAK"},
+    )
+    for index in range(4):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK g5h decay query",
+            preferred_scope="project:g5h",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(ranked_fact.id, label="g5h ranked fact")],
+            response_mode="verify_first",
+            metadata={"session_id": f"g5h-{index}", "raw_prompt": "SHOULD_NOT_LEAK"},
+        )
+    before_counts = _table_counts(db_path, ["facts", "relations", "memory_status_transitions", "retrieval_observations", "experience_traces"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "lifecycle-candidate-persist", str(db_path),
+            "--candidate-kind", "decay", "--actor", "tester", "--reason", "g5h decay candidate", "--limit", "20", "--top", "5",
+            "--frequent-threshold", "3", "--min-decay-score", "0.5",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    update_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "lifecycle-candidate-update", str(db_path), candidate_id,
+            "--status", "approved", "--actor", "tester", "--reason", "approve g5h", "--approval-phrase", "approve-g5-lifecycle-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    backup_path = tmp_path / "g5h-apply-backup.db"
+    apply_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "lifecycle-candidate-apply", str(db_path),
+            "--candidate-id", candidate_id, "--policy", "g5-lifecycle-decay-deprecate-apply-v1",
+            "--approval-phrase", "apply-approved-g5-lifecycle-decay-deprecate-v1", "--actor", "tester", "--reason", "guarded g5h apply",
+            "--backup-path", str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+
+    replay_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "rollback-replay-validate", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert replay_result.returncode == 0, replay_result.stderr
+    replay_payload = json.loads(replay_result.stdout)
+    assert replay_payload["kind"] == "dogfood_rollback_replay_validate"
+    assert replay_payload["read_only"] is True
+    assert replay_payload["quality_gate"]["pass"] is True
+    assert replay_payload["applications"][0]["rollback_replay_validation"]["restored_db_opened"] is True
+    assert replay_payload["applications"][0]["rollback_replay_validation"]["table_counts_match_backup"] is True
+
+    fixture_path = tmp_path / "g5h-ranking-fixture.json"
+    fixture_path.write_text(json.dumps({"tasks": [{"id": "g5h-ranking", "query": "What does Project G5h ranking require?", "preferred_scope": "project:g5h", "limit": 5, "expected": {"facts": [ranked_fact.id], "procedures": [], "episodes": []}, "avoid": {"facts": [], "procedures": [], "episodes": []}}]}))
+    experiment_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "retrieval-ranking-experiment", str(db_path),
+            "--fixtures", str(fixture_path), "--reinforcement-weight", "1.5", "--reinforcement-cap", "1.0",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert experiment_result.returncode == 0, experiment_result.stderr
+    experiment_payload = json.loads(experiment_result.stdout)
+    assert experiment_payload["kind"] == "dogfood_retrieval_ranking_experiment"
+    assert experiment_payload["read_only"] is True
+    assert experiment_payload["default_retrieval_unchanged"] is True
+    assert experiment_payload["promotion_policy"]["ordinary_conversation_auto_enable"] is False
+
+    decision_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "decay-collapse-decision", str(db_path), "--limit", "20", "--top", "5"],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert decision_result.returncode == 0, decision_result.stderr
+    decision_payload = json.loads(decision_result.stdout)
+    assert decision_payload["decision"]["deprecate_corridor"] == "supported_for_reviewed_approved_decay_candidates"
+    assert decision_payload["decision"]["collapse_corridor"].startswith("blocked")
+    assert "g5-lifecycle-delete-apply-v1" in decision_payload["blocked_policies"]
+
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    generate_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "trace-candidate-generate", str(db_path), "--limit", "20", "--top", "5"],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert generate_result.returncode == 0, generate_result.stderr
+    generate_payload = json.loads(generate_result.stdout)
+    assert generate_payload["generated_candidates"]
+    generated = generate_payload["generated_candidates"][0]
+    assert "classification_signals" in generated
+    assert "quality_annotations" in generated
+    assert "promotion_template" in generated
+    assert generated["quality_annotations"]["auto_promotion_allowed"] is False
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("UPDATE retrieval_observations SET created_at = '2020-01-01T00:00:00+00:00'")
+        connection.execute("UPDATE experience_traces SET created_at = '2026-01-01T00:00:00+00:00'")
+    reconciliation_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "telemetry-reconciliation", str(db_path),
+            "--epoch-start", "2025-01-01T00:00:00+00:00",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert reconciliation_result.returncode == 0, reconciliation_result.stderr
+    reconciliation_payload = json.loads(reconciliation_result.stdout)
+    assert reconciliation_payload["kind"] == "dogfood_telemetry_reconciliation"
+    assert reconciliation_payload["read_only"] is True
+    assert reconciliation_payload["apply_corridor"]["protected_memory_tables_mutated"] is False
+    assert reconciliation_payload["apply_corridor"]["ordinary_conversation_auto_apply"] is False
+    assert _table_counts(db_path, ["facts", "relations"])["facts"] == before_counts["facts"] + 1
+    assert "SHOULD_NOT_LEAK" not in replay_result.stdout
+    assert "SHOULD_NOT_LEAK" not in experiment_result.stdout
+    assert "SHOULD_NOT_LEAK" not in decision_result.stdout
+    assert "SHOULD_NOT_LEAK" not in generate_result.stdout
+    assert "SHOULD_NOT_LEAK" not in reconciliation_result.stdout
+
+
 def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:
     source = ingest_source_text(
         db_path=db_path,
