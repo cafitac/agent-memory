@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 18:19 KST
+Last updated: 2026-05-13 21:23 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.153`; the `personal-oss` Hermes hook is healthy on the v0.1.153 runtime. The current verified runway now has a 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit-approval corridor evidence, an idempotent live G4 queue apply, named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, a live Hermes DB 50-task representative fact shadow corpus, and a new live Hermes DB 50-task mixed fact/procedure/episode shadow corpus. Broad G4/background apply, collapse/delete apply, live telemetry reset, default ranking migration, and ordinary conversation auto-approval remain blocked. Live default ranking remains `conservative_legacy`.
+`agent-memory` is released and live-runtime-smoked through `v0.1.154`; the `personal-oss` Hermes hook is healthy on the v0.1.154 runtime. The current verified runway now has a 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit-approval corridor evidence, an idempotent live G4 queue apply, named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, a live Hermes DB 50-task representative fact shadow corpus, and a new live Hermes DB 50-task mixed fact/procedure/episode shadow corpus. Broad G4/background apply, collapse/delete apply, live telemetry reset, default ranking migration, and ordinary conversation auto-approval remain blocked. Live default ranking remains `conservative_legacy`.
 
 ## Current progress estimate toward the north-star
 
@@ -38,10 +38,10 @@ Reasoning:
 
 - Release: `v0.1.154`
 - GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`
-- npm: `@cafitac/agent-memory@0.1.153`
-- PyPI: `cafitac-agent-memory==0.1.153`
+- npm: `@cafitac/agent-memory@0.1.154`
+- PyPI: `cafitac-agent-memory==0.1.154`
 - Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`
-- Runtime smoke: PyPI install smoke passed after simple-index propagation, npm installed-bin smoke passed, GitHub release exists, and `hermes --profile personal-oss hooks doctor` is green after `--accept-hooks` approval for the v0.1.153 hook command. v0.1.153 runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.153-runtime-qa-20260513T080729/`.
+- Runtime smoke: PyPI install smoke passed after simple-index propagation, npm installed-bin smoke passed, GitHub release exists, and `hermes --profile personal-oss hooks doctor` is green after `--accept-hooks` approval for the v0.1.153 hook command. v0.1.154 runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
 - Current source follow-up reports: `/tmp/agent-memory-g4-corridor-smoke/`, `/tmp/agent-memory-telemetry-reset-decision/`, `/tmp/agent-memory-fresh-epoch-v0149/`, and `/tmp/agent-memory-apply-corridor-v0150/`.
 - Fresh report directory retained from G4 diagnostics: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-linkage-gap-diagnose-v0138-fresh.json` with decision `fresh_trace_linkage_gap_not_detected`.
@@ -54,13 +54,14 @@ Reasoning:
 
 ## Current blocker
 
-The v0.1.153 runtime is healthy, but broad brain-like automation is still intentionally blocked:
+The v0.1.154 runtime is healthy, and current source has an epoch-start scheduled-dry-run measurement fix queued for release, but broad brain-like automation is still intentionally blocked:
 
 - Fresh epoch report `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/fresh-epoch-since-v0152-with-metadata-gap-diagnostic.json`: quality gate still fails with `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_metadata_gap_classified`. The new metadata-gap diagnostic shows `dominant_blocker=classified_legacy_missing_outcome`, `classified_missing_outcome_count=6`, and `unresolved_adapter_payload_gap_count=0`; continue metadata-rich dogfooding before telemetry reset or default ranking migration.
 - G4 review queue copy/live-safe smoke `/tmp/agent-memory-apply-corridor-v0150/`: live preview/list/reconciliation were read-only; copy telemetry reset and copy G4 queue apply preserved durable memory (`mutated=false`); live G4 queue apply was idempotent with `applied_count=0`, `already_applied_count=1`, `mutated=false`, and `default_retrieval_unchanged=true`.
 - Historical telemetry reconciliation via the telemetry reset copy smoke `/tmp/agent-memory-telemetry-reset-decision/copy-apply.json`: deleting 1773 historical telemetry rows on a DB copy passed with protected durable memory tables unchanged. Live DB was not reset because the fresh epoch gate still fails; live reset remains manual-only behind `telemetry-reset-v1` and `apply-telemetry-reset-v1`.
 - Collapse proof is evidence-driven and can persist/replay per-candidate proof artifacts. The current local proof path can reach `satisfied` when supersession-chain/relation evidence exists, but collapse/delete apply remains disabled even after proof satisfaction.
 - Retrieval fixture coverage now includes a 50-task live-compatible expanded source gate, 75 checked-in eval tasks across the directory, a live-Hermes-DB representative 50-task fact corpus, and a live-Hermes-DB representative 50-task mixed fact/procedure/episode corpus. The opt-in ranking experiments passed as read-only comparisons, but default retrieval ranking is still unchanged and blocked until a separate explicit default-rollout decision is made after fresh-epoch telemetry is green.
+- New source follow-up evidence: `/Users/reddit/.agent-memory/reports/v0.1.154-continuation-20260513T120215/trace-quality-epoch-start-repo.json` and `/Users/reddit/.agent-memory/reports/v0.1.154-continuation-20260513T120215/scheduled-dry-run-epoch-start-repo.json` show that adding `--epoch-start` to trace-quality/scheduled-dry-run lets the post-v0.1.154 fresh window pass without legacy lookback pollution. This is a measurement fix, not an apply permission.
 - G4 broad apply contract remains blocked by policy even when a report is individually green. The guardrail now requires all of these to be green on real runtime evidence before reconsideration: retrieval ranking gate, rollback replay validation, live telemetry reconciliation, and human-reviewed queue approval; ordinary conversation auto-approval remains false.
 
 ## Recommended next work
@@ -68,7 +69,7 @@ The v0.1.153 runtime is healthy, but broad brain-like automation is still intent
 Proceed in this sequence:
 
 1. Keep live default ranking on `conservative_legacy`; do not run `retrieval-ranking-migrate-default` against the live profile until an operator gives the exact approval phrase and fresh-epoch telemetry is green.
-2. Continue metadata-rich dogfooding to lift fresh-epoch `observation_trace_coverage_ratio` above threshold and eliminate classified legacy missing-outcome rows; the latest blocker is not an unresolved adapter payload gap.
+2. Release the current `--epoch-start` scheduled-dry-run measurement slice, then keep metadata-rich dogfooding and compare fresh-epoch windows using the explicit epoch boundary; do not let legacy lookback rows drive go/no-go decisions.
 3. Keep live mixed retrieval corpus coverage in the shadow-only lane; extend it only through guarded reviewed-candidate promotions with backup/audit evidence.
 4. Keep fresh reviewed candidate promotion limited to the guarded explicit-approval corridor.
 5. Keep broad G4/background apply blocked until ranking gate, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
@@ -94,7 +95,7 @@ If asked "다음으로 뭐해야 해?", answer:
 ```bash
 cd /Users/reddit/Project/agent-memory
 git status --short --branch
-/Users/reddit/.agent-memory/runtime/v0.1.153/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY
