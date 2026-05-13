@@ -2028,6 +2028,11 @@ def _same_claim_slot_supersession_candidates(db_path: Path, *, limit: int, top: 
                     ),
                     "relation_mutation_supported_by_preview": False,
                 },
+                "enriched_evidence": _supersession_enriched_evidence(
+                    db_path,
+                    older_fact=older_fact,
+                    newer_fact=newer_fact,
+                ),
                 "review_score": review_score,
                 "review_recommendation": _supersession_review_recommendation(review_score),
                 "review_commands": {
@@ -3366,13 +3371,87 @@ def _fact_id_from_ref(ref: str) -> int:
     return int(ref.split(":", 1)[1])
 
 
+def _memory_ref_parts(ref: str) -> tuple[str, int]:
+    if ":" not in ref:
+        raise ValueError(f"expected memory ref, got: {ref}")
+    memory_type, raw_id = ref.split(":", 1)
+    if memory_type not in {"fact", "procedure", "episode"}:
+        raise ValueError(f"unsupported memory ref type for lifecycle apply: {memory_type}")
+    return memory_type, int(raw_id)
+
+
+def _supersession_enriched_evidence(db_path: Path, *, older_fact, newer_fact) -> dict[str, Any]:
+    older_ref = _fact_review_ref(older_fact.id)
+    newer_ref = _fact_review_ref(newer_fact.id)
+    older_relations = list_relations_for_node(db_path, node_ref=older_ref)
+    newer_relations = list_relations_for_node(db_path, node_ref=newer_ref)
+    older_activations = [a for a in list_memory_activations(db_path, limit=500) if a.memory_type == "fact" and a.memory_id == older_fact.id]
+    newer_activations = [a for a in list_memory_activations(db_path, limit=500) if a.memory_type == "fact" and a.memory_id == newer_fact.id]
+    older_history = list_memory_status_history(db_path, memory_type="fact", memory_id=older_fact.id)
+    newer_history = list_memory_status_history(db_path, memory_type="fact", memory_id=newer_fact.id)
+    temporal_order = "newer_fact_id_after_older" if newer_fact.id > older_fact.id else "ambiguous"
+    return {
+        "relation_signals": {
+            "older_relation_count": len(older_relations),
+            "newer_relation_count": len(newer_relations),
+            "older_conflict_relation_count": len(list_fact_conflict_relations(db_path, fact_id=older_fact.id)),
+            "newer_conflict_relation_count": len(list_fact_conflict_relations(db_path, fact_id=newer_fact.id)),
+            "older_replacement_relation_count": len(list_fact_replacement_relations(db_path, fact_id=older_fact.id)),
+            "newer_replacement_relation_count": len(list_fact_replacement_relations(db_path, fact_id=newer_fact.id)),
+        },
+        "temporal_signals": {
+            "order": temporal_order,
+            "older_fact_id": older_fact.id,
+            "newer_fact_id": newer_fact.id,
+            "older_status_transition_count": len(older_history),
+            "newer_status_transition_count": len(newer_history),
+        },
+        "activation_signals": {
+            "older_activation_count": len(older_activations),
+            "newer_activation_count": len(newer_activations),
+            "older_activation_ids": [a.id for a in older_activations[:5]],
+            "newer_activation_ids": [a.id for a in newer_activations[:5]],
+        },
+        "raw_content_included": False,
+    }
+
+
+def _rollback_confidence_for_backup(backup_path: str, expected_sha256: str | None) -> dict[str, Any]:
+    path = Path(backup_path).expanduser().resolve(strict=False)
+    exists = path.exists()
+    actual_sha256 = None
+    if exists:
+        actual_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {
+        "backup_path": str(path),
+        "backup_exists": exists,
+        "backup_sha256_matches": bool(expected_sha256 and actual_sha256 == expected_sha256),
+        "restore_command": f"agent-memory backup restore {path} <target-db>" if exists else None,
+    }
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
-    policy = "g5-lifecycle-supersession-apply-v1"
-    approval_phrase = "apply-approved-g5-lifecycle-supersession-v1"
-    if args.policy != policy:
-        raise ValueError(f"dogfood lifecycle-candidate-apply requires --policy {policy}")
-    if args.approval_phrase != approval_phrase:
-        raise ValueError(f"dogfood lifecycle-candidate-apply requires --approval-phrase {approval_phrase}")
+    policy_contracts = {
+        "g5-lifecycle-supersession-apply-v1": {
+            "candidate_kind": "supersession",
+            "proposal_type": "supersession_review",
+            "approval_phrase": "apply-approved-g5-lifecycle-supersession-v1",
+            "apply_mode": "approved_supersession_lifecycle_candidates_only",
+        },
+        "g5-lifecycle-decay-deprecate-apply-v1": {
+            "candidate_kind": "decay",
+            "proposal_type": "decay_review",
+            "approval_phrase": "apply-approved-g5-lifecycle-decay-deprecate-v1",
+            "apply_mode": "approved_decay_lifecycle_candidates_deprecate_only",
+        },
+    }
+    contract = policy_contracts.get(args.policy)
+    if contract is None:
+        expected = ", ".join(sorted(policy_contracts))
+        raise ValueError(f"dogfood lifecycle-candidate-apply requires --policy one of: {expected}")
+    policy = args.policy
+    if args.approval_phrase != contract["approval_phrase"]:
+        raise ValueError(f"dogfood lifecycle-candidate-apply requires --approval-phrase {contract['approval_phrase']}")
     if not args.actor.strip() or not args.reason.strip():
         raise ValueError("dogfood lifecycle-candidate-apply requires non-empty --actor and --reason")
     db_path = args.db_path.expanduser().resolve(strict=False)
@@ -3395,7 +3474,8 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
             ).fetchall()
         else:
             rows = connection.execute(
-                "SELECT * FROM g5_trace_candidate_reviews WHERE status = 'approved' AND candidate_kind = 'supersession' ORDER BY candidate_id"
+                "SELECT * FROM g5_trace_candidate_reviews WHERE status = 'approved' AND candidate_kind = ? ORDER BY candidate_id",
+                (contract["candidate_kind"],),
             ).fetchall()
         found_ids = {row["candidate_id"] for row in rows}
         for missing in sorted(set(candidate_filter) - found_ids):
@@ -3406,7 +3486,7 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
         if row["status"] != "approved":
             skipped.append({"candidate_id": candidate_id, "reason": f"status_{row['status']}"})
             continue
-        if row["candidate_kind"] != "supersession" or row["proposal_type"] != "supersession_review":
+        if row["candidate_kind"] != contract["candidate_kind"] or row["proposal_type"] != contract["proposal_type"]:
             skipped.append({"candidate_id": candidate_id, "reason": f"unsupported_{row['candidate_kind']}_{row['proposal_type']}"})
             continue
         with sqlite3.connect(db_path) as connection:
@@ -3416,36 +3496,64 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 (candidate_id, policy),
             ).fetchone()
         candidate = _safe_json_dict_from_db(row["cluster_json"])
-        superseded_ref = str(candidate.get("older_fact_ref") or "")
-        replacement_ref = str(candidate.get("newer_fact_ref") or "")
-        action = "apply_reviewed_supersession_relation"
+        applied_entry: dict[str, Any]
+        rollback_hint: dict[str, Any]
+        promoted_ref: str
+        if contract["candidate_kind"] == "supersession":
+            superseded_ref = str(candidate.get("older_fact_ref") or "")
+            replacement_ref = str(candidate.get("newer_fact_ref") or "")
+            action = "apply_reviewed_supersession_relation"
+            applied_entry = {
+                "candidate_id": candidate_id,
+                "action": action,
+                "superseded_ref": superseded_ref,
+                "replacement_ref": replacement_ref,
+            }
+            promoted_ref = replacement_ref
+        else:
+            memory_ref = str(candidate.get("memory_ref") or row["target_ref"] or "")
+            action = "apply_reviewed_decay_deprecation"
+            applied_entry = {"candidate_id": candidate_id, "action": action, "memory_ref": memory_ref}
+            promoted_ref = memory_ref
         if existing is not None:
-            applied.append(
-                {
-                    "candidate_id": candidate_id,
-                    "action": action,
-                    "inserted": False,
-                    "superseded_ref": superseded_ref,
-                    "replacement_ref": replacement_ref,
-                }
-            )
+            applied.append({**applied_entry, "inserted": False})
             continue
-        relation = supersede_fact(
-            db_path=db_path,
-            superseded_fact_id=_fact_id_from_ref(superseded_ref),
-            replacement_fact_id=_fact_id_from_ref(replacement_ref),
-            actor=args.actor.strip(),
-            reason=args.reason.strip(),
-        )
-        rollback_hint = {
-            "restore_backup_path": str(backup_path),
-            "candidate_id": candidate_id,
-            "policy": policy,
-            "relation_id": relation.id,
-            "superseded_ref": superseded_ref,
-            "replacement_ref": replacement_ref,
-            "default_retrieval_mutated": False,
-        }
+        if contract["candidate_kind"] == "supersession":
+            relation = supersede_fact(
+                db_path=db_path,
+                superseded_fact_id=_fact_id_from_ref(applied_entry["superseded_ref"]),
+                replacement_fact_id=_fact_id_from_ref(applied_entry["replacement_ref"]),
+                actor=args.actor.strip(),
+                reason=args.reason.strip(),
+            )
+            rollback_hint = {
+                "restore_backup_path": str(backup_path),
+                "candidate_id": candidate_id,
+                "policy": policy,
+                "relation_id": relation.id,
+                "superseded_ref": applied_entry["superseded_ref"],
+                "replacement_ref": applied_entry["replacement_ref"],
+                "default_retrieval_mutated": False,
+            }
+        else:
+            memory_type, memory_id = _memory_ref_parts(applied_entry["memory_ref"])
+            before_status = get_memory_status(db_path, memory_type=memory_type, memory_id=memory_id)
+            deprecate_memory(
+                db_path=db_path,
+                memory_type=memory_type,
+                memory_id=memory_id,
+                actor=args.actor.strip(),
+                reason=args.reason.strip(),
+            )
+            rollback_hint = {
+                "restore_backup_path": str(backup_path),
+                "candidate_id": candidate_id,
+                "policy": policy,
+                "memory_ref": applied_entry["memory_ref"],
+                "status_before": before_status,
+                "status_after": "deprecated",
+                "default_retrieval_mutated": False,
+            }
         with sqlite3.connect(db_path) as connection:
             _ensure_lifecycle_candidate_review_tables(connection)
             connection.execute(
@@ -3458,7 +3566,7 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 (
                     candidate_id,
                     row["proposal_type"],
-                    replacement_ref,
+                    promoted_ref,
                     policy,
                     action,
                     args.actor.strip(),
@@ -3469,29 +3577,20 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 ),
             )
             audit = _safe_json_list_from_db(row["audit_json"])
-            audit.append(
-                {
-                    "action": "apply",
-                    "actor": args.actor.strip(),
-                    "policy": policy,
-                    "reason_sha256": reason_sha256,
-                    "superseded_ref": superseded_ref,
-                    "replacement_ref": replacement_ref,
-                }
-            )
+            audit_event = {
+                "action": "apply",
+                "actor": args.actor.strip(),
+                "policy": policy,
+                "reason_sha256": reason_sha256,
+                "candidate_kind": contract["candidate_kind"],
+            }
+            audit_event.update({key: value for key, value in applied_entry.items() if key != "candidate_id"})
+            audit.append(audit_event)
             connection.execute(
                 "UPDATE g5_trace_candidate_reviews SET status = 'promoted', updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ? WHERE candidate_id = ?",
                 (args.actor.strip(), reason_sha256, json.dumps(audit, sort_keys=True), candidate_id),
             )
-        applied.append(
-            {
-                "candidate_id": candidate_id,
-                "action": action,
-                "inserted": True,
-                "superseded_ref": superseded_ref,
-                "replacement_ref": replacement_ref,
-            }
-        )
+        applied.append({**applied_entry, "inserted": True})
 
     payload = {
         "kind": "dogfood_lifecycle_candidate_apply",
@@ -3504,7 +3603,7 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
         "actor": args.actor.strip(),
         "reason_sha256": reason_sha256,
         "backup": backup,
-        "apply_mode": "approved_supersession_lifecycle_candidates_only",
+        "apply_mode": contract["apply_mode"],
         "applied": applied,
         "skipped": skipped,
         "rollback_hint": {
@@ -3513,6 +3612,151 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
             "default_retrieval_mutated": False,
         },
         "privacy": {"candidate_json_included": False, "raw_reason_included": False, "raw_content_included": False},
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[str, Any]:
+    preview = _dogfood_trace_cluster_preview_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            output=None,
+            limit=args.limit,
+            top=args.top,
+            min_evidence_count=args.min_evidence_count,
+        )
+    )
+    generated: list[dict[str, Any]] = []
+    for cluster in preview.get("clusters", []):
+        if not isinstance(cluster, dict):
+            continue
+        guessed_type = str(cluster.get("guessed_memory_type") or "fact")
+        proposal_type = "preference" if guessed_type == "preference" else guessed_type
+        if proposal_type not in {"fact", "procedure", "preference"}:
+            proposal_type = "fact"
+        generated.append(
+            {
+                "candidate_id": cluster.get("candidate_id"),
+                "proposal_type": proposal_type,
+                "review_score": cluster.get("review_score", {}),
+                "review_recommendation": cluster.get("review_recommendation", {}),
+                "required_human_fields": (
+                    ["subject", "predicate", "object", "scope", "confidence"]
+                    if proposal_type in {"fact", "preference"}
+                    else ["name", "trigger_context", "step", "scope", "confidence"]
+                ),
+                "safe_evidence": {
+                    "evidence_trace_ids": cluster.get("evidence_trace_ids", []),
+                    "related_memory_refs": cluster.get("related_memory_refs", []),
+                    "related_observation_ids": cluster.get("related_observation_ids", []),
+                    "raw_content_included": False,
+                },
+                "next_review_command": "agent-memory dogfood trace-candidate-update ... --promotion-type " + proposal_type,
+            }
+        )
+    payload = {
+        "kind": "dogfood_trace_candidate_generate",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "generation_mode": "automatic_graph_cluster_to_reviewed_candidate_skeletons",
+        "candidate_count": len(generated),
+        "generated_candidates": generated,
+        "automation_policy": {
+            "ordinary_conversation_auto_approval": False,
+            "promotion_supported_without_human_fields": False,
+            "raw_content_allowed": False,
+        },
+        "quality_gate": preview.get("quality_gate", {}),
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_retrieval_ranking_gate_payload(args: argparse.Namespace) -> dict[str, Any]:
+    result = evaluate_retrieval_fixtures(
+        args.db_path,
+        args.fixtures,
+        baseline_mode=args.baseline_mode,
+        fail_on_regression=False,
+        fail_on_baseline_regression=False,
+    )
+    data = result.model_dump(mode="json")
+    summary = data.get("summary", {}) if isinstance(data, dict) else {}
+    pass_value = bool(summary.get("pass", False) or summary.get("pass_", False))
+    failed_count = _safe_int(summary.get("failed_count", 0))
+    if not summary and isinstance(data, dict):
+        results = data.get("results", []) or []
+        failed_count = sum(1 for item in results if isinstance(item, dict) and not bool(item.get("pass", item.get("pass_", False))))
+        pass_value = failed_count == 0
+    baseline_regression_count = _safe_int((data.get("baseline_summary", {}) or {}).get("regression_count", 0)) if isinstance(data, dict) else 0
+    blocked_reasons: list[str] = []
+    if not pass_value or failed_count > 0:
+        blocked_reasons.append("retrieval_eval_failures_present")
+    if baseline_regression_count > args.max_baseline_regressions:
+        blocked_reasons.append("baseline_regression_threshold_exceeded")
+    payload = {
+        "kind": "dogfood_retrieval_ranking_gate",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ranking_change_allowed": not blocked_reasons,
+        "blocked_reasons": blocked_reasons,
+        "eval_summary": summary,
+        "baseline_regression_count": baseline_regression_count,
+        "max_baseline_regressions": args.max_baseline_regressions,
+        "policy": "ranking changes require passing retrieval eval gate before implementation",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_rollback_confidence_payload(args: argparse.Namespace) -> dict[str, Any]:
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id, proposal_type, promoted_ref, policy, action, backup_path, backup_sha256, rollback_hint_json, created_at
+            FROM g5_trace_candidate_applications
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        ).fetchall()
+    applications = []
+    for row in rows:
+        confidence = _rollback_confidence_for_backup(row["backup_path"], row["backup_sha256"])
+        applications.append(
+            {
+                "candidate_id": row["candidate_id"],
+                "proposal_type": row["proposal_type"],
+                "policy": row["policy"],
+                "action": row["action"],
+                "promoted_ref": row["promoted_ref"],
+                "created_at": row["created_at"],
+                "rollback_hint": _safe_json_dict_from_db(row["rollback_hint_json"]),
+                "rollback_confidence": confidence,
+            }
+        )
+    blocked_reasons = []
+    if any(not app["rollback_confidence"]["backup_exists"] for app in applications):
+        blocked_reasons.append("missing_backup")
+    if any(not app["rollback_confidence"]["backup_sha256_matches"] for app in applications):
+        blocked_reasons.append("backup_checksum_mismatch")
+    payload = {
+        "kind": "dogfood_rollback_confidence",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "application_count": len(applications),
+        "applications": applications,
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "blocked_reasons": blocked_reasons,
+            "decision": "rollback_confidence_sufficient_for_bounded_partial_automation" if not blocked_reasons else "fix_rollback_evidence_before_broader_automation",
+        },
     }
     _write_json_report(args.output, payload)
     return payload
@@ -9738,6 +9982,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_cluster_preview_parser.add_argument("--limit", type=int, default=200)
     dogfood_trace_cluster_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_trace_cluster_preview_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_trace_candidate_generate_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-generate",
+        help="Generate ref-safe fact/procedure/preference candidate skeletons from graph trace clusters without mutation.",
+    )
+    dogfood_trace_candidate_generate_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_generate_parser.add_argument("--output", type=Path)
+    dogfood_trace_candidate_generate_parser.add_argument("--limit", type=int, default=200)
+    dogfood_trace_candidate_generate_parser.add_argument("--top", type=int, default=20)
+    dogfood_trace_candidate_generate_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_reinforcement_refinement_preview_parser = dogfood_subparsers.add_parser(
         "reinforcement-refinement-preview",
         help="Build a read-only G5d preview of repeated activation -> reinforcement refinement candidates.",
@@ -9808,6 +10061,22 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_apply_parser.add_argument("--reason", required=True)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--output", type=Path)
+    dogfood_retrieval_ranking_gate_parser = dogfood_subparsers.add_parser(
+        "retrieval-ranking-gate",
+        help="Run retrieval eval as a read-only gate before any opt-in ranking policy change.",
+    )
+    dogfood_retrieval_ranking_gate_parser.add_argument("db_path", type=Path)
+    dogfood_retrieval_ranking_gate_parser.add_argument("--fixtures", type=Path, required=True)
+    dogfood_retrieval_ranking_gate_parser.add_argument("--baseline-mode")
+    dogfood_retrieval_ranking_gate_parser.add_argument("--max-baseline-regressions", type=int, default=0)
+    dogfood_retrieval_ranking_gate_parser.add_argument("--output", type=Path)
+    dogfood_rollback_confidence_parser = dogfood_subparsers.add_parser(
+        "rollback-confidence",
+        help="Inspect backup/checksum rollback confidence for reviewed lifecycle applications without mutation.",
+    )
+    dogfood_rollback_confidence_parser.add_argument("db_path", type=Path)
+    dogfood_rollback_confidence_parser.add_argument("--limit", type=int, default=50)
+    dogfood_rollback_confidence_parser.add_argument("--output", type=Path)
     dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
         "trace-candidate-persist",
         help="Persist G5 trace-cluster candidates for explicit human review without promoting memories.",
@@ -10852,6 +11121,9 @@ def main() -> None:
         if args.dogfood_action == "trace-cluster-preview":
             print(json.dumps(_dogfood_trace_cluster_preview_payload(args), indent=2))
             return
+        if args.dogfood_action == "trace-candidate-generate":
+            print(json.dumps(_dogfood_trace_candidate_generate_payload(args), indent=2))
+            return
         if args.dogfood_action == "reinforcement-refinement-preview":
             print(json.dumps(_dogfood_reinforcement_refinement_preview_payload(args), indent=2))
             return
@@ -10874,6 +11146,12 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-apply":
             print(json.dumps(_dogfood_lifecycle_candidate_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "retrieval-ranking-gate":
+            print(json.dumps(_dogfood_retrieval_ranking_gate_payload(args), indent=2))
+            return
+        if args.dogfood_action == "rollback-confidence":
+            print(json.dumps(_dogfood_rollback_confidence_payload(args), indent=2))
             return
         if args.dogfood_action == "trace-candidate-persist":
             print(json.dumps(_dogfood_trace_candidate_persist_payload(args), indent=2))

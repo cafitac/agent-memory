@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 08:10 KST
+Last updated: 2026-05-13 09:49 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.143`; the installed Hermes hooks are healthy on the v0.1.143 runtime across default, personal-oss, earlypay, and infra-admin profiles. Fresh linkage diagnostics no longer show a hook linkage bug, and G5a-G5e are merged/released for ref-safe trace-cluster preview, reviewed trace-candidate persist/list/update/apply, read-only review scoring, repeated activation -> reinforcement refinement preview, and stale weak evidence -> decay/collapse candidate preview. Broad G4/background apply remains blocked.
+`agent-memory` is released and live-runtime-smoked through `v0.1.144`; the installed Hermes hooks are healthy on the v0.1.144 runtime across default, personal-oss, earlypay, and infra-admin profiles. G5a-G5f are released, and the current local G5g slice adds a narrow reviewed decay deprecate corridor, richer supersession evidence, graph-cluster candidate skeleton generation, a retrieval-ranking eval gate, and rollback confidence inspection. Broad G4/background apply remains blocked.
 
 ## Current progress estimate toward the north-star
 
@@ -24,36 +24,36 @@ The north-star is a human-memory-like, mostly automatic, graph-based memory cons
 
 Approximate progress:
 
-- Overall north-star: 66-68%.
-- Substrate/evidence plumbing: about 75-77%.
-- Safe automatic mutation/promotion: about 50-53%.
-- Remaining work: about 32-34% overall, concentrated in decay/collapse apply, ranking evaluation, richer supersession evidence, and rollback confidence.
+- Overall north-star: 69-71%.
+- Substrate/evidence plumbing: about 78-80%.
+- Safe automatic mutation/promotion: about 55-58%.
+- Remaining work: about 29-31% overall, concentrated in larger-scope eval-backed automation, safer automatic review decisions, and broad rollback/replay validation.
 
 Reasoning:
 
-- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, G5e read-only stale weak evidence -> decay/collapse candidate preview, and in-flight G5f supersession preview / lifecycle registry / bounded partial automation.
-- Not done: broad background consolidation apply, fully automatic long-term memory promotion, richer conflict-aware supersession evidence, weak-trace decay/collapse apply, automatic graph-cluster-to-fact/procedure/preference generation, retrieval-ranking changes behind eval, and large-scope rollback confidence.
+- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, G5e read-only stale weak evidence -> decay/collapse candidate preview, G5f conflict -> supersession/replacement candidate preview plus lifecycle registry/bounded partial automation, and local G5g reviewed decay deprecate / ranking gate / rollback confidence slice.
+- Not done: broad background consolidation apply, fully automatic long-term memory promotion, eval-backed retrieval-ranking policy changes, automatic ordinary-conversation approval, and large-scope rollback/replay confidence.
 
 ## Latest verified checkpoint
 
-- Release: `v0.1.143`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.143`
-- npm: `@cafitac/agent-memory@0.1.143`
-- PyPI: `cafitac-agent-memory==0.1.143`
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/agent-memory`
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.143/g5e-live-smoke.json`
-- Hermes config backups from v0.1.143 rollout: `/Users/reddit/.hermes/config.yaml.bak-v0143-20260512T160959Z` plus matching `personal-oss`, `earlypay`, and `infra-admin` profile backups.
+- Release: `v0.1.144`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.144`
+- npm: `@cafitac/agent-memory@0.1.144`
+- PyPI: `cafitac-agent-memory==0.1.144`
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.144/.venv/bin/agent-memory`
+- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.144/g5e-live-smoke.json`
+- Hermes config backups from v0.1.144 rollout: `/Users/reddit/.hermes/config.yaml.bak-v0143-20260512T160959Z` plus matching `personal-oss`, `earlypay`, and `infra-admin` profile backups.
 - Fresh report directory retained from G4 diagnostics: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`
 - Fresh linkage diagnosis retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-linkage-gap-diagnose-v0138-fresh.json`
 - Fresh epoch readiness retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/fresh-epoch-v0138.json`
 - Fresh review queue preview retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-review-queue-preview-v0138-fresh.json`
 - Historical scheduled dry-run retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`
-- Source G5a/G5b/G5c/G5d/G5e checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, and `dogfood decay-collapse-preview` are merged and released through v0.1.143.
+- Source G5a/G5b/G5c/G5d/G5e checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, and `dogfood decay-collapse-preview` are merged and released through v0.1.144.
 - Release/published-install smoke passed; manual true-distribution PyPI/npm smoke passed; runtime rollout is doctor-green across default, personal-oss, earlypay, and infra-admin Hermes profiles.
 
 ## Current blocker
 
-Fresh v0.1.143 runtime plus v0.1.138 fresh telemetry evidence are healthy enough for continued brain-like reviewed-candidate planning:
+Fresh v0.1.144 runtime plus v0.1.138 fresh telemetry evidence are healthy enough for continued brain-like reviewed-candidate planning:
 
 - `g4-linkage-gap-diagnose-v0138-fresh.json`: quality gate pass, decision `fresh_trace_linkage_gap_not_detected`, observation/trace linkage coverage `1.0`, unlinked observations `0`.
 - `fresh-epoch-v0138.json`: quality gate pass, decision `fresh_epoch_ready_to_compare_against_historical`.
@@ -73,12 +73,11 @@ Fresh G5f blocker-resolution evidence: `.dev/dogfood/g5f-20260512T224602Z/schedu
 
 Proceed in this sequence:
 
-1. Review and release the G5f slice: conflict -> supersession/replacement candidate preview, unified lifecycle candidate registry, guarded supersession apply corridor, scheduled-blocker resolution report, and bounded G4 review-queue partial apply (`--max-apply`, default 1).
-2. Keep G5d/G5e/G5f semantics narrow: review scores/recommendations, reinforcement refinement, and decay/collapse candidates are review-priority signals only; they do not persist review state, increment/decrement reinforcement, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
-3. Add explicit contract tests for future conflict/supersession safety: `read_only=true`, `mutated=false`, `apply_supported=false`, no raw prompt/query/transcript/sample output, and protected memory tables unchanged.
-4. If a later conflict/supersession or decay/collapse apply slice needs mutation, add only a separate explicit narrow apply policy with backup/audit/rollback; generic continuation does not authorize it.
-5. G4 broad apply contract remains blocked/guardrail-only. Required future shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
-6. Historical telemetry reconciliation remains a separate reviewed `telemetry-reset-v1` corridor for historical telemetry rows older than a chosen epoch; never delete facts/procedures/episodes/relations/source records/status history.
+1. Review/release the local G5g slice: reviewed decay deprecate apply policy, enriched supersession evidence, trace-cluster candidate skeleton generation, retrieval-ranking gate, and rollback confidence report.
+2. Add live runtime smoke for the new commands on `/Users/reddit/.agent-memory/memory.db` after release, keeping mutation commands opt-in and backup-only.
+3. Start G5h only after release: replay/restore validation for backups and application logs, then eval-backed opt-in ranking experiments. Historical telemetry reconciliation remains a separate reviewed telemetry-only corridor.
+4. Keep broad G4/background apply blocked until ranking gate, rollback confidence, and replay validation have all passed on real runtime evidence. G4 broad apply contract remains guardrail-only.
+5. Ordinary conversation auto-approval remains forbidden; candidate generation creates review skeletons only.
 
 ## What not to do next
 
@@ -94,21 +93,21 @@ Do not silently delete, reset, or rewrite telemetry. Historical reconciliation m
 
 If asked "다음으로 뭐해야 해?", answer:
 
-> 지금은 v0.1.143까지 릴리즈/설치/스모크가 끝났고 Hermes hook도 default/personal-oss/earlypay/infra-admin 전부 doctor-green입니다. G5a-G5e는 merged/released이고, G5e는 stale weak evidence -> decay/collapse candidate를 read-only preview로 보여주는 단계입니다. 전체 목표 대비 대략 62-64% 정도 왔고, 남은 36-38%는 자동 apply/승격/decay/supersession/rollback 쪽입니다. 다음은 conflict -> supersession/replacement candidate preview를 read-only로 여는 게 맞습니다. broad G4/background apply는 historical scheduled-dry-run debt 때문에 아직 금지입니다.
+> 지금은 v0.1.144까지 릴리즈/설치/스모크가 끝났고 Hermes hook도 default/personal-oss/earlypay/infra-admin 전부 doctor-green입니다. G5a-G5f는 merged/released이고, G5e는 stale weak evidence -> decay/collapse candidate를 read-only preview로 보여주는 단계입니다. 전체 목표 대비 대략 69-71% 정도 왔고, 남은 29-31%는 자동 apply/승격/decay/supersession/rollback 쪽입니다. 다음은 local G5g slice를 리뷰/릴리즈한 뒤 rollback replay와 eval-backed ranking 실험으로 넘어가는 게 맞습니다. broad G4/background apply는 historical scheduled-dry-run debt 때문에 아직 금지입니다.
 
 ## Quick verification commands
 
 ```bash
 cd /Users/reddit/Project/agent-memory
 git status --short --branch
-/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/python - <<'PY'
+/Users/reddit/.agent-memory/runtime/v0.1.144/.venv/bin/python - <<'PY'
 import agent_memory
 print(agent_memory.__version__)
 PY
-/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/agent-memory dogfood decay-collapse-preview \
+/Users/reddit/.agent-memory/runtime/v0.1.144/.venv/bin/agent-memory dogfood supersession-preview \
   /Users/reddit/.agent-memory/memory.db \
-  --limit 200 --top 10 --min-decay-score 0.5 \
-  --output /tmp/agent-memory-next-g5e-decay-collapse-preview.json
+  --limit 200 --top 10 \
+  --output /tmp/agent-memory-next-g5f-supersession-preview.json
 ```
 
 Expected: read-only/no-mutation. G5e should remain a decay/collapse review-priority preview (`read_only=true`, `mutated=false`, default retrieval unchanged); fresh linkage should remain `fresh_trace_linkage_gap_not_detected`; broad apply remains blocked until the reviewed contract/reconciliation/apply runway is explicitly completed.

@@ -9538,6 +9538,10 @@ def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(
     }
     assert candidate["older_fact_ref"] == f"fact:{old_fact.id}"
     assert candidate["newer_fact_ref"] == f"fact:{new_fact.id}"
+    assert candidate["enriched_evidence"]["raw_content_included"] is False
+    assert candidate["enriched_evidence"]["relation_signals"]["older_relation_count"] >= 0
+    assert candidate["enriched_evidence"]["temporal_signals"]["order"] == "newer_fact_id_after_older"
+    assert candidate["enriched_evidence"]["activation_signals"]["older_activation_count"] == 0
     assert candidate["review_score"]["tier"] == "high"
     assert candidate["review_recommendation"] == {
         "decision": "ready_for_supersession_review",
@@ -9759,6 +9763,248 @@ def test_dogfood_lifecycle_candidate_registry_persists_lists_and_updates_superse
     assert "SHOULD_NOT_LEAK" not in persist_result.stdout
     assert "SHOULD_NOT_LEAK" not in list_result.stdout
     assert "SHOULD_NOT_LEAK" not in update_result.stdout
+
+
+def test_dogfood_lifecycle_candidate_apply_deprecates_approved_decay_candidate_with_backup(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-decay-apply.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5g decay apply source text token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5g-decay"},
+    )
+    stale_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5g stale weak evidence",
+        predicate="needs",
+        object_ref_or_value="guarded decay apply",
+        evidence_ids=[source.id],
+        scope="project:g5g-decay",
+        confidence=0.41,
+    )
+    fresh_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5g fresh evidence",
+        predicate="protects",
+        object_ref_or_value="decay gate",
+        evidence_ids=[source.id],
+        scope="project:g5g-decay",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fresh_fact.id)
+    record_retrieval_observation(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        query="SHOULD_NOT_LEAK stale weak collapse query",
+        preferred_scope="project:g5g-decay",
+        limit=5,
+        statuses=("approved", "candidate"),
+        retrieval_trace=[_fact_trace(stale_fact.id, label="stale weak candidate")],
+        response_mode="verify_first",
+        metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": "g5g-stale"},
+    )
+    for index in range(4):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK fresh decay spacing query",
+            preferred_scope="project:g5g-decay",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fresh_fact.id, label="fresh protected target")],
+            response_mode="verify_first",
+            metadata={"raw_prompt": "SHOULD_NOT_LEAK", "session_id": f"g5g-fresh-{index}"},
+        )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "decay",
+            "--actor",
+            "tester",
+            "--reason",
+            "decay apply runway",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--min-decay-score",
+            "0.5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "approved guarded decay deprecate",
+            "--approval-phrase",
+            "approve-g5-lifecycle-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    backup_path = tmp_path / "decay-apply-backup.db"
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-lifecycle-decay-deprecate-apply-v1",
+            "--approval-phrase",
+            "apply-approved-g5-lifecycle-decay-deprecate-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "guarded decay deprecate",
+            "--backup-path",
+            str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["apply_mode"] == "approved_decay_lifecycle_candidates_deprecate_only"
+    assert payload["applied"] == [
+        {
+            "candidate_id": candidate_id,
+            "action": "apply_reviewed_decay_deprecation",
+            "memory_ref": f"fact:{stale_fact.id}",
+            "inserted": True,
+        }
+    ]
+    assert payload["rollback_hint"]["restore_backup_to_revert"] is True
+    assert backup_path.exists()
+    assert get_fact(db_path, fact_id=stale_fact.id).status == "deprecated"
+    assert "SHOULD_NOT_LEAK" not in persist_result.stdout
+    assert "SHOULD_NOT_LEAK" not in apply_result.stdout
+
+
+def test_dogfood_new_brainlike_readiness_commands_are_safe_and_helpful(tmp_path: Path) -> None:
+    db_path = tmp_path / "brainlike-readiness.db"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    generate_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "trace-candidate-generate", str(db_path), "--limit", "20", "--top", "5"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert generate_result.returncode == 0, generate_result.stderr
+    generate_payload = json.loads(generate_result.stdout)
+    assert generate_payload["kind"] == "dogfood_trace_candidate_generate"
+    assert generate_payload["mutated"] is False
+    assert generate_payload["automation_policy"]["ordinary_conversation_auto_approval"] is False
+
+    rollback_result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "rollback-confidence", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert rollback_result.returncode == 0, rollback_result.stderr
+    rollback_payload = json.loads(rollback_result.stdout)
+    assert rollback_payload["kind"] == "dogfood_rollback_confidence"
+    assert rollback_payload["read_only"] is True
+    assert rollback_payload["quality_gate"]["pass"] is True
+
+    eval_source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Ranking gate fact says Project Gate uses retrieval eval before ranking changes.",
+    )
+    gate_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Project Gate",
+        predicate="ranking_policy",
+        object_ref_or_value="run retrieval eval before ranking changes",
+        evidence_ids=[eval_source.id],
+        scope="project:gate",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=gate_fact.id)
+    fixture_path = tmp_path / "ranking-gate-fixture.json"
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "ranking-gate",
+                        "query": "What must Project Gate run before ranking changes?",
+                        "preferred_scope": "project:gate",
+                        "limit": 5,
+                        "expected": {"facts": [gate_fact.id], "procedures": [], "episodes": []},
+                        "avoid": {"facts": [], "procedures": [], "episodes": []},
+                    }
+                ]
+            },
+            indent=2,
+        )
+    )
+    ranking_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "retrieval-ranking-gate",
+            str(db_path),
+            "--fixtures",
+            str(fixture_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert ranking_result.returncode == 0, ranking_result.stderr
+    ranking_payload = json.loads(ranking_result.stdout)
+    assert ranking_payload["kind"] == "dogfood_retrieval_ranking_gate"
+    assert ranking_payload["read_only"] is True
+    assert "ranking_change_allowed" in ranking_payload
+    assert ranking_payload["policy"] == "ranking changes require passing retrieval eval gate before implementation"
+
 
 
 def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:
