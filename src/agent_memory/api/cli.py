@@ -4614,6 +4614,18 @@ def _reviewed_promotion_payload_from_args(args: argparse.Namespace) -> dict[str,
             "success_rate": args.success_rate,
             "evidence_ids": [],
         }
+    if args.promotion_type == "episode":
+        if not args.title or not args.summary:
+            raise ValueError("dogfood trace-candidate-update episode promotion requires --title and --summary")
+        return {
+            "promotion_type": "episode",
+            "title": args.title,
+            "summary": args.summary,
+            "source_ids": [],
+            "tags": list(args.tag or []),
+            "scope": args.scope,
+            "importance_score": args.importance_score,
+        }
     raise ValueError("unsupported trace candidate promotion type")
 
 
@@ -4677,7 +4689,7 @@ def _dogfood_trace_candidate_update_payload(args: argparse.Namespace) -> dict[st
         "status_after": args.status,
         "status": args.status,
         "proposal_type": proposal_type,
-        "promotion_ready": args.status == "approved" and proposal_type in {"fact_promotion", "preference_promotion", "procedure_promotion"},
+        "promotion_ready": args.status == "approved" and proposal_type in {"fact_promotion", "preference_promotion", "procedure_promotion", "episode_promotion"},
         "reason_sha256": reason_sha256,
         "privacy": {"reviewed_payload_included": False, "raw_reason_included": False, "raw_content_included": False},
     }
@@ -4723,7 +4735,7 @@ def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str
         if row["status"] != "approved":
             skipped.append({"candidate_id": candidate_id, "reason": f"status_{row['status']}"})
             continue
-        if row["proposal_type"] not in {"fact_promotion", "preference_promotion", "procedure_promotion"}:
+        if row["proposal_type"] not in {"fact_promotion", "preference_promotion", "procedure_promotion", "episode_promotion"}:
             skipped.append({"candidate_id": candidate_id, "reason": f"proposal_type_{row['proposal_type']}"})
             continue
         with sqlite3.connect(db_path) as connection:
@@ -4763,6 +4775,18 @@ def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str
             )
             approve_procedure(db_path=db_path, procedure_id=procedure.id)
             promoted_ref = f"procedure:{procedure.id}"
+        elif promotion_type == "episode":
+            episode = create_episode(
+                db_path=db_path,
+                title=str(reviewed["title"]),
+                summary=str(reviewed["summary"]),
+                source_ids=[int(value) for value in reviewed.get("source_ids", [])],
+                tags=[str(value) for value in reviewed.get("tags", [])],
+                importance_score=float(reviewed.get("importance_score") or 0.0),
+                scope=str(reviewed.get("scope") or "global"),
+                status="approved",
+            )
+            promoted_ref = f"episode:{episode.id}"
         else:
             skipped.append({"candidate_id": candidate_id, "reason": f"reviewed_payload_not_promotable_{promotion_type or 'missing'}"})
             continue
@@ -6888,6 +6912,21 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("high_epoch_empty_retrieval_ratio")
     unknown_empty_outcome_count = empty_by_retrieval_outcome.get("unknown", 0) + empty_by_retrieval_outcome.get("", 0)
     unresolved_unknown_empty_outcome_count = empty_unknown_outcome_drilldown.get("adapter_payload_gap", 0)
+    classified_missing_outcome_count = max(0, unknown_empty_outcome_count - unresolved_unknown_empty_outcome_count)
+    if unresolved_unknown_empty_outcome_count:
+        dominant_blocker = "adapter_payload_gap"
+        classification_confidence = "partial" if classified_missing_outcome_count else "low"
+        metadata_gap_next_action = (
+            "Fix adapter payload metadata for unresolved empty observations before treating classified legacy gaps as reset-safe."
+        )
+    elif unknown_empty_outcome_count:
+        dominant_blocker = "classified_legacy_missing_outcome"
+        classification_confidence = "classified"
+        metadata_gap_next_action = "Collect more fresh metadata-rich dogfood before telemetry reset; no adapter payload gap detected."
+    else:
+        dominant_blocker = "none"
+        classification_confidence = "complete"
+        metadata_gap_next_action = "No unknown empty-retrieval outcome metadata gap detected."
     if unresolved_unknown_empty_outcome_count:
         warnings.append("epoch_empty_retrieval_outcome_unknown")
     elif unknown_empty_outcome_count:
@@ -6948,6 +6987,14 @@ def _dogfood_fresh_epoch_payload(args: argparse.Namespace) -> dict[str, Any]:
                 },
                 "classification_rule": "metadata-only aggregate inference from hook_event_name and response_mode",
                 "next_action": "Prefer more v0.1.129+ dogfood or a targeted metadata backfill preview before telemetry reset.",
+            },
+            "metadata_gap_diagnostic": {
+                "unknown_empty_outcome_count": unknown_empty_outcome_count,
+                "unresolved_adapter_payload_gap_count": unresolved_unknown_empty_outcome_count,
+                "classified_missing_outcome_count": classified_missing_outcome_count,
+                "dominant_blocker": dominant_blocker,
+                "classification_confidence": classification_confidence,
+                "next_action": metadata_gap_next_action,
             },
             "by_hook_event_name": {key: empty_by_hook_event_name[key] for key in sorted(empty_by_hook_event_name)},
             "by_surface": {key: empty_by_surface[key] for key in sorted(empty_by_surface)},
@@ -10911,7 +10958,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_candidate_update_parser.add_argument("--actor", required=True)
     dogfood_trace_candidate_update_parser.add_argument("--reason", required=True)
     dogfood_trace_candidate_update_parser.add_argument("--approval-phrase", required=True)
-    dogfood_trace_candidate_update_parser.add_argument("--promotion-type", choices=["fact", "preference", "procedure"])
+    dogfood_trace_candidate_update_parser.add_argument("--promotion-type", choices=["fact", "preference", "procedure", "episode"])
     dogfood_trace_candidate_update_parser.add_argument("--subject")
     dogfood_trace_candidate_update_parser.add_argument("--predicate")
     dogfood_trace_candidate_update_parser.add_argument("--object")
@@ -10920,6 +10967,10 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_candidate_update_parser.add_argument("--precondition", action="append")
     dogfood_trace_candidate_update_parser.add_argument("--step", action="append")
     dogfood_trace_candidate_update_parser.add_argument("--success-rate", type=float, default=0.0)
+    dogfood_trace_candidate_update_parser.add_argument("--title")
+    dogfood_trace_candidate_update_parser.add_argument("--summary")
+    dogfood_trace_candidate_update_parser.add_argument("--tag", action="append")
+    dogfood_trace_candidate_update_parser.add_argument("--importance-score", type=float, default=0.0)
     dogfood_trace_candidate_update_parser.add_argument("--scope", default="global")
     dogfood_trace_candidate_update_parser.add_argument("--confidence", type=float, default=0.7)
     dogfood_trace_candidate_apply_parser = dogfood_subparsers.add_parser(

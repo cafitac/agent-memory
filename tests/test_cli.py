@@ -3147,6 +3147,14 @@ def test_python_module_cli_dogfood_fresh_epoch_classifies_unknown_empty_retrieva
         "classification_rule": "metadata-only aggregate inference from hook_event_name and response_mode",
         "next_action": "Prefer more v0.1.129+ dogfood or a targeted metadata backfill preview before telemetry reset.",
     }
+    assert diagnostics["metadata_gap_diagnostic"] == {
+        "unknown_empty_outcome_count": 2,
+        "unresolved_adapter_payload_gap_count": 1,
+        "classified_missing_outcome_count": 1,
+        "dominant_blocker": "adapter_payload_gap",
+        "classification_confidence": "partial",
+        "next_action": "Fix adapter payload metadata for unresolved empty observations before treating classified legacy gaps as reset-safe.",
+    }
     assert payload["quality_gate"] == {
         "pass": False,
         "decision": "continue_fresh_epoch_dogfooding",
@@ -10819,9 +10827,37 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
             "name, trigger_context, status",
             ("Run reviewed candidate promotion", "when a trace candidate is explicitly approved", "approved"),
         ),
+        (
+            "episode",
+            [
+                "--promotion-type",
+                "episode",
+                "--title",
+                "Reviewed live mixed corpus checkpoint",
+                "--summary",
+                "A reviewed episode records the live mixed retrieval shadow corpus checkpoint without raw transcript storage.",
+                "--tag",
+                "retrieval-eval",
+                "--tag",
+                "shadow-corpus",
+                "--scope",
+                "project:g5-candidates",
+                "--importance-score",
+                "0.7",
+            ],
+            "promote_reviewed_episode",
+            "episode:",
+            "episodes",
+            "title, summary, status",
+            (
+                "Reviewed live mixed corpus checkpoint",
+                "A reviewed episode records the live mixed retrieval shadow corpus checkpoint without raw transcript storage.",
+                "approved",
+            ),
+        ),
     ],
 )
-def test_dogfood_trace_candidate_apply_supports_reviewed_preference_and_procedure_promotions(
+def test_dogfood_trace_candidate_apply_supports_reviewed_preference_procedure_and_episode_promotions(
     tmp_path: Path,
     promotion_type: str,
     update_args: list[str],
