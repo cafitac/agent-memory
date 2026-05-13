@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 10:35 KST
+Last updated: 2026-05-13 11:08 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.146`; the installed Hermes hooks are healthy on the v0.1.146 runtime across default, personal-oss, earlypay, and infra-admin profiles. G5a-G5f are released, and the current local G5h slice adds a narrow reviewed decay deprecate corridor, richer supersession evidence, graph-cluster candidate skeleton generation, a retrieval-ranking eval gate, and rollback confidence inspection, rollback replay validation, eval-gated opt-in ranking experiment preview, decay/collapse decision boundary, richer candidate skeleton annotations, and historical telemetry reconciliation report. Broad G4/background apply remains blocked.
+`agent-memory` is released and live-runtime-smoked through `v0.1.146`; the installed Hermes hooks are healthy on the v0.1.146 runtime across default, personal-oss, earlypay, and infra-admin profiles. G5a-G5g are released, local G5h is implemented/test-green, and the current local G5i slice adds live rollback replay rollups, live-compatible retrieval fixture expansion summaries, explicit collapse equivalence proof gates, telemetry-reset apply safety-gate reporting, and broad G4 apply reassessment fields. Broad G4/background apply remains blocked.
 
 ## Current progress estimate toward the north-star
 
@@ -24,14 +24,14 @@ The north-star is a human-memory-like, mostly automatic, graph-based memory cons
 
 Approximate progress:
 
-- Overall north-star: 71-73%.
+- Overall north-star: 72-74%.
 - Substrate/evidence plumbing: about 80-82%.
-- Safe automatic mutation/promotion: about 58-61%.
-- Remaining work: about 27-29% overall, concentrated in larger-scope eval-backed automation, safer automatic review decisions, and broad rollback/replay validation.
+- Safe automatic mutation/promotion: about 60-63%.
+- Remaining work: about 26-28% overall, concentrated in larger-scope eval-backed automation, safer automatic review decisions, real live smoke/release, and broader rollback/replay validation.
 
 Reasoning:
 
-- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, G5e read-only stale weak evidence -> decay/collapse candidate preview, G5f conflict -> supersession/replacement candidate preview plus lifecycle registry/bounded partial automation, G5g reviewed decay deprecate / ranking gate / rollback confidence, and local G5h rollback replay validation / eval-gated opt-in ranking experiment / decay-collapse decision boundary / richer candidate skeleton annotations / telemetry reconciliation report.
+- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, G5e read-only stale weak evidence -> decay/collapse candidate preview, G5f conflict -> supersession/replacement candidate preview plus lifecycle registry/bounded partial automation, G5g reviewed decay deprecate / ranking gate / rollback confidence, local G5h rollback replay validation / eval-gated opt-in ranking experiment / decay-collapse decision boundary / richer candidate skeleton annotations / telemetry reconciliation report, and local G5i live replay rollups / fixture expansion / collapse proof surface / telemetry apply safety gate / broad-G4 reassessment report fields.
 - Not done: broad background consolidation apply, fully automatic long-term memory promotion, default retrieval-ranking policy changes, automatic ordinary-conversation approval, collapse/delete apply, and large-scope autonomous rollback/replay on real runtime evidence.
 
 ## Latest verified checkpoint
@@ -73,10 +73,10 @@ Fresh G5f blocker-resolution evidence: `.dev/dogfood/g5f-20260512T224602Z/schedu
 
 Proceed in this sequence:
 
-1. Review/release the local G5h slice: `rollback-replay-validate`, `retrieval-ranking-experiment`, `decay-collapse-decision`, richer `trace-candidate-generate` skeleton annotations, and `telemetry-reconciliation`.
-2. After release, add live runtime smoke for the new read-only commands on `/Users/reddit/.agent-memory/memory.db`; keep all mutating commands opt-in, backup-backed, and phrase-gated.
-3. Use G5h evidence to decide the next G5i slice: either live rollback replay reports, fixture expansion for ranking experiments, or reviewed collapse equivalence proof. Do not enable default ranking changes yet.
-4. Keep broad G4/background apply blocked until ranking gate, rollback confidence, replay validation, and live telemetry reconciliation have all passed on real runtime evidence. G4 broad apply contract remains guardrail-only.
+1. Review/release the local G5h+G5i safety slice: G5h commands plus G5i rollup/proof/gate fields.
+2. After release, add live runtime smoke for the new read-only commands and telemetry-reset preview/apply safety reporting on a backed-up, epoch-filtered live-compatible target; keep all mutating commands opt-in, backup-backed, and phrase-gated.
+3. Expand real retrieval eval fixtures before any default ranking change. Do not enable default ranking changes yet.
+4. Keep broad G4/background apply blocked until ranking gate, rollback confidence, replay validation, live telemetry reconciliation, and human-reviewed queue approvals have all passed on real runtime evidence. G4 broad apply contract remains guardrail-only.
 5. Ordinary conversation auto-approval remains forbidden; candidate generation creates review skeletons only.
 
 ## What not to do next
@@ -93,7 +93,7 @@ Do not silently delete, reset, or rewrite telemetry. Historical reconciliation m
 
 If asked "다음으로 뭐해야 해?", answer:
 
-> 지금은 v0.1.146까지 릴리즈/설치/스모크가 끝났고 Hermes hook도 default/personal-oss/earlypay/infra-admin 전부 doctor-green입니다. G5a-G5g는 merged/released이고, local G5h는 rollback replay validation, eval-gated opt-in ranking experiment, decay/collapse decision boundary, richer candidate skeleton annotations, historical telemetry reconciliation report까지 구현/test-green인 상태입니다. 전체 목표 대비 대략 71-73% 정도 왔고, 남은 27-29%는 default ranking 변경, collapse/delete apply, 자동 승인/승격, broad G4/background apply를 안전하게 여는 쪽입니다. 다음은 G5h를 리뷰/릴리즈하고 live runtime smoke를 도는 게 맞습니다. broad G4/background apply는 아직 금지입니다.
+> 지금은 v0.1.146까지 릴리즈/설치/스모크가 끝났고 Hermes hook도 default/personal-oss/earlypay/infra-admin 전부 doctor-green입니다. G5a-G5g는 merged/released이고, local G5h는 구현/test-green이고, local G5i도 live rollback replay rollup, retrieval fixture expansion, collapse equivalence proof surface, telemetry apply safety gate, broad G4 reassessment report fields까지 구현/test-green인 상태입니다. 전체 목표 대비 대략 72-74% 정도 왔고, 남은 26-28%는 default ranking 변경, collapse/delete apply, 자동 승인/승격, broad G4/background apply를 안전하게 여는 쪽입니다. 다음은 G5h를 리뷰/릴리즈하고 live runtime smoke를 도는 게 맞습니다. broad G4/background apply는 아직 금지입니다.
 
 ## Quick verification commands
 
@@ -111,3 +111,8 @@ PY
 ```
 
 Expected: read-only/no-mutation. G5e should remain a decay/collapse review-priority preview (`read_only=true`, `mutated=false`, default retrieval unchanged); fresh linkage should remain `fresh_trace_linkage_gap_not_detected`; broad apply remains blocked until the reviewed contract/reconciliation/apply runway is explicitly completed.
+
+
+## G5i local command surface
+
+Local G5h/G5i command surface includes `rollback-replay-validate`, `retrieval-ranking-experiment`, `decay-collapse-decision`, `telemetry-reconciliation`, rollback confidence reporting, reviewed decay deprecate gates, and the G4 broad apply contract as blocked guardrail-only reporting. Historical telemetry reconciliation remains telemetry-only.

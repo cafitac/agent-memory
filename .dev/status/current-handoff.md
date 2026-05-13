@@ -1170,3 +1170,13 @@ HOME=/Users/reddit gh run list --repo cafitac/agent-memory --limit 10
 - Live installed G4 preview wrote `/tmp/agent-memory-v0136-g4-preview-live.json`; it stayed read-only/no-mutation and produced 2 ref-only queue entries. The old unknown-empty blocker is resolved/classified for the fresh window, but the broad gate remains blocked by `background_empty_retrieval_trace_linkage_gap` because the fresh comparison still has one fresh unlinked observation.
 - Installed queue-apply smoke was performed only on disposable fixture `/tmp/agent-memory-v0136-installed-apply-fixture.db`; it produced `applied_count=1`, `memory_reinforcement_mutated=true`, `memory_status_mutated=false`, `default_retrieval_unchanged=true`, and fact row `(reinforcement_count=1.0, retrieval_count=0)`. No live apply mutation was performed in this rollout.
 - Live aggregate after rollout: `facts=3`, `procedures=0`, `episodes=0`, `g4_review_queue_items=2`, `g4_review_queue_applications=2`, and the live telemetry tables continued to advance with the installed hook.
+
+
+## G5i local checkpoint
+
+Status: AI-authored draft. Not yet human-approved.
+Last updated: 2026-05-13 11:08 KST
+
+Runtime baseline remains `v0.1.146` at `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`; fresh linkage evidence still includes `fresh_trace_linkage_gap_not_detected` and report directory `g4-v0138-20260512-132253`. Overall north-star: 72-74%.
+
+Local G5i implements the requested five next steps after G5h: rollback replay rollups, live-compatible retrieval fixture expansion summaries, collapse equivalence proof surface, telemetry-only apply safety-gate reporting, and broad G4 apply reassessment fields. Broad G4/background apply remains blocked; default ranking changes, collapse/delete apply, and ordinary conversation auto-approval remain forbidden.

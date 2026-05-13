@@ -3526,6 +3526,16 @@ def _dogfood_rollback_replay_validate_payload(args: argparse.Namespace) -> dict[
         blocked_reasons.append("restore_open_failed")
     if any(not app["rollback_replay_validation"]["table_counts_match_backup"] for app in applications):
         blocked_reasons.append("restore_table_count_mismatch")
+    passed_replay_count = sum(
+        1
+        for app in applications
+        if app["rollback_replay_validation"].get("backup_exists")
+        and app["rollback_replay_validation"].get("backup_sha256_matches")
+        and app["rollback_replay_validation"].get("restored_db_opened")
+        and app["rollback_replay_validation"].get("table_counts_match_backup")
+    )
+    policy_counts = Counter(str(app.get("policy") or "unknown") for app in applications)
+    latest_application_created_at = max((str(app.get("created_at") or "") for app in applications), default=None)
     payload = {
         "kind": "dogfood_rollback_replay_validate",
         "read_only": True,
@@ -3533,6 +3543,14 @@ def _dogfood_rollback_replay_validate_payload(args: argparse.Namespace) -> dict[
         "default_retrieval_unchanged": True,
         "application_count": len(applications),
         "applications": applications,
+        "rollup": {
+            "checked_application_count": len(applications),
+            "passed_replay_count": passed_replay_count,
+            "failed_replay_count": len(applications) - passed_replay_count,
+            "policy_counts": {key: policy_counts[key] for key in sorted(policy_counts)},
+            "latest_application_created_at": latest_application_created_at,
+            "live_report_accumulation_safe": True,
+        },
         "quality_gate": {
             "pass": not blocked_reasons,
             "blocked_reasons": blocked_reasons,
@@ -3855,6 +3873,25 @@ def _fixture_tasks_for_preview(fixtures_path: Path) -> list[dict[str, Any]]:
     return [task for task in tasks if isinstance(task, dict)]
 
 
+def _retrieval_fixture_expansion_summary(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    source_counts = Counter(str(task.get("source") or "unspecified") for task in tasks)
+    live_compatible_count = sum(
+        1
+        for task in tasks
+        if bool(task.get("preferred_scope"))
+        and isinstance(task.get("expected"), dict)
+        and any(task["expected"].get(key) for key in ("facts", "procedures", "episodes"))
+    )
+    return {
+        "task_count": len(tasks),
+        "live_compatible_task_count": live_compatible_count,
+        "scoped_task_count": sum(1 for task in tasks if bool(task.get("preferred_scope"))),
+        "has_rationale_count": sum(1 for task in tasks if bool(task.get("rationale") or task.get("notes"))),
+        "fixture_source_counts": {key: source_counts[key] for key in sorted(source_counts)},
+        "live_runtime_safe": True,
+    }
+
+
 def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> dict[str, Any]:
     gate = _dogfood_retrieval_ranking_gate_payload(
         argparse.Namespace(
@@ -3866,8 +3903,9 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
         )
     )
     previews: list[dict[str, Any]] = []
+    fixture_tasks = _fixture_tasks_for_preview(args.fixtures)
     if gate["ranking_change_allowed"]:
-        for task in _fixture_tasks_for_preview(args.fixtures)[: args.max_tasks]:
+        for task in fixture_tasks[: args.max_tasks]:
             query = str(task.get("query") or "")
             if not query:
                 continue
@@ -3892,6 +3930,7 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
         "preview_count": len(previews),
         "rank_change_count": rank_change_count,
         "previews": previews,
+        "fixture_expansion": _retrieval_fixture_expansion_summary(fixture_tasks),
         "promotion_policy": {
             "default_ranking_mutated": False,
             "requires_gate_pass": True,
@@ -3927,6 +3966,18 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
             "retrieval_eval_gate_pass",
             "human_reviewed_candidate_payload",
         ],
+        "collapse_equivalence_proof": {
+            "proof_required": True,
+            "accepted_evidence": [
+                "rollback_replay_validate_pass",
+                "relation_equivalence_or_supersession_chain",
+                "retrieval_eval_gate_pass",
+                "human_reviewed_candidate_payload",
+            ],
+            "current_status": "not_satisfied",
+            "collapse_apply_allowed": False,
+            "delete_apply_allowed": False,
+        },
         "privacy": {"raw_content_included": False, "sample_values_included": False},
     }
     _write_json_report(args.output, payload)
@@ -3966,6 +4017,13 @@ def _dogfood_telemetry_reconciliation_payload(args: argparse.Namespace) -> dict[
             "approval_phrase": "apply-telemetry-reset-v1",
             "protected_memory_tables_mutated": False,
             "ordinary_conversation_auto_apply": False,
+            "safety_gate": {
+                "fresh_epoch_gate_required": True,
+                "backup_required": True,
+                "post_apply_preview_required": True,
+                "rollback_restore_replay_required_before_broad_g4": True,
+                "protected_table_count_verification_required": True,
+            },
         },
         "quality_gate": {
             "pass": bool(reset_preview.get("candidate_delete_total", 0) is not None),
@@ -7103,6 +7161,13 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         blocked_reasons.append("no_review_queue_candidates")
     blocked_reasons.extend(str(reason) for reason in warning_analysis.get("blocking_reasons", []))
     blocked_reasons = sorted(set(blocked_reasons))
+    broad_g4_required_green_gates = [
+        "retrieval_ranking_gate_pass",
+        "rollback_confidence_pass",
+        "rollback_replay_validate_pass",
+        "live_telemetry_reconciliation_pass",
+        "human_review_queue_approval_pass",
+    ]
 
     payload = {
         "kind": "dogfood_g4_review_queue_preview",
@@ -7123,6 +7188,14 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
             "pass": not blocked_reasons,
             "decision": "review_queue_ready_for_manual_review" if not blocked_reasons else "continue_read_only_dogfood_before_review_queue",
             "blocked_reasons": blocked_reasons,
+        },
+        "broad_g4_apply_reassessment": {
+            "broad_g4_apply_allowed": False,
+            "decision": "broad_g4_apply_still_blocked_until_all_live_safety_gates_pass",
+            "required_green_gates": broad_g4_required_green_gates,
+            "current_report_green": not blocked_reasons,
+            "default_retrieval_unchanged": True,
+            "ordinary_conversation_auto_approval": False,
         },
         "automation_policy": {
             "apply_supported": False,
@@ -7502,11 +7575,18 @@ def _dogfood_telemetry_reset_apply_payload(args: argparse.Namespace) -> dict[str
         }
     protected_unchanged = protected_before == protected_after
     deleted_total = sum(deleted_by_table.values())
-    if not protected_unchanged:
-        raise RuntimeError("protected table counts changed during telemetry reset apply")
     after_preview = _dogfood_telemetry_reset_preview_payload(
         argparse.Namespace(db_path=db_path, epoch_start=args.epoch_start, output=None)
     )
+    blocked_reasons: list[str] = []
+    if not protected_unchanged:
+        blocked_reasons.append("protected_table_count_changed")
+    if deleted_total != candidate_total:
+        blocked_reasons.append("deleted_total_does_not_match_preview")
+    if _safe_int(after_preview.get("candidate_delete_total")) != 0:
+        blocked_reasons.append("post_apply_preview_still_has_candidates")
+    if blocked_reasons:
+        raise RuntimeError("telemetry reset apply failed safety gate: " + ",".join(blocked_reasons))
     payload = {
         "kind": "dogfood_telemetry_reset_apply",
         "read_only": False,
@@ -7529,6 +7609,11 @@ def _dogfood_telemetry_reset_apply_payload(args: argparse.Namespace) -> dict[str
         "post_apply_preview": {
             "candidate_delete_total": after_preview.get("candidate_delete_total"),
             "warnings": after_preview.get("warnings", []),
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "telemetry_only_reset_applied_with_protected_tables_verified",
+            "blocked_reasons": [],
         },
         "privacy": {
             "raw_conversation_content_included": False,

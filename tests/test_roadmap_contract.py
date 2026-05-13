@@ -71,7 +71,7 @@ def test_v0146_status_docs_record_g5h_local_slice_and_next_brainlike_steps() -> 
         assert "/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
-        assert "Overall north-star: 71-73%" in doc
+        assert "Overall north-star: 72-74%" in doc
         assert "broad g4/background apply" in doc.lower()
 
     assert "dogfood trace-cluster-preview" in next_action
@@ -82,6 +82,7 @@ def test_v0146_status_docs_record_g5h_local_slice_and_next_brainlike_steps() -> 
     assert "G5f" in next_action
     assert "G5g" in next_action
     assert "G5h" in next_action
+    assert "G5i" in next_action
     assert "review_score" in next_action
     assert "dogfood reinforcement-refinement-preview" in next_action
     assert "dogfood decay-collapse-preview" in next_action

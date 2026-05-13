@@ -10102,9 +10102,17 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert replay_payload["quality_gate"]["pass"] is True
     assert replay_payload["applications"][0]["rollback_replay_validation"]["restored_db_opened"] is True
     assert replay_payload["applications"][0]["rollback_replay_validation"]["table_counts_match_backup"] is True
+    assert replay_payload["rollup"] == {
+        "checked_application_count": 1,
+        "passed_replay_count": 1,
+        "failed_replay_count": 0,
+        "policy_counts": {"g5-lifecycle-decay-deprecate-apply-v1": 1},
+        "latest_application_created_at": replay_payload["applications"][0]["created_at"],
+        "live_report_accumulation_safe": True,
+    }
 
     fixture_path = tmp_path / "g5h-ranking-fixture.json"
-    fixture_path.write_text(json.dumps({"tasks": [{"id": "g5h-ranking", "query": "What does Project G5h ranking require?", "preferred_scope": "project:g5h", "limit": 5, "expected": {"facts": [ranked_fact.id], "procedures": [], "episodes": []}, "avoid": {"facts": [], "procedures": [], "episodes": []}}]}))
+    fixture_path.write_text(json.dumps({"tasks": [{"id": "g5h-ranking", "query": "What does Project G5h ranking require?", "preferred_scope": "project:g5h", "limit": 5, "expected": {"facts": [ranked_fact.id], "procedures": [], "episodes": []}, "avoid": {"facts": [], "procedures": [], "episodes": []}, "source": "live-compatible-g5i", "rationale": "covers eval-gated opt-in ranking on live-shaped scopes"}]}))
     experiment_result = subprocess.run(
         [
             sys.executable, "-m", "agent_memory.api.cli", "dogfood", "retrieval-ranking-experiment", str(db_path),
@@ -10118,6 +10126,14 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert experiment_payload["read_only"] is True
     assert experiment_payload["default_retrieval_unchanged"] is True
     assert experiment_payload["promotion_policy"]["ordinary_conversation_auto_enable"] is False
+    assert experiment_payload["fixture_expansion"] == {
+        "task_count": 1,
+        "live_compatible_task_count": 1,
+        "scoped_task_count": 1,
+        "has_rationale_count": 1,
+        "fixture_source_counts": {"live-compatible-g5i": 1},
+        "live_runtime_safe": True,
+    }
 
     decision_result = subprocess.run(
         [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "decay-collapse-decision", str(db_path), "--limit", "20", "--top", "5"],
@@ -10128,6 +10144,18 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert decision_payload["decision"]["deprecate_corridor"] == "supported_for_reviewed_approved_decay_candidates"
     assert decision_payload["decision"]["collapse_corridor"].startswith("blocked")
     assert "g5-lifecycle-delete-apply-v1" in decision_payload["blocked_policies"]
+    assert decision_payload["collapse_equivalence_proof"] == {
+        "proof_required": True,
+        "accepted_evidence": [
+            "rollback_replay_validate_pass",
+            "relation_equivalence_or_supersession_chain",
+            "retrieval_eval_gate_pass",
+            "human_reviewed_candidate_payload",
+        ],
+        "current_status": "not_satisfied",
+        "collapse_apply_allowed": False,
+        "delete_apply_allowed": False,
+    }
 
     _seed_trace_cluster_for_candidate_flow(db_path)
     generate_result = subprocess.run(
@@ -10159,6 +10187,50 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert reconciliation_payload["read_only"] is True
     assert reconciliation_payload["apply_corridor"]["protected_memory_tables_mutated"] is False
     assert reconciliation_payload["apply_corridor"]["ordinary_conversation_auto_apply"] is False
+    assert reconciliation_payload["apply_corridor"]["safety_gate"] == {
+        "fresh_epoch_gate_required": True,
+        "backup_required": True,
+        "post_apply_preview_required": True,
+        "rollback_restore_replay_required_before_broad_g4": True,
+        "protected_table_count_verification_required": True,
+    }
+    apply_reset_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "telemetry-reset-apply", str(db_path),
+            "--epoch-start", "2025-01-01T00:00:00+00:00",
+            "--policy", "telemetry-reset-v1",
+            "--approval-phrase", "apply-telemetry-reset-v1",
+            "--actor", "tester",
+            "--reason", "g5i telemetry only corridor",
+            "--backup-path", str(tmp_path / "g5i-telemetry-reset.backup.db"),
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert apply_reset_result.returncode == 0, apply_reset_result.stderr
+    apply_reset_payload = json.loads(apply_reset_result.stdout)
+    assert apply_reset_payload["quality_gate"] == {
+        "pass": True,
+        "decision": "telemetry_only_reset_applied_with_protected_tables_verified",
+        "blocked_reasons": [],
+    }
+
+    g4_result = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-preview", str(db_path),
+            "--limit", "20", "--top", "5", "--queue-limit", "5", "--epoch-start", "2025-01-01T00:00:00+00:00",
+        ],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+    )
+    assert g4_result.returncode == 0, g4_result.stderr
+    g4_payload = json.loads(g4_result.stdout)
+    assert g4_payload["broad_g4_apply_reassessment"]["broad_g4_apply_allowed"] is False
+    assert g4_payload["broad_g4_apply_reassessment"]["required_green_gates"] == [
+        "retrieval_ranking_gate_pass",
+        "rollback_confidence_pass",
+        "rollback_replay_validate_pass",
+        "live_telemetry_reconciliation_pass",
+        "human_review_queue_approval_pass",
+    ]
     assert _table_counts(db_path, ["facts", "relations"])["facts"] == before_counts["facts"] + 1
     assert "SHOULD_NOT_LEAK" not in replay_result.stdout
     assert "SHOULD_NOT_LEAK" not in experiment_result.stdout
