@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_memory.api.cli import main
-from agent_memory.core.curation import approve_fact, create_candidate_fact, supersede_fact
+from agent_memory.core.curation import approve_fact, create_candidate_fact, create_episode, supersede_fact
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.core.retrieval import retrieve_memory_packet
@@ -9464,6 +9464,95 @@ def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_muta
     assert "SHOULD_NOT_LEAK" not in result.stdout
     assert "source text" not in result.stdout
     assert "query_preview" not in result.stdout
+
+
+
+def test_dogfood_decay_collapse_preview_handles_episode_source_ids_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "decay-collapse-episode-preview.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5e episode source text and token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5e-decay-episode"},
+    )
+    episode = create_episode(
+        db_path=db_path,
+        title="G5e stale episode",
+        summary="Episode evidence should be counted from source ids without reading raw content.",
+        source_ids=[source.id],
+        tags=["g5e", "episode"],
+        importance_score=0.25,
+        scope="project:g5e-decay",
+        status="approved",
+    )
+    record_retrieval_observation(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        query="SHOULD_NOT_LEAK stale episode collapse query",
+        preferred_scope="project:g5e-decay",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[
+            RetrievalTraceEntry(
+                memory_type="episode",
+                memory_id=episode.id,
+                label="stale episode candidate",
+                scope="project:g5e-decay",
+                scope_priority=0,
+                text_match_count=1,
+                rank_value=0.7,
+                total_score=0.7,
+            )
+        ],
+        response_mode="verify_first",
+        metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": "g5e-episode"},
+    )
+
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "procedures", "episodes"],
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "decay-collapse-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--min-decay-score",
+            "0.1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    candidates = {candidate["memory_ref"]: candidate for candidate in payload["decay_collapse_candidates"]}
+    candidate = candidates[f"episode:{episode.id}"]
+    assert candidate["ref_safe_evidence"]["evidence_id_count"] == 1
+    assert candidate["ref_safe_evidence"]["content_included"] is False
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "procedures", "episodes"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
 
 
 def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(

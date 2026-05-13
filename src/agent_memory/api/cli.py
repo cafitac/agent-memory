@@ -582,10 +582,12 @@ def _ref_safe_evidence_snapshot(db_path: Path, memory_ref: str) -> dict[str, Any
         }
     memory_type, memory_id = parts
     table_by_type = {"fact": "facts", "procedure": "procedures", "episode": "episodes"}
+    evidence_column_by_type = {"fact": "evidence_ids_json", "procedure": "evidence_ids_json", "episode": "source_ids_json"}
     table_name = table_by_type[memory_type]
+    evidence_column = evidence_column_by_type[memory_type]
     with _open_readonly_sqlite(db_path) as connection:
         row = connection.execute(
-            f"SELECT evidence_ids_json, scope FROM {table_name} WHERE id = ?",
+            f"SELECT {evidence_column} AS evidence_refs_json, scope FROM {table_name} WHERE id = ?",
             (memory_id,),
         ).fetchone()
     relations = list_relations_for_node(db_path, node_ref=memory_ref)
@@ -605,7 +607,7 @@ def _ref_safe_evidence_snapshot(db_path: Path, memory_ref: str) -> dict[str, Any
         "memory_type": memory_type,
         "memory_id": memory_id,
         "exists": True,
-        "evidence_id_count": len(_safe_json_list_from_db(row["evidence_ids_json"])),
+        "evidence_id_count": len(_safe_json_list_from_db(row["evidence_refs_json"])),
         "relation_count": len(relations),
         "scope_present": row["scope"] is not None,
         "content_included": False,

@@ -1,7 +1,22 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 17:09 KST
+Last updated: 2026-05-13 17:55 KST
+
+
+
+## v0.1.153 next-step live dogfood checkpoint
+
+Run directory: `/Users/reddit/.agent-memory/reports/v0.1.153-next-steps-20260513T084528/`.
+
+Results from the requested next-step pass:
+
+- Metadata-rich dogfooding produced a clean dogfood-only fresh epoch: `fresh-epoch-dogfood-only-strict.json` passed with trace coverage `1.0`, empty retrieval ratio `0.0`, no unknown/classified metadata gap, no raw query/trace/content samples, and no mutation.
+- Wider post-v0.1.152/post-v0.1.153 fresh epochs still fail because old rows remain in the epoch window: post-v0.1.153 has `low_epoch_observation_trace_coverage` plus `epoch_empty_retrieval_outcome_metadata_gap_classified`; dominant blocker remains `classified_legacy_missing_outcome`, not an unresolved adapter payload gap.
+- Default ranking remains protected: mixed 50-task shadow eval passed `50/50` with zero baseline regressions, but `active_ranking_policy=conservative_legacy`, `candidate_ranking_policy=graph_reinforced_v1`, `default_retrieval_unchanged=true`, `mutated=false`, and migration still requires the explicit migration command/approval.
+- Reviewed trace-candidate promotion remains narrow only: generation/listing are read-only, ordinary conversation auto-approval is false, raw content is not allowed, and bad apply policy/approval exits without mutation.
+- Broad G4/background apply remains blocked: dogfood epoch G4 preview is read-only/no-mutation with `broad_g4_apply_allowed=false`; required green gates are retrieval ranking, rollback replay, live telemetry reconciliation/fresh epoch, and human-reviewed queue approval.
+- While checking broad G4/decay paths, the live v0.1.153 decay-collapse decision hit an episode evidence snapshot bug (`episodes` use `source_ids_json`, not `evidence_ids_json`). Source now has a regression fix and test; release v0.1.154 is required before relying on live decay-collapse decision over episode candidates.
 
 ## v0.1.153 released runtime checkpoint
 
