@@ -1,7 +1,7 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 21:23 KST
+Last updated: 2026-05-13 22:38 KST
 
 
 
@@ -9,8 +9,8 @@ Last updated: 2026-05-13 21:23 KST
 
 ## v0.1.154 active runtime checkpoint
 
-- Release: `v0.1.154` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`).
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- Release: `v0.1.155` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`).
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
 - Hermes `personal-oss` hook accepted and `hermes --profile personal-oss hooks doctor` is green.
 - Runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
 - v0.1.154 fixes episode decay-collapse evidence snapshots by reading episode `source_ids_json`; the v0.1.154 decay-collapse decision over the mixed corpus now runs read-only/no-mutation.
@@ -35,11 +35,11 @@ This document is the restartable checkpoint after the v0.1.153 release/runtime r
 
 Current verified release state:
 
-- Release: `v0.1.154`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`.
+- Release: `v0.1.155`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`.
 - npm: `@cafitac/agent-memory@0.1.153`.
 - PyPI: `cafitac-agent-memory==0.1.153`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
 - Hermes hook doctor is green for `personal-oss` on the v0.1.153 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
