@@ -3950,7 +3950,92 @@ def _retrieval_fixture_expansion_summary(tasks: list[dict[str, Any]]) -> dict[st
     }
 
 
+RANKING_POLICIES = ("conservative_legacy", "graph_reinforced_v1", "shadow_compare")
+RANKING_DEFAULT_POLICY = "conservative_legacy"
+RANKING_MIGRATION_APPROVAL_PHRASE = "migrate-retrieval-ranking-default-v1"
+PROTECTED_RANKING_MIGRATION_TABLES = (
+    "facts",
+    "procedures",
+    "episodes",
+    "relations",
+    "memory_status_transitions",
+    "g5_trace_candidate_reviews",
+    "g4_review_queue_items",
+    "g4_review_queue_applications",
+)
+
+
+def _ranking_policy_or_default(args: argparse.Namespace) -> str:
+    policy = str(getattr(args, "ranking_policy", None) or RANKING_DEFAULT_POLICY)
+    if policy not in RANKING_POLICIES:
+        raise ValueError(f"unsupported ranking policy: {policy}")
+    return policy
+
+
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    return bool(
+        connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table,),
+        ).fetchone()
+    )
+
+
+def _protected_table_hashes(db_path: Path) -> dict[str, dict[str, Any]]:
+    hashes: dict[str, dict[str, Any]] = {}
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        for table in PROTECTED_RANKING_MIGRATION_TABLES:
+            if not _table_exists(connection, table):
+                hashes[table] = {"exists": False, "row_count": 0, "sha256": None}
+                continue
+            rows = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid')]
+            encoded = json.dumps(rows, sort_keys=True, default=str).encode("utf-8")
+            hashes[table] = {
+                "exists": True,
+                "row_count": len(rows),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+    return hashes
+
+
+def _read_ranking_policy_from_config(config_path: Path) -> str:
+    if not config_path.exists():
+        return RANKING_DEFAULT_POLICY
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("retrieval_ranking_policy:"):
+            value = stripped.split(":", 1)[1].strip().strip('"\'')
+            if value in RANKING_POLICIES:
+                return value
+    return RANKING_DEFAULT_POLICY
+
+
+def _write_ranking_policy_to_config(config_path: Path, policy: str) -> None:
+    original = config_path.read_text(encoding="utf-8") if config_path.exists() else "agent_memory:\n"
+    lines = original.splitlines()
+    replaced = False
+    new_lines: list[str] = []
+    for line in lines:
+        if line.strip().startswith("retrieval_ranking_policy:"):
+            indent = line[: len(line) - len(line.lstrip())]
+            new_lines.append(f"{indent}retrieval_ranking_policy: {policy}")
+            replaced = True
+        else:
+            new_lines.append(line)
+    if not replaced:
+        if not new_lines:
+            new_lines.append("agent_memory:")
+        if not any(line.strip() == "agent_memory:" for line in new_lines):
+            new_lines.extend(["", "agent_memory:"])
+        new_lines.append(f"  retrieval_ranking_policy: {policy}")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+
+
 def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> dict[str, Any]:
+    candidate_policy = _ranking_policy_or_default(args)
+    shadow_compare_requested = bool(getattr(args, "shadow_compare", False)) or candidate_policy == "shadow_compare"
     gate = _dogfood_retrieval_ranking_gate_payload(
         argparse.Namespace(
             db_path=args.db_path,
@@ -3982,6 +4067,8 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
     fixture_gate_comparison = {
         "comparison_mode": "expanded_fixtures_vs_current_default_read_only",
         "baseline_mode": args.baseline_mode or "current_default",
+        "active_ranking_policy": RANKING_DEFAULT_POLICY,
+        "candidate_ranking_policy": candidate_policy,
         "fixture_task_count": fixture_expansion["task_count"],
         "expanded_fixture_gate_met": fixture_expansion["task_count"] >= 50,
         "eval_gate_pass": bool(gate.get("ranking_change_allowed")),
@@ -3992,11 +4079,24 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
         "default_ranking_mutated": False,
         "ordinary_conversation_auto_enable": False,
     }
+    shadow_compare = {
+        "mode": "legacy_returned_candidate_compared" if shadow_compare_requested else "not_requested",
+        "active_ranking_policy": RANKING_DEFAULT_POLICY,
+        "candidate_ranking_policy": candidate_policy,
+        "protected_default_order_returned": True,
+        "candidate_preview_count": len(previews),
+        "candidate_rank_change_count": rank_change_count,
+        "baseline_regression_count": gate.get("baseline_regression_count", 0),
+        "requires_zero_baseline_regressions": True,
+        "durable_memory_mutated": False,
+    }
     payload = {
         "kind": "dogfood_retrieval_ranking_experiment",
         "read_only": True,
         "mutated": False,
         "default_retrieval_unchanged": True,
+        "active_ranking_policy": RANKING_DEFAULT_POLICY,
+        "candidate_ranking_policy": candidate_policy,
         "experiment_mode": "eval_gated_opt_in_ranker_preview_only",
         "gate": gate,
         "preview_count": len(previews),
@@ -4004,14 +4104,103 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
         "previews": previews,
         "fixture_expansion": fixture_expansion,
         "fixture_gate_comparison": fixture_gate_comparison,
+        "shadow_compare": shadow_compare,
         "promotion_policy": {
             "default_ranking_mutated": False,
             "requires_gate_pass": True,
             "requires_live_e2e_before_default": True,
+            "requires_shadow_compare": True,
+            "migration_command_required": True,
             "ordinary_conversation_auto_enable": False,
         },
     }
     _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_retrieval_ranking_migrate_default_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = str(args.policy)
+    if policy not in ("conservative_legacy", "graph_reinforced_v1"):
+        raise ValueError("retrieval-ranking-migrate-default policy must be conservative_legacy or graph_reinforced_v1")
+    if args.approval_phrase != RANKING_MIGRATION_APPROVAL_PHRASE:
+        raise ValueError(f"approval phrase must be {RANKING_MIGRATION_APPROVAL_PHRASE}")
+    if not args.actor.strip():
+        raise ValueError("actor is required")
+    if not args.reason.strip():
+        raise ValueError("reason is required")
+
+    before_hashes = _protected_table_hashes(args.db_path)
+    gate = _dogfood_retrieval_ranking_gate_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            fixtures=args.fixtures,
+            baseline_mode=getattr(args, "baseline_mode", None),
+            max_baseline_regressions=getattr(args, "max_baseline_regressions", 0),
+            output=None,
+        )
+    )
+    if not gate.get("ranking_change_allowed"):
+        raise ValueError("retrieval ranking migration blocked by retrieval-ranking-gate")
+
+    shadow = _dogfood_retrieval_ranking_experiment_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            fixtures=args.fixtures,
+            baseline_mode=getattr(args, "baseline_mode", None),
+            max_baseline_regressions=getattr(args, "max_baseline_regressions", 0),
+            max_tasks=getattr(args, "max_tasks", 5),
+            limit=getattr(args, "limit", 5),
+            reinforcement_weight=getattr(args, "reinforcement_weight", 1.5),
+            reinforcement_cap=getattr(args, "reinforcement_cap", 1.0),
+            ranking_policy=policy,
+            shadow_compare=True,
+            output=None,
+        )
+    )
+    policy_before = _read_ranking_policy_from_config(args.config_path)
+    _write_ranking_policy_to_config(args.config_path, policy)
+    after_hashes = _protected_table_hashes(args.db_path)
+    protected_unchanged = before_hashes == after_hashes
+    payload = {
+        "kind": "dogfood_retrieval_ranking_migrate_default",
+        "read_only": False,
+        "mutated": policy_before != policy,
+        "mutation_scope": "config_only",
+        "db_mutated": False,
+        "default_retrieval_unchanged": policy == RANKING_DEFAULT_POLICY,
+        "policy_before": policy_before,
+        "policy_after": policy,
+        "config_path": str(args.config_path),
+        "actor": args.actor,
+        "reason_sha256": hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest(),
+        "retrieval_gate": gate,
+        "shadow_compare": shadow.get("shadow_compare", {}),
+        "rollback_replay_gate": {
+            "protected_durable_tables_unchanged": protected_unchanged,
+            "protected_tables": sorted(before_hashes),
+            "before_hashes": before_hashes,
+            "after_hashes": after_hashes,
+            "rollback_policy": RANKING_DEFAULT_POLICY,
+        },
+        "rollback_command": {
+            "dogfood_action": "retrieval-ranking-migrate-default",
+            "db_path": str(args.db_path),
+            "fixtures": str(args.fixtures),
+            "config_path": str(args.config_path),
+            "policy": RANKING_DEFAULT_POLICY,
+            "approval_phrase": RANKING_MIGRATION_APPROVAL_PHRASE,
+        },
+        "safety_exclusions": {
+            "broad_g4_apply_enabled": False,
+            "ordinary_conversation_auto_approval": False,
+            "collapse_delete_apply_enabled": False,
+            "raw_prompt_or_query_storage_enabled": False,
+        },
+    }
+    if not protected_unchanged:
+        raise ValueError("protected durable memory tables changed during config-only ranking migration")
+    _write_json_report(getattr(args, "audit_output", None), payload)
+    _write_json_report(getattr(args, "output", None), payload)
     return payload
 
 
@@ -10652,7 +10841,37 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_retrieval_ranking_experiment_parser.add_argument("--limit", type=int, default=5)
     dogfood_retrieval_ranking_experiment_parser.add_argument("--reinforcement-weight", type=float, default=1.5)
     dogfood_retrieval_ranking_experiment_parser.add_argument("--reinforcement-cap", type=float, default=1.0)
+    dogfood_retrieval_ranking_experiment_parser.add_argument(
+        "--ranking-policy",
+        choices=list(RANKING_POLICIES),
+        default=RANKING_DEFAULT_POLICY,
+        help="Candidate ranking policy to compare while keeping the conservative legacy default returned.",
+    )
+    dogfood_retrieval_ranking_experiment_parser.add_argument(
+        "--shadow-compare",
+        action="store_true",
+        help="Run candidate ranking only as a shadow comparison; do not mutate defaults or returned order.",
+    )
     dogfood_retrieval_ranking_experiment_parser.add_argument("--output", type=Path)
+    dogfood_retrieval_ranking_migrate_parser = dogfood_subparsers.add_parser(
+        "retrieval-ranking-migrate-default",
+        help="Explicitly migrate retrieval ranking default config after fixture/shadow/rollback gates pass.",
+    )
+    dogfood_retrieval_ranking_migrate_parser.add_argument("db_path", type=Path)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--fixtures", type=Path, required=True)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--policy", required=True, choices=["conservative_legacy", "graph_reinforced_v1"])
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--config-path", type=Path, required=True)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--actor", required=True)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--reason", required=True)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--approval-phrase", required=True)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--baseline-mode")
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--max-baseline-regressions", type=int, default=0)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--max-tasks", type=int, default=5)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--limit", type=int, default=5)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--reinforcement-weight", type=float, default=1.5)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--reinforcement-cap", type=float, default=1.0)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--audit-output", type=Path)
+    dogfood_retrieval_ranking_migrate_parser.add_argument("--output", type=Path)
     dogfood_decay_collapse_decision_parser = dogfood_subparsers.add_parser(
         "decay-collapse-decision",
         help="Summarize the safe decision boundary after decay/collapse preview: deprecate only; collapse/delete blocked.",
@@ -11757,6 +11976,9 @@ def main() -> None:
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))
+            return
+        if args.dogfood_action == "retrieval-ranking-migrate-default":
+            print(json.dumps(_dogfood_retrieval_ranking_migrate_default_payload(args), indent=2))
             return
         if args.dogfood_action == "decay-collapse-decision":
             print(json.dumps(_dogfood_decay_collapse_decision_payload(args), indent=2))

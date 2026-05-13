@@ -10036,6 +10036,151 @@ def test_dogfood_new_brainlike_readiness_commands_are_safe_and_helpful(tmp_path:
 
 
 
+def test_retrieval_ranking_opt_in_default_migration_is_shadow_gated_and_rollbackable(tmp_path: Path) -> None:
+    db_path = tmp_path / "ranking-migration.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Ranking migration keeps conservative legacy as default until explicit approval.",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Ranking migration",
+        predicate="default_policy",
+        object_ref_or_value="conservative legacy until explicit approval",
+        evidence_ids=[source.id],
+        scope="project:ranking-migration",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    fixture_path = tmp_path / "ranking-migration-fixture.json"
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "ranking-migration-default-freeze",
+                        "query": "What default policy does ranking migration keep?",
+                        "preferred_scope": "project:ranking-migration",
+                        "limit": 5,
+                        "expected": {"facts": [fact.id], "procedures": [], "episodes": []},
+                        "avoid": {"facts": [], "procedures": [], "episodes": []},
+                        "source": "ranking-migration-test",
+                        "rationale": "covers explicit opt-in-to-default migration gate",
+                    }
+                ]
+            },
+            indent=2,
+        )
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    experiment_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "retrieval-ranking-experiment",
+            str(db_path),
+            "--fixtures",
+            str(fixture_path),
+            "--ranking-policy",
+            "graph_reinforced_v1",
+            "--shadow-compare",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert experiment_result.returncode == 0, experiment_result.stderr
+    experiment_payload = json.loads(experiment_result.stdout)
+    assert experiment_payload["active_ranking_policy"] == "conservative_legacy"
+    assert experiment_payload["candidate_ranking_policy"] == "graph_reinforced_v1"
+    assert experiment_payload["shadow_compare"]["mode"] == "legacy_returned_candidate_compared"
+    assert experiment_payload["shadow_compare"]["protected_default_order_returned"] is True
+    assert experiment_payload["promotion_policy"]["migration_command_required"] is True
+    assert experiment_payload["default_retrieval_unchanged"] is True
+
+    config_path = tmp_path / "agent-memory-ranking-config.yaml"
+    config_path.write_text("agent_memory:\n  retrieval_ranking_policy: conservative_legacy\n")
+    audit_path = tmp_path / "ranking-migration-audit.json"
+    migrate_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "retrieval-ranking-migrate-default",
+            str(db_path),
+            "--fixtures",
+            str(fixture_path),
+            "--policy",
+            "graph_reinforced_v1",
+            "--config-path",
+            str(config_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "promote candidate ranking after fixture gate",
+            "--approval-phrase",
+            "migrate-retrieval-ranking-default-v1",
+            "--audit-output",
+            str(audit_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert migrate_result.returncode == 0, migrate_result.stderr
+    migrate_payload = json.loads(migrate_result.stdout)
+    assert migrate_payload["kind"] == "dogfood_retrieval_ranking_migrate_default"
+    assert migrate_payload["mutated"] is True
+    assert migrate_payload["mutation_scope"] == "config_only"
+    assert migrate_payload["policy_before"] == "conservative_legacy"
+    assert migrate_payload["policy_after"] == "graph_reinforced_v1"
+    assert migrate_payload["rollback_command"]["policy"] == "conservative_legacy"
+    assert migrate_payload["rollback_replay_gate"]["protected_durable_tables_unchanged"] is True
+    assert "retrieval_ranking_policy: graph_reinforced_v1" in config_path.read_text()
+    assert json.loads(audit_path.read_text())["policy_after"] == "graph_reinforced_v1"
+
+    rollback_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "retrieval-ranking-migrate-default",
+            str(db_path),
+            "--fixtures",
+            str(fixture_path),
+            "--policy",
+            "conservative_legacy",
+            "--config-path",
+            str(config_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "rollback ranking default",
+            "--approval-phrase",
+            "migrate-retrieval-ranking-default-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert rollback_result.returncode == 0, rollback_result.stderr
+    rollback_payload = json.loads(rollback_result.stdout)
+    assert rollback_payload["policy_before"] == "graph_reinforced_v1"
+    assert rollback_payload["policy_after"] == "conservative_legacy"
+    assert "retrieval_ranking_policy: conservative_legacy" in config_path.read_text()
+
+
+
 def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Path) -> None:
     db_path = tmp_path / "g5h-next-steps.db"
     initialize_database(db_path)
@@ -10200,6 +10345,8 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert experiment_payload["fixture_gate_comparison"] == {
         "comparison_mode": "expanded_fixtures_vs_current_default_read_only",
         "baseline_mode": "current_default",
+        "active_ranking_policy": "conservative_legacy",
+        "candidate_ranking_policy": "conservative_legacy",
         "fixture_task_count": 1,
         "expanded_fixture_gate_met": False,
         "eval_gate_pass": True,
