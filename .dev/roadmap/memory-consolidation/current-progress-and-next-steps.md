@@ -1,20 +1,20 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 13:25 KST
+Last updated: 2026-05-13 14:55 KST
 
-## v0.1.150 released runtime checkpoint and next runway
+## v0.1.151 released runtime checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.150 release/runtime rollout plus the local post-release safety slice: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, and v0.1.150 Hermes hook rollout across default/personal-oss/earlypay/infra-admin.
+This document is the restartable checkpoint after the v0.1.151 release/runtime rollout plus the post-release default-ranking rollout design: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, v0.1.151 `personal-oss` Hermes hook rollout, and an explicit opt-in-to-default migration plan for future retrieval-ranking default changes.
 
 Current verified release state:
 
-- Release: `v0.1.150`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.150`.
-- npm: `@cafitac/agent-memory@0.1.150`.
-- PyPI: `cafitac-agent-memory==0.1.150`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.150/.venv/bin/agent-memory`.
-- Hermes hook doctor is green across default, `personal-oss`, `earlypay`, and `infra-admin` profiles.
+- Release: `v0.1.151`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.151`.
+- npm: `@cafitac/agent-memory@0.1.151`.
+- PyPI: `cafitac-agent-memory==0.1.151`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.151/.venv/bin/agent-memory`.
+- Hermes hook doctor is green for `personal-oss` on the v0.1.151 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
@@ -35,15 +35,15 @@ Progress estimate:
 
 Current interpretation:
 
-Fresh v0.1.150 evidence and merged G5a-G5i are healthy enough to continue the brain-like reviewed-candidate runway. The current local safety slice has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, and one fresh guarded live reviewed-candidate promotion. Broad G4/background apply remains blocked. Current next work is review/test/commit/release this local slice, then design default-ranking rollout as a separate explicit opt-in-to-default migration with rollback/replay gates.
+Fresh v0.1.151 evidence and merged G5a-G5i are healthy enough to continue the brain-like reviewed-candidate runway. The current local safety runway has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate promotion, the explicit default-ranking opt-in-to-default migration design, and a source-only implementation of named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics. Broad G4/background apply remains blocked. Current next work is full-suite/PR/release/runtime smoke for this source slice, then live shadow evidence while keeping `conservative_legacy` as default.
 
 Recommended sequence from here:
 
-1. Review the local post-v0.1.150 safety slice and keep this doc checkpoint test-protected.
-2. Verify the 50-task expanded retrieval fixture gate and 75-task checked-in eval suite remain green before any release.
-3. Keep collapse proof evidence-driven: `satisfied` requires supersession-chain/relation evidence, and collapse/delete apply remains disabled.
-4. Keep fresh reviewed candidate promotion limited to the explicit guarded corridor with backup/hash/actor/reason/approval evidence; do not use broad apply.
-5. Keep opt-in ranking experiment read-only until a separate default-ranking rollout design is implemented.
+1. Review and full-suite test the source-only default-ranking migration implementation.
+2. Commit/PR/release the slice without live-migrating Hermes to `graph_reinforced_v1`.
+3. After release/runtime smoke, run live shadow evidence over the 75-task checked-in fixture suite plus 50-task expanded gate.
+4. Keep collapse proof evidence-driven: `satisfied` requires supersession-chain/relation evidence, and collapse/delete apply remains disabled.
+5. Keep fresh reviewed candidate promotion limited to the explicit guarded corridor with backup/hash/actor/reason/approval evidence; do not use broad apply.
 6. Preserve broad G4/background apply as blocked until ranking, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
 
 ---
