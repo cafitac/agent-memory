@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 21:23 KST
+Last updated: 2026-05-13 22:38 KST
 
 ## Use this first when the user asks
 
@@ -36,12 +36,12 @@ Reasoning:
 
 ## Latest verified checkpoint
 
-- Release: `v0.1.154`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`
-- npm: `@cafitac/agent-memory@0.1.154`
-- PyPI: `cafitac-agent-memory==0.1.154`
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`
-- Runtime smoke: PyPI install smoke passed after simple-index propagation, npm installed-bin smoke passed, GitHub release exists, and `hermes --profile personal-oss hooks doctor` is green after `--accept-hooks` approval for the v0.1.153 hook command. v0.1.154 runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
+- Release: `v0.1.155`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`
+- npm: `@cafitac/agent-memory@0.1.155`
+- PyPI: `cafitac-agent-memory==0.1.155`
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`
+- Runtime smoke: PyPI install smoke passed after simple-index propagation, npm installed-bin smoke passed, GitHub release exists, and `hermes --profile personal-oss hooks doctor` is green after `--accept-hooks` approval for the v0.1.153 hook command. v0.1.155 runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.155-runtime-qa-20260513T133421/`.
 - Current source follow-up reports: `/tmp/agent-memory-g4-corridor-smoke/`, `/tmp/agent-memory-telemetry-reset-decision/`, `/tmp/agent-memory-fresh-epoch-v0149/`, and `/tmp/agent-memory-apply-corridor-v0150/`.
 - Fresh report directory retained from G4 diagnostics: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-linkage-gap-diagnose-v0138-fresh.json` with decision `fresh_trace_linkage_gap_not_detected`.
@@ -54,7 +54,7 @@ Reasoning:
 
 ## Current blocker
 
-The v0.1.154 runtime is healthy, and current source has an epoch-start scheduled-dry-run measurement fix queued for release, but broad brain-like automation is still intentionally blocked:
+The v0.1.155 runtime is healthy and includes the epoch-start scheduled-dry-run measurement fix, but broad brain-like automation is still intentionally blocked:
 
 - Fresh epoch report `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/fresh-epoch-since-v0152-with-metadata-gap-diagnostic.json`: quality gate still fails with `low_epoch_observation_trace_coverage` and `epoch_empty_retrieval_outcome_metadata_gap_classified`. The new metadata-gap diagnostic shows `dominant_blocker=classified_legacy_missing_outcome`, `classified_missing_outcome_count=6`, and `unresolved_adapter_payload_gap_count=0`; continue metadata-rich dogfooding before telemetry reset or default ranking migration.
 - G4 review queue copy/live-safe smoke `/tmp/agent-memory-apply-corridor-v0150/`: live preview/list/reconciliation were read-only; copy telemetry reset and copy G4 queue apply preserved durable memory (`mutated=false`); live G4 queue apply was idempotent with `applied_count=0`, `already_applied_count=1`, `mutated=false`, and `default_retrieval_unchanged=true`.
@@ -69,7 +69,7 @@ The v0.1.154 runtime is healthy, and current source has an epoch-start scheduled
 Proceed in this sequence:
 
 1. Keep live default ranking on `conservative_legacy`; do not run `retrieval-ranking-migrate-default` against the live profile until an operator gives the exact approval phrase and fresh-epoch telemetry is green.
-2. Release the current `--epoch-start` scheduled-dry-run measurement slice, then keep metadata-rich dogfooding and compare fresh-epoch windows using the explicit epoch boundary; do not let legacy lookback rows drive go/no-go decisions.
+2. Keep metadata-rich dogfooding and compare fresh-epoch windows using the released explicit `--epoch-start` boundary; do not let legacy lookback rows drive go/no-go decisions.
 3. Keep live mixed retrieval corpus coverage in the shadow-only lane; extend it only through guarded reviewed-candidate promotions with backup/audit evidence.
 4. Keep fresh reviewed candidate promotion limited to the guarded explicit-approval corridor.
 5. Keep broad G4/background apply blocked until ranking gate, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
@@ -99,7 +99,7 @@ git status --short --branch
 import agent_memory
 print(agent_memory.__version__)
 PY
-/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory dogfood supersession-preview   /Users/reddit/.agent-memory/memory.db   --limit 200 --top 10   --output /tmp/agent-memory-next-g5f-supersession-preview.json
+/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory dogfood supersession-preview   /Users/reddit/.agent-memory/memory.db   --limit 200 --top 10   --output /tmp/agent-memory-next-g5f-supersession-preview.json
 ```
 
 Expected: read-only/no-mutation. Collapse proof may become satisfied only through proof artifacts; collapse/delete apply and broad G4/background apply remain blocked.
@@ -107,8 +107,8 @@ Expected: read-only/no-mutation. Collapse proof may become satisfied only throug
 
 ## v0.1.154 active runtime checkpoint
 
-- Release: `v0.1.154` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`).
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- Release: `v0.1.155` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`).
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
 - Hermes `personal-oss` hook accepted and `hermes --profile personal-oss hooks doctor` is green.
 - Runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
 - v0.1.154 fixes episode decay-collapse evidence snapshots by reading episode `source_ids_json`; the v0.1.154 decay-collapse decision over the mixed corpus now runs read-only/no-mutation.

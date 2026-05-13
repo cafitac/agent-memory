@@ -1,11 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 21:23 KST
+Last updated: 2026-05-13 22:38 KST
 
 
 
 
+
+## v0.1.155 active runtime checkpoint
+
+- Release: `v0.1.155` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`).
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
+- Hermes `personal-oss` hook accepted and `hermes --profile personal-oss hooks doctor` is green.
+- Runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.155-runtime-qa-20260513T133421/`.
+- v0.1.155 adds explicit `--epoch-start` support to `dogfood trace-quality` and propagates it through `dogfood scheduled-dry-run`, so fresh scheduled evidence can be measured without legacy lookback pollution.
+- Fresh v0.1.155 hook-window smoke (`2026-05-13T13:33:00Z`) is read-only/no-mutation and passes scheduled dry-run as `scheduled_dry_run_quality_gate_passed_plan_g4_only`; broad G4/background apply is still not enabled.
 
 ## v0.1.154 continuation / v0.1.155 source checkpoint
 
@@ -18,8 +27,8 @@ Last updated: 2026-05-13 21:23 KST
 
 ## v0.1.154 active runtime checkpoint
 
-- Release: `v0.1.154` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`).
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- Release: `v0.1.155` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`).
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
 - Hermes `personal-oss` hook accepted and `hermes --profile personal-oss hooks doctor` is green.
 - Runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
 - v0.1.154 fixes episode decay-collapse evidence snapshots by reading episode `source_ids_json`; the v0.1.154 decay-collapse decision over the mixed corpus now runs read-only/no-mutation.
@@ -45,8 +54,8 @@ Use `.dev/status/next-agent-memory-action.md` as the shortest current source of 
 Current verified state:
 
 - Latest completed release/runtime rollout: `v0.1.153`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.155`.
 - npm/PyPI latest verified as `0.1.153`.
 - Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.153 runtime.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
