@@ -1,20 +1,20 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 14:55 KST
+Last updated: 2026-05-13 15:12 KST
 
-## v0.1.151 released runtime checkpoint and next runway
+## v0.1.152 released runtime checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.151 release/runtime rollout plus the post-release default-ranking rollout design: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, v0.1.151 `personal-oss` Hermes hook rollout, and an explicit opt-in-to-default migration plan for future retrieval-ranking default changes.
+This document is the restartable checkpoint after the v0.1.152 release/runtime rollout: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, v0.1.152 `personal-oss` Hermes hook rollout, released named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and one live shadow smoke while keeping `conservative_legacy` as the live default.
 
 Current verified release state:
 
-- Release: `v0.1.151`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.151`.
-- npm: `@cafitac/agent-memory@0.1.151`.
-- PyPI: `cafitac-agent-memory==0.1.151`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.151/.venv/bin/agent-memory`.
-- Hermes hook doctor is green for `personal-oss` on the v0.1.151 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
+- Release: `v0.1.152`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.152`.
+- npm: `@cafitac/agent-memory@0.1.152`.
+- PyPI: `cafitac-agent-memory==0.1.152`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.152/.venv/bin/agent-memory`.
+- Hermes hook doctor is green for `personal-oss` on the v0.1.152 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
@@ -28,20 +28,20 @@ Fresh diagnostics:
 
 Progress estimate:
 
-- Overall north-star: 74-76%.
-- Substrate/evidence plumbing: about 85%.
-- Safe automatic mutation/promotion: about 62-66%.
-- Remaining work: about 24-26% overall.
+- Overall north-star: 76-78%.
+- Substrate/evidence plumbing: about 86%.
+- Safe automatic mutation/promotion: about 64-68%.
+- Remaining work: about 22-24% overall.
 
 Current interpretation:
 
-Fresh v0.1.151 evidence and merged G5a-G5i are healthy enough to continue the brain-like reviewed-candidate runway. The current local safety runway has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate promotion, the explicit default-ranking opt-in-to-default migration design, and a source-only implementation of named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics. Broad G4/background apply remains blocked. Current next work is full-suite/PR/release/runtime smoke for this source slice, then live shadow evidence while keeping `conservative_legacy` as default.
+Fresh v0.1.152 evidence and merged G5a-G5i plus default-ranking migration mechanics are healthy enough to continue the brain-like reviewed-candidate runway. The current runway has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate promotion, the explicit default-ranking opt-in-to-default migration design, released named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics, and a live shadow smoke preserving `conservative_legacy`. Broad G4/background apply remains blocked. Current next work is to build a representative live shadow fixture corpus or fix the live fixture reference gap, continue telemetry/fresh-epoch reconciliation, and only then consider explicit operator-approved default ranking migration.
 
 Recommended sequence from here:
 
-1. Review and full-suite test the source-only default-ranking migration implementation.
-2. Commit/PR/release the slice without live-migrating Hermes to `graph_reinforced_v1`.
-3. After release/runtime smoke, run live shadow evidence over the 75-task checked-in fixture suite plus 50-task expanded gate.
+1. Keep live default ranking on `conservative_legacy` while collecting more shadow evidence from real runtime traffic/fixtures.
+2. Fix the live-compatible expanded fixture gap or seed a representative live shadow fixture corpus so the 50-task gate can be replayed against the live Hermes DB instead of only source fixtures.
+3. Continue telemetry/fresh-epoch reconciliation before trusting epoch-wide automation.
 4. Keep collapse proof evidence-driven: `satisfied` requires supersession-chain/relation evidence, and collapse/delete apply remains disabled.
 5. Keep fresh reviewed candidate promotion limited to the explicit guarded corridor with backup/hash/actor/reason/approval evidence; do not use broad apply.
 6. Preserve broad G4/background apply as blocked until ranking, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
