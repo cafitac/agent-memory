@@ -630,6 +630,68 @@ def test_checked_in_retrieval_eval_examples_use_symbolic_references() -> None:
 
 
 
+def test_checked_in_retrieval_eval_examples_include_canonical_live_compatible_fixture_slice() -> None:
+    fixture_dir = _checked_in_fixture_dir()
+    fixture_expectations = [
+        (
+            fixture_dir / "scope" / "project-scope.json",
+            "project_scope_fact",
+            "fact",
+            "project:m1",
+            "project-scope-fact",
+            "facts",
+            "drift_fact",
+        ),
+        (
+            fixture_dir / "procedure" / "pre-pr-tests.json",
+            "project_scope_procedure",
+            "procedure",
+            "project:m1",
+            "project-scope-procedure",
+            "procedures",
+            "drift_fact",
+        ),
+        (
+            fixture_dir / "episode" / "review-history.json",
+            "rollout_episode",
+            "episode",
+            "project:m1",
+            "episode-recall",
+            "episodes",
+            "drift_fact",
+        ),
+        (
+            fixture_dir / "drift" / "cross-scope-drift.json",
+            "current_branch_fact",
+            "fact",
+            "project:m1",
+            "cross-scope-drift-check",
+            "facts",
+            "drift_fact",
+        ),
+        (
+            fixture_dir / "staleness" / "current-vs-stale.json",
+            "current_branch_fact",
+            "fact",
+            "project:m1",
+            "current-vs-stale-fact",
+            "facts",
+            "stale_branch_fact",
+        ),
+    ]
+
+    for fixture_path, expected_ref, memory_type, scope, task_id, expected_type, avoid_ref in fixture_expectations:
+        payload = json.loads(fixture_path.read_text())
+        task = payload["tasks"][0]
+        assert payload["references"][expected_ref]["memory_type"] == memory_type
+        assert payload["references"][expected_ref]["scope"] == scope
+        assert task["id"] == task_id
+        assert task["preferred_scope"] == scope
+        assert task["expected"][expected_type] == [expected_ref]
+        assert task["avoid"]["facts"] == [avoid_ref]
+
+
+
 def test_checked_in_retrieval_eval_examples_include_branch_only_staleness_case() -> None:
     fixture_dir = _checked_in_fixture_dir()
     payload = json.loads((fixture_dir / "staleness" / "branch-only-current.json").read_text())

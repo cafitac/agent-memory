@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 11:08 KST
+Last updated: 2026-05-13 11:53 KST
 
 ## Use this first when the user asks
 
@@ -16,7 +16,7 @@ Then verify the repo/runtime state briefly and answer from the recommendation be
 
 ## One-sentence current state
 
-`agent-memory` is released and live-runtime-smoked through `v0.1.146`; the installed Hermes hooks are healthy on the v0.1.146 runtime across default, personal-oss, earlypay, and infra-admin profiles. G5a-G5g are released, local G5h is implemented/test-green, and the current local G5i slice adds live rollback replay rollups, live-compatible retrieval fixture expansion summaries, explicit collapse equivalence proof gates, telemetry-reset apply safety-gate reporting, and broad G4 apply reassessment fields. Broad G4/background apply remains blocked.
+`agent-memory` is released and live-runtime-smoked through `v0.1.148`; the installed Hermes hooks are healthy on the v0.1.148 runtime across default, personal-oss, earlypay, and infra-admin profiles. G5a-G5i are released; the current local follow-up slice expands canonical live-compatible retrieval fixture coverage, fixes retrieval-ranking gate pass inference, makes collapse equivalence proof evidence-driven, and verifies G4 review queue plus telemetry reset on live-compatible DB copies. Broad G4/background apply, default ranking changes, collapse/delete apply, live telemetry reset, and ordinary conversation auto-approval remain blocked.
 
 ## Current progress estimate toward the north-star
 
@@ -36,48 +36,40 @@ Reasoning:
 
 ## Latest verified checkpoint
 
-- Release: `v0.1.146`
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.146`
-- npm: `@cafitac/agent-memory@0.1.146`
-- PyPI: `cafitac-agent-memory==0.1.146`
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.146/g5e-live-smoke.json`
-- Hermes config backups from v0.1.144 rollout: `/Users/reddit/.hermes/config.yaml.bak-v0143-20260512T160959Z` plus matching `personal-oss`, `earlypay`, and `infra-admin` profile backups.
-- Fresh report directory retained from G4 diagnostics: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`
+- Release: `v0.1.148`
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.148`
+- npm: `@cafitac/agent-memory@0.1.148`
+- PyPI: `cafitac-agent-memory==0.1.148`
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.148/.venv/bin/agent-memory`
+- Runtime smoke: published-install smoke passed; Hermes hook doctor is green across default, personal-oss, earlypay, and infra-admin profiles.
+- Current source follow-up reports: `/tmp/agent-memory-g4-corridor-smoke/`, `/tmp/agent-memory-telemetry-reset-decision/`, and `/tmp/agent-memory-fresh-epoch-v0149/`.
+- Fresh report directory retained from G4 diagnostics: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-linkage-gap-diagnose-v0138-fresh.json`
 - Fresh epoch readiness retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/fresh-epoch-v0138.json`
 - Fresh review queue preview retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/g4-review-queue-preview-v0138-fresh.json`
 - Historical scheduled dry-run retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/scheduled-dry-run.json`
-- Source G5a/G5b/G5c/G5d/G5e/G5f/G5g checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, decay deprecate apply, ranking gate, and rollback confidence are merged and released through v0.1.146.
+- Source G5a-G5i checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, decay deprecate apply, ranking gate/experiment, rollback confidence/replay validation, telemetry reconciliation/reset safety reporting, and G4 reviewed queue preview/persist/update/apply are merged and released through v0.1.148.
 - Release/published-install smoke passed; manual true-distribution PyPI/npm smoke passed; runtime rollout is doctor-green across default, personal-oss, earlypay, and infra-admin Hermes profiles.
 
 ## Current blocker
 
-Fresh v0.1.146 runtime plus v0.1.138 fresh telemetry evidence are healthy enough for continued brain-like reviewed-candidate planning:
+The v0.1.148 runtime is healthy, but broad brain-like automation is still intentionally blocked:
 
-- `g4-linkage-gap-diagnose-v0138-fresh.json`: quality gate pass, decision `fresh_trace_linkage_gap_not_detected`, observation/trace linkage coverage `1.0`, unlinked observations `0`.
-- `fresh-epoch-v0138.json`: quality gate pass, decision `fresh_epoch_ready_to_compare_against_historical`.
-- `g4-review-queue-preview-v0138-fresh.json`: quality gate pass, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
-- `g5d-live-smoke.json`: quality gate decision `reinforcement_refinement_preview_ready_for_human_review`, `read_only=true`, `mutated=false`, candidate count `1`.
-- `g5e-live-smoke.json`: quality gate decision `continue_decay_collapse_dogfooding_before_review`, `read_only=true`, `mutated=false`, candidate count `0`, default retrieval unchanged.
-
-However, historical scheduled-dry-run still blocks broad G4/background apply, but a fresh aggregate-safe blocker resolution now passes for bounded partial automation only on:
-
-- `trace_quality_needs_more_dogfooding`
-- `decay_risk_above_threshold`
-- `background_quality_warnings_present`
-
-Fresh G5f blocker-resolution evidence: `.dev/dogfood/g5f-20260512T224602Z/scheduled-blocker-resolution.json` reports `pass=true`, unresolved blockers `[]`, `bounded_partial_automation_allowed=true`, and `broad_g4_apply_allowed=false`. Interpretation: this is no longer a fresh hook linkage bug. It is historical telemetry/review debt plus still-narrow mutation safety work.
+- Fresh epoch report `/tmp/agent-memory-fresh-epoch-v0149/fresh-epoch.json`: quality gate fails with `high_epoch_empty_retrieval_ratio` and `epoch_empty_retrieval_outcome_metadata_gap_classified`; continue dogfooding before trusting epoch-wide automation.
+- G4 review queue copy smoke `/tmp/agent-memory-g4-corridor-smoke/`: preview/persist/list/apply corridor is operational on a live-compatible DB copy; existing approved reinforcement item was already applied, so copy apply was idempotent with `already_applied_count=1`, `memory_status_mutated=false`, and `default_retrieval_unchanged=true`.
+- Telemetry reset copy smoke `/tmp/agent-memory-telemetry-reset-decision/copy-apply.json`: deleting 1773 historical telemetry rows on a DB copy passed with protected durable memory tables unchanged. Live DB was not reset because the fresh epoch gate still fails; live reset remains manual-only behind `telemetry-reset-v1` and `apply-telemetry-reset-v1`.
+- Collapse equivalence proof is now evidence-driven in local source. Live report `/tmp/agent-memory-fresh-epoch-v0149/decay-collapse-decision.json` is only `partially_satisfied`; missing evidence is `relation_equivalence_or_supersession_chain` and `human_reviewed_candidate_payload`. Collapse/delete apply remains blocked.
+- Retrieval fixture coverage now includes a canonical live-compatible slice and ranking gate pass inference is fixed locally, but default retrieval ranking is still unchanged and blocked until larger eval coverage passes.
 
 ## Recommended next work
 
 Proceed in this sequence:
 
-1. Review/release the local G5h+G5i safety slice: G5h commands plus G5i rollup/proof/gate fields.
-2. After release, add live runtime smoke for the new read-only commands and telemetry-reset preview/apply safety reporting on a backed-up, epoch-filtered live-compatible target; keep all mutating commands opt-in, backup-backed, and phrase-gated.
-3. Expand real retrieval eval fixtures before any default ranking change. Do not enable default ranking changes yet.
-4. Keep broad G4/background apply blocked until ranking gate, rollback confidence, replay validation, live telemetry reconciliation, and human-reviewed queue approvals have all passed on real runtime evidence. G4 broad apply contract remains guardrail-only.
-5. Ordinary conversation auto-approval remains forbidden; candidate generation creates review skeletons only.
+1. Finish the current local follow-up branch: run full tests, commit, PR, release, and published-install smoke.
+2. After release, install the new runtime and run live smoke for the evidence-driven `decay-collapse-decision` plus retrieval-ranking gate regression fix.
+3. Expand real retrieval eval fixtures from the current 21 tasks toward a broader 50+ task gate before any default ranking change.
+4. Add/persist relation-equivalence evidence or reviewed supersession-chain evidence so collapse proof can move from `partially_satisfied` to `satisfied` while keeping collapse/delete apply disabled.
+5. Keep broad G4/background apply blocked until ranking gate, rollback replay, telemetry reconciliation, fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
 
 ## What not to do next
 
