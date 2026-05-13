@@ -27,9 +27,9 @@ Current verified state:
 
 Progress estimate:
 
-- Overall north-star: 62-64%.
+- Overall north-star: 66-68%.
 - Substrate/evidence plumbing: about 75-77%.
-- Safe automatic mutation/promotion: about 43-46%.
+- Safe automatic mutation/promotion: about 50-53%.
 - Remaining work: about 36-38% overall.
 
 Current interpretation:

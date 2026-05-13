@@ -1,0 +1,47 @@
+{
+  "automation_policy": {
+    "apply_supported": false,
+    "default_retrieval_policy": "approved_only_unchanged",
+    "mutation_contract": {
+      "creates_replacement_relation": false,
+      "deprecates_or_deletes_memory": false,
+      "raw_content_allowed": false,
+      "writes_review_queue": false
+    },
+    "ordinary_conversation_auto_approval": false,
+    "requires_human_review": true
+  },
+  "candidate_count": 0,
+  "db_path": "/Users/reddit/.agent-memory/memory.db",
+  "default_retrieval_unchanged": true,
+  "kind": "dogfood_supersession_preview",
+  "mutated": false,
+  "privacy": {
+    "object_values_included": false,
+    "raw_conversation_content_included": false,
+    "safe_summaries_included": false,
+    "sample_values_included": false,
+    "subject_values_hashed": true
+  },
+  "quality_gate": {
+    "blocked_reasons": [
+      "no_supersession_candidates_ready"
+    ],
+    "decision": "continue_supersession_dogfooding_before_review",
+    "pass": false
+  },
+  "read_only": true,
+  "scan": {
+    "candidate_sources": [
+      "same_claim_slot_conflict"
+    ],
+    "limit": 300,
+    "top": 20
+  },
+  "suggested_next_steps": [
+    "Review same-claim-slot conflicts before any replacement/supersession relation apply corridor.",
+    "Keep this preview read-only; do not deprecate or supersede memories from score alone.",
+    "Use a separate guarded policy with backup/audit/rollback for any future mutation slice."
+  ],
+  "supersession_candidates": []
+}

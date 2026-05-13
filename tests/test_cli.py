@@ -18,6 +18,7 @@ from agent_memory.integrations import hermes_hooks
 from agent_memory.integrations.hermes_hooks import HermesPreLlmHookOptions, HermesShellHookPayload, scope_from_cwd
 from agent_memory.storage.sqlite import (
     initialize_database,
+    get_fact,
     insert_experience_trace,
     insert_relation,
     list_experience_traces,
@@ -3834,6 +3835,8 @@ def test_python_module_cli_dogfood_g4_review_queue_apply_records_approved_items_
     assert applied.returncode == 0, applied.stderr
     payload = json.loads(applied.stdout)
     assert payload["kind"] == "dogfood_g4_review_queue_apply"
+    assert payload["apply_mode"] == "bounded_partial_automation_reviewed_queue_items_only"
+    assert payload["max_apply"] == 1
     assert payload["applied_count"] == 1
     assert payload["memory_status_mutated"] is False
     assert payload["memory_reinforcement_mutated"] is True
@@ -4393,6 +4396,98 @@ def test_python_module_cli_dogfood_scheduled_dry_run_bundles_read_only_reports_w
         }
     assert after_counts == before_counts
 
+
+
+def test_python_module_cli_dogfood_scheduled_blocker_resolution_classifies_fresh_aggregate_evidence(
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "scheduled-report.json"
+    output_path = tmp_path / "resolution.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_scheduled_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "reports": {
+                    "trace_quality": {
+                        "recommendation": "ready_for_more_dry_runs",
+                        "coverage": {"observation_trace_coverage_ratio": 0.34},
+                        "retrieval_quality": {"empty_retrieval_ratio": 0.5061},
+                        "warnings": [],
+                    },
+                    "background_dry_run": {
+                        "review_handoff": {"decay_risk_candidate_count": 1},
+                        "scan": {"quality_warnings": []},
+                        "reports": {
+                            "decay_risk": {
+                                "candidate_decomposition": {
+                                    "candidate_count": 1,
+                                    "max_score": 0.2,
+                                    "resolution_hint_counts": {"monitor_only_no_mutation": 1},
+                                    "raw_content_included": False,
+                                }
+                            }
+                        },
+                    },
+                },
+                "quality_gate": {
+                    "pass": False,
+                    "blocked_reasons": [
+                        "trace_quality_needs_more_dogfooding",
+                        "decay_risk_above_threshold",
+                    ],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "sample_values_included": False,
+                    "raw_query_text_included": False,
+                },
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-blocker-resolution",
+            "--report",
+            str(report_path),
+            "--output",
+            str(output_path),
+            "--accept-ready-trace-quality",
+            "--allow-monitor-only-decay",
+            "--max-empty-retrieval-ratio",
+            "0.51",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_scheduled_blocker_resolution"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["resolution_gate"] == {
+        "pass": True,
+        "decision": "scheduled_blockers_resolved_for_bounded_partial_automation_only",
+        "unresolved_blockers": [],
+    }
+    assert payload["resolutions"]["trace_quality_needs_more_dogfooding"]["resolved"] is True
+    assert payload["resolutions"]["decay_risk_above_threshold"]["resolution"] == "monitor_only_low_risk_decay_classified"
+    assert payload["resolutions"]["background_quality_warnings_present"]["resolved"] is True
+    assert payload["automation_policy"]["broad_g4_apply_allowed"] is False
+    assert payload["automation_policy"]["bounded_partial_automation_allowed"] is True
+    assert payload["privacy"]["raw_report_included"] is False
 
 
 def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_raw_content(
@@ -9348,6 +9443,322 @@ def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_muta
     assert "SHOULD_NOT_LEAK" not in result.stdout
     assert "source text" not in result.stdout
     assert "query_preview" not in result.stdout
+
+
+def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "supersession-preview.db"
+    output_path = tmp_path / "supersession-preview.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5f supersession source text token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5f-supersession"},
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="agent-memory runtime",
+        predicate="uses_version",
+        object_ref_or_value="v0.1.142 SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g5f",
+        confidence=0.62,
+    )
+    new_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="agent-memory runtime",
+        predicate="uses_version",
+        object_ref_or_value="v0.1.143 SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g5f",
+        confidence=0.93,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    approve_fact(db_path=db_path, fact_id=new_fact.id)
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "supersession-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_supersession_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "mutation_contract": {
+            "writes_review_queue": False,
+            "creates_replacement_relation": False,
+            "deprecates_or_deletes_memory": False,
+            "raw_content_allowed": False,
+        },
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "supersession_preview_ready_for_human_review",
+        "blocked_reasons": [],
+    }
+    assert payload["candidate_count"] == 1
+    candidate = payload["supersession_candidates"][0]
+    assert candidate["candidate_kind"] == "same_claim_slot_conflict"
+    assert candidate["claim_slot"] == {
+        "subject_ref_sha256": hashlib.sha256("agent-memory runtime".encode()).hexdigest(),
+        "predicate": "uses_version",
+        "scope": "project:g5f",
+        "fact_count": 2,
+    }
+    assert candidate["older_fact_ref"] == f"fact:{old_fact.id}"
+    assert candidate["newer_fact_ref"] == f"fact:{new_fact.id}"
+    assert candidate["review_score"]["tier"] == "high"
+    assert candidate["review_recommendation"] == {
+        "decision": "ready_for_supersession_review",
+        "automation": "human_review_only",
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_unchanged": True,
+        "mutation_supported": False,
+    }
+    assert candidate["review_commands"] == {
+        "review_older": f"agent-memory review fact {db_path} {old_fact.id}",
+        "review_newer": f"agent-memory review fact {db_path} {new_fact.id}",
+        "review_replacements_older": f"agent-memory review replacements fact {db_path} {old_fact.id}",
+        "future_guarded_apply": "not_supported_by_preview",
+    }
+    assert payload["privacy"] == {
+        "raw_conversation_content_included": False,
+        "sample_values_included": False,
+        "safe_summaries_included": False,
+        "subject_values_hashed": True,
+        "object_values_included": False,
+    }
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
+    assert "v0.1.142" not in result.stdout
+    assert "v0.1.143" not in result.stdout
+
+
+def test_dogfood_lifecycle_candidate_registry_persists_lists_and_updates_supersession(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-candidate-registry.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5f lifecycle registry source text token=SHOULD_NOT_LEAK must not leak.",
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="registry runtime",
+        predicate="uses_version",
+        object_ref_or_value="old SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g5f-registry",
+        confidence=0.52,
+    )
+    new_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="registry runtime",
+        predicate="uses_version",
+        object_ref_or_value="new SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g5f-registry",
+        confidence=0.91,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    approve_fact(db_path=db_path, fact_id=new_fact.id)
+    before_counts = _table_counts(db_path, ["facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "supersession",
+            "--actor",
+            "tester",
+            "--reason",
+            "registry runway",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    persist_payload = json.loads(persist_result.stdout)
+    assert persist_payload["kind"] == "dogfood_lifecycle_candidate_persist"
+    assert persist_payload["candidate_kind"] == "supersession"
+    assert persist_payload["candidate_persistence_supported"] is True
+    assert persist_payload["apply_supported"] is False
+    assert persist_payload["inserted_count"] == 1
+    assert persist_payload["privacy"] == {
+        "candidate_json_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "reason_stored_as_sha256": True,
+    }
+    candidate_id = persist_payload["candidate_ids"][0]
+
+    list_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-list",
+            str(db_path),
+            "--candidate-kind",
+            "supersession",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert list_result.returncode == 0, list_result.stderr
+    list_payload = json.loads(list_result.stdout)
+    assert list_payload["kind"] == "dogfood_lifecycle_candidate_list"
+    assert list_payload["count"] == 1
+    assert list_payload["items"] == [
+        {
+            "candidate_id": candidate_id,
+            "status": "pending",
+            "candidate_kind": "supersession",
+            "proposal_type": "supersession_review",
+            "target_ref": f"fact:{old_fact.id}",
+            "candidate_sha256": persist_payload["source_preview_sha256"],
+        }
+    ]
+
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "approved for later guarded corridor",
+            "--approval-phrase",
+            "approve-g5-lifecycle-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    update_payload = json.loads(update_result.stdout)
+    assert update_payload["kind"] == "dogfood_lifecycle_candidate_update"
+    assert update_payload["status_before"] == "pending"
+    assert update_payload["status_after"] == "approved"
+    assert update_payload["apply_supported"] is False
+    assert _table_counts(db_path, ["facts", "relations", "memory_status_transitions"]) == before_counts
+
+    backup_path = tmp_path / "lifecycle-apply-backup.db"
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-lifecycle-supersession-apply-v1",
+            "--approval-phrase",
+            "apply-approved-g5-lifecycle-supersession-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "guarded supersession relation",
+            "--backup-path",
+            str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    apply_payload = json.loads(apply_result.stdout)
+    assert apply_payload["kind"] == "dogfood_lifecycle_candidate_apply"
+    assert apply_payload["apply_mode"] == "approved_supersession_lifecycle_candidates_only"
+    assert apply_payload["mutated"] is True
+    assert apply_payload["default_retrieval_unchanged"] is True
+    assert apply_payload["applied"] == [
+        {
+            "candidate_id": candidate_id,
+            "action": "apply_reviewed_supersession_relation",
+            "inserted": True,
+            "superseded_ref": f"fact:{old_fact.id}",
+            "replacement_ref": f"fact:{new_fact.id}",
+        }
+    ]
+    assert apply_payload["backup"]["path"] == str(backup_path.resolve(strict=False))
+    assert backup_path.exists()
+    assert get_fact(db_path, fact_id=old_fact.id).status == "deprecated"
+    assert get_fact(db_path, fact_id=new_fact.id).status == "approved"
+    assert _table_counts(db_path, ["facts"])["facts"] == before_counts["facts"]
+    assert _table_counts(db_path, ["relations"])["relations"] == before_counts["relations"] + 1
+    assert "SHOULD_NOT_LEAK" not in apply_result.stdout
+    assert "old " not in apply_result.stdout
+    assert "new " not in apply_result.stdout
+    assert "SHOULD_NOT_LEAK" not in persist_result.stdout
+    assert "SHOULD_NOT_LEAK" not in list_result.stdout
+    assert "SHOULD_NOT_LEAK" not in update_result.stdout
 
 
 def _seed_trace_cluster_for_candidate_flow(db_path: Path) -> int:

@@ -1,0 +1,1585 @@
+{
+  "automation_policy": {
+    "apply_supported": false,
+    "default_retrieval_policy": "approved_only_unchanged",
+    "ordinary_conversation_auto_approval": false,
+    "requires_human_review": true
+  },
+  "db_path": "/Users/reddit/.agent-memory/memory.db",
+  "default_retrieval_unchanged": true,
+  "kind": "dogfood_scheduled_dry_run",
+  "mutated": false,
+  "privacy": {
+    "raw_conversation_content_included": false,
+    "raw_query_text_included": false,
+    "sample_values_included": false
+  },
+  "quality_gate": {
+    "blocked_reasons": [
+      "trace_quality_needs_more_dogfooding",
+      "decay_risk_above_threshold"
+    ],
+    "blocker_diagnostics": {
+      "background_quality_warnings_present": {
+        "blocked": false,
+        "empty_retrieval_activation_diagnostics": {
+          "by_hook_event_name": {
+            "pre_llm_call": 99
+          },
+          "by_response_mode": {
+            "unknown": 26,
+            "verify_first": 73
+          },
+          "by_retrieval_outcome": {
+            "no_reliable_memory": 73,
+            "unknown": 26
+          },
+          "by_scope": {
+            "cwd:3cb80c5bd205081b": 22,
+            "cwd:4544b6bee3936120": 21,
+            "cwd:a439e0c3063d5e5c": 26,
+            "cwd:f7eb832640609c57": 14,
+            "cwd:ff110488b5197ef4": 16
+          },
+          "by_surface": {
+            "hermes-pre-llm-hook": 99
+          },
+          "count": 99,
+          "ratio": 0.495,
+          "sample_activation_ids": [
+            3071,
+            3070,
+            3069,
+            3060,
+            3057
+          ],
+          "sample_observation_ids": [
+            3166,
+            3165,
+            3164,
+            3155,
+            3152
+          ],
+          "trace_linkage": {
+            "linked_to_trace_count": 73,
+            "unlinked_to_trace_count": 26
+          }
+        },
+        "next_action": "Resolve or classify each background warning before drafting any broad G4 apply contract.",
+        "source": "reports.background_dry_run.scan.quality_warnings",
+        "warning_count": 0,
+        "warnings": []
+      },
+      "decay_risk_above_threshold": {
+        "blocked": true,
+        "candidate_count": 1,
+        "candidate_decomposition": {
+          "candidate_count": 1,
+          "factor_score_max": {
+            "low_connectivity": 0.0,
+            "low_repetition": 0.0,
+            "stale_activity": 0.2,
+            "status_risk": 0.0,
+            "weak_strength": 0.0
+          },
+          "max_score": 0.2,
+          "raw_content_included": false,
+          "resolution_hint_counts": {
+            "monitor_only_no_mutation": 1
+          },
+          "sample_memory_refs": [
+            "fact:1"
+          ],
+          "signal_counts": {
+            "connected_memory": 1,
+            "frequently_activated": 1,
+            "protected_from_age_only_decay": 1
+          },
+          "top_factor_names": [
+            "stale_activity",
+            "low_connectivity",
+            "low_repetition",
+            "status_risk",
+            "weak_strength"
+          ]
+        },
+        "excess": 1,
+        "max_allowed": 0,
+        "next_action": "Inspect aggregate decay-risk candidates and decide whether they are stale evidence or expected weak traces.",
+        "source": "reports.background_dry_run.review_handoff.decay_risk_candidate_count"
+      },
+      "trace_quality_needs_more_dogfooding": {
+        "blocked": true,
+        "coverage_diagnostics": {
+          "activation_count": 907,
+          "activation_trace_link_coverage_ratio": 0.3396,
+          "activations_linked_to_traces": 308,
+          "likely_gap": "traces_missing_observation_links",
+          "next_action": "Verify the runtime links new metadata-only turn traces to retrieval observation ids before broad G4 planning.",
+          "trace_without_observation_link_count": 599,
+          "unlinked_observation_count": 599
+        },
+        "coverage_ratio": 0.3396,
+        "empty_retrieval_ratio": 0.5061,
+        "next_action": "Collect more metadata-only trace/activation evidence or lower only after a RED-tested plan.",
+        "recommendation": "ready_for_more_dry_runs",
+        "source": "reports.trace_quality",
+        "warnings": []
+      }
+    },
+    "decision": "continue_scheduled_dry_run_dogfooding_before_g4",
+    "pass": false
+  },
+  "read_only": true,
+  "reports": {
+    "background_dry_run": {
+      "automation_policy": {
+        "apply_supported": false,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "ordinary_conversation_auto_approval": false,
+        "requires_human_review": true
+      },
+      "db_path": "/Users/reddit/.agent-memory/memory.db",
+      "default_retrieval_unchanged": true,
+      "error": null,
+      "kind": "memory_consolidation_background_dry_run",
+      "lock": {
+        "acquired": true,
+        "mode": "non_blocking_exclusive",
+        "path": "/Users/reddit/.agent-memory/memory.scheduled-dry-run.lock"
+      },
+      "mutated": false,
+      "output_path": null,
+      "read_only": true,
+      "reports": {
+        "activation_summary": {
+          "activation_count": 200,
+          "activation_kind_counts": {
+            "empty_retrieval": 99,
+            "retrieved": 101
+          },
+          "activation_window": {
+            "first_activated_at": "2026-05-12 04:26:25",
+            "first_activation_id": 2872,
+            "latest_activated_at": "2026-05-12 22:34:40",
+            "latest_activation_id": 3071
+          },
+          "empty_retrieval": {
+            "by_hook_event_name": {
+              "pre_llm_call": 99
+            },
+            "by_response_mode": {
+              "unknown": 26,
+              "verify_first": 73
+            },
+            "by_retrieval_outcome": {
+              "no_reliable_memory": 73,
+              "unknown": 26
+            },
+            "by_scope": {
+              "cwd:3cb80c5bd205081b": 22,
+              "cwd:4544b6bee3936120": 21,
+              "cwd:a439e0c3063d5e5c": 26,
+              "cwd:f7eb832640609c57": 14,
+              "cwd:ff110488b5197ef4": 16
+            },
+            "by_surface": {
+              "hermes-pre-llm-hook": 99
+            },
+            "count": 99,
+            "ratio": 0.495,
+            "sample_activation_ids": [
+              3071,
+              3070,
+              3069,
+              3060,
+              3057
+            ],
+            "sample_observation_ids": [
+              3166,
+              3165,
+              3164,
+              3155,
+              3152
+            ],
+            "trace_linkage": {
+              "linked_to_trace_count": 73,
+              "unlinked_to_trace_count": 26
+            }
+          },
+          "frequent_threshold": 3,
+          "kind": "memory_activation_summary",
+          "limit": 200,
+          "quality_warnings": [],
+          "read_only": true,
+          "scope_counts": {
+            "cwd:3cb80c5bd205081b": 34,
+            "cwd:4544b6bee3936120": 52,
+            "cwd:a439e0c3063d5e5c": 39,
+            "cwd:f7eb832640609c57": 47,
+            "cwd:ff110488b5197ef4": 28
+          },
+          "status_summary": {
+            "approved": 1
+          },
+          "suggested_next_steps": [
+            "Run observations audit to compare activation refs with retrieval observation behavior.",
+            "Run observations empty-diagnostics if empty_retrieval is high for a surface or scope.",
+            "Use future reinforcement/decay reports before changing retrieval ranking or memory status."
+          ],
+          "surface_counts": {
+            "hermes-pre-llm-hook": 200
+          },
+          "top": 20,
+          "top_memory_refs": [
+            {
+              "activation_count": 101,
+              "activation_window": {
+                "first_activated_at": "2026-05-12 04:26:25",
+                "first_activation_id": 2872,
+                "latest_activated_at": "2026-05-12 16:22:08",
+                "latest_activation_id": 3068
+              },
+              "current_status": "approved",
+              "memory_ref": "fact:1",
+              "sample_activation_ids": [
+                3068,
+                3067,
+                3066,
+                3065,
+                3064
+              ],
+              "sample_observation_ids": [
+                3163,
+                3162,
+                3161,
+                3160,
+                3159
+              ],
+              "signals": [
+                "frequently_activated",
+                "likely_reinforcement_candidate"
+              ],
+              "total_strength": 101.0
+            }
+          ]
+        },
+        "candidates": {
+          "candidate_count": 10,
+          "candidates": [
+            {
+              "candidate_id": "candidate:af06b18931d56e54",
+              "cluster_key": "scope:cwd:f7eb832640609c57|memory:fact:1",
+              "event_kind_counts": {
+                "turn": 33
+              },
+              "evidence_count": 33,
+              "evidence_trace_ids": [
+                2250,
+                2267,
+                2286,
+                2307,
+                2321,
+                2322,
+                2357,
+                2366,
+                2368,
+                2369,
+                2370,
+                2371,
+                2383,
+                2409,
+                2410,
+                2411,
+                2412,
+                2413,
+                2420,
+                2428,
+                2429,
+                2430,
+                2431,
+                2432,
+                2433,
+                2439,
+                2440,
+                2441,
+                2442,
+                2443,
+                2444,
+                2445,
+                2446
+              ],
+              "evidence_window": {
+                "first_trace_id": 2250,
+                "latest_trace_id": 2446
+              },
+              "fingerprint": "af06b18931d56e54",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 240,
+                "activation_counts_by_ref": {
+                  "fact:1": 240
+                },
+                "current_statuses": {
+                  "fact:1": "approved"
+                }
+              },
+              "related_memory_refs": [
+                "fact:1"
+              ],
+              "related_observation_ids": [
+                2967,
+                2984,
+                3003,
+                3024,
+                3038,
+                3039,
+                3074,
+                3083,
+                3085,
+                3086,
+                3087,
+                3088,
+                3100,
+                3126,
+                3127,
+                3128,
+                3129,
+                3130,
+                3137,
+                3145
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 33
+              },
+              "risk_flags": [
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 3.3,
+              "scopes": [
+                "cwd:f7eb832640609c57"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:af06b18931d56e54"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:bb43909fce6df232",
+              "cluster_key": "scope:cwd:4544b6bee3936120|memory:fact:1",
+              "event_kind_counts": {
+                "turn": 31
+              },
+              "evidence_count": 31,
+              "evidence_trace_ids": [
+                2253,
+                2259,
+                2260,
+                2266,
+                2269,
+                2272,
+                2281,
+                2283,
+                2284,
+                2293,
+                2301,
+                2304,
+                2305,
+                2308,
+                2319,
+                2323,
+                2330,
+                2337,
+                2339,
+                2345,
+                2346,
+                2351,
+                2378,
+                2379,
+                2392,
+                2397,
+                2400,
+                2405,
+                2406,
+                2426,
+                2436
+              ],
+              "evidence_window": {
+                "first_trace_id": 2253,
+                "latest_trace_id": 2436
+              },
+              "fingerprint": "bb43909fce6df232",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 240,
+                "activation_counts_by_ref": {
+                  "fact:1": 240
+                },
+                "current_statuses": {
+                  "fact:1": "approved"
+                }
+              },
+              "related_memory_refs": [
+                "fact:1"
+              ],
+              "related_observation_ids": [
+                2970,
+                2976,
+                2977,
+                2983,
+                2986,
+                2989,
+                2998,
+                3000,
+                3001,
+                3010,
+                3018,
+                3021,
+                3022,
+                3025,
+                3036,
+                3040,
+                3047,
+                3054,
+                3056,
+                3062
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 31
+              },
+              "risk_flags": [
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 3.1,
+              "scopes": [
+                "cwd:4544b6bee3936120"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:bb43909fce6df232"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:6d51c69f636fdfcd",
+              "cluster_key": "scope:cwd:a439e0c3063d5e5c|summary:no-summary",
+              "event_kind_counts": {
+                "turn": 26
+              },
+              "evidence_count": 26,
+              "evidence_trace_ids": [
+                2255,
+                2263,
+                2264,
+                2265,
+                2279,
+                2280,
+                2288,
+                2289,
+                2295,
+                2296,
+                2300,
+                2302,
+                2328,
+                2332,
+                2353,
+                2367,
+                2372,
+                2373,
+                2374,
+                2375,
+                2387,
+                2389,
+                2394,
+                2399,
+                2414,
+                2434
+              ],
+              "evidence_window": {
+                "first_trace_id": 2255,
+                "latest_trace_id": 2434
+              },
+              "fingerprint": "6d51c69f636fdfcd",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 0,
+                "activation_counts_by_ref": {},
+                "current_statuses": {}
+              },
+              "related_memory_refs": [],
+              "related_observation_ids": [],
+              "retention_policy_counts": {
+                "ephemeral": 26
+              },
+              "risk_flags": [
+                "no_related_memory_refs",
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 2.6,
+              "scopes": [
+                "cwd:a439e0c3063d5e5c"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:6d51c69f636fdfcd"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:035f9ca27aa797f1",
+              "cluster_key": "scope:cwd:3cb80c5bd205081b|summary:no-summary",
+              "event_kind_counts": {
+                "turn": 22
+              },
+              "evidence_count": 22,
+              "evidence_trace_ids": [
+                2257,
+                2258,
+                2276,
+                2282,
+                2292,
+                2309,
+                2310,
+                2315,
+                2318,
+                2326,
+                2329,
+                2350,
+                2356,
+                2384,
+                2408,
+                2423,
+                2424,
+                2425,
+                2427,
+                2438,
+                2447,
+                2449
+              ],
+              "evidence_window": {
+                "first_trace_id": 2257,
+                "latest_trace_id": 2449
+              },
+              "fingerprint": "035f9ca27aa797f1",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 0,
+                "activation_counts_by_ref": {},
+                "current_statuses": {}
+              },
+              "related_memory_refs": [],
+              "related_observation_ids": [
+                2974,
+                2975,
+                2993,
+                2999,
+                3009,
+                3026,
+                3027,
+                3032,
+                3035,
+                3043,
+                3046,
+                3067,
+                3073,
+                3101,
+                3125,
+                3140,
+                3141,
+                3142,
+                3144,
+                3155
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 22
+              },
+              "risk_flags": [
+                "no_related_memory_refs",
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 2.2,
+              "scopes": [
+                "cwd:3cb80c5bd205081b"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:035f9ca27aa797f1"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:eccf143e2d2c623f",
+              "cluster_key": "scope:cwd:4544b6bee3936120|summary:no-summary",
+              "event_kind_counts": {
+                "turn": 21
+              },
+              "evidence_count": 21,
+              "evidence_trace_ids": [
+                2251,
+                2262,
+                2268,
+                2273,
+                2277,
+                2278,
+                2287,
+                2299,
+                2303,
+                2311,
+                2312,
+                2324,
+                2327,
+                2331,
+                2333,
+                2334,
+                2335,
+                2340,
+                2342,
+                2418,
+                2435
+              ],
+              "evidence_window": {
+                "first_trace_id": 2251,
+                "latest_trace_id": 2435
+              },
+              "fingerprint": "eccf143e2d2c623f",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 0,
+                "activation_counts_by_ref": {},
+                "current_statuses": {}
+              },
+              "related_memory_refs": [],
+              "related_observation_ids": [
+                2968,
+                2979,
+                2985,
+                2990,
+                2994,
+                2995,
+                3004,
+                3016,
+                3020,
+                3028,
+                3029,
+                3041,
+                3044,
+                3048,
+                3050,
+                3051,
+                3052,
+                3057,
+                3059,
+                3135
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 21
+              },
+              "risk_flags": [
+                "no_related_memory_refs",
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 2.1,
+              "scopes": [
+                "cwd:4544b6bee3936120"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:eccf143e2d2c623f"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:276f1889a15d9813",
+              "cluster_key": "scope:cwd:ff110488b5197ef4|summary:no-summary",
+              "event_kind_counts": {
+                "turn": 16
+              },
+              "evidence_count": 16,
+              "evidence_trace_ids": [
+                2336,
+                2338,
+                2341,
+                2347,
+                2354,
+                2355,
+                2358,
+                2362,
+                2363,
+                2365,
+                2393,
+                2398,
+                2402,
+                2403,
+                2416,
+                2419
+              ],
+              "evidence_window": {
+                "first_trace_id": 2336,
+                "latest_trace_id": 2419
+              },
+              "fingerprint": "276f1889a15d9813",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 0,
+                "activation_counts_by_ref": {},
+                "current_statuses": {}
+              },
+              "related_memory_refs": [],
+              "related_observation_ids": [
+                3053,
+                3055,
+                3058,
+                3064,
+                3071,
+                3072,
+                3075,
+                3079,
+                3080,
+                3082,
+                3110,
+                3115,
+                3119,
+                3120,
+                3133,
+                3136
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 16
+              },
+              "risk_flags": [
+                "no_related_memory_refs",
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 1.6,
+              "scopes": [
+                "cwd:ff110488b5197ef4"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:276f1889a15d9813"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:80248f509b80be7e",
+              "cluster_key": "scope:cwd:f7eb832640609c57|summary:no-summary",
+              "event_kind_counts": {
+                "turn": 14
+              },
+              "evidence_count": 14,
+              "evidence_trace_ids": [
+                2254,
+                2270,
+                2271,
+                2291,
+                2313,
+                2316,
+                2325,
+                2344,
+                2349,
+                2359,
+                2386,
+                2388,
+                2421,
+                2448
+              ],
+              "evidence_window": {
+                "first_trace_id": 2254,
+                "latest_trace_id": 2448
+              },
+              "fingerprint": "80248f509b80be7e",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 0,
+                "activation_counts_by_ref": {},
+                "current_statuses": {}
+              },
+              "related_memory_refs": [],
+              "related_observation_ids": [
+                2971,
+                2987,
+                2988,
+                3008,
+                3030,
+                3033,
+                3042,
+                3061,
+                3066,
+                3076,
+                3103,
+                3105,
+                3138,
+                3165
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 14
+              },
+              "risk_flags": [
+                "no_related_memory_refs",
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 1.4,
+              "scopes": [
+                "cwd:f7eb832640609c57"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:80248f509b80be7e"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:491bb0466f702d60",
+              "cluster_key": "scope:cwd:a439e0c3063d5e5c|memory:fact:1",
+              "event_kind_counts": {
+                "turn": 13
+              },
+              "evidence_count": 13,
+              "evidence_trace_ids": [
+                2252,
+                2261,
+                2274,
+                2285,
+                2294,
+                2298,
+                2306,
+                2360,
+                2376,
+                2391,
+                2395,
+                2404,
+                2417
+              ],
+              "evidence_window": {
+                "first_trace_id": 2252,
+                "latest_trace_id": 2417
+              },
+              "fingerprint": "491bb0466f702d60",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 240,
+                "activation_counts_by_ref": {
+                  "fact:1": 240
+                },
+                "current_statuses": {
+                  "fact:1": "approved"
+                }
+              },
+              "related_memory_refs": [
+                "fact:1"
+              ],
+              "related_observation_ids": [],
+              "retention_policy_counts": {
+                "ephemeral": 13
+              },
+              "risk_flags": [
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 1.3,
+              "scopes": [
+                "cwd:a439e0c3063d5e5c"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:491bb0466f702d60"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:46a7bb34d61321df",
+              "cluster_key": "scope:cwd:3cb80c5bd205081b|memory:fact:1",
+              "event_kind_counts": {
+                "turn": 12
+              },
+              "evidence_count": 12,
+              "evidence_trace_ids": [
+                2256,
+                2275,
+                2290,
+                2297,
+                2314,
+                2317,
+                2320,
+                2348,
+                2377,
+                2407,
+                2422,
+                2437
+              ],
+              "evidence_window": {
+                "first_trace_id": 2256,
+                "latest_trace_id": 2437
+              },
+              "fingerprint": "46a7bb34d61321df",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 240,
+                "activation_counts_by_ref": {
+                  "fact:1": 240
+                },
+                "current_statuses": {
+                  "fact:1": "approved"
+                }
+              },
+              "related_memory_refs": [
+                "fact:1"
+              ],
+              "related_observation_ids": [
+                2973,
+                2992,
+                3007,
+                3014,
+                3031,
+                3034,
+                3037,
+                3065,
+                3094,
+                3124,
+                3139,
+                3154
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 12
+              },
+              "risk_flags": [
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 1.2,
+              "scopes": [
+                "cwd:3cb80c5bd205081b"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:46a7bb34d61321df"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            },
+            {
+              "candidate_id": "candidate:c03dfce90af30c79",
+              "cluster_key": "scope:cwd:ff110488b5197ef4|memory:fact:1",
+              "event_kind_counts": {
+                "turn": 12
+              },
+              "evidence_count": 12,
+              "evidence_trace_ids": [
+                2343,
+                2352,
+                2361,
+                2364,
+                2380,
+                2381,
+                2382,
+                2385,
+                2390,
+                2396,
+                2401,
+                2415
+              ],
+              "evidence_window": {
+                "first_trace_id": 2343,
+                "latest_trace_id": 2415
+              },
+              "fingerprint": "c03dfce90af30c79",
+              "guessed_memory_type": "semantic",
+              "reinforcement": {
+                "activation_count": 240,
+                "activation_counts_by_ref": {
+                  "fact:1": 240
+                },
+                "current_statuses": {
+                  "fact:1": "approved"
+                }
+              },
+              "related_memory_refs": [
+                "fact:1"
+              ],
+              "related_observation_ids": [
+                3060,
+                3069,
+                3078,
+                3081,
+                3097,
+                3098,
+                3099,
+                3102,
+                3107,
+                3113,
+                3118,
+                3132
+              ],
+              "retention_policy_counts": {
+                "ephemeral": 12
+              },
+              "risk_flags": [
+                "missing_safe_summary"
+              ],
+              "safe_summaries": [],
+              "salience_total": 1.2,
+              "scopes": [
+                "cwd:ff110488b5197ef4"
+              ],
+              "suggested_review_commands": [
+                "agent-memory consolidation explain /Users/reddit/.agent-memory/memory.db candidate:c03dfce90af30c79"
+              ],
+              "surfaces": [
+                "hermes-pre-llm-hook"
+              ],
+              "user_emphasis_total": 0.0
+            }
+          ],
+          "kind": "memory_consolidation_candidates",
+          "limit": 200,
+          "min_evidence": 2,
+          "quality_warnings": [],
+          "read_only": true,
+          "suggested_next_steps": [
+            "Inspect candidate explanations before any promotion workflow.",
+            "Keep this report read-only; do not create or approve long-term memories automatically.",
+            "Use candidate fingerprints for future reject/snooze workflows only after human review UX exists."
+          ],
+          "top": 20,
+          "trace_count": 200
+        },
+        "decay_risk": {
+          "activation_count": 200,
+          "activation_window": {
+            "first_activated_at": "2026-05-12 04:26:25",
+            "first_activation_id": 2872,
+            "latest_activated_at": "2026-05-12 22:34:40",
+            "latest_activation_id": 3071
+          },
+          "candidate_decomposition": {
+            "candidate_count": 1,
+            "factor_score_max": {
+              "low_connectivity": 0.0,
+              "low_repetition": 0.0,
+              "stale_activity": 0.2,
+              "status_risk": 0.0,
+              "weak_strength": 0.0
+            },
+            "max_score": 0.2,
+            "raw_content_included": false,
+            "resolution_hint_counts": {
+              "monitor_only_no_mutation": 1
+            },
+            "sample_memory_refs": [
+              "fact:1"
+            ],
+            "signal_counts": {
+              "connected_memory": 1,
+              "frequently_activated": 1,
+              "protected_from_age_only_decay": 1
+            },
+            "top_factor_names": [
+              "stale_activity",
+              "low_connectivity",
+              "low_repetition",
+              "status_risk",
+              "weak_strength"
+            ]
+          },
+          "decay_risk_candidates": [
+            {
+              "activation_count": 101,
+              "activation_window": {
+                "first_activated_at": "2026-05-12 04:26:25",
+                "first_activation_id": 2872,
+                "latest_activated_at": "2026-05-12 16:22:08",
+                "latest_activation_id": 3068
+              },
+              "current_status": "approved",
+              "factor_breakdown": {
+                "low_connectivity": {
+                  "ratio": 0.0,
+                  "relation_count": 1,
+                  "score": 0.0
+                },
+                "low_repetition": {
+                  "activation_count": 101,
+                  "ratio": 0.0,
+                  "score": 0.0,
+                  "threshold": 3
+                },
+                "stale_activity": {
+                  "activation_id_distance": 3,
+                  "global_latest_activation_id": 3071,
+                  "latest_activation_id": 3068,
+                  "ratio": 1.0,
+                  "score": 0.2
+                },
+                "status_risk": {
+                  "risk_ratio": 0.0,
+                  "score": 0.0,
+                  "value": "approved"
+                },
+                "weak_strength": {
+                  "ratio": 0.0,
+                  "score": 0.0,
+                  "threshold": 3,
+                  "total_strength": 101.0
+                }
+              },
+              "memory_ref": "fact:1",
+              "protections": [
+                "approved_frequent_connected_max_score"
+              ],
+              "ref_safe_evidence": {
+                "content_included": false,
+                "evidence_id_count": 0,
+                "exists": true,
+                "memory_id": 1,
+                "memory_ref": "fact:1",
+                "memory_type": "fact",
+                "relation_count": 1,
+                "scope_present": true
+              },
+              "resolution_hint": "monitor_only_no_mutation",
+              "review_support": {
+                "operator_commands": [
+                  "agent-memory review explain fact /Users/reddit/.agent-memory/memory.db 1",
+                  "agent-memory review history fact /Users/reddit/.agent-memory/memory.db 1",
+                  "agent-memory graph inspect /Users/reddit/.agent-memory/memory.db fact:1 --depth 1"
+                ],
+                "raw_content_included": false,
+                "recommended_actions": [
+                  "inspect_ref_safe_evidence",
+                  "monitor_without_mutation"
+                ],
+                "review_required": true,
+                "safe_to_auto_mutate": false
+              },
+              "sample_activation_ids": [
+                3068,
+                3067,
+                3066,
+                3065,
+                3064
+              ],
+              "sample_observation_ids": [
+                3163,
+                3162,
+                3161,
+                3160,
+                3159
+              ],
+              "score": 0.2,
+              "signals": [
+                "protected_from_age_only_decay",
+                "frequently_activated",
+                "connected_memory"
+              ],
+              "total_strength": 101.0
+            }
+          ],
+          "frequent_threshold": 3,
+          "kind": "memory_decay_risk_report",
+          "limit": 200,
+          "negative_evidence": {
+            "empty_retrieval_count": 99,
+            "empty_retrieval_ratio": 0.495
+          },
+          "quality_warnings": [],
+          "read_only": true,
+          "scoring": {
+            "max_score": 1.0,
+            "protections": {
+              "approved_frequent_connected_max_score": 0.25,
+              "approved_frequent_max_score": 0.4
+            },
+            "weights": {
+              "low_connectivity": 0.15,
+              "low_repetition": 0.3,
+              "stale_activity": 0.2,
+              "status_risk": 0.15,
+              "weak_strength": 0.2
+            }
+          },
+          "suggested_next_steps": [
+            "Inspect high decay-risk refs with activations summary and review explain before any status change.",
+            "Treat this report as advisory only; do not delete, deprecate, or mutate from decay score alone.",
+            "Use future consolidation candidate reports to compare weak refs with trace clusters before cleanup."
+          ],
+          "top": 20
+        },
+        "reinforcement": {
+          "activation_count": 200,
+          "activation_window": {
+            "first_activated_at": "2026-05-12 04:26:25",
+            "first_activation_id": 2872,
+            "latest_activated_at": "2026-05-12 22:34:40",
+            "latest_activation_id": 3071
+          },
+          "frequent_threshold": 3,
+          "kind": "memory_reinforcement_report",
+          "limit": 200,
+          "negative_evidence": {
+            "empty_retrieval_count": 99,
+            "empty_retrieval_ratio": 0.495
+          },
+          "quality_warnings": [],
+          "read_only": true,
+          "reinforcement_candidates": [
+            {
+              "activation_count": 101,
+              "activation_window": {
+                "first_activated_at": "2026-05-12 04:26:25",
+                "first_activation_id": 2872,
+                "latest_activated_at": "2026-05-12 16:22:08",
+                "latest_activation_id": 3068
+              },
+              "current_status": "approved",
+              "factor_breakdown": {
+                "connectivity": {
+                  "ratio": 1,
+                  "relation_count": 1,
+                  "score": 0.15
+                },
+                "repetition": {
+                  "activation_count": 101,
+                  "ratio": 1.0,
+                  "score": 0.35,
+                  "threshold": 3
+                },
+                "status_trust": {
+                  "score": 0.2,
+                  "trust_ratio": 1.0,
+                  "value": "approved"
+                },
+                "strength": {
+                  "ratio": 1.0,
+                  "score": 0.2,
+                  "threshold": 3,
+                  "total_strength": 101.0
+                },
+                "surface_scope_diversity": {
+                  "ratio": 1.0,
+                  "scope_count": 5,
+                  "scopes": [
+                    "cwd:3cb80c5bd205081b",
+                    "cwd:4544b6bee3936120",
+                    "cwd:a439e0c3063d5e5c",
+                    "cwd:f7eb832640609c57",
+                    "cwd:ff110488b5197ef4"
+                  ],
+                  "score": 0.1,
+                  "surface_count": 1,
+                  "surfaces": [
+                    "hermes-pre-llm-hook"
+                  ]
+                }
+              },
+              "memory_ref": "fact:1",
+              "penalties": {},
+              "sample_activation_ids": [
+                3068,
+                3067,
+                3066,
+                3065,
+                3064
+              ],
+              "sample_observation_ids": [
+                3163,
+                3162,
+                3161,
+                3160,
+                3159
+              ],
+              "score": 1.0,
+              "signals": [
+                "strong_reinforcement_candidate",
+                "frequently_activated",
+                "connected_memory"
+              ],
+              "total_strength": 101.0
+            }
+          ],
+          "scoring": {
+            "max_score": 1.0,
+            "penalties": {
+              "deprecated": 0.4,
+              "disputed": 0.3,
+              "missing": 0.2,
+              "supersession_or_replacement": 0.25
+            },
+            "weights": {
+              "connectivity": 0.15,
+              "repetition": 0.35,
+              "status_trust": 0.2,
+              "strength": 0.2,
+              "surface_scope_diversity": 0.1
+            }
+          },
+          "suggested_next_steps": [
+            "Inspect strong candidates with activations summary before any promotion workflow.",
+            "Use decay-risk reporting before mutating stale or weak memories.",
+            "Keep retrieval ranking unchanged until opt-in eval and live Hermes E2E pass."
+          ],
+          "top": 20
+        }
+      },
+      "review_handoff": {
+        "candidate_count": 10,
+        "decay_risk_candidate_count": 1,
+        "next_steps": [
+          "Review this JSON report manually; it is intentionally read-only.",
+          "Use existing explain/promote/auto-approve commands only as explicit follow-up actions.",
+          "Do not infer or approve ordinary conversation memories from this background dry-run."
+        ],
+        "reinforcement_candidate_count": 0,
+        "suitable_for_human_review": true
+      },
+      "scan": {
+        "frequent_threshold": 3,
+        "limit": 200,
+        "min_evidence": 2,
+        "quality_warnings": [],
+        "top": 20
+      },
+      "status": "completed"
+    },
+    "remember_intent": {
+      "default_retrieval_unchanged": true,
+      "kind": "remember_intent_dogfood_report",
+      "limit": 200,
+      "mutated": false,
+      "read_only": true,
+      "rejection_counts": {},
+      "review_ready_count": 0,
+      "sample_limit": 10,
+      "samples": [],
+      "scopes": {},
+      "suggested_next_steps": [
+        "Review remember_intent samples and their consolidation candidate explanations before enabling G2 auto-approval.",
+        "Keep G2 default-off and require policy, conflict preflight, audit history, and rollback/review commands."
+      ],
+      "trace_counts": {
+        "ordinary_turn": 200,
+        "other": 0,
+        "remember_intent": 0,
+        "total": 200
+      },
+      "unsafe_sample_count": 0
+    },
+    "storage_health": {
+      "agent_memory_version": "0.1.143",
+      "database": {
+        "path": "/Users/reddit/.agent-memory/memory.db",
+        "path_exists": true,
+        "schema_user_version": 0
+      },
+      "hermes": {
+        "agent_memory_hook_present": null,
+        "config_checked": false,
+        "config_exists": null
+      },
+      "invariants": {
+        "activation_links": {
+          "checked_count": 907,
+          "orphan_observation_count": 0,
+          "orphan_trace_count": 0,
+          "status": "pass"
+        },
+        "metadata_json_valid": {
+          "checked_counts": {
+            "experience_traces": 907,
+            "memory_activations": 907,
+            "retrieval_observations": 907
+          },
+          "invalid_counts": {
+            "experience_traces": 0,
+            "memory_activations": 0,
+            "retrieval_observations": 0
+          },
+          "status": "pass"
+        },
+        "ordinary_trace_metadata_only": {
+          "checked_count": 907,
+          "status": "pass",
+          "violation_count": 0,
+          "violations": {}
+        },
+        "query_hash_presence": {
+          "checked_count": 907,
+          "latest_violation_at": null,
+          "status": "pass",
+          "violation_count": 0
+        },
+        "remember_intent_safety": {
+          "checked_count": 0,
+          "rejected_secret_like_count": 0,
+          "review_ready_count": 0,
+          "status": "pass",
+          "violation_count": 0,
+          "violations": {}
+        },
+        "stored_query_excerpt_empty": {
+          "checked_count": 907,
+          "latest_violation_at": null,
+          "status": "pass",
+          "violation_count": 0
+        }
+      },
+      "kind": "dogfood_storage_health",
+      "latest_records": {
+        "episodes": null,
+        "experience_traces": "2026-05-12 22:34:40",
+        "facts": "2026-04-30 17:26:00",
+        "memory_activations": "2026-05-12 22:34:40",
+        "procedures": null,
+        "retrieval_observations": "2026-05-12 22:34:40"
+      },
+      "memory_counts": {
+        "episodes": {},
+        "facts": {
+          "approved": 1,
+          "deprecated": 2
+        },
+        "procedures": {}
+      },
+      "mutated": false,
+      "read_only": true,
+      "status": "healthy",
+      "suggested_next_steps": [
+        "Storage health invariants are clean; continue G3c dogfooding before G4 apply-mode planning."
+      ],
+      "table_counts": {
+        "episodes": 0,
+        "experience_traces": 907,
+        "facts": 3,
+        "memory_activations": 907,
+        "procedures": 0,
+        "retrieval_observations": 907
+      },
+      "warnings": []
+    },
+    "trace_quality": {
+      "candidate_signals": {
+        "related_memory_ref_count": 1,
+        "related_memory_ref_repetition_count": 1,
+        "retrieved_memory_ref_repetition_count": 1
+      },
+      "coverage": {
+        "activation_count": 907,
+        "observation_count": 907,
+        "observation_trace_coverage_ratio": 0.3396,
+        "observations_linked_from_traces": 308,
+        "trace_count": 907
+      },
+      "coverage_diagnostics": {
+        "activation_count": 907,
+        "activation_trace_link_coverage_ratio": 0.3396,
+        "activations_linked_to_traces": 308,
+        "likely_gap": "traces_missing_observation_links",
+        "next_action": "Verify the runtime links new metadata-only turn traces to retrieval observation ids before broad G4 planning.",
+        "trace_without_observation_link_count": 599,
+        "unlinked_observation_count": 599
+      },
+      "database": {
+        "exists": true,
+        "path": "/Users/reddit/.agent-memory/memory.db"
+      },
+      "invariants": {
+        "metadata_json_valid": {
+          "checked_counts": {
+            "experience_traces": 907,
+            "memory_activations": 907,
+            "retrieval_observations": 907
+          },
+          "invalid_counts": {
+            "experience_traces": 0,
+            "memory_activations": 0,
+            "retrieval_observations": 0
+          },
+          "status": "pass"
+        },
+        "ordinary_trace_metadata_only": {
+          "checked_count": 907,
+          "status": "pass",
+          "violation_count": 0,
+          "violations": {}
+        }
+      },
+      "kind": "dogfood_trace_quality",
+      "mutated": false,
+      "privacy": {
+        "aggregate_only": true,
+        "raw_conversation_content_included": false,
+        "raw_query_included": false,
+        "raw_trace_summary_included": false,
+        "sample_values_included": false
+      },
+      "read_only": true,
+      "recommendation": "ready_for_more_dry_runs",
+      "retrieval_quality": {
+        "empty_retrieval_count": 459,
+        "empty_retrieval_ratio": 0.5061,
+        "max_retrieval_repetition": 448,
+        "repeated_memory_ref_count": 1
+      },
+      "status": "healthy",
+      "thresholds": {
+        "min_evidence_count": 2,
+        "min_trace_coverage": 0.25
+      },
+      "time_window": {
+        "since_hours": 168,
+        "sqlite_since_modifier": "-168 hours"
+      },
+      "trace_distribution": {
+        "event_kind_counts": {
+          "turn": 907
+        },
+        "retention_policy_counts": {
+          "ephemeral": 907
+        }
+      },
+      "warnings": []
+    }
+  },
+  "reports_included": [
+    "storage_health",
+    "trace_quality",
+    "remember_intent",
+    "background_dry_run"
+  ],
+  "suggested_next_steps": [
+    "Schedule this command repeatedly before planning any G4 apply mode.",
+    "Treat a passing quality gate only as permission to write a separate G4 plan with RED tests.",
+    "Keep ordinary conversation traces metadata-only and keep default retrieval approved-only."
+  ],
+  "thresholds": {
+    "candidate_min": 1,
+    "max_decay_risk": 0,
+    "min_evidence_count": 2,
+    "min_trace_coverage": 0.25,
+    "since_hours": 168
+  }
+}

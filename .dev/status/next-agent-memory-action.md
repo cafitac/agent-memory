@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 01:10 KST
+Last updated: 2026-05-13 08:10 KST
 
 ## Use this first when the user asks
 
@@ -24,15 +24,15 @@ The north-star is a human-memory-like, mostly automatic, graph-based memory cons
 
 Approximate progress:
 
-- Overall north-star: 62-64%.
+- Overall north-star: 66-68%.
 - Substrate/evidence plumbing: about 75-77%.
-- Safe automatic mutation/promotion: about 43-46%.
-- Remaining work: about 36-38% overall, concentrated in guarded apply, conflict/supersession, decay/collapse apply, ranking evaluation, and rollback confidence.
+- Safe automatic mutation/promotion: about 50-53%.
+- Remaining work: about 32-34% overall, concentrated in decay/collapse apply, ranking evaluation, richer supersession evidence, and rollback confidence.
 
 Reasoning:
 
-- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, and G5e read-only stale weak evidence -> decay/collapse candidate preview.
-- Not done: broad background consolidation apply, automatic long-term memory promotion, conflict-aware automatic supersession, weak-trace decay/collapse apply, automatic graph-cluster-to-fact/procedure/preference generation, retrieval-ranking changes behind eval, and large-scope rollback confidence.
+- Done: trace substrate, retrieval observations, activation/reinforcement/decay evidence, graph/review primitives, background dry-runs, fresh-epoch comparison, persisted review queue, first narrow approved mutation (`apply_reinforcement_marker`), fresh linkage health, G5a ref-safe `trace cluster -> consolidation candidate` preview, G5b reviewed trace-candidate persist/list/update/apply for explicit fact/preference/procedure promotion, G5c read-only cluster scoring, G5d read-only repeated activation -> reinforcement refinement preview, G5e read-only stale weak evidence -> decay/collapse candidate preview, and in-flight G5f supersession preview / lifecycle registry / bounded partial automation.
+- Not done: broad background consolidation apply, fully automatic long-term memory promotion, richer conflict-aware supersession evidence, weak-trace decay/collapse apply, automatic graph-cluster-to-fact/procedure/preference generation, retrieval-ranking changes behind eval, and large-scope rollback confidence.
 
 ## Latest verified checkpoint
 
@@ -61,20 +61,20 @@ Fresh v0.1.143 runtime plus v0.1.138 fresh telemetry evidence are healthy enough
 - `g5d-live-smoke.json`: quality gate decision `reinforcement_refinement_preview_ready_for_human_review`, `read_only=true`, `mutated=false`, candidate count `1`.
 - `g5e-live-smoke.json`: quality gate decision `continue_decay_collapse_dogfooding_before_review`, `read_only=true`, `mutated=false`, candidate count `0`, default retrieval unchanged.
 
-However, historical scheduled-dry-run still blocks broad G4/background apply on:
+However, historical scheduled-dry-run still blocks broad G4/background apply, but a fresh aggregate-safe blocker resolution now passes for bounded partial automation only on:
 
 - `trace_quality_needs_more_dogfooding`
 - `decay_risk_above_threshold`
 - `background_quality_warnings_present`
 
-Interpretation: this is no longer a fresh hook linkage bug. It is historical telemetry/review debt plus still-narrow mutation safety work.
+Fresh G5f blocker-resolution evidence: `.dev/dogfood/g5f-20260512T224602Z/scheduled-blocker-resolution.json` reports `pass=true`, unresolved blockers `[]`, `bounded_partial_automation_allowed=true`, and `broad_g4_apply_allowed=false`. Interpretation: this is no longer a fresh hook linkage bug. It is historical telemetry/review debt plus still-narrow mutation safety work.
 
 ## Recommended next work
 
 Proceed in this sequence:
 
-1. Start the next review-first slice after G5e: conflict -> supersession/replacement candidate preview, read-only/ref-safe. This should identify same-claim-slot conflicts and replacement chains for human review without mutating facts, relations, status, retrieval ranking, or prompts.
-2. Keep G5d/G5e semantics narrow: review scores/recommendations, reinforcement refinement, and decay/collapse candidates are review-priority signals only; they do not persist review state, increment/decrement reinforcement, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
+1. Review and release the G5f slice: conflict -> supersession/replacement candidate preview, unified lifecycle candidate registry, guarded supersession apply corridor, scheduled-blocker resolution report, and bounded G4 review-queue partial apply (`--max-apply`, default 1).
+2. Keep G5d/G5e/G5f semantics narrow: review scores/recommendations, reinforcement refinement, and decay/collapse candidates are review-priority signals only; they do not persist review state, increment/decrement reinforcement, promote memories, auto-approve ordinary conversation, or change retrieval defaults.
 3. Add explicit contract tests for future conflict/supersession safety: `read_only=true`, `mutated=false`, `apply_supported=false`, no raw prompt/query/transcript/sample output, and protected memory tables unchanged.
 4. If a later conflict/supersession or decay/collapse apply slice needs mutation, add only a separate explicit narrow apply policy with backup/audit/rollback; generic continuation does not authorize it.
 5. G4 broad apply contract remains blocked/guardrail-only. Required future shape: explicit policy, approval phrase, actor, reason hash, backup path, expected queue ids/hash, audit row, rollback hint, raw-content exclusion, and ordinary-conversation auto-approval forbidden.
