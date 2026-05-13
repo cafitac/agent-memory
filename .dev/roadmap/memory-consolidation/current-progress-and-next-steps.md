@@ -1,20 +1,20 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 16:32 KST
+Last updated: 2026-05-13 17:09 KST
 
-## v0.1.152 released runtime checkpoint and next runway
+## v0.1.153 released runtime checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.152 release/runtime rollout: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate fact promotion, one guarded live reviewed procedure/episode promotion pair, copy/live-safe explicit approval corridor evidence, v0.1.152 `personal-oss` Hermes hook rollout, released named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and 50-task live-Hermes-DB representative fact plus mixed fact/procedure/episode shadow corpus evidence while keeping `conservative_legacy` as the live default.
+This document is the restartable checkpoint after the v0.1.153 release/runtime rollout: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate fact promotion, one guarded live reviewed procedure/episode promotion pair, copy/live-safe explicit approval corridor evidence, v0.1.153 `personal-oss` Hermes hook rollout, released named ranking policy/shadow-compare diagnostics, approval-gated config-only default-ranking migrate/rollback mechanics, and 50-task live-Hermes-DB representative fact plus mixed fact/procedure/episode shadow corpus evidence while keeping `conservative_legacy` as the live default.
 
 Current verified release state:
 
-- Release: `v0.1.152`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.152`.
-- npm: `@cafitac/agent-memory@0.1.152`.
-- PyPI: `cafitac-agent-memory==0.1.152`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.152/.venv/bin/agent-memory`.
-- Hermes hook doctor is green for `personal-oss` on the v0.1.152 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
+- Release: `v0.1.153`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.153`.
+- npm: `@cafitac/agent-memory@0.1.153`.
+- PyPI: `cafitac-agent-memory==0.1.153`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.153/.venv/bin/agent-memory`.
+- Hermes hook doctor is green for `personal-oss` on the v0.1.153 runtime after `--accept-hooks`; default/earlypay/infra-admin stayed on prior green runtime unless explicitly upgraded later.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
@@ -35,7 +35,7 @@ Progress estimate:
 
 Current interpretation:
 
-Fresh v0.1.152 evidence and merged G5a-G5i plus default-ranking migration mechanics are healthy enough to continue the brain-like reviewed-candidate runway. The current runway has completed the expanded retrieval source fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate fact promotion, one guarded live reviewed procedure/episode promotion pair, the explicit default-ranking opt-in-to-default migration design, released named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics, and representative live-Hermes-DB fact plus mixed shadow evidence preserving `conservative_legacy`. Broad G4/background apply remains blocked. Current next work is to improve fresh-epoch telemetry coverage and reduce classified legacy missing-outcome rows through metadata-rich dogfooding before any explicit operator-approved default ranking migration.
+Fresh v0.1.153 evidence and merged G5a-G5i plus default-ranking migration mechanics are healthy enough to continue the brain-like reviewed-candidate runway. The current runway has completed the expanded retrieval source fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, one fresh guarded live reviewed-candidate fact promotion, one guarded live reviewed procedure/episode promotion pair, the explicit default-ranking opt-in-to-default migration design, released named ranking policy diagnostics plus approval-gated config-only migrate/rollback mechanics, and representative live-Hermes-DB fact plus mixed shadow evidence preserving `conservative_legacy`. Broad G4/background apply remains blocked. Current next work is to improve fresh-epoch telemetry coverage and reduce classified legacy missing-outcome rows through metadata-rich dogfooding before any explicit operator-approved default ranking migration.
 
 Recommended sequence from here:
 
