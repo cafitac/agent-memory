@@ -71,10 +71,11 @@ def test_v0152_status_docs_record_current_brainlike_runway_and_blocked_broad_app
         assert "/Users/reddit/.agent-memory/runtime/v0.1.152/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
-        assert "Overall north-star: 76-78%" in doc
+        assert "Overall north-star: 78-80%" in doc
         assert "broad g4/background apply" in doc.lower()
         assert "50-task expanded retrieval fixture gate" in doc or "50-task expanded retrieval fixture" in doc
         assert "75 checked-in" in doc or "75/75" in doc
+        assert "mixed fact/procedure/episode" in doc or "approved facts/procedure/episode" in doc
         assert "collapse proof" in doc.lower()
 
     assert "dogfood trace-cluster-preview" in next_action
