@@ -3839,8 +3839,9 @@ def _dogfood_retrieval_ranking_gate_payload(args: argparse.Namespace) -> dict[st
     )
     data = result.model_dump(mode="json")
     summary = data.get("summary", {}) if isinstance(data, dict) else {}
-    pass_value = bool(summary.get("pass", False) or summary.get("pass_", False))
     failed_count = _safe_int(summary.get("failed_count", 0))
+    pass_marker = summary.get("pass", summary.get("pass_"))
+    pass_value = failed_count == 0 if pass_marker is None else bool(pass_marker)
     if not summary and isinstance(data, dict):
         results = data.get("results", []) or []
         failed_count = sum(1 for item in results if isinstance(item, dict) and not bool(item.get("pass", item.get("pass_", False))))
@@ -3945,6 +3946,94 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
 def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[str, Any]:
     preview = _dogfood_decay_collapse_preview_payload(args)
     candidate_count = _safe_int(preview.get("candidate_count", 0))
+    accepted_evidence = [
+        "rollback_replay_validate_pass",
+        "relation_equivalence_or_supersession_chain",
+        "retrieval_eval_gate_pass",
+        "human_reviewed_candidate_payload",
+    ]
+    replay_payload = _dogfood_rollback_replay_validate_payload(
+        argparse.Namespace(db_path=args.db_path, limit=50, output=None)
+    )
+    fixtures = getattr(args, "fixtures", None)
+    if fixtures:
+        ranking_gate = _dogfood_retrieval_ranking_gate_payload(
+            argparse.Namespace(
+                db_path=args.db_path,
+                fixtures=fixtures,
+                baseline_mode=getattr(args, "baseline_mode", None),
+                max_baseline_regressions=getattr(args, "max_baseline_regressions", 0),
+                output=None,
+            )
+        )
+        retrieval_eval_status = {
+            "passed": bool(ranking_gate.get("ranking_change_allowed")),
+            "source": "dogfood_retrieval_ranking_gate.ranking_change_allowed",
+            "blocked_reasons": ranking_gate.get("blocked_reasons", []),
+        }
+    else:
+        retrieval_eval_status = {
+            "passed": None,
+            "source": "dogfood_retrieval_ranking_gate.ranking_change_allowed",
+            "skipped_reason": "fixtures_not_provided",
+        }
+
+    with sqlite3.connect(args.db_path) as connection:
+        _ensure_lifecycle_candidate_review_tables(connection)
+        decay_review_count = _safe_int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM g5_trace_candidate_reviews
+                WHERE candidate_kind = 'decay'
+                  AND proposal_type = 'decay_review'
+                  AND status IN ('approved', 'promoted')
+                """
+            ).fetchone()[0]
+        )
+        supersession_review_count = _safe_int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM g5_trace_candidate_reviews
+                WHERE candidate_kind = 'supersession'
+                  AND proposal_type = 'supersession_review'
+                  AND status IN ('approved', 'promoted')
+                """
+            ).fetchone()[0]
+        )
+
+    evidence_status: dict[str, dict[str, Any]] = {
+        "rollback_replay_validate_pass": {
+            "passed": bool((replay_payload.get("quality_gate") or {}).get("pass")),
+            "source": "dogfood_rollback_replay_validate.quality_gate.pass",
+            "checked_application_count": (replay_payload.get("rollup") or {}).get("checked_application_count", 0),
+        },
+        "relation_equivalence_or_supersession_chain": {
+            "passed": supersession_review_count > 0,
+            "source": "approved_supersession_candidate_or_existing_supersession_relation",
+            "approved_supersession_candidate_count": supersession_review_count,
+        },
+        "retrieval_eval_gate_pass": retrieval_eval_status,
+        "human_reviewed_candidate_payload": {
+            "passed": decay_review_count > 0,
+            "source": "g5_trace_candidate_reviews approved decay candidates",
+            "approved_decay_candidate_count": decay_review_count,
+        },
+    }
+    missing_evidence = [
+        key
+        for key in accepted_evidence
+        if evidence_status.get(key, {}).get("passed") is not True
+    ]
+    green_evidence_count = len(accepted_evidence) - len(missing_evidence)
+    current_status = (
+        "satisfied"
+        if not missing_evidence
+        else "partially_satisfied"
+        if green_evidence_count > 0
+        else "not_satisfied"
+    )
     payload = {
         "kind": "dogfood_decay_collapse_decision",
         "read_only": True,
@@ -3960,21 +4049,15 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
         },
         "allowed_next_policy": "g5-lifecycle-decay-deprecate-apply-v1",
         "blocked_policies": ["g5-lifecycle-collapse-apply-v1", "g5-lifecycle-delete-apply-v1"],
-        "required_evidence_before_collapse": [
-            "rollback_replay_validate_pass",
-            "relation_equivalence_or_supersession_chain",
-            "retrieval_eval_gate_pass",
-            "human_reviewed_candidate_payload",
-        ],
+        "required_evidence_before_collapse": accepted_evidence,
         "collapse_equivalence_proof": {
             "proof_required": True,
-            "accepted_evidence": [
-                "rollback_replay_validate_pass",
-                "relation_equivalence_or_supersession_chain",
-                "retrieval_eval_gate_pass",
-                "human_reviewed_candidate_payload",
-            ],
-            "current_status": "not_satisfied",
+            "accepted_evidence": accepted_evidence,
+            "evidence_status": evidence_status,
+            "green_evidence_count": green_evidence_count,
+            "required_evidence_count": len(accepted_evidence),
+            "missing_evidence": missing_evidence,
+            "current_status": current_status,
             "collapse_apply_allowed": False,
             "delete_apply_allowed": False,
         },
@@ -10456,6 +10539,9 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_decay_collapse_decision_parser.add_argument("--top", type=int, default=20)
     dogfood_decay_collapse_decision_parser.add_argument("--frequent-threshold", type=int, default=3)
     dogfood_decay_collapse_decision_parser.add_argument("--min-decay-score", type=float, default=0.5)
+    dogfood_decay_collapse_decision_parser.add_argument("--fixtures", type=Path)
+    dogfood_decay_collapse_decision_parser.add_argument("--baseline-mode")
+    dogfood_decay_collapse_decision_parser.add_argument("--max-baseline-regressions", type=int, default=0)
     dogfood_decay_collapse_decision_parser.add_argument("--output", type=Path)
     dogfood_trace_candidate_persist_parser = dogfood_subparsers.add_parser(
         "trace-candidate-persist",

@@ -10136,7 +10136,10 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     }
 
     decision_result = subprocess.run(
-        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "decay-collapse-decision", str(db_path), "--limit", "20", "--top", "5"],
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "decay-collapse-decision", str(db_path),
+            "--limit", "20", "--top", "5", "--fixtures", str(fixture_path),
+        ],
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
     )
     assert decision_result.returncode == 0, decision_result.stderr
@@ -10144,18 +10147,24 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert decision_payload["decision"]["deprecate_corridor"] == "supported_for_reviewed_approved_decay_candidates"
     assert decision_payload["decision"]["collapse_corridor"].startswith("blocked")
     assert "g5-lifecycle-delete-apply-v1" in decision_payload["blocked_policies"]
-    assert decision_payload["collapse_equivalence_proof"] == {
-        "proof_required": True,
-        "accepted_evidence": [
-            "rollback_replay_validate_pass",
-            "relation_equivalence_or_supersession_chain",
-            "retrieval_eval_gate_pass",
-            "human_reviewed_candidate_payload",
-        ],
-        "current_status": "not_satisfied",
-        "collapse_apply_allowed": False,
-        "delete_apply_allowed": False,
-    }
+    proof = decision_payload["collapse_equivalence_proof"]
+    assert proof["proof_required"] is True
+    assert proof["accepted_evidence"] == [
+        "rollback_replay_validate_pass",
+        "relation_equivalence_or_supersession_chain",
+        "retrieval_eval_gate_pass",
+        "human_reviewed_candidate_payload",
+    ]
+    assert proof["evidence_status"]["rollback_replay_validate_pass"]["passed"] is True
+    assert proof["evidence_status"]["human_reviewed_candidate_payload"]["passed"] is True
+    assert proof["evidence_status"]["retrieval_eval_gate_pass"]["passed"] is True
+    assert proof["evidence_status"]["relation_equivalence_or_supersession_chain"]["passed"] is False
+    assert proof["green_evidence_count"] == 3
+    assert proof["required_evidence_count"] == 4
+    assert proof["missing_evidence"] == ["relation_equivalence_or_supersession_chain"]
+    assert proof["current_status"] == "partially_satisfied"
+    assert proof["collapse_apply_allowed"] is False
+    assert proof["delete_apply_allowed"] is False
 
     _seed_trace_cluster_for_candidate_flow(db_path)
     generate_result = subprocess.run(
