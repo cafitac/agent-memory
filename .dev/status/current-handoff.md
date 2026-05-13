@@ -1,38 +1,38 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 14:55 KST
+Last updated: 2026-05-13 15:12 KST
 
-## v0.1.151 released runtime checkpoint
+## v0.1.152 released runtime checkpoint
 
 Use `.dev/status/next-agent-memory-action.md` as the shortest current source of truth.
 
 Current verified state:
 
-- Latest completed release/runtime rollout: `v0.1.151`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.151/.venv/bin/agent-memory`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.151`.
-- npm/PyPI latest verified as `0.1.151`.
-- Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.151 runtime.
+- Latest completed release/runtime rollout: `v0.1.152`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.152/.venv/bin/agent-memory`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.152`.
+- npm/PyPI latest verified as `0.1.152`.
+- Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.152 runtime.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained from G4 diagnostics: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
-- Current v0.1.151 source/runtime runway now includes a 50-task expanded retrieval fixture gate (`live-compatible-50-gate.json`), 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with relation-equivalence/supersession-chain evidence, one fresh live G5 reviewed-candidate promotion (`candidate:29db0390b2f81bdb` -> `fact:4`) with backup/hash evidence, idempotent live G4 queue apply evidence, and the explicit default-ranking opt-in-to-default migration plan at `.dev/roadmap/memory-consolidation/default-ranking-opt-in-to-default-migration.md`.
-- Source-only default-ranking migration implementation is now present locally: named `conservative_legacy`/`graph_reinforced_v1`/`shadow_compare` policy diagnostics, shadow compare on `retrieval-ranking-experiment`, and approval-gated config-only `retrieval-ranking-migrate-default` with protected table hash proof plus rollback metadata. This has not been released yet, and live Hermes remains on `conservative_legacy`.
+- Current v0.1.152 source/runtime runway now includes a 50-task expanded retrieval fixture gate (`live-compatible-50-gate.json`), 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with relation-equivalence/supersession-chain evidence, one fresh live G5 reviewed-candidate promotion (`candidate:29db0390b2f81bdb` -> `fact:4`) with backup/hash evidence, idempotent live G4 queue apply evidence, the explicit default-ranking opt-in-to-default migration plan at `.dev/roadmap/memory-consolidation/default-ranking-opt-in-to-default-migration.md`, and the released default-ranking migration mechanics.
+- Default-ranking migration mechanics are now released in v0.1.152: named `conservative_legacy`/`graph_reinforced_v1`/`shadow_compare` policy diagnostics, shadow compare on `retrieval-ranking-experiment`, and approval-gated config-only `retrieval-ranking-migrate-default` with protected table hash proof plus rollback metadata. Live Hermes remains on `conservative_legacy`; live shadow smoke report `/Users/reddit/.agent-memory/reports/default-ranking-v0152-shadow/live-fact4-shadow.json` had zero baseline regressions and no durable mutation.
 - Broad G4/background apply remains blocked; default retrieval ranking changes, collapse/delete apply, live telemetry reset, and ordinary conversation auto-approval remain blocked. The new fact `fact:4` also records this guardrail in the live memory DB.
 
 Progress estimate:
 
-- Overall north-star: 74-76%.
-- Substrate/evidence plumbing: about 85%.
-- Safe automatic mutation/promotion: about 62-66%.
-- Remaining work: about 24-26% overall.
+- Overall north-star: 76-78%.
+- Substrate/evidence plumbing: about 86%.
+- Safe automatic mutation/promotion: about 64-68%.
+- Remaining work: about 22-24% overall.
 
 Current interpretation:
 
 - The trace/retrieval/candidate/proof substrate is healthy enough for the next safety runway.
-- Completed in the current runway: expanded retrieval gate to 50 tasks, proved the checked-in fixture directory at 75/75 pass, moved collapse proof to `satisfied` with supersession-chain evidence while keeping collapse/delete disabled, ran one fresh non-idempotent narrow live reviewed-candidate promotion with backup/hash verification, released/runtime-smoked v0.1.151, documented the explicit default-ranking opt-in-to-default migration plan, and implemented the source-only named-policy/shadow-compare/config-only migrate/rollback command path.
+- Completed in the current runway: expanded retrieval gate to 50 tasks, proved the checked-in fixture directory at 75/75 pass, moved collapse proof to `satisfied` with supersession-chain evidence while keeping collapse/delete disabled, ran one fresh non-idempotent narrow live reviewed-candidate promotion with backup/hash verification, released/runtime-smoked v0.1.151, documented the explicit default-ranking opt-in-to-default migration plan, implemented and released the named-policy/shadow-compare/config-only migrate/rollback command path in v0.1.152, and smoke-tested live shadow comparison without changing the live default.
 - Broad G4/background apply remains blocked; existing docs/RED-test-only broad-G4 baseline must not be advertised as ready.
-- Retrieval ranking changes remain opt-in experiments only; the expanded 50-task experiment passed as read-only with `expanded_fixture_gate_met=true`, `eval_gate_pass=true`, `default_ranking_mutated=false`, and report `/Users/reddit/.agent-memory/reports/g5i-ranking-experiment-expanded-50-20260513T1355/ranking-experiment-expanded-50.json`. Current source implementation adds the migration mechanics, but live default enablement still requires release/runtime smoke and explicit operator approval.
+- Retrieval ranking changes remain opt-in experiments only; the expanded 50-task experiment passed as read-only with `expanded_fixture_gate_met=true`, `eval_gate_pass=true`, `default_ranking_mutated=false`, and report `/Users/reddit/.agent-memory/reports/g5i-ranking-experiment-expanded-50-20260513T1355/ranking-experiment-expanded-50.json`. v0.1.152 adds released migration mechanics, but live default enablement still requires more shadow evidence and explicit operator approval.
 
 Current safe mutation boundaries:
 
