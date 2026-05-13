@@ -59,7 +59,7 @@ def test_current_handoff_does_not_advertise_broad_g4_apply_as_ready() -> None:
     assert "docs/RED-test-only" in handoff
 
 
-def test_v0142_status_docs_record_g5e_completion_and_next_brainlike_steps() -> None:
+def test_v0143_status_docs_record_g5f_completion_and_next_brainlike_steps() -> None:
     next_action = _read_doc(".dev/status/next-agent-memory-action.md")
     handoff = _read_doc(".dev/status/current-handoff.md")
     current_progress = _read_doc(".dev/roadmap/memory-consolidation/current-progress-and-next-steps.md")
@@ -71,14 +71,15 @@ def test_v0142_status_docs_record_g5e_completion_and_next_brainlike_steps() -> N
         assert "/Users/reddit/.agent-memory/runtime/v0.1.143/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
-        assert "Overall north-star: 62-64%" in doc
-        assert "broad g4/background apply remains blocked" in doc.lower()
+        assert "Overall north-star: 66-68%" in doc
+        assert "broad g4/background apply" in doc.lower()
 
     assert "dogfood trace-cluster-preview" in next_action
     assert "G5b" in next_action
     assert "G5c" in next_action
     assert "G5d" in next_action
     assert "G5e" in next_action
+    assert "G5f" in next_action
     assert "review_score" in next_action
     assert "dogfood reinforcement-refinement-preview" in next_action
     assert "dogfood decay-collapse-preview" in next_action

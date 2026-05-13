@@ -1,0 +1,60 @@
+{
+  "automation_policy": {
+    "bounded_partial_automation_allowed": true,
+    "broad_g4_apply_allowed": false,
+    "default_retrieval_policy": "approved_only_unchanged",
+    "ordinary_conversation_auto_approval": false,
+    "requires_backup_audit_rollback": true,
+    "requires_reviewed_candidates": true
+  },
+  "default_retrieval_unchanged": true,
+  "kind": "dogfood_scheduled_blocker_resolution",
+  "mutated": false,
+  "original_blocked_reasons": [
+    "decay_risk_above_threshold",
+    "trace_quality_needs_more_dogfooding"
+  ],
+  "privacy": {
+    "raw_conversation_content_included": false,
+    "raw_query_text_included": false,
+    "raw_report_included": false,
+    "sample_values_included": false
+  },
+  "read_only": true,
+  "report_path": "/Users/reddit/Project/agent-memory/.dev/dogfood/g5f-20260512T224602Z/scheduled-dry-run.json",
+  "report_sha256": "de94eb4f0230360980c2b831c4d9a68aab3df26cc3b35f0acaff8097fd595bc7",
+  "resolution_gate": {
+    "decision": "scheduled_blockers_resolved_for_bounded_partial_automation_only",
+    "pass": true,
+    "unresolved_blockers": []
+  },
+  "resolutions": {
+    "background_quality_warnings_present": {
+      "resolution": "no_background_quality_warnings",
+      "resolved": true,
+      "warning_count": 0,
+      "warnings": []
+    },
+    "decay_risk_above_threshold": {
+      "candidate_count": 1,
+      "max_score": 0.2,
+      "monitor_only_candidate_count": 1,
+      "raw_content_included": false,
+      "resolution": "monitor_only_low_risk_decay_classified",
+      "resolved": true
+    },
+    "trace_quality_needs_more_dogfooding": {
+      "coverage_ratio": 0.3396,
+      "empty_retrieval_ratio": 0.5061,
+      "recommendation": "ready_for_more_dry_runs",
+      "resolution": "accepted_ready_trace_quality",
+      "resolved": true,
+      "warnings": []
+    }
+  },
+  "suggested_next_steps": [
+    "Use this only as evidence for bounded reviewed-candidate automation, not broad G4 apply.",
+    "Keep ordinary conversation auto-approval disabled.",
+    "Require backup/audit/rollback for every mutation corridor."
+  ]
+}
