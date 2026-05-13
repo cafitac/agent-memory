@@ -1,9 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 17:55 KST
+Last updated: 2026-05-13 18:19 KST
 
 
+
+
+
+## v0.1.154 active runtime checkpoint
+
+- Release: `v0.1.154` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`).
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- Hermes `personal-oss` hook accepted and `hermes --profile personal-oss hooks doctor` is green.
+- Runtime QA artifacts: `/Users/reddit/.agent-memory/reports/v0.1.154-runtime-qa-20260513T091806/`.
+- v0.1.154 fixes episode decay-collapse evidence snapshots by reading episode `source_ids_json`; the v0.1.154 decay-collapse decision over the mixed corpus now runs read-only/no-mutation.
+- Runtime QA remains safety-preserving: storage health healthy, mixed 50-task shadow ranking passed `50/50` with zero regressions and no default mutation, decay-collapse decision keeps collapse/delete apply disabled, and telemetry reconciliation remains manual-only.
 
 ## v0.1.153 next-step live dogfood checkpoint
 
@@ -25,8 +36,8 @@ Use `.dev/status/next-agent-memory-action.md` as the shortest current source of 
 Current verified state:
 
 - Latest completed release/runtime rollout: `v0.1.153`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.153/.venv/bin/agent-memory`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.153`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.154`.
 - npm/PyPI latest verified as `0.1.153`.
 - Hermes hook doctor is green for `personal-oss` after `--accept-hooks` smoke on the v0.1.153 runtime.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.

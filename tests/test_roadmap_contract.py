@@ -67,8 +67,8 @@ def test_v0152_status_docs_record_current_brainlike_runway_and_blocked_broad_app
     stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
 
     for doc in (next_action, handoff, current_progress):
-        assert "v0.1.153" in doc
-        assert "/Users/reddit/.agent-memory/runtime/v0.1.153/.venv/bin/agent-memory" in doc
+        assert "v0.1.154" in doc
+        assert "/Users/reddit/.agent-memory/runtime/v0.1.154/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
         assert "Overall north-star: 78-80%" in doc
