@@ -1,49 +1,50 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 10:35 KST
+Last updated: 2026-05-13 13:25 KST
 
-## v0.1.146 + local G5h checkpoint and next runway
+## v0.1.150 released runtime checkpoint and next runway
 
-This document is the restartable checkpoint after the v0.1.146 release/runtime rollout and local G5h implementation: rollback replay validation, eval-gated opt-in ranking experiment preview, decay/collapse decision boundary, richer candidate skeleton annotations, and historical telemetry reconciliation report on top of the released G5g lifecycle/ranking/rollback-confidence runway.
+This document is the restartable checkpoint after the v0.1.150 release/runtime rollout plus the local post-release safety slice: 50-task expanded retrieval fixture gate, 75 checked-in retrieval eval tasks across the fixture directory, per-candidate collapse proof artifact persistence/replay with supersession-chain evidence, one fresh non-idempotent narrow live reviewed-candidate promotion, copy/live-safe explicit approval corridor evidence, and v0.1.150 Hermes hook rollout across default/personal-oss/earlypay/infra-admin.
 
 Current verified release state:
 
-- Release: `v0.1.146`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.146`.
-- npm: `@cafitac/agent-memory@0.1.146`.
-- PyPI: `cafitac-agent-memory==0.1.146`.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`.
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.146/g5f-live-smoke.json`.
+- Release: `v0.1.150`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.150`.
+- npm: `@cafitac/agent-memory@0.1.150`.
+- PyPI: `cafitac-agent-memory==0.1.150`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.150/.venv/bin/agent-memory`.
+- Hermes hook doctor is green across default, `personal-oss`, `earlypay`, and `infra-admin` profiles.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 
 Fresh diagnostics:
 
-- `g4-linkage-gap-diagnose-v0138-fresh.json`: `quality_gate.pass=true`, decision `fresh_trace_linkage_gap_not_detected`, observation/trace linkage coverage `1.0`, unlinked observation count `0`.
-- `fresh-epoch-v0138.json`: `quality_gate.pass=true`, decision `fresh_epoch_ready_to_compare_against_historical`.
-- `g4-review-queue-preview-v0138-fresh.json`: `quality_gate.pass=true`, decision `review_queue_ready_for_manual_review`, `read_only=true`, `mutated=false`.
-- `scheduled-dry-run.json`: historical/full-window broad G4 still blocks on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
-- G5a/G5b/G5c/G5d/G5e/G5f/G5g: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only `review_score`/`review_recommendation`, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, decay deprecate corridor, ranking gate, and rollback confidence are merged/released through v0.1.146.
-- G5e decay-collapse preview does not persist review state, delete/deprecate/collapse memories, promote memories, auto-approve ordinary conversation, or change retrieval defaults. Full release CI, publish, manual true-distribution smoke, and live Hermes runtime rollout passed.
+- `g4-linkage-gap-diagnose-v0138-fresh.json`: decision `fresh_trace_linkage_gap_not_detected`.
+- `/tmp/agent-memory-fresh-epoch-v0149/fresh-epoch.json`: still blocks epoch-wide automation on high empty retrieval and metadata classification gaps.
+- `/tmp/agent-memory-apply-corridor-v0150/`: copy/live-safe explicit approval corridor smoke passed without unintended durable-memory mutation; live apply was idempotent.
+- `/tmp/agent-memory-telemetry-reset-decision/copy-apply.json`: copy telemetry reset passed with protected durable memory tables unchanged; live telemetry reset remains blocked.
+- 50-task expanded retrieval fixture gate exists and the checked-in fixture directory now evaluates at 75/75 pass; default ranking remains unchanged until a separate default-rollout decision.
+- Collapse proof artifacts can be persisted/replayed and can reach `satisfied` with reviewed supersession-chain/relation evidence, but collapse/delete apply remains disabled.
 
 Progress estimate:
 
-- Overall north-star: 71-73%.
-- Substrate/evidence plumbing: about 80-82%.
-- Safe automatic mutation/promotion: about 58-61%.
-- Remaining work: about 27-29% overall.
+- Overall north-star: 74-76%.
+- Substrate/evidence plumbing: about 85%.
+- Safe automatic mutation/promotion: about 62-66%.
+- Remaining work: about 24-26% overall.
 
 Current interpretation:
 
-Fresh v0.1.146 evidence and merged G5a-G5g are healthy enough to continue the brain-like reviewed-candidate runway. Broad G4/background apply remains blocked. Local G5h adds rollback replay validation, eval-gated opt-in ranking experiment preview, decay/collapse decision boundary, richer candidate skeleton annotations, and historical telemetry reconciliation report; it is not approval for broad/background apply, default ranking mutation, collapse/delete apply, or ordinary conversation auto-approval.
+Fresh v0.1.150 evidence and merged G5a-G5i are healthy enough to continue the brain-like reviewed-candidate runway. The current local safety slice has completed the expanded retrieval fixture gate, stronger read-only opt-in ranking comparison, supersession-chain collapse proof evidence, and one fresh guarded live reviewed-candidate promotion. Broad G4/background apply remains blocked. Current next work is review/test/commit/release this local slice, then design default-ranking rollout as a separate explicit opt-in-to-default migration with rollback/replay gates.
 
 Recommended sequence from here:
 
-1. Review/release the local G5h slice and then smoke the new read-only commands on the live runtime: `rollback-replay-validate`, `retrieval-ranking-experiment`, `decay-collapse-decision`, `trace-candidate-generate`, and `telemetry-reconciliation`.
-2. Keep default retrieval ranking unchanged; ranking experiments are opt-in previews gated by retrieval eval fixtures only.
-3. Keep collapse/delete blocked until rollback replay, relation equivalence/supersession evidence, retrieval eval, and human-reviewed candidate payloads are all green.
-4. G4 broad apply contract: preserve explicit policy/approval/actor/reason/backup/expected-queue/audit/rollback requirements and keep raw-content/default-retrieval/ordinary-auto-approval forbidden.
-5. Historical telemetry reconciliation: use only a reviewed telemetry-only `telemetry-reset-v1` corridor for historical rows older than a selected epoch; protected memory tables must not mutate.
+1. Review the local post-v0.1.150 safety slice and keep this doc checkpoint test-protected.
+2. Verify the 50-task expanded retrieval fixture gate and 75-task checked-in eval suite remain green before any release.
+3. Keep collapse proof evidence-driven: `satisfied` requires supersession-chain/relation evidence, and collapse/delete apply remains disabled.
+4. Keep fresh reviewed candidate promotion limited to the explicit guarded corridor with backup/hash/actor/reason/approval evidence; do not use broad apply.
+5. Keep opt-in ranking experiment read-only until a separate default-ranking rollout design is implemented.
+6. Preserve broad G4/background apply as blocked until ranking, rollback replay, telemetry reconciliation/fresh epoch, and reviewed queue approvals all pass on real runtime evidence.
 
 ---
 
