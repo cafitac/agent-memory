@@ -1,0 +1,1098 @@
+{
+  "references": {
+    "project_scope_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "kb_export_command",
+      "object_ref_or_value": "agent-memory kb export"
+    },
+    "current_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "EP-123"
+    },
+    "current_version_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.86"
+    },
+    "project_scope_kb_export": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "kb_export_command",
+      "object_ref_or_value": "agent-memory kb export"
+    },
+    "current_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests"
+    },
+    "project_scope_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests"
+    },
+    "current_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run current release QA"
+    },
+    "rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Retrieval evaluation rollout"
+    },
+    "current_rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 current v0.1.90 candidate validation rollout episode"
+    },
+    "drift_fact": {
+      "memory_type": "fact",
+      "scope": "project:drift",
+      "subject_ref": "Project Drift",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "ZZ-999"
+    },
+    "stale_branch_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "branch_pattern",
+      "object_ref_or_value": "LEGACY-1"
+    },
+    "stale_version_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.75"
+    }
+  },
+  "tasks": [
+    {
+      "id": "expanded-fact-kb-export-command-01",
+      "query": "For Project M1, which command is the approved KB export command?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Expand direct fact recall for KB export under Project M1 scope."
+    },
+    {
+      "id": "expanded-fact-kb-export-command-02",
+      "query": "Project M1 KB drafts should use what agent-memory export command?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_kb_export"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Second phrasing for the same KB export fact."
+    },
+    {
+      "id": "expanded-fact-current-branch-policy-01",
+      "query": "What branch pattern is current for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_branch_fact",
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Current branch policy should outrank stale and cross-scope branch facts."
+    },
+    {
+      "id": "expanded-fact-current-branch-policy-02",
+      "query": "Project M1 currently uses which EP branch format?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Branch-policy recall with EP wording."
+    },
+    {
+      "id": "expanded-fact-current-version-01",
+      "query": "What is the latest Project M1 release version?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Current version should outrank stale release version."
+    },
+    {
+      "id": "expanded-fact-current-version-02",
+      "query": "Project M1 latest release version v0.1.86 authoritative current value",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Explicit stale-version contrast guardrail."
+    },
+    {
+      "id": "expanded-fact-current-version-03",
+      "query": "Project M1 release notes need the current release version value.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Release-notes phrasing should still surface the authoritative version."
+    },
+    {
+      "id": "expanded-fact-kb-cross-surface-01",
+      "query": "For a Project M1 KB export answer, recall the approved fact not a procedure or episode.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Fact-focused cross-surface wording for KB export."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-01",
+      "query": "Before opening a Project M1 PR, what tests should run?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Procedure recall for pre-PR tests."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-02",
+      "query": "What should run before opening a PR for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "project_scope_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Checklist phrasing for pre-PR procedure."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-03",
+      "query": "What should run before opening a PR for Project M1? Run uv run pytest tests/ -q",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Natural-language pre-PR procedure recall."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-04",
+      "query": "Project M1 requires uv run pytest tests/ -q before opening a PR; recall the procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "project_scope_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Exact command phrasing should map to the procedure."
+    },
+    {
+      "id": "expanded-procedure-release-qa-01",
+      "query": "Before marking a Project M1 release candidate ready, what release QA procedure should run?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Release QA procedure recall."
+    },
+    {
+      "id": "expanded-procedure-release-qa-02",
+      "query": "Project M1 release candidate QA should install published artifacts and run runtime QA; recall the procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Artifact-smoke wording should hit current release QA procedure."
+    },
+    {
+      "id": "expanded-procedure-release-qa-03",
+      "query": "Which current release QA workflow uses PyPI install, npm wrapper smoke, and Hermes runtime QA?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Procedure step wording should surface the current release QA workflow."
+    },
+    {
+      "id": "expanded-procedure-release-qa-04",
+      "query": "For Project M1 release readiness, recall the current QA workflow, not only release notes noise.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Release readiness phrasing under prompt-noise pressure."
+    },
+    {
+      "id": "expanded-procedure-cross-surface-01",
+      "query": "What should run before opening a PR for Project M1? Use the local tests procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Cross-surface procedure-over-episode guardrail."
+    },
+    {
+      "id": "expanded-procedure-cross-surface-02",
+      "query": "Before opening a PR for Project M1, recall the Run local tests procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Procedure query should avoid drifting into unrelated memory types."
+    },
+    {
+      "id": "expanded-episode-rollout-history-01",
+      "query": "What Project M1 episode confirmed retrieval evaluation fixture rollout?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Episode recall for retrieval evaluation rollout."
+    },
+    {
+      "id": "expanded-episode-rollout-history-02",
+      "query": "Recall the Project M1 retrieval evaluation rollout history episode.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Second phrasing for rollout episode recall."
+    },
+    {
+      "id": "expanded-episode-current-rollout-01",
+      "query": "Which current Project M1 rollout episode resolved after v0.1.90 candidate validation?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Current rollout episode recall."
+    },
+    {
+      "id": "expanded-episode-current-rollout-02",
+      "query": "Project M1 May 2026 rollout validation episode should be recalled.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Date and validation phrasing for current rollout episode."
+    },
+    {
+      "id": "expanded-episode-current-rollout-03",
+      "query": "For current rollout history, use the v0.1.90 candidate validation episode.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Current rollout history under release wording."
+    },
+    {
+      "id": "expanded-episode-cross-surface-01",
+      "query": "Recall Project M1 rollout history as an episode, not the release QA procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Episode-over-procedure cross-surface query."
+    },
+    {
+      "id": "expanded-episode-cross-surface-02",
+      "query": "Which Project M1 historical episode describes rollout validation rather than branch policy?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [
+          "stale_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "rationale": "Episode query with branch-policy distractor."
+    },
+    {
+      "id": "expanded-fact-kb-export-command-03",
+      "query": "When answering Project M1 KB export setup, which command is canonical?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Additional scoped fact wording for KB export."
+    },
+    {
+      "id": "expanded-fact-kb-export-command-04",
+      "query": "Project M1 canonical knowledge-base export CLI command",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_kb_export"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Noun-phrase fact query for KB export."
+    },
+    {
+      "id": "expanded-fact-current-branch-policy-03",
+      "query": "Project M1 current EP-123 branch pattern for active work.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Explicit current-vs-stale branch contrast."
+    },
+    {
+      "id": "expanded-fact-current-branch-policy-04",
+      "query": "Project M1 worktree branch naming should follow which EP pattern?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_branch_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Worktree wording should retain project scope."
+    },
+    {
+      "id": "expanded-fact-current-version-04",
+      "query": "For Project M1, retrieve the current release version instead of an old version.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Current release fact with explicit stale avoidance."
+    },
+    {
+      "id": "expanded-fact-current-version-05",
+      "query": "Project M1 current version for runtime QA notes",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "current_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Runtime-QA wording for version fact."
+    },
+    {
+      "id": "expanded-fact-kb-cross-surface-02",
+      "query": "KB export is a Project M1 fact; retrieve the fact even if procedures also mention QA.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Cross-surface fact preference under procedure noise."
+    },
+    {
+      "id": "expanded-fact-kb-cross-surface-03",
+      "query": "What fact records the agent-memory kb export command for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [
+          "project_scope_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Direct fact-record wording."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-05",
+      "query": "Project M1 PR checklist local test command procedure",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "drift_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Checklist wording for procedure recall."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-06",
+      "query": "Before a Project M1 pull request, recall the Run local tests workflow.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "project_scope_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Workflow wording maps to local tests procedure."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-07",
+      "query": "Which procedure says to run uv run pytest tests/ -q for Project M1?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Exact command should retrieve procedure."
+    },
+    {
+      "id": "expanded-procedure-pre-pr-tests-08",
+      "query": "Project M1 local test workflow before PR submission",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "project_scope_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Short noun-phrase workflow recall."
+    },
+    {
+      "id": "expanded-procedure-release-qa-05",
+      "query": "Project M1 release candidate readiness procedure with PyPI and npm smoke checks",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Release QA step wording."
+    },
+    {
+      "id": "expanded-procedure-release-qa-06",
+      "query": "Which Project M1 procedure validates published artifacts before release?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Published artifact validation wording."
+    },
+    {
+      "id": "expanded-procedure-release-qa-07",
+      "query": "Recall current Project M1 release QA, not stale release version facts.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [
+          "stale_version_fact"
+        ],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Procedure query with stale fact distractor."
+    },
+    {
+      "id": "expanded-procedure-release-qa-08",
+      "query": "Project M1 Hermes runtime QA belongs to which current release QA procedure?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_release_qa_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Hermes runtime QA phrase should hit procedure."
+    },
+    {
+      "id": "expanded-procedure-cross-surface-03",
+      "query": "For Project M1 pre-PR work, use the Run local tests procedure.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Procedure-over-episode cross-surface guardrail."
+    },
+    {
+      "id": "expanded-procedure-cross-surface-04",
+      "query": "Run local tests is the Project M1 procedure needed before PR review.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [
+          "current_pre_pr_procedure"
+        ],
+        "episodes": []
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Procedure title recall."
+    },
+    {
+      "id": "expanded-episode-rollout-history-03",
+      "query": "Project M1 retrieval eval rollout historical episode",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Short episode-history wording."
+    },
+    {
+      "id": "expanded-episode-rollout-history-04",
+      "query": "Which episode documented Project M1 retrieval evaluation fixture rollout?",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Documented rollout phrasing for episode recall."
+    },
+    {
+      "id": "expanded-episode-current-rollout-04",
+      "query": "Project M1 v0.1.90 candidate validation rollout episode",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Versioned rollout episode wording."
+    },
+    {
+      "id": "expanded-episode-current-rollout-05",
+      "query": "Current Project M1 rollout validation history after candidate validation",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Current rollout history wording."
+    },
+    {
+      "id": "expanded-episode-cross-surface-03",
+      "query": "Project M1 current rollout validation history episode.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Episode-over-procedure guardrail."
+    },
+    {
+      "id": "expanded-episode-cross-surface-04",
+      "query": "Project M1 current rollout validation historical episode.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Episode query with fact distractor."
+    },
+    {
+      "id": "expanded-episode-cross-surface-05",
+      "query": "Recall the Project M1 current rollout episode under release validation wording.",
+      "preferred_scope": "project:m1",
+      "limit": 5,
+      "expected": {
+        "facts": [],
+        "procedures": [],
+        "episodes": [
+          "current_rollout_episode"
+        ]
+      },
+      "avoid": {
+        "facts": [],
+        "procedures": [],
+        "episodes": []
+      },
+      "source": "expanded-live-compatible-50",
+      "rationale": "Final episode phrasing for 50-task coverage."
+    }
+  ]
+}

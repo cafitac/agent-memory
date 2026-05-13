@@ -3377,6 +3377,19 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_is_ref_safe_and_read_
         "requires_human_review": True,
         "default_retrieval_policy": "approved_only_unchanged",
     }
+    reassessment = payload["broad_g4_apply_reassessment"]
+    assert reassessment["broad_g4_apply_allowed"] is False
+    assert reassessment["decision"] == "broad_g4_apply_still_blocked_until_all_live_safety_gates_pass"
+    assert reassessment["required_green_gates"] == [
+        "retrieval_ranking_gate_pass",
+        "rollback_confidence_pass",
+        "rollback_replay_validate_pass",
+        "live_telemetry_reconciliation_pass",
+        "human_review_queue_approval_pass",
+    ]
+    assert reassessment["current_report_green"] is payload["quality_gate"]["pass"]
+    assert reassessment["default_retrieval_unchanged"] is True
+    assert reassessment["ordinary_conversation_auto_approval"] is False
     assert payload["queue_count"] >= 1
     entry = payload["queue"][0]
     assert entry["proposal_type"] == "reinforcement_review"
@@ -10091,12 +10104,19 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     g5h_proof_artifact_path.write_text(
         json.dumps(
             {
-                "current_status": "partially_satisfied",
-                "missing_evidence": ["relation_equivalence_or_supersession_chain"],
+                "current_status": "satisfied",
+                "missing_evidence": [],
                 "proof_inputs": {
                     "rollback_replay_validate_pass": True,
+                    "relation_equivalence_or_supersession_chain": True,
                     "retrieval_eval_gate_pass": True,
                     "human_reviewed_candidate_payload": True,
+                },
+                "relation_equivalence_evidence": {
+                    "type": "reviewed_supersession_chain",
+                    "superseded_ref": f"fact:{stale_fact.id}",
+                    "replacement_ref": f"fact:{ranked_fact.id}",
+                    "reviewed": True,
                 },
             }
         )
@@ -10112,7 +10132,7 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert update_result.returncode == 0, update_result.stderr
     update_payload = json.loads(update_result.stdout)
     assert update_payload["proof_artifact_stored"] is True
-    assert update_payload["proof_artifact_status"] == "partially_satisfied"
+    assert update_payload["proof_artifact_status"] == "satisfied"
     backup_path = tmp_path / "g5h-apply-backup.db"
     apply_result = subprocess.run(
         [
@@ -10124,6 +10144,15 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
     )
     assert apply_result.returncode == 0, apply_result.stderr
+    supersession_relation = supersede_fact(
+        db_path=db_path,
+        superseded_fact_id=stale_fact.id,
+        replacement_fact_id=ranked_fact.id,
+        actor="tester",
+        reason="reviewed supersession-chain evidence for collapse proof",
+        evidence_ids=[source.id],
+    )
+    assert supersession_relation.relation_type == "superseded_by"
 
     replay_result = subprocess.run(
         [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "rollback-replay-validate", str(db_path)],
@@ -10168,6 +10197,19 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
         "fixture_source_counts": {"live-compatible-g5i": 1},
         "live_runtime_safe": True,
     }
+    assert experiment_payload["fixture_gate_comparison"] == {
+        "comparison_mode": "expanded_fixtures_vs_current_default_read_only",
+        "baseline_mode": "current_default",
+        "fixture_task_count": 1,
+        "expanded_fixture_gate_met": False,
+        "eval_gate_pass": True,
+        "baseline_regression_count": 0,
+        "max_baseline_regressions": 0,
+        "previewed_task_count": 1,
+        "rank_change_count": experiment_payload["rank_change_count"],
+        "default_ranking_mutated": False,
+        "ordinary_conversation_auto_enable": False,
+    }
 
     decision_result = subprocess.run(
         [
@@ -10192,24 +10234,26 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert proof["evidence_status"]["rollback_replay_validate_pass"]["passed"] is True
     assert proof["evidence_status"]["human_reviewed_candidate_payload"]["passed"] is True
     assert proof["evidence_status"]["retrieval_eval_gate_pass"]["passed"] is True
-    assert proof["evidence_status"]["relation_equivalence_or_supersession_chain"]["passed"] is False
-    assert proof["green_evidence_count"] == 3
+    assert proof["evidence_status"]["relation_equivalence_or_supersession_chain"]["passed"] is True
+    assert proof["evidence_status"]["relation_equivalence_or_supersession_chain"]["replacement_relation_evidence_count"] == 1
+    assert proof["green_evidence_count"] == 4
     assert proof["required_evidence_count"] == 4
-    assert proof["missing_evidence"] == ["relation_equivalence_or_supersession_chain"]
-    assert proof["current_status"] == "partially_satisfied"
+    assert proof["missing_evidence"] == []
+    assert proof["current_status"] == "satisfied"
     replay = proof["candidate_proof_replay"]
     assert replay["reviewed_decay_candidate_count"] == 1
     assert replay["artifact_count"] == 1
-    assert replay["green_artifact_count"] == 0
-    assert replay["all_candidate_artifacts_green"] is False
+    assert replay["green_artifact_count"] == 1
+    assert replay["all_candidate_artifacts_green"] is True
     assert replay["missing_artifact_candidate_ids"] == []
     assert replay["items"] == [
         {
             "candidate_id": candidate_id,
             "target_ref": f"fact:{stale_fact.id}",
             "artifact_present": True,
-            "current_status": "partially_satisfied",
-            "missing_evidence": ["relation_equivalence_or_supersession_chain"],
+            "current_status": "satisfied",
+            "missing_evidence": [],
+            "replacement_relation_evidence_count": 1,
             "collapse_apply_allowed": False,
             "delete_apply_allowed": False,
         }

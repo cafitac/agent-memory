@@ -1,59 +1,52 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 10:35 KST
+Last updated: 2026-05-13 13:55 KST
 
-## v0.1.146 + local G5h checkpoint
+## v0.1.150 released runtime checkpoint
 
 Use `.dev/status/next-agent-memory-action.md` as the shortest current source of truth.
 
 Current verified state:
 
-- Latest completed release/runtime rollout: `v0.1.146`; local unreleased G5h code is implemented and test-green.
-- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`.
-- Runtime smoke report: `/Users/reddit/.agent-memory/runtime/v0.1.143/g5e-live-smoke.json`.
-- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.146`.
-- npm/PyPI latest verified as `0.1.146`.
-- Hermes configs updated from v0.1.141 to v0.1.143 and backed up as `/Users/reddit/.hermes/config.yaml.bak-v0143-20260512T160959Z` plus matching profile backups.
+- Latest completed release/runtime rollout: `v0.1.150`.
+- Runtime: `/Users/reddit/.agent-memory/runtime/v0.1.150/.venv/bin/agent-memory`.
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.150`.
+- npm/PyPI latest verified as `0.1.150`.
 - Hermes hook doctor is green across default, `personal-oss`, `earlypay`, and `infra-admin` profiles after `--accept-hooks` smoke.
 - Fresh G4 report directory retained: `/Users/reddit/.agent-memory/reports/g4-v0138-20260512-132253/`.
 - Fresh linkage diagnosis retained from G4 diagnostics: `g4-linkage-gap-diagnose-v0138-fresh.json` passed with decision `fresh_trace_linkage_gap_not_detected`.
-- Fresh epoch readiness retained: `fresh-epoch-v0138.json` passed with decision `fresh_epoch_ready_to_compare_against_historical`.
-- Fresh review queue preview retained: `g4-review-queue-preview-v0138-fresh.json` passed with decision `review_queue_ready_for_manual_review`, `read_only=true`, and `mutated=false`.
-- G5a/G5b/G5c/G5d/G5e/G5f/G5g source checkpoint: `dogfood trace-cluster-preview`, `dogfood trace-candidate-persist/list/update/apply`, read-only trace-cluster scoring, `dogfood reinforcement-refinement-preview`, `dogfood decay-collapse-preview`, `dogfood supersession-preview`, lifecycle candidate registry/apply, decay deprecate apply, ranking gate, and rollback confidence are merged/released through v0.1.146.
-- G5e is merged/released via PR #306 and v0.1.143: stale weak evidence -> decay/collapse candidate preview emits read-only/ref-safe candidates and guardrails; it writes JSON reports only, keeps `mutated=false`, and does not persist review state, delete/deprecate/collapse memories, auto-approve ordinary conversation, or change retrieval defaults.
-- Historical scheduled dry-run still blocks broad G4/background apply on `trace_quality_needs_more_dogfooding`, `decay_risk_above_threshold`, and `background_quality_warnings_present`.
-- Broad G4/background apply remains blocked; local G5h adds narrow reviewed decay deprecate apply, richer supersession evidence, candidate skeleton generation, ranking eval gate, and rollback confidence inspection, rollback replay validation, eval-gated opt-in ranking experiment preview, decay/collapse decision boundary, richer candidate skeleton annotations, and historical telemetry reconciliation report, but not broad apply.
+- Current v0.1.150 source/runtime runway now includes a 50-task expanded retrieval fixture gate (`live-compatible-50-gate.json`), 75 checked-in retrieval eval tasks across the fixture directory, persisted/replayed per-candidate collapse proof artifacts with relation-equivalence/supersession-chain evidence, one fresh live G5 reviewed-candidate promotion (`candidate:29db0390b2f81bdb` -> `fact:4`) with backup/hash evidence, and idempotent live G4 queue apply evidence.
+- Broad G4/background apply remains blocked; default retrieval ranking changes, collapse/delete apply, live telemetry reset, and ordinary conversation auto-approval remain blocked. The new fact `fact:4` also records this guardrail in the live memory DB.
 
 Progress estimate:
 
-- Overall north-star: 71-73%.
-- Substrate/evidence plumbing: about 80-82%.
-- Safe automatic mutation/promotion: about 58-61%.
-- Remaining work: about 27-29% overall.
+- Overall north-star: 74-76%.
+- Substrate/evidence plumbing: about 85%.
+- Safe automatic mutation/promotion: about 62-66%.
+- Remaining work: about 24-26% overall.
 
 Current interpretation:
 
-- The fresh hook/runtime linkage blocker is resolved for v0.1.138-v0.1.143-era evidence.
-- G5g is released; local G5h completes the next reviewed safety/runway slice: rollback replay validation, eval-gated opt-in ranking experiment preview, decay/collapse decision boundary, richer candidate skeleton annotations, and historical telemetry reconciliation report. It is not approval for broad/background automation.
-- Broad G4/background apply remains blocked; fresh readiness, reviewed candidate apply support, G5c scoring, G5d reinforcement-refinement preview, and G5e decay-collapse preview do not authorize automatic memory creation.
-- The next safe sequence after G5h release is live runtime smoke for the new read-only commands, then a G5i decision between live rollback replay reports, broader ranking fixtures, or reviewed collapse equivalence proof; keep G4 broad apply separate and blocked.
-- Existing broad-G4 baseline remains a docs/RED-test-only guardrail; do not advertise broad G4 consolidation apply mode as ready.
+- The trace/retrieval/candidate/proof substrate is healthy enough for the next safety runway.
+- Completed in the current local slice: expanded retrieval gate to 50 tasks, proved the checked-in fixture directory at 75/75 pass, moved collapse proof to `satisfied` with supersession-chain evidence while keeping collapse/delete disabled, and ran one fresh non-idempotent narrow live reviewed-candidate promotion with backup/hash verification.
+- Broad G4/background apply remains blocked; existing docs/RED-test-only broad-G4 baseline must not be advertised as ready.
+- Retrieval ranking changes remain opt-in experiments only; the expanded 50-task experiment passed as read-only with `expanded_fixture_gate_met=true`, `eval_gate_pass=true`, `default_ranking_mutated=false`, and report `/Users/reddit/.agent-memory/reports/g5i-ranking-experiment-expanded-50-20260513T1355/ranking-experiment-expanded-50.json`.
 
 Current safe mutation boundaries:
 
 - Historical telemetry reconciliation must use the reviewed telemetry-only `telemetry-reset-v1` corridor with epoch filter, backup, approval phrase, actor, reason hash, and protected-table preservation.
-- First narrow reviewed apply remains `g4-review-queue-apply-v1` over approved queue items only, with action `apply_reinforcement_marker` for reinforcement-review items; the merged G5b candidate-apply corridor additionally allows explicit reviewed fact/preference/procedure promotion behind `g5-reviewed-candidate-promotion-v1`.
-- Broad promotion, delete/collapse, ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain blocked; only narrow reviewed supersession and decay-deprecate policies exist.
+- G4 reviewed queue apply remains narrow and policy-bound; broad promotion, delete/collapse, ordinary conversation auto-approval, raw transcript storage, and default retrieval ranking changes remain blocked.
+- Collapse proof can become `satisfied` only with relation-equivalence or reviewed supersession-chain evidence, rollback replay, retrieval eval gate pass, and human-reviewed candidate payload evidence; collapse/delete apply remains disabled even after proof satisfaction.
 
 Brain-like next design axis:
 
 - `trace cluster -> consolidation candidate` is available as a ref-safe read-only preview, not an apply path.
-- `candidate -> reviewed fact/procedure/preference promotion` is available only through explicit G5b review/apply commands.
-- `trace cluster -> review-priority scoring` is released G5c and remains human-review-only.
-- `repeated activation -> reinforcement refinement preview` is released G5d and remains human-review-only; preview scores are not apply approval.
-- `stale weak evidence -> decay/collapse candidate preview` is released G5e and remains human-review-only; candidates are not delete/deprecate/collapse approval.
-- Local G5h: reviewed decay deprecate apply, richer supersession evidence, graph-cluster candidate skeleton generation, retrieval-ranking gate, and rollback-confidence inspection, rollback-replay validation, eval-gated ranking experiment, decay-collapse decision, richer candidate skeleton annotations, and telemetry reconciliation.
+- `candidate -> reviewed fact/procedure/preference promotion` is available only through explicit review/apply commands.
+- `trace cluster -> review-priority scoring` remains human-review-only.
+- `repeated activation -> reinforcement refinement preview` remains human-review-only; preview scores are not apply approval.
+- `stale weak evidence -> decay/collapse candidate preview` remains human-review-only; candidates are not delete/deprecate/collapse approval.
+- v0.1.150 adds the current release baseline for rollback replay validation, eval-gated ranking experiment, decay-collapse decision, richer candidate proof artifacts, telemetry safety reports, and live-compatible explicit-approval corridor smokes.
 - Retrieval ranking changes only behind opt-in eval before any default change.
 
 ---
@@ -77,7 +70,7 @@ For prompts like "다음으로 뭐해야 해?" or "다음 할 거 추천해줘",
 
 - `.dev/status/next-agent-memory-action.md`
 
-Current recommendation: review/release the local G5h slice, then run live runtime smoke for rollback-replay-validate, retrieval-ranking-experiment, decay-collapse-decision, trace-candidate-generate annotations, and telemetry-reconciliation. Broad G4/background apply remains blocked and must not be enabled from a generic continuation prompt.
+Current recommendation: finish the local post-v0.1.150 safety slice review, run the full standard test suite, then commit/release it. This slice already strengthens the opt-in ranking experiment against the expanded 50-task fixture gate and reconfirms broad G4/background apply as blocked. After release, the next design slice is default-ranking rollout as an explicit opt-in-to-default migration with rollback/replay and fixture gates; do not enable broad G4/background apply from a generic continuation prompt.
 
 ## Ready-to-say answer
 

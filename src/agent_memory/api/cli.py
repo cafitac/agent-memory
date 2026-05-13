@@ -3978,6 +3978,20 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
                 )
             )
     rank_change_count = sum(len(preview.get("rank_changes", [])) for preview in previews)
+    fixture_expansion = _retrieval_fixture_expansion_summary(fixture_tasks)
+    fixture_gate_comparison = {
+        "comparison_mode": "expanded_fixtures_vs_current_default_read_only",
+        "baseline_mode": args.baseline_mode or "current_default",
+        "fixture_task_count": fixture_expansion["task_count"],
+        "expanded_fixture_gate_met": fixture_expansion["task_count"] >= 50,
+        "eval_gate_pass": bool(gate.get("ranking_change_allowed")),
+        "baseline_regression_count": gate.get("baseline_regression_count", 0),
+        "max_baseline_regressions": gate.get("max_baseline_regressions", 0),
+        "previewed_task_count": len(previews),
+        "rank_change_count": rank_change_count,
+        "default_ranking_mutated": False,
+        "ordinary_conversation_auto_enable": False,
+    }
     payload = {
         "kind": "dogfood_retrieval_ranking_experiment",
         "read_only": True,
@@ -3988,7 +4002,8 @@ def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> d
         "preview_count": len(previews),
         "rank_change_count": rank_change_count,
         "previews": previews,
-        "fixture_expansion": _retrieval_fixture_expansion_summary(fixture_tasks),
+        "fixture_expansion": fixture_expansion,
+        "fixture_gate_comparison": fixture_gate_comparison,
         "promotion_policy": {
             "default_ranking_mutated": False,
             "requires_gate_pass": True,
@@ -4064,10 +4079,18 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
     candidate_proof_items: list[dict[str, Any]] = []
     missing_artifact_candidate_ids: list[str] = []
     green_artifact_count = 0
+    replacement_relation_evidence_count = 0
     for row in decay_review_rows:
         reviewed = _safe_json_dict_from_db(row["reviewed_json"])
         artifact = _collapse_proof_artifact_from_reviewed(reviewed)
         artifact_status = _collapse_proof_status_from_artifact(artifact) if artifact else "missing"
+        replacement_relation_count = 0
+        target_ref = str(row["target_ref"] or "")
+        if target_ref.startswith("fact:"):
+            replacement_relation_count = len(
+                list_fact_replacement_relations(args.db_path, fact_id=_fact_id_from_ref(target_ref))
+            )
+            replacement_relation_evidence_count += replacement_relation_count
         if not artifact:
             missing_artifact_candidate_ids.append(row["candidate_id"])
         elif artifact_status == "satisfied":
@@ -4079,6 +4102,7 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
                 "artifact_present": bool(artifact),
                 "current_status": artifact_status,
                 "missing_evidence": artifact.get("missing_evidence", []) if artifact else ["collapse_proof_artifact"],
+                "replacement_relation_evidence_count": replacement_relation_count,
                 "collapse_apply_allowed": bool(artifact.get("collapse_apply_allowed", False)) if artifact else False,
                 "delete_apply_allowed": bool(artifact.get("delete_apply_allowed", False)) if artifact else False,
             }
@@ -4101,9 +4125,11 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
             "checked_application_count": (replay_payload.get("rollup") or {}).get("checked_application_count", 0),
         },
         "relation_equivalence_or_supersession_chain": {
-            "passed": supersession_review_count > 0,
+            "passed": supersession_review_count > 0 or replacement_relation_evidence_count > 0,
             "source": "approved_supersession_candidate_or_existing_supersession_relation",
             "approved_supersession_candidate_count": supersession_review_count,
+            "replacement_relation_evidence_count": replacement_relation_evidence_count,
+            "green_collapse_proof_artifact_count": green_artifact_count,
         },
         "retrieval_eval_gate_pass": retrieval_eval_status,
         "human_reviewed_candidate_payload": {
