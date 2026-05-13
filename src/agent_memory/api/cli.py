@@ -3323,13 +3323,37 @@ def _dogfood_lifecycle_candidate_update_payload(args: argparse.Namespace) -> dic
         connection.row_factory = sqlite3.Row
         _ensure_lifecycle_candidate_review_tables(connection)
         row = connection.execute(
-            "SELECT status, proposal_type, candidate_kind, audit_json FROM g5_trace_candidate_reviews WHERE candidate_id = ?",
+            "SELECT status, proposal_type, candidate_kind, target_ref, cluster_sha256, reviewed_json, audit_json FROM g5_trace_candidate_reviews WHERE candidate_id = ?",
             (args.candidate_id,),
         ).fetchone()
         if row is None:
             raise ValueError(f"lifecycle candidate not found: {args.candidate_id}")
         status_before = row["status"]
         audit = _safe_json_list_from_db(row["audit_json"])
+        reviewed = _safe_json_dict_from_db(row["reviewed_json"])
+        artifact_stored = False
+        artifact_sha256 = None
+        artifact_status = None
+        artifact_input = _load_json_argument(
+            getattr(args, "collapse_proof_artifact_json", None),
+            label="--collapse-proof-artifact-json",
+        )
+        if artifact_input:
+            if row["candidate_kind"] != "decay":
+                raise ValueError("--collapse-proof-artifact-json is only supported for decay lifecycle candidates")
+            artifact = artifact_input.get("collapse_proof_artifact", artifact_input)
+            if not isinstance(artifact, dict):
+                raise ValueError("--collapse-proof-artifact-json must contain an object artifact")
+            artifact = dict(artifact)
+            artifact.setdefault("candidate_id", args.candidate_id)
+            artifact.setdefault("target_ref", row["target_ref"])
+            artifact.setdefault("candidate_sha256", row["cluster_sha256"])
+            artifact.setdefault("collapse_apply_allowed", False)
+            artifact.setdefault("delete_apply_allowed", False)
+            reviewed["collapse_proof_artifact"] = artifact
+            artifact_sha256 = hashlib.sha256(json.dumps(artifact, sort_keys=True).encode("utf-8")).hexdigest()
+            artifact_status = _collapse_proof_status_from_artifact(artifact)
+            artifact_stored = True
         audit.append(
             {
                 "action": args.status,
@@ -3345,10 +3369,17 @@ def _dogfood_lifecycle_candidate_update_payload(args: argparse.Namespace) -> dic
         connection.execute(
             """
             UPDATE g5_trace_candidate_reviews
-            SET status = ?, updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, audit_json = ?
+            SET status = ?, updated_at = CURRENT_TIMESTAMP, actor = ?, reason_sha256 = ?, reviewed_json = ?, audit_json = ?
             WHERE candidate_id = ?
             """,
-            (args.status, args.actor.strip(), reason_sha256, json.dumps(audit, sort_keys=True), args.candidate_id),
+            (
+                args.status,
+                args.actor.strip(),
+                reason_sha256,
+                json.dumps(reviewed, sort_keys=True),
+                json.dumps(audit, sort_keys=True),
+                args.candidate_id,
+            ),
         )
     return {
         "kind": "dogfood_lifecycle_candidate_update",
@@ -3362,6 +3393,9 @@ def _dogfood_lifecycle_candidate_update_payload(args: argparse.Namespace) -> dic
         "status_before": status_before,
         "status_after": args.status,
         "reason_sha256": reason_sha256,
+        "proof_artifact_stored": artifact_stored,
+        "proof_artifact_sha256": artifact_sha256,
+        "proof_artifact_status": artifact_status,
         "privacy": {"candidate_json_included": False, "raw_reason_included": False, "raw_content_included": False},
     }
 
@@ -3370,6 +3404,29 @@ def _fact_id_from_ref(ref: str) -> int:
     if not ref.startswith("fact:"):
         raise ValueError(f"expected fact ref, got: {ref}")
     return int(ref.split(":", 1)[1])
+
+
+def _load_json_argument(value: str | None, *, label: str) -> dict[str, Any]:
+    if not value:
+        return {}
+    raw = value.strip()
+    path = Path(raw).expanduser()
+    if path.exists():
+        raw = path.read_text()
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{label} must be a JSON object or a path to a JSON object")
+    return parsed
+
+
+def _collapse_proof_artifact_from_reviewed(reviewed: dict[str, Any]) -> dict[str, Any]:
+    artifact = reviewed.get("collapse_proof_artifact", {})
+    return artifact if isinstance(artifact, dict) else {}
+
+
+def _collapse_proof_status_from_artifact(artifact: dict[str, Any]) -> str:
+    status = artifact.get("current_status")
+    return status if status in {"satisfied", "partially_satisfied", "not_satisfied"} else "not_satisfied"
 
 
 def _memory_ref_parts(ref: str) -> tuple[str, int]:
@@ -3979,18 +4036,19 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
         }
 
     with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
         _ensure_lifecycle_candidate_review_tables(connection)
-        decay_review_count = _safe_int(
-            connection.execute(
-                """
-                SELECT COUNT(*)
-                FROM g5_trace_candidate_reviews
-                WHERE candidate_kind = 'decay'
-                  AND proposal_type = 'decay_review'
-                  AND status IN ('approved', 'promoted')
-                """
-            ).fetchone()[0]
-        )
+        decay_review_rows = connection.execute(
+            """
+            SELECT candidate_id, target_ref, reviewed_json
+            FROM g5_trace_candidate_reviews
+            WHERE candidate_kind = 'decay'
+              AND proposal_type = 'decay_review'
+              AND status IN ('approved', 'promoted')
+            ORDER BY updated_at DESC, candidate_id
+            """
+        ).fetchall()
+        decay_review_count = len(decay_review_rows)
         supersession_review_count = _safe_int(
             connection.execute(
                 """
@@ -4002,6 +4060,39 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
                 """
             ).fetchone()[0]
         )
+
+    candidate_proof_items: list[dict[str, Any]] = []
+    missing_artifact_candidate_ids: list[str] = []
+    green_artifact_count = 0
+    for row in decay_review_rows:
+        reviewed = _safe_json_dict_from_db(row["reviewed_json"])
+        artifact = _collapse_proof_artifact_from_reviewed(reviewed)
+        artifact_status = _collapse_proof_status_from_artifact(artifact) if artifact else "missing"
+        if not artifact:
+            missing_artifact_candidate_ids.append(row["candidate_id"])
+        elif artifact_status == "satisfied":
+            green_artifact_count += 1
+        candidate_proof_items.append(
+            {
+                "candidate_id": row["candidate_id"],
+                "target_ref": row["target_ref"],
+                "artifact_present": bool(artifact),
+                "current_status": artifact_status,
+                "missing_evidence": artifact.get("missing_evidence", []) if artifact else ["collapse_proof_artifact"],
+                "collapse_apply_allowed": bool(artifact.get("collapse_apply_allowed", False)) if artifact else False,
+                "delete_apply_allowed": bool(artifact.get("delete_apply_allowed", False)) if artifact else False,
+            }
+        )
+    artifact_count = decay_review_count - len(missing_artifact_candidate_ids)
+    all_candidate_artifacts_green = decay_review_count > 0 and artifact_count == decay_review_count and green_artifact_count == decay_review_count
+    candidate_proof_replay = {
+        "reviewed_decay_candidate_count": decay_review_count,
+        "artifact_count": artifact_count,
+        "green_artifact_count": green_artifact_count,
+        "all_candidate_artifacts_green": all_candidate_artifacts_green,
+        "missing_artifact_candidate_ids": missing_artifact_candidate_ids,
+        "items": candidate_proof_items,
+    }
 
     evidence_status: dict[str, dict[str, Any]] = {
         "rollback_replay_validate_pass": {
@@ -4017,8 +4108,9 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
         "retrieval_eval_gate_pass": retrieval_eval_status,
         "human_reviewed_candidate_payload": {
             "passed": decay_review_count > 0,
-            "source": "g5_trace_candidate_reviews approved decay candidates",
+            "source": "g5_trace_candidate_reviews approved decay candidate proof replay",
             "approved_decay_candidate_count": decay_review_count,
+            "candidate_proof_artifact_count": artifact_count,
         },
     }
     missing_evidence = [
@@ -4058,6 +4150,7 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
             "required_evidence_count": len(accepted_evidence),
             "missing_evidence": missing_evidence,
             "current_status": current_status,
+            "candidate_proof_replay": candidate_proof_replay,
             "collapse_apply_allowed": False,
             "delete_apply_allowed": False,
         },
@@ -10482,6 +10575,10 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_update_parser.add_argument("--actor", required=True)
     dogfood_lifecycle_candidate_update_parser.add_argument("--reason", required=True)
     dogfood_lifecycle_candidate_update_parser.add_argument("--approval-phrase", required=True)
+    dogfood_lifecycle_candidate_update_parser.add_argument(
+        "--collapse-proof-artifact-json",
+        help="Optional JSON object or path persisted into reviewed_json for decay collapse proof replay.",
+    )
     dogfood_lifecycle_candidate_apply_parser = dogfood_subparsers.add_parser(
         "lifecycle-candidate-apply",
         help="Apply approved supersession lifecycle candidates through a narrow guarded backup/audit corridor.",

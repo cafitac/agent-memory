@@ -612,11 +612,25 @@ def test_checked_in_retrieval_eval_examples_validate_as_fixture_models() -> None
     fixture_dir = _checked_in_fixture_dir()
     fixture_paths = sorted(fixture_dir.rglob("*.json"))
 
-    assert len(fixture_paths) >= 10
+    assert len(fixture_paths) >= 24
+    task_ids: set[str] = set()
+    live_compatible_task_count = 0
     for fixture_path in fixture_paths:
         payload = json.loads(fixture_path.read_text())
         fixture = RetrievalEvalFixture.model_validate(payload)
         assert fixture.tasks, fixture_path
+        for task in fixture.tasks:
+            task_ids.add(task.id)
+            if task.preferred_scope and (task.expected.facts or task.expected.procedures or task.expected.episodes):
+                live_compatible_task_count += 1
+
+    assert live_compatible_task_count >= 25
+    assert {
+        "release-version-source-noise-guardrail",
+        "release-qa-procedure-source-noise-guardrail",
+        "episode-current-rollout-source-noise-guardrail",
+        "kb-export-procedure-cross-surface-guardrail",
+    } <= task_ids
 
 
 
@@ -1484,56 +1498,54 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
 
     result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixtures_dir, baseline_mode="lexical")
 
-    assert result.summary.total_tasks == 21
-    assert result.summary.passed_tasks + result.summary.failed_tasks == 21
-    assert result.summary.passed_tasks >= 15
-    assert result.summary.by_memory_type["facts"].total_tasks == 9
-    assert result.summary.by_memory_type["facts"].passed_tasks + result.summary.by_memory_type["facts"].failed_tasks == 9
-    assert 8 <= result.summary.by_memory_type["facts"].total_expected_hits <= 9
-    assert result.summary.by_memory_type["facts"].total_avoid_hits <= 1
-    assert result.summary.by_memory_type["procedures"].total_tasks == 9
-    assert result.summary.by_memory_type["procedures"].passed_tasks + result.summary.by_memory_type["procedures"].failed_tasks == 9
-    # Linux/macOS lexical tokenization can rank procedure examples differently; keep the checked-in
-    # fixture smoke focused on model validity and broad regression bounds rather than exact rank ties.
-    assert 3 <= result.summary.by_memory_type["procedures"].total_expected_hits <= 9
-    assert result.summary.by_memory_type["procedures"].total_avoid_hits <= 1
-    assert result.summary.by_memory_type["episodes"].total_tasks == 3
-    assert result.summary.by_memory_type["episodes"].passed_tasks + result.summary.by_memory_type["episodes"].failed_tasks == 3
-    assert result.summary.by_memory_type["episodes"].total_expected_hits == 3
+    assert result.summary.total_tasks == 25
+    assert result.summary.passed_tasks == 25
+    assert result.summary.failed_tasks == 0
+    assert result.summary.by_memory_type["facts"].total_tasks == 10
+    assert result.summary.by_memory_type["facts"].passed_tasks == 10
+    assert result.summary.by_memory_type["facts"].total_expected_hits == 10
+    assert result.summary.by_memory_type["facts"].total_avoid_hits == 0
+    assert result.summary.by_memory_type["procedures"].total_tasks == 11
+    assert result.summary.by_memory_type["procedures"].passed_tasks == 11
+    assert result.summary.by_memory_type["procedures"].total_expected_hits == 11
+    assert result.summary.by_memory_type["procedures"].total_avoid_hits == 0
+    assert result.summary.by_memory_type["episodes"].total_tasks == 4
+    assert result.summary.by_memory_type["episodes"].passed_tasks == 4
+    assert result.summary.by_memory_type["episodes"].total_expected_hits == 4
     assert result.summary.by_memory_type["episodes"].total_avoid_hits == 0
-    assert result.summary.by_primary_task_type["facts"].total_tasks == 9
-    assert result.summary.by_primary_task_type["facts"].passed_tasks + result.summary.by_primary_task_type["facts"].failed_tasks == 9
-    assert result.summary.by_primary_task_type["procedures"].total_tasks == 9
-    assert result.summary.by_primary_task_type["procedures"].passed_tasks + result.summary.by_primary_task_type["procedures"].failed_tasks == 9
-    assert result.summary.by_primary_task_type["episodes"].total_tasks == 3
-    assert result.summary.by_primary_task_type["episodes"].passed_tasks + result.summary.by_primary_task_type["episodes"].failed_tasks == 3
+    assert result.summary.by_primary_task_type["facts"].total_tasks == 10
+    assert result.summary.by_primary_task_type["facts"].passed_tasks == 10
+    assert result.summary.by_primary_task_type["procedures"].total_tasks == 11
+    assert result.summary.by_primary_task_type["procedures"].passed_tasks == 11
+    assert result.summary.by_primary_task_type["episodes"].total_tasks == 4
+    assert result.summary.by_primary_task_type["episodes"].passed_tasks == 4
     assert result.baseline_summary is not None
-    assert result.baseline_summary.total_tasks == 21
-    assert result.baseline_summary.passed_tasks == 16
+    assert result.baseline_summary.total_tasks == 25
+    assert result.baseline_summary.passed_tasks == 20
     assert result.baseline_summary.failed_tasks == 5
     assert result.baseline_summary.tasks_with_avoid_hits == 5
-    assert result.baseline_summary.by_memory_type["facts"].total_tasks == 9
-    assert result.baseline_summary.by_memory_type["facts"].passed_tasks == 5
+    assert result.baseline_summary.by_memory_type["facts"].total_tasks == 10
+    assert result.baseline_summary.by_memory_type["facts"].passed_tasks == 6
     assert result.baseline_summary.by_memory_type["facts"].failed_tasks == 4
-    assert result.baseline_summary.by_memory_type["facts"].total_expected_hits == 9
+    assert result.baseline_summary.by_memory_type["facts"].total_expected_hits == 10
     assert result.baseline_summary.by_memory_type["facts"].total_avoid_hits == 4
     assert result.baseline_summary.by_memory_type["facts"].tasks_with_avoid_hits == 4
-    assert result.baseline_summary.by_memory_type["procedures"].total_tasks == 9
-    assert result.baseline_summary.by_memory_type["procedures"].passed_tasks == 9
+    assert result.baseline_summary.by_memory_type["procedures"].total_tasks == 11
+    assert result.baseline_summary.by_memory_type["procedures"].passed_tasks == 11
     assert result.baseline_summary.by_memory_type["procedures"].failed_tasks == 0
-    assert result.baseline_summary.by_memory_type["procedures"].total_expected_hits == 9
-    assert result.baseline_summary.by_memory_type["episodes"].total_tasks == 4
-    assert result.baseline_summary.by_memory_type["episodes"].passed_tasks == 3
+    assert result.baseline_summary.by_memory_type["procedures"].total_expected_hits == 11
+    assert result.baseline_summary.by_memory_type["episodes"].total_tasks == 5
+    assert result.baseline_summary.by_memory_type["episodes"].passed_tasks == 4
     assert result.baseline_summary.by_memory_type["episodes"].failed_tasks == 1
-    assert result.baseline_summary.by_memory_type["episodes"].total_expected_hits == 3
-    assert result.baseline_summary.by_primary_task_type["facts"].total_tasks == 9
-    assert result.baseline_summary.by_primary_task_type["facts"].passed_tasks == 5
+    assert result.baseline_summary.by_memory_type["episodes"].total_expected_hits == 4
+    assert result.baseline_summary.by_primary_task_type["facts"].total_tasks == 10
+    assert result.baseline_summary.by_primary_task_type["facts"].passed_tasks == 6
     assert result.baseline_summary.by_primary_task_type["facts"].failed_tasks == 4
-    assert result.baseline_summary.by_primary_task_type["procedures"].total_tasks == 9
-    assert result.baseline_summary.by_primary_task_type["procedures"].passed_tasks == 8
+    assert result.baseline_summary.by_primary_task_type["procedures"].total_tasks == 11
+    assert result.baseline_summary.by_primary_task_type["procedures"].passed_tasks == 10
     assert result.baseline_summary.by_primary_task_type["procedures"].failed_tasks == 1
-    assert result.baseline_summary.by_primary_task_type["episodes"].total_tasks == 3
-    assert result.baseline_summary.by_primary_task_type["episodes"].passed_tasks == 3
+    assert result.baseline_summary.by_primary_task_type["episodes"].total_tasks == 4
+    assert result.baseline_summary.by_primary_task_type["episodes"].passed_tasks == 4
     assert result.baseline_summary.by_primary_task_type["episodes"].failed_tasks == 0
     assert result.delta_summary is not None
     assert -5 <= result.delta_summary.total_avoid_hit_delta <= -4
@@ -1576,6 +1588,10 @@ def test_checked_in_retrieval_fixture_examples_run_against_seeded_db(tmp_path: P
         "project-scope-procedure-scope-adjacent-guardrail",
         "same-scope-current-release-qa-procedure",
         "project-scope-procedure-release-qa-budget-pressure",
+        "release-version-source-noise-guardrail",
+        "release-qa-procedure-source-noise-guardrail",
+        "episode-current-rollout-source-noise-guardrail",
+        "kb-export-procedure-cross-surface-guardrail",
     }
     current_by_task = {task.task_id: task.pass_ for task in result.results}
     baseline_by_task = {task.task_id: task.baseline.pass_ for task in result.results if task.baseline is not None}
@@ -1642,47 +1658,36 @@ def test_cli_eval_retrieval_runs_checked_in_symbolic_fixture_directory(tmp_path:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["summary"]["total_tasks"] == 21
-    assert payload["summary"]["passed_tasks"] + payload["summary"]["failed_tasks"] == 21
-    assert payload["summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 9
-    assert (
-        payload["summary"]["by_primary_task_type"]["facts"]["passed_tasks"]
-        + payload["summary"]["by_primary_task_type"]["facts"]["failed_tasks"]
-        == 9
-    )
-    assert payload["summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 9
-    assert (
-        payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"]
-        + payload["summary"]["by_primary_task_type"]["procedures"]["failed_tasks"]
-        == 9
-    )
-    assert payload["summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 3
-    assert (
-        payload["summary"]["by_primary_task_type"]["episodes"]["passed_tasks"]
-        + payload["summary"]["by_primary_task_type"]["episodes"]["failed_tasks"]
-        == 3
-    )
-    assert payload["baseline_summary"]["total_tasks"] == 21
-    assert payload["baseline_summary"]["passed_tasks"] == 16
+    assert payload["summary"]["total_tasks"] == 25
+    assert payload["summary"]["passed_tasks"] == 25
+    assert payload["summary"]["failed_tasks"] == 0
+    assert payload["summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 10
+    assert payload["summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 10
+    assert payload["summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 11
+    assert payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 11
+    assert payload["summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 4
+    assert payload["summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 4
+    assert payload["baseline_summary"]["total_tasks"] == 25
+    assert payload["baseline_summary"]["passed_tasks"] == 20
     assert payload["baseline_summary"]["failed_tasks"] == 5
-    assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 9
-    assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 5
+    assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 10
+    assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 6
     assert payload["baseline_summary"]["by_primary_task_type"]["facts"]["failed_tasks"] == 4
-    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 9
-    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 8
+    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 11
+    assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 10
     assert payload["baseline_summary"]["by_primary_task_type"]["procedures"]["failed_tasks"] == 1
-    assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 3
-    assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 3
+    assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 4
+    assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 4
     assert payload["baseline_summary"]["by_primary_task_type"]["episodes"]["failed_tasks"] == 0
     assert payload["baseline_summary"]["tasks_with_avoid_hits"] == 5
-    assert payload["baseline_summary"]["by_memory_type"]["facts"]["total_tasks"] == 9
-    assert payload["baseline_summary"]["by_memory_type"]["facts"]["passed_tasks"] == 5
+    assert payload["baseline_summary"]["by_memory_type"]["facts"]["total_tasks"] == 10
+    assert payload["baseline_summary"]["by_memory_type"]["facts"]["passed_tasks"] == 6
     assert payload["baseline_summary"]["by_memory_type"]["facts"]["failed_tasks"] == 4
-    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["total_tasks"] == 9
-    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["passed_tasks"] == 9
+    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["total_tasks"] == 11
+    assert payload["baseline_summary"]["by_memory_type"]["procedures"]["passed_tasks"] == 11
     assert payload["baseline_summary"]["by_memory_type"]["procedures"]["failed_tasks"] == 0
-    assert payload["baseline_summary"]["by_memory_type"]["episodes"]["total_tasks"] == 4
-    assert payload["baseline_summary"]["by_memory_type"]["episodes"]["passed_tasks"] == 3
+    assert payload["baseline_summary"]["by_memory_type"]["episodes"]["total_tasks"] == 5
+    assert payload["baseline_summary"]["by_memory_type"]["episodes"]["passed_tasks"] == 4
     assert payload["baseline_summary"]["by_memory_type"]["episodes"]["failed_tasks"] == 1
     assert payload["delta_summary"]["total_avoid_hit_delta"] <= 0
     assert payload["delta_summary"]["by_memory_type"]["facts"]["total_avoid_hit_delta"] <= 0
@@ -1868,49 +1873,49 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
 
     expected = {
         "lexical": {
-            "baseline_passed": 16,
+            "baseline_passed": 20,
             "baseline_failed": 5,
             "baseline_avoid": 5,
             "delta_avoid": -5,
             "delta_pass": 5,
-            "facts_primary": (9, 5, 4),
+            "facts_primary": (10, 6, 4),
         },
         "source-lexical": {
-            "baseline_passed": 14,
-            "baseline_failed": 7,
+            "baseline_passed": 16,
+            "baseline_failed": 9,
             "baseline_avoid": 0,
             "delta_avoid": 0,
-            "delta_pass": 7,
-            "facts_primary": (9, 4, 5),
+            "delta_pass": 9,
+            "facts_primary": (10, 4, 6),
         },
         "lexical-global": {
-            "baseline_passed": 11,
+            "baseline_passed": 15,
             "baseline_failed": 10,
             "baseline_avoid": 8,
             "delta_avoid": -8,
             "delta_pass": 10,
-            "facts_primary": (9, 3, 6),
+            "facts_primary": (10, 4, 6),
         },
         "source-global": {
-            "baseline_passed": 6,
-            "baseline_failed": 15,
+            "baseline_passed": 8,
+            "baseline_failed": 17,
             "baseline_avoid": 8,
             "delta_avoid": -8,
-            "delta_pass": 15,
-            "facts_primary": (9, 0, 9),
+            "delta_pass": 17,
+            "facts_primary": (10, 0, 10),
         },
      }
 
     for mode, expectation in expected.items():
         result = evaluate_retrieval_fixtures(db_path=db_path, fixtures_path=fixtures_dir, baseline_mode=mode)
 
-        assert result.summary.total_tasks == 21
-        assert result.summary.passed_tasks + result.summary.failed_tasks == 21
-        assert result.summary.by_primary_task_type["facts"].total_tasks == 9
-        assert result.summary.by_primary_task_type["procedures"].total_tasks == 9
+        assert result.summary.total_tasks == 25
+        assert result.summary.passed_tasks + result.summary.failed_tasks == 25
+        assert result.summary.by_primary_task_type["facts"].total_tasks == 10
+        assert result.summary.by_primary_task_type["procedures"].total_tasks == 11
         assert result.baseline_summary is not None
         assert result.baseline_summary.mode == mode
-        assert result.baseline_summary.total_tasks == 21
+        assert result.baseline_summary.total_tasks == 25
         assert result.baseline_summary.passed_tasks == expectation["baseline_passed"]
         assert result.baseline_summary.failed_tasks == expectation["baseline_failed"]
         assert result.baseline_summary.tasks_with_avoid_hits == expectation["baseline_avoid"]

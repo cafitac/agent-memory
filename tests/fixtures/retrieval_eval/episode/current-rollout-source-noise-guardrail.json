@@ -1,0 +1,25 @@
+{
+  "references": {
+    "current_rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 current v0.1.90 candidate validation rollout episode"
+    },
+    "stale_rollout_episode": {
+      "memory_type": "episode",
+      "scope": "project:m1",
+      "title": "Project M1 stale rollout episode"
+    }
+  },
+  "tasks": [
+    {
+      "id": "episode-current-rollout-source-noise-guardrail",
+      "query": "Which Project M1 rollout episode resolved after the current candidate validation?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {"facts": [], "procedures": [], "episodes": ["current_rollout_episode"]},
+      "avoid": {"facts": [], "procedures": [], "episodes": ["stale_rollout_episode"]},
+      "rationale": "Keep the current rollout episode above stale same-scope rollout history."
+    }
+  ]
+}
