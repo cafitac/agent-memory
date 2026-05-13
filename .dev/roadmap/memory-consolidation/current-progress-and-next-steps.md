@@ -675,3 +675,13 @@ Next after this release: handle `fact:1` isolated approved memory using relation
   3. Adds persisted G4 review queue commands before any apply path: `g4-review-queue-persist`, `g4-review-queue-list`, and `g4-review-queue-update`. Persist/update mutate only the new `g4_review_queue_items` table, store operator reasons as SHA-256, omit proposal raw JSON from list output, and keep `apply_supported=false`.
 - Local verification passed: targeted G4/fallback tests and full `uv run --python 3.11 pytest tests/ -q` => `283 passed, 1 xfailed`.
 - Broad G4 apply is still intentionally blocked. Review queue persistence is not apply. Next release target: v0.1.134 after PR/CI/publish.
+
+
+## G5i local checkpoint
+
+Status: AI-authored draft. Not yet human-approved.
+Last updated: 2026-05-13 11:08 KST
+
+Runtime baseline remains `v0.1.146` at `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`; fresh linkage evidence still includes `fresh_trace_linkage_gap_not_detected` and report directory `g4-v0138-20260512-132253`. Overall north-star: 72-74%.
+
+Local G5i implements the requested five next steps after G5h: rollback replay rollups, live-compatible retrieval fixture expansion summaries, collapse equivalence proof surface, telemetry-only apply safety-gate reporting, and broad G4 apply reassessment fields. Broad G4/background apply remains blocked; default ranking changes, collapse/delete apply, and ordinary conversation auto-approval remain forbidden.
