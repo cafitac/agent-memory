@@ -9849,6 +9849,16 @@ def test_dogfood_lifecycle_candidate_apply_deprecates_approved_decay_candidate_w
     )
     assert persist_result.returncode == 0, persist_result.stderr
     candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    proof_artifact_path = tmp_path / "decay-collapse-proof.json"
+    proof_artifact_path.write_text(
+        json.dumps(
+            {
+                "current_status": "partially_satisfied",
+                "missing_evidence": ["relation_equivalence_or_supersession_chain", "retrieval_eval_gate_pass"],
+                "proof_inputs": {"human_reviewed_candidate_payload": True},
+            }
+        )
+    )
     update_result = subprocess.run(
         [
             sys.executable,
@@ -9866,6 +9876,8 @@ def test_dogfood_lifecycle_candidate_apply_deprecates_approved_decay_candidate_w
             "approved guarded decay deprecate",
             "--approval-phrase",
             "approve-g5-lifecycle-candidate-v1",
+            "--collapse-proof-artifact-json",
+            str(proof_artifact_path),
         ],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
@@ -9873,6 +9885,10 @@ def test_dogfood_lifecycle_candidate_apply_deprecates_approved_decay_candidate_w
         text=True,
     )
     assert update_result.returncode == 0, update_result.stderr
+    update_payload = json.loads(update_result.stdout)
+    assert update_payload["proof_artifact_stored"] is True
+    assert update_payload["proof_artifact_status"] == "partially_satisfied"
+    assert update_payload["proof_artifact_sha256"]
     backup_path = tmp_path / "decay-apply-backup.db"
     apply_result = subprocess.run(
         [
@@ -10071,14 +10087,32 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     )
     assert persist_result.returncode == 0, persist_result.stderr
     candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    g5h_proof_artifact_path = tmp_path / "g5h-collapse-proof.json"
+    g5h_proof_artifact_path.write_text(
+        json.dumps(
+            {
+                "current_status": "partially_satisfied",
+                "missing_evidence": ["relation_equivalence_or_supersession_chain"],
+                "proof_inputs": {
+                    "rollback_replay_validate_pass": True,
+                    "retrieval_eval_gate_pass": True,
+                    "human_reviewed_candidate_payload": True,
+                },
+            }
+        )
+    )
     update_result = subprocess.run(
         [
             sys.executable, "-m", "agent_memory.api.cli", "dogfood", "lifecycle-candidate-update", str(db_path), candidate_id,
             "--status", "approved", "--actor", "tester", "--reason", "approve g5h", "--approval-phrase", "approve-g5-lifecycle-candidate-v1",
+            "--collapse-proof-artifact-json", str(g5h_proof_artifact_path),
         ],
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
     )
     assert update_result.returncode == 0, update_result.stderr
+    update_payload = json.loads(update_result.stdout)
+    assert update_payload["proof_artifact_stored"] is True
+    assert update_payload["proof_artifact_status"] == "partially_satisfied"
     backup_path = tmp_path / "g5h-apply-backup.db"
     apply_result = subprocess.run(
         [
@@ -10163,6 +10197,23 @@ def test_dogfood_g5h_next_brainlike_steps_are_read_only_or_guarded(tmp_path: Pat
     assert proof["required_evidence_count"] == 4
     assert proof["missing_evidence"] == ["relation_equivalence_or_supersession_chain"]
     assert proof["current_status"] == "partially_satisfied"
+    replay = proof["candidate_proof_replay"]
+    assert replay["reviewed_decay_candidate_count"] == 1
+    assert replay["artifact_count"] == 1
+    assert replay["green_artifact_count"] == 0
+    assert replay["all_candidate_artifacts_green"] is False
+    assert replay["missing_artifact_candidate_ids"] == []
+    assert replay["items"] == [
+        {
+            "candidate_id": candidate_id,
+            "target_ref": f"fact:{stale_fact.id}",
+            "artifact_present": True,
+            "current_status": "partially_satisfied",
+            "missing_evidence": ["relation_equivalence_or_supersession_chain"],
+            "collapse_apply_allowed": False,
+            "delete_apply_allowed": False,
+        }
+    ]
     assert proof["collapse_apply_allowed"] is False
     assert proof["delete_apply_allowed"] is False
 

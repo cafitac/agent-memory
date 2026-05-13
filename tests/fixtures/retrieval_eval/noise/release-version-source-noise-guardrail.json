@@ -1,0 +1,29 @@
+{
+  "references": {
+    "current_version_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "latest_release_version",
+      "object_ref_or_value": "v0.1.86"
+    },
+    "budget_pressure_release_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1 release notes",
+      "predicate": "budget_pressure_context",
+      "object_ref_or_value": "release candidate checklist noise near v0.1.86"
+    }
+  },
+  "tasks": [
+    {
+      "id": "release-version-source-noise-guardrail",
+      "query": "Which approved memory states the authoritative latest Project M1 release version rather than release-note noise?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {"facts": ["current_version_fact"], "procedures": [], "episodes": []},
+      "avoid": {"facts": ["budget_pressure_release_fact"], "procedures": [], "episodes": []},
+      "rationale": "Keep authoritative same-slot version facts above adjacent release-note source noise."
+    }
+  ]
+}

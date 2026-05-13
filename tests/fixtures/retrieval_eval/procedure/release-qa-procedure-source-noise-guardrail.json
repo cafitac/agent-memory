@@ -1,0 +1,30 @@
+{
+  "references": {
+    "current_release_qa_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run current release QA"
+    },
+    "release_notes_noise_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Draft release notes checklist"
+    },
+    "release_monitoring_noise_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Monitor release candidate signals"
+    }
+  },
+  "tasks": [
+    {
+      "id": "release-qa-procedure-source-noise-guardrail",
+      "query": "What should Project M1 run before marking a release candidate ready?",
+      "preferred_scope": "project:m1",
+      "limit": 1,
+      "expected": {"facts": [], "procedures": ["current_release_qa_procedure"], "episodes": []},
+      "avoid": {"facts": [], "procedures": ["release_notes_noise_procedure", "release_monitoring_noise_procedure"], "episodes": []},
+      "rationale": "Keep the reviewed release QA procedure above adjacent same-source checklist and monitoring noise."
+    }
+  ]
+}

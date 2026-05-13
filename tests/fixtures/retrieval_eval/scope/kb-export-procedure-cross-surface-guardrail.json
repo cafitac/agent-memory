@@ -1,0 +1,32 @@
+{
+  "references": {
+    "project_scope_fact": {
+      "memory_type": "fact",
+      "scope": "project:m1",
+      "subject_ref": "Project M1",
+      "predicate": "kb_export_command"
+    },
+    "current_pre_pr_procedure": {
+      "memory_type": "procedure",
+      "scope": "project:m1",
+      "name": "Run local tests"
+    },
+    "noisy_global_fact": {
+      "memory_type": "fact",
+      "scope": "global",
+      "subject_ref": "Generic docs",
+      "predicate": "kb_export_command"
+    }
+  },
+  "tasks": [
+    {
+      "id": "kb-export-procedure-cross-surface-guardrail",
+      "query": "Before opening a PR, what local tests should Project M1 run?",
+      "preferred_scope": "project:m1",
+      "limit": 2,
+      "expected": {"facts": [], "procedures": ["current_pre_pr_procedure"], "episodes": []},
+      "avoid": {"facts": ["noisy_global_fact"], "procedures": [], "episodes": []},
+      "rationale": "Exercise mixed fact/procedure retrieval under a small prompt budget without surfacing global KB export noise."
+    }
+  ]
+}
