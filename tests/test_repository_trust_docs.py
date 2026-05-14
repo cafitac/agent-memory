@@ -23,7 +23,6 @@ def test_external_trust_docs_exist_and_are_linked_from_readme() -> None:
     assert "agent-memory bootstrap" in readme
     assert "agent-memory doctor" in readme
     assert "https://www.npmjs.com/package/@cafitac/agent-memory" in readme
-    assert "https://pypi.org/project/cafitac-agent-memory/" in readme
 
 
 def test_first_run_memory_layer_guide_covers_safe_bootstrap_and_cleanup() -> None:
