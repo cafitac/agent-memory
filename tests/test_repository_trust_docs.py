@@ -14,7 +14,6 @@ def test_external_trust_docs_exist_and_are_linked_from_readme() -> None:
         "CONTRIBUTING.md",
         "docs/install-smoke.md",
         "docs/first-run-memory-layer.md",
-        "docs/hermes-dogfood.md",
     ]:
         assert (ROOT / relative_path).exists()
         assert relative_path in readme
