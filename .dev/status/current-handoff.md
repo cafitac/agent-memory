@@ -1,35 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:01 KST
+Last updated: 2026-05-14 21:15 KST
 
-## Source checkpoint: G4 readiness gate summary added after operator bundle
+## Source checkpoint: G4 post-apply verification gate added
 
-Implemented the safe B-direction source slice: a read-only mixed retrieval + G4 readiness summary command that consumes saved artifacts and emits a single preflight gate without enabling mutation.
+Implemented the next safe B-direction source slice without running live apply: a read-only post-apply verification gate for the separate `g4-review-queue-apply` corridor.
 
-- New command: `dogfood g4-readiness-gate-summary`.
+- New command: `dogfood g4-post-apply-verification`.
 - Inputs:
-  - `--retrieval-ranking-report`: saved `dogfood_retrieval_ranking_experiment` artifact.
-  - `--operator-apply-bundle-report`: saved `dogfood_g4_operator_apply_bundle` artifact.
-- Output kind: `dogfood_g4_readiness_gate_summary`.
-- It checks both sides are read-only, no-mutation, default-retrieval-unchanged, privacy/ref-safe, and green enough for only the already separate manual operator apply corridor.
-- It deliberately does not call `g4-review-queue-apply`, does not support broad G4 apply, does not migrate default retrieval ranking, and does not allow ordinary-conversation auto-approval.
+  - `--apply-report`: saved `dogfood_g4_review_queue_apply` artifact from an already approved apply.
+  - `--post-apply-bundle-report`: saved post-apply `dogfood_g4_operator_apply_bundle` artifact.
+  - `--rollback-replay-report`: saved `dogfood_rollback_replay_validate` artifact.
+- Output kind: `dogfood_g4_post_apply_verification`.
+- It verifies apply artifact contract: exact policy `g4-review-queue-apply-v1`, approval phrase matched, `mutated=true`, `read_only=false` only for the saved apply artifact, `applied_count <= max_apply`, default retrieval unchanged, memory status not mutated, ordinary auto-approval false, privacy/ref-safe, and backup file SHA-256 matches the apply artifact.
+- It verifies post-apply bundle contract: read-only/no-mutation/default-unchanged, quality gate green, broad apply false, apply-executed false, apply-supported false, ordinary auto-approval false, and privacy/ref-safe.
+- It verifies rollback replay contract: read-only/no-mutation/default-unchanged, quality gate green, and privacy/ref-safe.
+- It emits `next_step=stop_or_collect_operator_review_before_any_further_mutation`; it does not run apply and does not authorize another mutation.
 
 Verification:
 
-- RED observed first: `g4-readiness-gate-summary` was not a valid dogfood action and the two new tests failed.
-- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_readiness_gate_summary'` -> `2 passed, 138 deselected`.
-- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_readiness_gate_summary or g4_operator_apply_bundle or g4_apply_readiness'` -> `6 passed, 134 deselected`.
-- `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-readiness-gate-summary --help` -> passed.
+- RED observed first: `g4-post-apply-verification` was not a valid dogfood action and the two new tests failed.
+- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_post_apply_verification'` -> `2 passed, 140 deselected`.
+- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_post_apply_verification or g4_readiness_gate_summary or g4_operator_apply_bundle or g4_review_queue_apply'` -> `7 passed, 135 deselected`.
+- `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-post-apply-verification --help` -> passed.
+- Source-checkout live read-only blocked smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`; it stayed read-only/no-mutation and correctly blocked because no real live apply artifact exists.
+- `.venv/bin/python -m pytest tests/ -q` -> `324 passed, 1 xfailed`.
 - `git diff --check` -> passed.
-- Source-checkout live read-only smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json` with `quality_gate.pass=true`, `retrieval_ranking_gate.pass=true`, `operator_apply_bundle_gate.pass=true`, `read_only=true`, `mutated=false`.
-- `.venv/bin/python -m pytest tests/ -q` -> `322 passed, 1 xfailed`.
 
 Immediate next recommended slice:
 
 - Commit this source/test/doc slice.
 - Still do not release yet.
-- Next safe B-direction work, if no explicit apply approval is given, should strengthen post-apply verification/rollback evidence contracts around the separate `g4-review-queue-apply` corridor while keeping actual live apply blocked.
+- If no exact live apply approval is given, the next safe B-direction work should be manual-review/checklist/runbook hardening around the verified pre-apply and post-apply gates, not another mutation command.
+- Live apply remains blocked unless separately approved with exact operator phrase, policy, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Source-checkout live read-only smoke: G4 operator bundle over saved v0.1.161 artifacts
 

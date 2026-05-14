@@ -4745,6 +4745,263 @@ def test_python_module_cli_dogfood_g4_readiness_gate_summary_blocks_mixed_artifa
     }
 
 
+def test_python_module_cli_dogfood_g4_post_apply_verification_validates_apply_bundle_and_replay_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-post-apply-verification.db"
+    initialize_database(db_path)
+    backup_path = tmp_path / "memory-before-apply.db"
+    backup_path.write_bytes(b"safe backup bytes")
+    backup_sha256 = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+    apply_report = tmp_path / "g4-review-queue-apply.json"
+    apply_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_review_queue_apply",
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": True,
+                "policy": "g4-review-queue-apply-v1",
+                "approval_phrase_matched": True,
+                "backup": {"path": str(backup_path), "sha256": backup_sha256},
+                "apply_mode": "bounded_partial_automation_reviewed_queue_items_only",
+                "max_apply": 3,
+                "applied_count": 2,
+                "already_applied_count": 0,
+                "skipped_count": 0,
+                "memory_status_mutated": False,
+                "memory_reinforcement_mutated": True,
+                "ordinary_conversation_auto_approval": False,
+                "privacy": {
+                    "proposal_json_included": False,
+                    "raw_content_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                    "raw_reason_included": False,
+                    "reason_stored_as_sha256": True,
+                },
+                "secret": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    post_bundle_report = tmp_path / "post-apply-bundle.json"
+    post_bundle_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_operator_apply_bundle",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "apply_executed": False,
+                "apply_supported": False,
+                "bounded_partial_apply_ready": True,
+                "broad_g4_apply_allowed": False,
+                "ordinary_conversation_auto_approval": False,
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {
+                    "proposal_json_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                    "aggregate_or_ref_only": True,
+                },
+                "secret": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollback_replay_report = tmp_path / "rollback-replay.json"
+    rollback_replay_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {"raw_content_included": False, "sample_values_included": False},
+                "secret": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with sqlite3.connect(db_path) as connection:
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("facts", "procedures", "episodes")
+        }
+
+    output_path = tmp_path / "post-apply-verification.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-post-apply-verification",
+            str(db_path),
+            "--apply-report",
+            str(apply_report),
+            "--post-apply-bundle-report",
+            str(post_bundle_report),
+            "--rollback-replay-report",
+            str(rollback_replay_report),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_g4_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["verified_apply_mutated"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "g4_post_apply_verification_green_stop_before_next_mutation",
+        "blocked_reasons": [],
+    }
+    assert payload["apply_artifact_gate"]["pass"] is True
+    assert payload["apply_artifact_gate"]["applied_count"] == 2
+    assert payload["apply_artifact_gate"]["max_apply"] == 3
+    assert payload["backup_integrity_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "backup_path_provided": True,
+        "backup_exists": True,
+        "backup_sha256_matches": True,
+        "backup_sha256": backup_sha256,
+    }
+    assert payload["post_apply_bundle_gate"]["pass"] is True
+    assert payload["rollback_replay_gate"]["pass"] is True
+    assert payload["next_step"] == "stop_or_collect_operator_review_before_any_further_mutation"
+    assert payload["safety_exclusions"] == {
+        "broad_g4_background_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_migration": False,
+        "collapse_delete_apply": False,
+        "live_telemetry_reset": False,
+        "additional_apply_without_new_approval": False,
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in before_counts
+        }
+    assert after_counts == before_counts
+
+
+def test_python_module_cli_dogfood_g4_post_apply_verification_blocks_unsafe_artifacts(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-post-apply-verification-blocked.db"
+    initialize_database(db_path)
+    backup_path = tmp_path / "memory-before-apply.db"
+    backup_path.write_bytes(b"changed backup bytes")
+    apply_report = tmp_path / "g4-review-queue-apply-blocked.json"
+    apply_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_review_queue_apply",
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": True,
+                "policy": "g4-review-queue-apply-v1",
+                "approval_phrase_matched": True,
+                "backup": {"path": str(backup_path), "sha256": "0" * 64},
+                "max_apply": 1,
+                "applied_count": 2,
+                "memory_status_mutated": True,
+                "ordinary_conversation_auto_approval": True,
+                "privacy": {"raw_reason_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    post_bundle_report = tmp_path / "post-apply-bundle-blocked.json"
+    post_bundle_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_operator_apply_bundle",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "apply_executed": False,
+                "apply_supported": False,
+                "bounded_partial_apply_ready": True,
+                "broad_g4_apply_allowed": True,
+                "ordinary_conversation_auto_approval": False,
+                "quality_gate": {"pass": False, "blocked_reasons": ["review_queue_not_rechecked"]},
+                "privacy": {"sample_values_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollback_replay_report = tmp_path / "rollback-replay-blocked.json"
+    rollback_replay_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": False, "blocked_reasons": ["backup_sha256_mismatch"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-post-apply-verification",
+            str(db_path),
+            "--apply-report",
+            str(apply_report),
+            "--post-apply-bundle-report",
+            str(post_bundle_report),
+            "--rollback-replay-report",
+            str(rollback_replay_report),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "g4_post_apply_verification_blocked"
+    assert set(payload["quality_gate"]["blocked_reasons"]) >= {
+        "apply_report_exceeds_max_apply",
+        "apply_report_memory_status_mutated",
+        "apply_report_ordinary_auto_approval_enabled",
+        "apply_report_privacy_flags_not_ref_safe",
+        "backup_sha256_mismatch",
+        "post_apply_bundle_not_green",
+        "post_apply_bundle_broad_apply_allowed",
+        "post_apply_bundle_privacy_flags_not_ref_safe",
+        "rollback_replay_not_green",
+    }
+
+
 def test_python_module_cli_dogfood_g4_operator_apply_bundle_blocks_failed_artifact_without_apply(
     tmp_path: Path,
 ) -> None:

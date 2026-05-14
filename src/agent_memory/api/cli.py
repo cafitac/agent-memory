@@ -8882,6 +8882,216 @@ def _dogfood_g4_readiness_gate_summary_payload(args: argparse.Namespace) -> dict
     return payload
 
 
+def _dogfood_g4_post_apply_verification_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+
+    apply_payload, apply_base = _read_json_artifact_summary(args.apply_report)
+    bundle_payload, bundle_base = _read_json_artifact_summary(args.post_apply_bundle_report)
+    replay_payload, replay_base = _read_json_artifact_summary(args.rollback_replay_report)
+    apply_payload = apply_payload or {}
+    bundle_payload = bundle_payload or {}
+    replay_payload = replay_payload or {}
+
+    apply_privacy = apply_payload.get("privacy", {}) if isinstance(apply_payload.get("privacy"), dict) else {}
+    apply_blocked_reasons: list[str] = []
+    if not apply_base["provided"]:
+        apply_blocked_reasons.append("apply_report_not_provided")
+    if apply_base["error"] is not None:
+        apply_blocked_reasons.append("apply_report_unreadable")
+    if apply_base["kind"] != "dogfood_g4_review_queue_apply":
+        apply_blocked_reasons.append("apply_report_kind_invalid")
+    if apply_base["read_only"] is not False:
+        apply_blocked_reasons.append("apply_report_not_mutating_artifact")
+    if apply_base["mutated"] is not True:
+        apply_blocked_reasons.append("apply_report_mutation_not_confirmed")
+    if apply_base["default_retrieval_unchanged"] is not True:
+        apply_blocked_reasons.append("apply_report_default_retrieval_changed")
+    if apply_payload.get("policy") != "g4-review-queue-apply-v1":
+        apply_blocked_reasons.append("apply_report_policy_invalid")
+    if apply_payload.get("approval_phrase_matched") is not True:
+        apply_blocked_reasons.append("apply_report_approval_phrase_not_matched")
+    applied_count = _safe_int(apply_payload.get("applied_count"))
+    max_apply = _safe_int(apply_payload.get("max_apply"))
+    if applied_count < 1:
+        apply_blocked_reasons.append("apply_report_no_applied_items")
+    if max_apply < 1:
+        apply_blocked_reasons.append("apply_report_max_apply_invalid")
+    if max_apply > 0 and applied_count > max_apply:
+        apply_blocked_reasons.append("apply_report_exceeds_max_apply")
+    if apply_payload.get("memory_status_mutated") is not False:
+        apply_blocked_reasons.append("apply_report_memory_status_mutated")
+    if apply_payload.get("ordinary_conversation_auto_approval") is not False:
+        apply_blocked_reasons.append("apply_report_ordinary_auto_approval_enabled")
+    if not _privacy_flags_are_ref_safe(apply_privacy):
+        apply_blocked_reasons.append("apply_report_privacy_flags_not_ref_safe")
+
+    backup = apply_payload.get("backup", {}) if isinstance(apply_payload.get("backup"), dict) else {}
+    backup_path_value = backup.get("path") if isinstance(backup.get("path"), str) else None
+    backup_sha256_value = backup.get("sha256") if isinstance(backup.get("sha256"), str) else None
+    backup_exists = False
+    backup_sha256_matches = False
+    backup_blocked_reasons: list[str] = []
+    if not backup_path_value:
+        backup_blocked_reasons.append("backup_path_missing")
+    else:
+        backup_path = Path(backup_path_value).expanduser().resolve(strict=False)
+        backup_exists = backup_path.exists()
+        if not backup_exists:
+            backup_blocked_reasons.append("backup_missing")
+        elif not backup_sha256_value:
+            backup_blocked_reasons.append("backup_sha256_missing")
+        else:
+            backup_sha256_matches = _sha256_file(backup_path) == backup_sha256_value
+            if not backup_sha256_matches:
+                backup_blocked_reasons.append("backup_sha256_mismatch")
+    backup_gate = {
+        "pass": not backup_blocked_reasons,
+        "blocked_reasons": sorted(set(backup_blocked_reasons)),
+        "backup_path_provided": backup_path_value is not None,
+        "backup_exists": backup_exists,
+        "backup_sha256_matches": backup_sha256_matches,
+        "backup_sha256": backup_sha256_value,
+    }
+
+    apply_gate = {
+        **apply_base,
+        "pass": not apply_blocked_reasons,
+        "blocked_reasons": sorted(set(apply_blocked_reasons)),
+        "policy": apply_payload.get("policy"),
+        "approval_phrase_matched": apply_payload.get("approval_phrase_matched") is True,
+        "applied_count": applied_count,
+        "already_applied_count": _safe_int(apply_payload.get("already_applied_count")),
+        "skipped_count": _safe_int(apply_payload.get("skipped_count")),
+        "max_apply": max_apply,
+        "memory_status_mutated": apply_payload.get("memory_status_mutated") is True,
+        "memory_reinforcement_mutated": apply_payload.get("memory_reinforcement_mutated") is True,
+        "ordinary_conversation_auto_approval": apply_payload.get("ordinary_conversation_auto_approval") is True,
+    }
+    apply_gate.pop("error", None)
+
+    bundle_quality = bundle_payload.get("quality_gate", {}) if isinstance(bundle_payload.get("quality_gate"), dict) else {}
+    bundle_privacy = bundle_payload.get("privacy", {}) if isinstance(bundle_payload.get("privacy"), dict) else {}
+    bundle_blocked_reasons: list[str] = []
+    if not bundle_base["provided"]:
+        bundle_blocked_reasons.append("post_apply_bundle_report_not_provided")
+    if bundle_base["error"] is not None:
+        bundle_blocked_reasons.append("post_apply_bundle_report_unreadable")
+    if bundle_base["kind"] != "dogfood_g4_operator_apply_bundle":
+        bundle_blocked_reasons.append("post_apply_bundle_kind_invalid")
+    if bundle_base["read_only"] is not True:
+        bundle_blocked_reasons.append("post_apply_bundle_not_read_only")
+    if bundle_base["mutated"] is not False:
+        bundle_blocked_reasons.append("post_apply_bundle_mutated")
+    if bundle_base["default_retrieval_unchanged"] is not True:
+        bundle_blocked_reasons.append("post_apply_bundle_default_retrieval_changed")
+    if bundle_quality.get("pass") is not True:
+        bundle_blocked_reasons.append("post_apply_bundle_not_green")
+    for reason in bundle_quality.get("blocked_reasons", []) if isinstance(bundle_quality.get("blocked_reasons"), list) else []:
+        if reason:
+            bundle_blocked_reasons.append(str(reason))
+    if bundle_payload.get("broad_g4_apply_allowed") is not False:
+        bundle_blocked_reasons.append("post_apply_bundle_broad_apply_allowed")
+    if bundle_payload.get("apply_executed") is not False:
+        bundle_blocked_reasons.append("post_apply_bundle_apply_executed")
+    if bundle_payload.get("apply_supported") is not False:
+        bundle_blocked_reasons.append("post_apply_bundle_apply_supported")
+    if bundle_payload.get("ordinary_conversation_auto_approval") is not False:
+        bundle_blocked_reasons.append("post_apply_bundle_ordinary_auto_approval_enabled")
+    if not _privacy_flags_are_ref_safe(bundle_privacy):
+        bundle_blocked_reasons.append("post_apply_bundle_privacy_flags_not_ref_safe")
+    bundle_gate = {
+        **bundle_base,
+        "pass": not bundle_blocked_reasons,
+        "blocked_reasons": sorted(set(bundle_blocked_reasons)),
+        "bounded_partial_apply_ready": bundle_payload.get("bounded_partial_apply_ready") is True,
+        "broad_g4_apply_allowed": bundle_payload.get("broad_g4_apply_allowed") is True,
+        "apply_executed": bundle_payload.get("apply_executed") is True,
+        "apply_supported": bundle_payload.get("apply_supported") is True,
+        "ordinary_conversation_auto_approval": bundle_payload.get("ordinary_conversation_auto_approval") is True,
+    }
+    bundle_gate.pop("error", None)
+
+    replay_quality = replay_payload.get("quality_gate", {}) if isinstance(replay_payload.get("quality_gate"), dict) else {}
+    replay_privacy = replay_payload.get("privacy", {}) if isinstance(replay_payload.get("privacy"), dict) else {}
+    replay_blocked_reasons: list[str] = []
+    if not replay_base["provided"]:
+        replay_blocked_reasons.append("rollback_replay_report_not_provided")
+    if replay_base["error"] is not None:
+        replay_blocked_reasons.append("rollback_replay_report_unreadable")
+    if replay_base["kind"] != "dogfood_rollback_replay_validate":
+        replay_blocked_reasons.append("rollback_replay_kind_invalid")
+    if replay_base["read_only"] is not True:
+        replay_blocked_reasons.append("rollback_replay_not_read_only")
+    if replay_base["mutated"] is not False:
+        replay_blocked_reasons.append("rollback_replay_mutated")
+    if replay_base["default_retrieval_unchanged"] is not True:
+        replay_blocked_reasons.append("rollback_replay_default_retrieval_changed")
+    if replay_quality.get("pass") is not True:
+        replay_blocked_reasons.append("rollback_replay_not_green")
+    for reason in replay_quality.get("blocked_reasons", []) if isinstance(replay_quality.get("blocked_reasons"), list) else []:
+        if reason:
+            replay_blocked_reasons.append(str(reason))
+    if not _privacy_flags_are_ref_safe(replay_privacy):
+        replay_blocked_reasons.append("rollback_replay_privacy_flags_not_ref_safe")
+    replay_gate = {
+        **replay_base,
+        "pass": not replay_blocked_reasons,
+        "blocked_reasons": sorted(set(replay_blocked_reasons)),
+    }
+    replay_gate.pop("error", None)
+
+    blocked_reasons = sorted(
+        set(
+            [
+                *apply_gate["blocked_reasons"],
+                *backup_gate["blocked_reasons"],
+                *bundle_gate["blocked_reasons"],
+                *replay_gate["blocked_reasons"],
+            ]
+        )
+    )
+    green = not blocked_reasons
+    payload = {
+        "kind": "dogfood_g4_post_apply_verification",
+        "read_only": True,
+        "mutated": False,
+        "verified_apply_mutated": apply_payload.get("mutated") is True,
+        "db_path": str(db_path),
+        "default_retrieval_unchanged": apply_base["default_retrieval_unchanged"] is True and bundle_base["default_retrieval_unchanged"] is True and replay_base["default_retrieval_unchanged"] is True,
+        "automation_stage": "bounded_operator_apply_post_apply_verification",
+        "apply_artifact_gate": apply_gate,
+        "backup_integrity_gate": backup_gate,
+        "post_apply_bundle_gate": bundle_gate,
+        "rollback_replay_gate": replay_gate,
+        "quality_gate": {
+            "pass": green,
+            "decision": "g4_post_apply_verification_green_stop_before_next_mutation" if green else "g4_post_apply_verification_blocked",
+            "blocked_reasons": blocked_reasons,
+        },
+        "next_step": "stop_or_collect_operator_review_before_any_further_mutation",
+        "safety_exclusions": {
+            "broad_g4_background_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_migration": False,
+            "collapse_delete_apply": False,
+            "live_telemetry_reset": False,
+            "additional_apply_without_new_approval": False,
+        },
+        "privacy": {
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "raw_reason_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_g4_operator_apply_bundle_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.max_apply < 1:
         raise ValueError("dogfood g4-operator-apply-bundle max-apply must be >= 1")
@@ -12317,6 +12527,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_readiness_gate_summary_parser.add_argument("--retrieval-ranking-report", type=Path, required=True)
     dogfood_g4_readiness_gate_summary_parser.add_argument("--operator-apply-bundle-report", type=Path, required=True)
     dogfood_g4_readiness_gate_summary_parser.add_argument("--output", type=Path)
+    dogfood_g4_post_apply_verification_parser = dogfood_subparsers.add_parser(
+        "g4-post-apply-verification",
+        help="Validate saved G4 apply, post-apply bundle, and rollback replay artifacts as a read-only stop gate; does not apply mutations.",
+    )
+    dogfood_g4_post_apply_verification_parser.add_argument("db_path", type=Path)
+    dogfood_g4_post_apply_verification_parser.add_argument("--apply-report", type=Path, required=True)
+    dogfood_g4_post_apply_verification_parser.add_argument("--post-apply-bundle-report", type=Path, required=True)
+    dogfood_g4_post_apply_verification_parser.add_argument("--rollback-replay-report", type=Path, required=True)
+    dogfood_g4_post_apply_verification_parser.add_argument("--output", type=Path)
     dogfood_g4_operator_apply_bundle_parser = dogfood_subparsers.add_parser(
         "g4-operator-apply-bundle",
         help="Generate read-only G4 approval, preview, readiness artifacts and an exact manual apply command preview; does not apply mutations.",
@@ -13400,6 +13619,9 @@ def main() -> None:
             return
         if args.dogfood_action == "g4-readiness-gate-summary":
             print(json.dumps(_dogfood_g4_readiness_gate_summary_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-post-apply-verification":
+            print(json.dumps(_dogfood_g4_post_apply_verification_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-operator-apply-bundle":
             print(json.dumps(_dogfood_g4_operator_apply_bundle_payload(args), indent=2))
