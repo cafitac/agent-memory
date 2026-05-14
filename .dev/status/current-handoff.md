@@ -1,7 +1,33 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 16:34 KST
+Last updated: 2026-05-14 17:12 KST
+
+## Source checkpoint: fresh-epoch runway bundles comparison and reconciliation
+
+This source slice fixes the operational gap between repeated fresh-epoch reports and the manual telemetry-reconciliation decision.
+
+Implemented and verified in source:
+
+- New read-only `dogfood fresh-epoch-runway` command runs the full artifact workflow in one operator-safe step: `fresh-epoch` -> `fresh-epoch-compare` -> `telemetry-reconciliation`.
+- The command writes three durable JSON artifacts under `--report-dir`: fresh-epoch readiness, fresh-epoch comparison, and telemetry reconciliation.
+- `--baseline-report` can be repeated so previously saved fresh-epoch reports are included in the comparison before the current report is fed into reconciliation.
+- The aggregate runway payload remains ref-safe/privacy-safe: no raw conversation content, raw query text, raw trace summary, sample values, or raw source report body.
+- The runway quality gate only turns green when fresh-epoch, comparison, and reconciliation gates are all green. It still sets `telemetry_reset_apply_supported=false`, `apply_supported=false`, keeps default retrieval unchanged, and requires human review.
+
+Verification:
+
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_fresh_epoch_runway_writes_artifacts_and_reconciliation -q` -> `1 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'fresh_epoch_runway or fresh_epoch_compare or telemetry_reconciliation'` -> `5 passed, 127 deselected`.
+- `.venv/bin/python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py` -> passed.
+- `.venv/bin/python -m pytest tests/ -q` -> `314 passed, 1 xfailed`.
+- Source-checkout live read-only smoke wrote artifacts to `/Users/reddit/.agent-memory/reports/v0.1.160-source-fresh-epoch-runway-20260514T081138Z/`; it correctly stayed blocked on the current mixed live corpus with `fresh_epoch_quality_gate_not_green`, `fresh_epoch_comparison_not_green`, and `telemetry_reconciliation_not_green`.
+
+Next after this slice:
+
+- Commit/push/PR this source checkpoint.
+- After merge/release/runtime rollout, use `dogfood fresh-epoch-runway` for repeated real metadata-rich runtime windows instead of manually chaining three commands.
+- Treat a green runway as reset-avoidance evidence only. Do not run live telemetry reset, default ranking migration, broad G4/background apply, collapse/delete, or ordinary-conversation auto-approval without a separate explicit operator approval corridor.
 
 ## Source checkpoint: telemetry reconciliation consumes fresh-epoch comparison evidence
 
