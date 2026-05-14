@@ -1,7 +1,27 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:45 KST
+Last updated: 2026-05-14 20:48 KST
+
+## Source-checkout smoke: G4 operator bundle consumes saved green v0.1.161 gate artifacts
+
+This follow-up validates the newly added source-checkout operator bundle against the already collected live/runtime v0.1.161 evidence, without applying any mutation.
+
+Implemented/evidence:
+
+- Ran source checkout `dogfood g4-operator-apply-bundle` against `/Users/reddit/.agent-memory/memory.db`.
+- Report directory: `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/`.
+- Input artifacts were the saved green v0.1.161 retrieval ranking, rollback confidence, rollback replay, and telemetry reconciliation reports.
+- Generated artifacts: `g4-review-queue-approval-report.json`, `g4-review-queue-preview.json`, `g4-apply-readiness.json`, and `g4-operator-apply-bundle.json`.
+- Bundle quality gate passed with decision `operator_apply_bundle_ready_for_exact_manual_apply`.
+- Child artifact summaries: human-review approval pass true, queue preview pass true, apply-readiness pass true, queue count `8`, `bounded_partial_apply_ready=true`.
+- Privacy/safety stayed ref-safe: no raw proposal JSON, raw content, raw query text, raw trace summary, raw reason, or sample values; `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, ordinary conversation auto-approval false.
+
+Next after this smoke:
+
+- Do not release solely for this smoke/doc checkpoint.
+- The exact bounded operator-approved G4 queue apply runbook has been drafted at `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md`. It separates readiness from authorization and requires the exact policy/approval phrase, actor, private reason, backup path, bounded `--max-apply`, audit output, and post-apply verification before any live apply can be run.
+- Generic continuation still must not execute live apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, or ordinary conversation auto-approval.
 
 ## Source checkpoint: G4 read-only operator apply bundle
 

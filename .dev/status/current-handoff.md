@@ -1,7 +1,29 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:45 KST
+Last updated: 2026-05-14 20:48 KST
+
+## Source-checkout live read-only smoke: G4 operator bundle over saved v0.1.161 artifacts
+
+Completed the safe next slice after commit `d75e034` without running live apply.
+
+- Command path: source checkout `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-bundle`.
+- Live DB: `/Users/reddit/.agent-memory/memory.db`.
+- Output directory: `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/`.
+- Inputs were the saved green v0.1.161 gate artifacts:
+  - retrieval ranking: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/retrieval-ranking-shadow.json`
+  - rollback confidence: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/rollback-confidence.json`
+  - rollback replay: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/rollback-replay-validate.json`
+  - telemetry reconciliation: `/Users/reddit/.agent-memory/reports/v0.1.161-fresh-runway-green-20260514T103021Z/green-telemetry-reconciliation.json`
+- Generated artifacts:
+  - `g4-review-queue-approval-report.json` sha256 `0efbb0a1376afc950a73908bb3798a2549e40b0395016b271b71b105dc725a46`
+  - `g4-review-queue-preview.json` sha256 `3a985fd1264f4ca7a0ee52f816ca2531b056951dd17d8aea17f15bddcb68ea93`
+  - `g4-apply-readiness.json` sha256 `041f27ecc75923930fed0cac1e7c9678d663b3827d0253786590b3703df4fc7e`
+  - `g4-operator-apply-bundle.json`
+- Result: `quality_gate.pass=true`, decision `operator_apply_bundle_ready_for_exact_manual_apply`, queue count `8`, `bounded_partial_apply_ready=true`.
+- Safety state stayed unchanged: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, ordinary conversation auto-approval false, raw reason/content/query/trace/proposal JSON absent.
+
+This smoke means the source-checkout operator bundle can consume the saved green v0.1.161 gates and produce the exact manual-apply packet. It is still not authorization to apply. Generic continuation remains limited to read-only evidence and source/doc/test work.
 
 ## Branch/release policy update
 

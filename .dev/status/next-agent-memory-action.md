@@ -1,7 +1,22 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:45 KST
+Last updated: 2026-05-14 20:48 KST
+
+## Just completed: source-checkout read-only G4 operator bundle smoke
+
+- Ran source checkout `dogfood g4-operator-apply-bundle` against live `/Users/reddit/.agent-memory/memory.db` using saved green v0.1.161 ranking, rollback confidence, rollback replay, and telemetry reconciliation artifacts.
+- Report directory: `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/`.
+- Main artifact: `g4-operator-apply-bundle.json`.
+- Generated child artifacts: `g4-review-queue-approval-report.json`, `g4-review-queue-preview.json`, `g4-apply-readiness.json`.
+- Result: quality gate green, queue count `8`, `bounded_partial_apply_ready=true`, and decision `operator_apply_bundle_ready_for_exact_manual_apply`.
+- Safety was preserved: read-only/no-mutation/default unchanged; `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, ordinary conversation auto-approval false, and no raw reason/content/query/trace/proposal JSON output.
+
+Recommended next work now:
+
+1. Commit this doc/status/runbook update if desired; no release yet.
+2. The exact bounded G4 queue apply runbook now lives at `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md`. It must not be executed unless the operator gives explicit approval for live apply with backup path, actor, private reason, bounded `--max-apply`, policy `g4-review-queue-apply-v1`, and exact approval phrase `apply-approved-g4-review-queue-items-v1`.
+3. Keep live telemetry reset, default-ranking migration, broad/background G4 apply, collapse/delete, unreviewed promotion, and ordinary conversation auto-approval blocked.
 
 ## Operating policy: develop first, slower release cadence
 
