@@ -4745,6 +4745,273 @@ def test_python_module_cli_dogfood_g4_readiness_gate_summary_blocks_mixed_artifa
     }
 
 
+def test_python_module_cli_dogfood_g4_operator_apply_packet_emits_machine_readable_checklist_without_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-operator-apply-packet.db"
+    initialize_database(db_path)
+    operator_bundle_report = tmp_path / "g4-operator-apply-bundle.json"
+    operator_bundle_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_operator_apply_bundle",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "apply_executed": False,
+                "apply_supported": False,
+                "bounded_partial_apply_ready": True,
+                "broad_g4_apply_allowed": False,
+                "ordinary_conversation_auto_approval": False,
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "operator_apply_bundle_ready_for_exact_manual_apply",
+                    "blocked_reasons": [],
+                },
+                "artifact_summaries": {"queue_count": 8, "apply_readiness_pass": True},
+                "privacy": {
+                    "proposal_json_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                    "aggregate_or_ref_only": True,
+                },
+                "secret": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    readiness_summary_report = tmp_path / "g4-readiness-gate-summary.json"
+    readiness_summary_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_readiness_gate_summary",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "bounded_g4_preflight_summary_green_for_manual_operator_apply",
+                    "blocked_reasons": [],
+                },
+                "operator_apply_bundle_gate": {"pass": True, "bounded_partial_apply_ready": True},
+                "retrieval_ranking_gate": {"pass": True, "fixture_task_count": 50},
+                "privacy": {
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                    "aggregate_or_ref_only": True,
+                },
+                "secret": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with sqlite3.connect(db_path) as connection:
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("facts", "procedures", "episodes")
+        }
+
+    output_path = tmp_path / "operator-apply-packet.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-operator-apply-packet",
+            str(db_path),
+            "--operator-apply-bundle-report",
+            str(operator_bundle_report),
+            "--readiness-gate-summary-report",
+            str(readiness_summary_report),
+            "--actor",
+            "operator@example.test",
+            "--max-apply",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_g4_operator_apply_packet"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["apply_executed"] is False
+    assert payload["apply_supported"] is False
+    assert payload["broad_g4_apply_allowed"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "operator_apply_packet_ready_for_manual_review_only",
+        "blocked_reasons": [],
+    }
+    assert payload["operator_checklist"] == {
+        "pre_authorization_required": True,
+        "required_policy": "g4-review-queue-apply-v1",
+        "required_approval_phrase": "apply-approved-g4-review-queue-items-v1",
+        "actor_required": True,
+        "private_reason_required": True,
+        "backup_path_required": True,
+        "audit_output_path_required": True,
+        "max_apply": 1,
+        "post_apply_verification_required": True,
+        "repeated_apply_requires_new_packet": True,
+    }
+    assert payload["manual_apply_command_preview"] == [
+        "agent-memory",
+        "dogfood",
+        "g4-review-queue-apply",
+        str(db_path.resolve(strict=False)),
+        "--policy",
+        "g4-review-queue-apply-v1",
+        "--approval-phrase",
+        "apply-approved-g4-review-queue-items-v1",
+        "--actor",
+        "operator@example.test",
+        "--reason",
+        "<operator-private-reason>",
+        "--backup-path",
+        "<required-backup-path>",
+        "--max-apply",
+        "1",
+        "--output",
+        "<apply-audit-output.json>",
+    ]
+    assert payload["post_apply_verification_command_template"] == [
+        "agent-memory",
+        "dogfood",
+        "g4-post-apply-verification",
+        str(db_path.resolve(strict=False)),
+        "--apply-report",
+        "<apply-audit-output.json>",
+        "--post-apply-bundle-report",
+        "<post-apply-operator-bundle.json>",
+        "--rollback-replay-report",
+        "<post-apply-rollback-replay.json>",
+        "--output",
+        "<post-apply-verification.json>",
+    ]
+    assert payload["artifact_gates"]["operator_apply_bundle"]["pass"] is True
+    assert payload["artifact_gates"]["readiness_gate_summary"]["pass"] is True
+    assert payload["privacy"] == {
+        "raw_content_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "raw_reason_included": False,
+        "sample_values_included": False,
+        "aggregate_or_ref_only": True,
+    }
+    assert payload["safety_exclusions"] == {
+        "broad_g4_background_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_migration": False,
+        "collapse_delete_apply": False,
+        "live_telemetry_reset": False,
+        "apply_without_exact_operator_approval": False,
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in before_counts
+        }
+    assert after_counts == before_counts
+
+
+def test_python_module_cli_dogfood_g4_operator_apply_packet_blocks_unsafe_or_stale_artifacts(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-operator-apply-packet-blocked.db"
+    initialize_database(db_path)
+    operator_bundle_report = tmp_path / "g4-operator-apply-bundle-blocked.json"
+    operator_bundle_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_operator_apply_bundle",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "apply_executed": True,
+                "apply_supported": True,
+                "bounded_partial_apply_ready": False,
+                "broad_g4_apply_allowed": True,
+                "ordinary_conversation_auto_approval": True,
+                "quality_gate": {"pass": False, "blocked_reasons": ["review_queue_not_green"]},
+                "privacy": {"raw_reason_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    readiness_summary_report = tmp_path / "g4-readiness-gate-summary-blocked.json"
+    readiness_summary_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_readiness_gate_summary",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": False, "blocked_reasons": ["operator_apply_bundle_not_green"]},
+                "privacy": {"sample_values_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-operator-apply-packet",
+            str(db_path),
+            "--operator-apply-bundle-report",
+            str(operator_bundle_report),
+            "--readiness-gate-summary-report",
+            str(readiness_summary_report),
+            "--actor",
+            "operator@example.test",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["apply_executed"] is False
+    assert payload["apply_supported"] is False
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "operator_apply_packet_blocked_before_manual_apply"
+    assert set(payload["quality_gate"]["blocked_reasons"]) >= {
+        "operator_apply_bundle_not_green",
+        "operator_apply_bundle_not_bounded_ready",
+        "operator_apply_bundle_broad_apply_allowed",
+        "operator_apply_bundle_apply_executed",
+        "operator_apply_bundle_apply_supported",
+        "operator_apply_bundle_ordinary_auto_approval_enabled",
+        "operator_apply_bundle_privacy_flags_not_ref_safe",
+        "readiness_gate_summary_not_green",
+        "readiness_gate_summary_privacy_flags_not_ref_safe",
+    }
+
+
 def test_python_module_cli_dogfood_g4_post_apply_verification_validates_apply_bundle_and_replay_without_mutation(
     tmp_path: Path,
 ) -> None:
