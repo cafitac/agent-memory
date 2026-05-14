@@ -3159,6 +3159,217 @@ def test_python_module_cli_dogfood_fresh_epoch_filters_historical_telemetry_with
 
 
 
+def test_python_module_cli_dogfood_fresh_epoch_compare_gates_metadata_rich_reports_without_leaks(
+    tmp_path: Path,
+) -> None:
+    first_report = tmp_path / "fresh-epoch-1.json"
+    second_report = tmp_path / "fresh-epoch-2.json"
+    first_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_fresh_epoch_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "epoch": {
+                    "started_at": "2026-05-10 00:00:00",
+                    "historical_rows_excluded": {"retrieval_observations": 10},
+                    "latest_created_at": "2026-05-10 00:05:00",
+                },
+                "coverage": {
+                    "observation_count": 2,
+                    "trace_count": 2,
+                    "observation_trace_coverage_ratio": 1.0,
+                },
+                "empty_retrieval_diagnostics": {
+                    "count": 1,
+                    "ratio": 0.5,
+                    "unknown_outcome_drilldown": {"count": 0, "unresolved_count": 0},
+                    "metadata_gap_diagnostic": {
+                        "unknown_empty_outcome_count": 0,
+                        "unresolved_adapter_payload_gap_count": 0,
+                        "classified_missing_outcome_count": 0,
+                        "dominant_blocker": "none",
+                        "classification_confidence": "complete",
+                    },
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "fresh_epoch_ready_to_compare_against_historical",
+                    "blocked_reasons": [],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    second_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_fresh_epoch_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "epoch": {
+                    "started_at": "2026-05-10 00:00:00",
+                    "historical_rows_excluded": {"retrieval_observations": 11},
+                    "latest_created_at": "2026-05-10 00:10:00",
+                },
+                "coverage": {
+                    "observation_count": 3,
+                    "trace_count": 3,
+                    "observation_trace_coverage_ratio": 1.0,
+                },
+                "empty_retrieval_diagnostics": {
+                    "count": 1,
+                    "ratio": 0.3333333333,
+                    "unknown_outcome_drilldown": {"count": 0, "unresolved_count": 0},
+                    "metadata_gap_diagnostic": {
+                        "unknown_empty_outcome_count": 0,
+                        "unresolved_adapter_payload_gap_count": 0,
+                        "classified_missing_outcome_count": 0,
+                        "dominant_blocker": "none",
+                        "classification_confidence": "complete",
+                    },
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "fresh_epoch_ready_to_compare_against_historical",
+                    "blocked_reasons": [],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "fresh-epoch-compare.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "fresh-epoch-compare",
+            "--report",
+            str(first_report),
+            "--report",
+            str(second_report),
+            "--output",
+            str(output_path),
+            "--min-report-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_fresh_epoch_comparison"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["report_count"] == 2
+    assert payload["aggregate"]["quality_gate_pass_count"] == 2
+    assert payload["aggregate"]["observation_count_total"] == 5
+    assert payload["aggregate"]["trace_coverage_ratio_min"] == 1.0
+    assert payload["aggregate"]["empty_retrieval_ratio_max"] == 0.5
+    assert payload["aggregate"]["unresolved_unknown_empty_outcome_count_total"] == 0
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "fresh_epoch_collection_stable_for_historical_comparison",
+        "blocked_reasons": [],
+    }
+    assert payload["automation_policy"]["telemetry_reset_apply_supported"] is False
+    assert payload["privacy"]["raw_conversation_content_included"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+def test_python_module_cli_dogfood_fresh_epoch_compare_blocks_unresolved_metadata_gap(
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "fresh-epoch-gap.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_fresh_epoch_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "epoch": {"started_at": "2026-05-10 00:00:00", "latest_created_at": "2026-05-10 00:05:00"},
+                "coverage": {"observation_count": 1, "trace_count": 1, "observation_trace_coverage_ratio": 1.0},
+                "empty_retrieval_diagnostics": {
+                    "count": 1,
+                    "ratio": 1.0,
+                    "unknown_outcome_drilldown": {"count": 1, "unresolved_count": 1},
+                    "metadata_gap_diagnostic": {
+                        "unknown_empty_outcome_count": 1,
+                        "unresolved_adapter_payload_gap_count": 1,
+                        "classified_missing_outcome_count": 0,
+                        "dominant_blocker": "adapter_payload_gap",
+                        "classification_confidence": "low",
+                    },
+                },
+                "quality_gate": {
+                    "pass": False,
+                    "decision": "continue_fresh_epoch_dogfooding",
+                    "blocked_reasons": ["epoch_empty_retrieval_outcome_unknown"],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "fresh-epoch-compare",
+            "--report",
+            str(report_path),
+            "--min-report-count",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["aggregate"]["unresolved_unknown_empty_outcome_count_total"] == 1
+    assert payload["aggregate"]["metadata_dominant_blocker_counts"] == {"adapter_payload_gap": 1}
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "continue_fresh_epoch_collection_before_historical_comparison"
+    assert payload["quality_gate"]["blocked_reasons"] == [
+        "fresh_epoch_quality_gate_not_stable",
+        "unresolved_fresh_epoch_metadata_gap_present",
+        "blocked_reasons_present",
+    ]
+
+
 def test_python_module_cli_dogfood_fresh_epoch_classifies_unknown_empty_retrieval_outcomes(
     tmp_path: Path,
 ) -> None:

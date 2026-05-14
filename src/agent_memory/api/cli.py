@@ -5166,6 +5166,203 @@ def _scheduled_dry_run_report_summary(path: Path) -> dict[str, Any]:
     }
 
 
+def _fresh_epoch_report_summary(path: Path) -> dict[str, Any]:
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+    except Exception as exc:
+        return {
+            "path": str(path),
+            "report_sha256": None,
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "epoch_started_at": None,
+            "latest_created_at": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "unreadable",
+            "blocked_reasons": ["report_unreadable"],
+            "observation_count": 0,
+            "trace_count": 0,
+            "trace_coverage_ratio": 0.0,
+            "empty_retrieval_ratio": 0.0,
+            "unknown_empty_outcome_count": 0,
+            "unresolved_unknown_empty_outcome_count": 0,
+            "classified_missing_outcome_count": 0,
+            "metadata_dominant_blocker": "unknown",
+            "metadata_classification_confidence": "unknown",
+            "privacy_flags": {},
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(raw, dict):
+        return {
+            "path": str(path),
+            "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "epoch_started_at": None,
+            "latest_created_at": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "invalid",
+            "blocked_reasons": ["report_not_json_object"],
+            "observation_count": 0,
+            "trace_count": 0,
+            "trace_coverage_ratio": 0.0,
+            "empty_retrieval_ratio": 0.0,
+            "unknown_empty_outcome_count": 0,
+            "unresolved_unknown_empty_outcome_count": 0,
+            "classified_missing_outcome_count": 0,
+            "metadata_dominant_blocker": "unknown",
+            "metadata_classification_confidence": "unknown",
+            "privacy_flags": {},
+            "error": None,
+        }
+
+    epoch = raw.get("epoch", {}) if isinstance(raw.get("epoch"), dict) else {}
+    coverage = raw.get("coverage", {}) if isinstance(raw.get("coverage"), dict) else {}
+    empty = raw.get("empty_retrieval_diagnostics", {}) if isinstance(raw.get("empty_retrieval_diagnostics"), dict) else {}
+    metadata_gap = empty.get("metadata_gap_diagnostic", {}) if isinstance(empty.get("metadata_gap_diagnostic"), dict) else {}
+    unknown_drilldown = empty.get("unknown_outcome_drilldown", {}) if isinstance(empty.get("unknown_outcome_drilldown"), dict) else {}
+    quality_gate = raw.get("quality_gate", {}) if isinstance(raw.get("quality_gate"), dict) else {}
+    blocked_reasons = quality_gate.get("blocked_reasons", []) if isinstance(quality_gate.get("blocked_reasons"), list) else []
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    return {
+        "path": str(path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": raw.get("kind"),
+        "read_only": raw.get("read_only"),
+        "mutated": raw.get("mutated"),
+        "default_retrieval_unchanged": raw.get("default_retrieval_unchanged"),
+        "epoch_started_at": epoch.get("started_at"),
+        "latest_created_at": epoch.get("latest_created_at"),
+        "quality_gate_pass": quality_gate.get("pass") is True,
+        "quality_gate_decision": str(quality_gate.get("decision", "unknown")),
+        "blocked_reasons": sorted(str(reason) for reason in blocked_reasons if reason),
+        "observation_count": _safe_int(coverage.get("observation_count")),
+        "trace_count": _safe_int(coverage.get("trace_count")),
+        "trace_coverage_ratio": round(_safe_float(coverage.get("observation_trace_coverage_ratio")), 4),
+        "empty_retrieval_ratio": round(_safe_float(empty.get("ratio")), 4),
+        "unknown_empty_outcome_count": _safe_int(metadata_gap.get("unknown_empty_outcome_count", unknown_drilldown.get("count"))),
+        "unresolved_unknown_empty_outcome_count": _safe_int(
+            metadata_gap.get("unresolved_adapter_payload_gap_count", unknown_drilldown.get("unresolved_count"))
+        ),
+        "classified_missing_outcome_count": _safe_int(metadata_gap.get("classified_missing_outcome_count")),
+        "metadata_dominant_blocker": str(metadata_gap.get("dominant_blocker", "unknown")),
+        "metadata_classification_confidence": str(metadata_gap.get("classification_confidence", "unknown")),
+        "privacy_flags": {
+            "raw_conversation_content_included": privacy.get("raw_conversation_content_included") is True,
+            "sample_values_included": privacy.get("sample_values_included") is True,
+            "raw_query_text_included": privacy.get("raw_query_text_included") is True,
+            "raw_trace_summary_included": privacy.get("raw_trace_summary_included") is True,
+        },
+        "error": None,
+    }
+
+
+def _fresh_epoch_comparison_report(
+    *,
+    report_paths: list[Path],
+    output_path: Path | None,
+    min_report_count: int,
+) -> dict[str, Any]:
+    if not report_paths:
+        raise ValueError("dogfood fresh-epoch-compare requires at least one --report path")
+    if min_report_count < 1:
+        raise ValueError("dogfood fresh-epoch-compare min-report-count must be >= 1")
+
+    summaries = [_fresh_epoch_report_summary(path) for path in report_paths]
+    blocked_reasons = sorted({reason for summary in summaries for reason in summary.get("blocked_reasons", [])})
+    pass_count = sum(1 for summary in summaries if summary.get("quality_gate_pass") is True)
+    unresolved_total = sum(summary["unresolved_unknown_empty_outcome_count"] for summary in summaries)
+    unknown_total = sum(summary["unknown_empty_outcome_count"] for summary in summaries)
+    classified_total = sum(summary["classified_missing_outcome_count"] for summary in summaries)
+    coverage_ratios = [summary["trace_coverage_ratio"] for summary in summaries]
+    empty_ratios = [summary["empty_retrieval_ratio"] for summary in summaries]
+    quality_gate_counter = Counter(str(summary.get("quality_gate_decision", "unknown")) for summary in summaries)
+    metadata_blocker_counter = Counter(str(summary.get("metadata_dominant_blocker", "unknown")) for summary in summaries)
+    confidence_counter = Counter(str(summary.get("metadata_classification_confidence", "unknown")) for summary in summaries)
+
+    comparison_blocked_reasons: list[str] = []
+    if len(summaries) < min_report_count:
+        comparison_blocked_reasons.append("not_enough_fresh_epoch_reports")
+    if pass_count < len(summaries):
+        comparison_blocked_reasons.append("fresh_epoch_quality_gate_not_stable")
+    if unresolved_total:
+        comparison_blocked_reasons.append("unresolved_fresh_epoch_metadata_gap_present")
+    if blocked_reasons:
+        comparison_blocked_reasons.append("blocked_reasons_present")
+    if any(summary.get("kind") != "dogfood_fresh_epoch_readiness" for summary in summaries):
+        comparison_blocked_reasons.append("non_fresh_epoch_report_present")
+    if any(summary.get("read_only") is not True for summary in summaries):
+        comparison_blocked_reasons.append("report_not_read_only")
+    if any(summary.get("mutated") is True for summary in summaries):
+        comparison_blocked_reasons.append("report_claims_mutation")
+    if any(summary.get("default_retrieval_unchanged") is False for summary in summaries):
+        comparison_blocked_reasons.append("default_retrieval_changed")
+    if any(any(summary.get("privacy_flags", {}).values()) for summary in summaries):
+        comparison_blocked_reasons.append("privacy_flag_claims_raw_content")
+
+    passed = not comparison_blocked_reasons
+    payload = {
+        "kind": "dogfood_fresh_epoch_comparison",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "report_count": len(summaries),
+        "reports": summaries,
+        "aggregate": {
+            "quality_gate_pass_count": pass_count,
+            "quality_gate_decision_counts": {key: quality_gate_counter[key] for key in sorted(quality_gate_counter)},
+            "observation_count_total": sum(summary["observation_count"] for summary in summaries),
+            "trace_count_total": sum(summary["trace_count"] for summary in summaries),
+            "trace_coverage_ratio_min": min(coverage_ratios, default=0.0),
+            "trace_coverage_ratio_max": max(coverage_ratios, default=0.0),
+            "empty_retrieval_ratio_min": min(empty_ratios, default=0.0),
+            "empty_retrieval_ratio_max": max(empty_ratios, default=0.0),
+            "unknown_empty_outcome_count_total": unknown_total,
+            "unresolved_unknown_empty_outcome_count_total": unresolved_total,
+            "classified_missing_outcome_count_total": classified_total,
+            "metadata_dominant_blocker_counts": {key: metadata_blocker_counter[key] for key in sorted(metadata_blocker_counter)},
+            "metadata_classification_confidence_counts": {key: confidence_counter[key] for key in sorted(confidence_counter)},
+            "blocked_reasons": blocked_reasons,
+        },
+        "thresholds": {"min_report_count": min_report_count},
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "fresh_epoch_collection_stable_for_historical_comparison"
+                if passed
+                else "continue_fresh_epoch_collection_before_historical_comparison"
+            ),
+            "blocked_reasons": comparison_blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "telemetry_reset_apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "raw_report_included": False,
+        },
+        "suggested_next_steps": [
+            "Use a passing comparison only as reset-avoidance evidence for historical telemetry analysis.",
+            "Keep telemetry reset/apply in a separate reviewed corridor with explicit backup and approval phrase.",
+            "Keep broad G4 apply blocked until reviewed candidates have their own persist/apply gate evidence.",
+        ],
+    }
+    _write_json_report(output_path, payload)
+    return payload
+
+
 def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> dict[str, Any]:
     report_path = args.report.expanduser().resolve(strict=False)
     raw_text = report_path.read_text(encoding="utf-8")
@@ -11013,6 +11210,21 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_fresh_epoch_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_fresh_epoch_parser.add_argument("--min-evidence-count", type=int, default=2)
     dogfood_fresh_epoch_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
+
+    dogfood_fresh_epoch_compare_parser = dogfood_subparsers.add_parser(
+        "fresh-epoch-compare",
+        help="Compare saved fresh-epoch JSON reports with read-only stability gates before historical telemetry decisions.",
+    )
+    dogfood_fresh_epoch_compare_parser.add_argument(
+        "--report",
+        type=Path,
+        action="append",
+        required=True,
+        dest="reports",
+        help="Path to a JSON report produced by dogfood fresh-epoch; repeat for multiple runs.",
+    )
+    dogfood_fresh_epoch_compare_parser.add_argument("--output", type=Path)
+    dogfood_fresh_epoch_compare_parser.add_argument("--min-report-count", type=int, default=2)
     dogfood_telemetry_reset_preview_parser = dogfood_subparsers.add_parser(
         "telemetry-reset-preview",
         help="Preview aggregate telemetry-only reset candidates without deleting or mutating rows.",
@@ -12078,6 +12290,19 @@ def main() -> None:
             if not 0 <= args.high_empty_threshold <= 1:
                 raise ValueError("dogfood fresh-epoch high-empty-threshold must be between 0 and 1")
             print(json.dumps(_dogfood_fresh_epoch_payload(args), indent=2))
+            return
+
+        if args.dogfood_action == "fresh-epoch-compare":
+            print(
+                json.dumps(
+                    _fresh_epoch_comparison_report(
+                        report_paths=args.reports,
+                        output_path=args.output,
+                        min_report_count=args.min_report_count,
+                    ),
+                    indent=2,
+                )
+            )
             return
         if args.dogfood_action == "telemetry-reset-preview":
             print(json.dumps(_dogfood_telemetry_reset_preview_payload(args), indent=2))

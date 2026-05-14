@@ -1,7 +1,34 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 12:45 KST
+Last updated: 2026-05-14 16:21 KST
+
+## Source checkpoint: fresh-epoch comparison gate
+
+This source slice returns from the OSS package-surface work to the brain-like memory automation runway.
+
+Implemented and verified in source:
+
+- New read-only `dogfood fresh-epoch-compare` command compares saved `dogfood fresh-epoch` JSON reports across repeated fresh windows.
+- The comparison is aggregate/ref-safe only: it records report hashes, pass counts, coverage/empty-retrieval ranges, unknown/unresolved metadata-gap totals, blocker/confidence counts, and privacy flags without raw query/content/trace samples.
+- It passes only when enough reports are present, all source reports are read-only fresh-epoch readiness reports, all fresh-epoch gates pass, unresolved fresh metadata gaps are zero, no source blockers remain, default retrieval is unchanged, and privacy flags do not claim raw content exposure.
+- It explicitly does not support telemetry reset apply, broad apply, default ranking changes, or ordinary conversation auto-approval.
+- Regression tests cover both the green metadata-rich comparison and an unresolved adapter-payload metadata-gap blocker.
+
+Verification:
+
+- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'fresh_epoch or scheduled_compare'` -> `6 passed, 123 deselected`.
+- `.venv/bin/python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py` -> passed.
+- `.venv/bin/python -m pytest tests/ -q` -> `311 passed, 1 xfailed`.
+- `.venv/bin/python -m ruff check ...` could not run because repo-local venv has no `ruff` module installed.
+
+Recommended next work:
+
+1. Generate/collect repeated metadata-rich live/runtime fresh-epoch reports with explicit `--epoch-start` boundaries.
+2. Compare those saved reports with `dogfood fresh-epoch-compare --report ... --report ...`.
+3. If the comparison is green, use it only as reset-avoidance evidence for historical telemetry analysis; do not infer broad apply permission.
+4. Keep live default ranking on `conservative_legacy`; keep `graph_reinforced_v1` shadow-only until a separate explicit default-rollout decision.
+5. Keep broad G4/background apply, collapse/delete apply, telemetry reset apply, unreviewed promotion, and ordinary conversation auto-approval blocked.
 
 ## v0.1.158 npm package metadata/package-contents audit checkpoint
 
