@@ -1,8 +1,8 @@
-# First-run memory layer setup
+# First-run setup
 
-This guide is the safe first-run path for users who want to try agent-memory without learning the whole data model first.
+The default setup is npm-first and local-first.
 
-## What bootstrap creates
+## Install
 
 ```bash
 npm install -g @cafitac/agent-memory
@@ -10,70 +10,51 @@ agent-memory bootstrap
 agent-memory doctor
 ```
 
-`agent-memory bootstrap` is local-first. It creates or reuses:
+`bootstrap` creates or reuses the local SQLite database at:
 
-- `~/.agent-memory/memory.db` — the local SQLite database for curated memory.
-- `~/.hermes/config.yaml` — the Hermes config file where the pre-LLM shell hook is merged.
-
-Existing Hermes hooks are preserved. If bootstrap modifies an existing config it writes a `*.agent-memory.bak` backup next to the config file.
-
-## Safe default behavior
-
-Bootstrap installs the Hermes hook with the `conservative` preset. The generated hook is intentionally small and auditable:
-
-- one top memory by default
-- small prompt line, character, and token budgets
-- no alternative-memory detail in normal prompt context
-- no reason-code noise by default
-- fail closed when the database or retrieval path is unavailable
-
-The hook only reads approved memory and returns bounded context for the current prompt. It does not upload the database, sync it, or write back to Hermes session storage.
-
-## First memory
-
-```bash
-DB=~/.agent-memory/memory.db
-agent-memory create-fact "$DB" "agent-memory" "primary-install-path" "npm install -g @cafitac/agent-memory" "user:default"
-agent-memory approve-fact "$DB" 1
-agent-memory retrieve "$DB" "How should I install agent-memory?" --preferred-scope user:default
+```text
+~/.agent-memory/memory.db
 ```
 
-Normal retrieval is approved-only. Candidate, disputed, and deprecated memories stay out of prompt context unless you intentionally run a forensic command such as `agent-memory retrieve ... --status all`.
+It also adds the agent-memory pre-LLM hook to the local Hermes config when Hermes is present. Existing hook config is preserved where possible, and a backup is written before config changes. The default hook uses the conservative preset.
 
-## Verify the layer
+## Check the setup
 
 ```bash
 agent-memory doctor
+```
+
+If you use Hermes, also run:
+
+```bash
 hermes hooks doctor
 ```
 
-Expected result:
+Hermes may ask you to approve the new hook command the first time it runs.
 
-- the DB exists
-- the config exists
-- the hook is installed
-- Hermes hook diagnostics are healthy or show a clear local policy action such as accepting hooks
-
-## Back up before experiments
-
-Before trying dogfood, graph, or consolidation commands on a real memory DB, create a local backup bundle:
+## Use without global install
 
 ```bash
-DB=~/.agent-memory/memory.db
-agent-memory backup export "$DB" ~/.agent-memory/backups/memory.agent-memory-backup.zip
-agent-memory backup inspect ~/.agent-memory/backups/memory.agent-memory-backup.zip
+npm exec --yes --package @cafitac/agent-memory -- agent-memory doctor
 ```
 
-The manifest printed by `backup inspect` is metadata-only, but the bundle also contains a SQLite copy of your local memory DB. Treat backup bundles as private local data.
+## Privacy note
 
-## Disable or delete
+`agent-memory` is not a hosted service. By default, your memory database stays on your machine.
 
-To disable the hook without deleting memory, edit `~/.hermes/config.yaml` and remove the `agent-memory hermes-pre-llm-hook ...` entry from `hooks.pre_llm_call`.
+Treat these as private local data:
 
-To delete local memory data, remove the SQLite database after confirming you no longer need it:
+- `~/.agent-memory/memory.db`
+- backup bundles
+- exported graph or report files
+- debug/dogfood artifacts
+
+## Remove local data
+
+To delete local memory data after confirming you no longer need it:
 
 ```bash
 rm ~/.agent-memory/memory.db
 ```
 
-To fully revert bootstrap, remove the hook entry from `~/.hermes/config.yaml` and delete `~/.agent-memory/memory.db`. Restore the `*.agent-memory.bak` file if you want the exact pre-bootstrap Hermes config.
+To disable the Hermes hook, edit `~/.hermes/config.yaml` and remove the `agent-memory` hook entry from `hooks.pre_llm_call`.
