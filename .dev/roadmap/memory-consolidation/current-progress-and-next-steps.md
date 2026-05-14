@@ -1,7 +1,41 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 22:38 KST
+Last updated: 2026-05-14 11:50 KST
+
+## v0.1.157 OSS public-surface checkpoint
+
+This checkpoint records the README/npm-install-only cleanup after the v0.1.155 runtime measurement fix. It is a public OSS surface cleanup, not an automation enablement.
+
+Verified release state:
+
+- Release: `v0.1.157` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.157`).
+- npm: `@cafitac/agent-memory@0.1.157`.
+- PyPI: `cafitac-agent-memory==0.1.157`.
+- PR #341: `docs: make README npm-install only`.
+- PR #342: `chore: release v0.1.157 [skip release]`.
+- CI passed on PR #341, release-sync PR #342, and `main`.
+- Published npm smoke passed with `UV_NO_CACHE=1 npm exec --yes --package @cafitac/agent-memory@0.1.157 -- agent-memory doctor`.
+
+OSS README contract:
+
+- Keep README focused on npm installation and first command success.
+- Allowed top-level README content: one-line description, npm global install, `agent-memory bootstrap`, `agent-memory doctor`, npm one-shot usage, default local DB path, trust/deeper-doc links, and license.
+- Disallowed in README: G-stage/dogfood/operator runbooks, runtime QA artifacts, broad roadmap status, long examples, Hermes integration walkthroughs, Python-first install paths, and internal automation-policy detail.
+- Move any necessary detail to `docs/install-smoke.md`, `docs/first-run-memory-layer.md`, other linked docs, or `.dev`.
+
+Recommended next PR-sized slice:
+
+1. Audit `package.json` public metadata: description, keywords, homepage, repository, bugs, license, bin, and files.
+2. Run `npm pack --dry-run` and inspect the tarball file list for internal-only `.dev`, report, cache, worktree, or dogfood artifacts.
+3. Keep published npm smoke as the user-facing install gate.
+4. Do not combine this OSS package cleanup with brain-like memory automation changes.
+
+Automation guardrails remain unchanged:
+
+- Overall north-star remains about 78-80%; substrate/evidence plumbing about 87%; safe automatic mutation/promotion about 66-70%.
+- Live default ranking remains `conservative_legacy`; `graph_reinforced_v1` remains shadow-only.
+- Broad G4/background apply, collapse/delete apply, live telemetry reset, default ranking migration, unreviewed automatic promotion, and ordinary conversation auto-approval remain blocked.
 
 
 
