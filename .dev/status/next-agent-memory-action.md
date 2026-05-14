@@ -1,9 +1,25 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:48 KST
+Last updated: 2026-05-14 21:01 KST
 
-## Just completed: source-checkout read-only G4 operator bundle smoke
+## Just completed: source G4 readiness gate summary
+
+- Added read-only `dogfood g4-readiness-gate-summary`.
+- It consumes a saved retrieval-ranking experiment artifact plus a saved G4 operator-apply-bundle artifact and emits one ref-safe preflight summary.
+- It keeps `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true` and only reports whether the existing manual operator-apply corridor is ready.
+- It still does not execute apply, does not support broad G4 apply, does not migrate default retrieval ranking, and does not allow ordinary-conversation auto-approval.
+- Source-checkout live read-only smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json` with `quality_gate.pass=true`.
+- Full verification: `.venv/bin/python -m pytest tests/ -q` -> `322 passed, 1 xfailed`.
+
+Recommended next work now:
+
+1. Commit this source/test/doc slice; no release yet.
+2. If still choosing safe B-direction work, strengthen post-apply verification/rollback evidence contracts around `g4-review-queue-apply` without running live apply.
+3. Only run live bounded G4 queue apply if the operator separately gives the exact approval phrase `apply-approved-g4-review-queue-items-v1` plus actor, private reason, backup path, policy `g4-review-queue-apply-v1`, and bounded `--max-apply`.
+4. Keep live telemetry reset, default-ranking migration, broad/background G4 apply, collapse/delete, unreviewed promotion, and ordinary conversation auto-approval blocked.
+
+## Previous checkpoint: source-checkout read-only G4 operator bundle smoke
 
 - Ran source checkout `dogfood g4-operator-apply-bundle` against live `/Users/reddit/.agent-memory/memory.db` using saved green v0.1.161 ranking, rollback confidence, rollback replay, and telemetry reconciliation artifacts.
 - Report directory: `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/`.

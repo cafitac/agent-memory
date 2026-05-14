@@ -1,7 +1,28 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:48 KST
+Last updated: 2026-05-14 21:01 KST
+
+## Source checkpoint: G4 readiness gate summary after operator bundle
+
+This B-direction slice adds one more source-level safety layer before any manual apply: it summarizes the retrieval-ranking artifact and the G4 operator bundle artifact together, without applying anything.
+
+Implemented/evidence:
+
+- New read-only command: `dogfood g4-readiness-gate-summary`.
+- It accepts `--retrieval-ranking-report` and `--operator-apply-bundle-report`.
+- It emits `dogfood_g4_readiness_gate_summary` with separate `retrieval_ranking_gate`, `operator_apply_bundle_gate`, and a combined `quality_gate`.
+- The combined gate requires the ranking artifact to be read-only/no-mutation/default-unchanged with zero baseline regressions and no ordinary-conversation auto-enable.
+- It requires the operator bundle to be read-only/no-mutation/default-unchanged, quality-gate green, bounded-ready, broad-apply false, apply-executed false, apply-supported false, ordinary auto-approval false, and privacy/ref-safe.
+- Source-checkout live read-only smoke: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json` passed with both sub-gates green.
+- Full tests: `.venv/bin/python -m pytest tests/ -q` -> `322 passed, 1 xfailed`.
+
+Next after this slice:
+
+- Commit this source/test/doc checkpoint.
+- Do not release solely for this checkpoint.
+- If staying in B-direction, next strengthen post-apply verification and rollback replay contracts for the separate `g4-review-queue-apply` corridor, still without running live apply.
+- Live apply remains blocked unless separately approved with exact operator phrase, policy, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Source-checkout smoke: G4 operator bundle consumes saved green v0.1.161 gate artifacts
 

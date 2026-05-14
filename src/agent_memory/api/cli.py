@@ -8687,6 +8687,201 @@ def _dogfood_g4_apply_readiness_payload(args: argparse.Namespace) -> dict[str, A
     return payload
 
 
+def _read_json_artifact_summary(path: Path | None) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    if path is None:
+        return None, {
+            "provided": False,
+            "path": None,
+            "report_sha256": None,
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "error": None,
+        }
+    report_path = path.expanduser().resolve(strict=False)
+    try:
+        raw_text = report_path.read_text(encoding="utf-8")
+        payload = json.loads(raw_text)
+    except Exception as exc:
+        return None, {
+            "provided": True,
+            "path": str(report_path),
+            "report_sha256": None,
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(payload, dict):
+        return None, {
+            "provided": True,
+            "path": str(report_path),
+            "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "error": {"type": "ValueError", "message": "artifact is not a JSON object"},
+        }
+    return payload, {
+        "provided": True,
+        "path": str(report_path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": payload.get("kind"),
+        "read_only": payload.get("read_only"),
+        "mutated": payload.get("mutated"),
+        "default_retrieval_unchanged": payload.get("default_retrieval_unchanged"),
+        "error": None,
+    }
+
+
+def _privacy_flags_are_ref_safe(privacy: dict[str, Any]) -> bool:
+    unsafe_keys = (
+        "proposal_json_included",
+        "raw_content_included",
+        "raw_conversation_content_included",
+        "raw_reason_included",
+        "raw_query_text_included",
+        "raw_trace_summary_included",
+        "sample_values_included",
+        "raw_report_included",
+    )
+    return not any(privacy.get(key) is True for key in unsafe_keys)
+
+
+def _dogfood_g4_readiness_gate_summary_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+
+    ranking_payload, ranking_base = _read_json_artifact_summary(args.retrieval_ranking_report)
+    bundle_payload, bundle_base = _read_json_artifact_summary(args.operator_apply_bundle_report)
+    ranking_payload = ranking_payload or {}
+    bundle_payload = bundle_payload or {}
+
+    fixture_gate = ranking_payload.get("fixture_gate_comparison", {})
+    if not isinstance(fixture_gate, dict):
+        fixture_gate = {}
+    shadow_compare = ranking_payload.get("shadow_compare", {})
+    if not isinstance(shadow_compare, dict):
+        shadow_compare = {}
+    ranking_blocked_reasons: list[str] = []
+    if not ranking_base["provided"]:
+        ranking_blocked_reasons.append("retrieval_ranking_report_not_provided")
+    if ranking_base["error"] is not None:
+        ranking_blocked_reasons.append("retrieval_ranking_report_unreadable")
+    if ranking_base["kind"] != "dogfood_retrieval_ranking_experiment":
+        ranking_blocked_reasons.append("retrieval_ranking_report_kind_invalid")
+    if ranking_base["read_only"] is not True:
+        ranking_blocked_reasons.append("retrieval_ranking_report_not_read_only")
+    if ranking_base["mutated"] is not False:
+        ranking_blocked_reasons.append("retrieval_ranking_report_mutated")
+    if ranking_base["default_retrieval_unchanged"] is not True:
+        ranking_blocked_reasons.append("retrieval_ranking_default_changed")
+    baseline_regression_count = _safe_int(
+        fixture_gate.get("baseline_regression_count", shadow_compare.get("baseline_regression_count", 0))
+    )
+    if baseline_regression_count > 0:
+        ranking_blocked_reasons.append("retrieval_ranking_baseline_regressions_present")
+    if fixture_gate.get("default_ranking_mutated") is True:
+        ranking_blocked_reasons.append("retrieval_ranking_default_mutated")
+    if fixture_gate.get("ordinary_conversation_auto_enable") is True:
+        ranking_blocked_reasons.append("retrieval_ranking_ordinary_conversation_auto_enabled")
+    ranking_gate = {
+        **ranking_base,
+        "pass": not ranking_blocked_reasons,
+        "blocked_reasons": sorted(set(ranking_blocked_reasons)),
+        "fixture_task_count": _safe_int(fixture_gate.get("fixture_task_count", ranking_payload.get("fixture_expansion", {}).get("task_count", 0) if isinstance(ranking_payload.get("fixture_expansion"), dict) else 0)),
+        "baseline_regression_count": baseline_regression_count,
+        "rank_change_count": _safe_int(fixture_gate.get("rank_change_count", ranking_payload.get("rank_change_count", 0))),
+        "default_ranking_mutated": fixture_gate.get("default_ranking_mutated") is True,
+        "ordinary_conversation_auto_enable": fixture_gate.get("ordinary_conversation_auto_enable") is True,
+    }
+    ranking_gate.pop("error", None)
+
+    bundle_quality = bundle_payload.get("quality_gate", {}) if isinstance(bundle_payload.get("quality_gate"), dict) else {}
+    bundle_privacy = bundle_payload.get("privacy", {}) if isinstance(bundle_payload.get("privacy"), dict) else {}
+    bundle_blocked_reasons: list[str] = []
+    if not bundle_base["provided"]:
+        bundle_blocked_reasons.append("operator_apply_bundle_report_not_provided")
+    if bundle_base["error"] is not None:
+        bundle_blocked_reasons.append("operator_apply_bundle_report_unreadable")
+    if bundle_base["kind"] != "dogfood_g4_operator_apply_bundle":
+        bundle_blocked_reasons.append("operator_apply_bundle_kind_invalid")
+    if bundle_base["read_only"] is not True:
+        bundle_blocked_reasons.append("operator_apply_bundle_not_read_only")
+    if bundle_base["mutated"] is not False:
+        bundle_blocked_reasons.append("operator_apply_bundle_mutated")
+    if bundle_base["default_retrieval_unchanged"] is not True:
+        bundle_blocked_reasons.append("operator_apply_bundle_default_retrieval_changed")
+    if bundle_quality.get("pass") is not True:
+        bundle_blocked_reasons.append("operator_apply_bundle_not_green")
+    for reason in bundle_quality.get("blocked_reasons", []) if isinstance(bundle_quality.get("blocked_reasons"), list) else []:
+        if reason:
+            bundle_blocked_reasons.append(str(reason))
+    if bundle_payload.get("bounded_partial_apply_ready") is not True:
+        bundle_blocked_reasons.append("operator_apply_bundle_not_bounded_ready")
+    if bundle_payload.get("broad_g4_apply_allowed") is not False:
+        bundle_blocked_reasons.append("operator_apply_bundle_broad_apply_allowed")
+    if bundle_payload.get("apply_executed") is not False:
+        bundle_blocked_reasons.append("operator_apply_bundle_apply_executed")
+    if bundle_payload.get("apply_supported") is not False:
+        bundle_blocked_reasons.append("operator_apply_bundle_apply_supported")
+    if bundle_payload.get("ordinary_conversation_auto_approval") is not False:
+        bundle_blocked_reasons.append("operator_apply_bundle_ordinary_auto_approval_enabled")
+    if not _privacy_flags_are_ref_safe(bundle_privacy):
+        bundle_blocked_reasons.append("operator_apply_bundle_privacy_flags_not_ref_safe")
+    bundle_gate = {
+        **bundle_base,
+        "pass": not bundle_blocked_reasons,
+        "blocked_reasons": sorted(set(bundle_blocked_reasons)),
+        "bounded_partial_apply_ready": bundle_payload.get("bounded_partial_apply_ready") is True,
+        "broad_g4_apply_allowed": bundle_payload.get("broad_g4_apply_allowed") is True,
+        "apply_executed": bundle_payload.get("apply_executed") is True,
+        "apply_supported": bundle_payload.get("apply_supported") is True,
+        "ordinary_conversation_auto_approval": bundle_payload.get("ordinary_conversation_auto_approval") is True,
+    }
+    bundle_gate.pop("error", None)
+
+    blocked_reasons = sorted(set([*ranking_gate["blocked_reasons"], *bundle_gate["blocked_reasons"]]))
+    green = not blocked_reasons
+    payload = {
+        "kind": "dogfood_g4_readiness_gate_summary",
+        "read_only": True,
+        "mutated": False,
+        "db_path": str(db_path),
+        "default_retrieval_unchanged": True,
+        "automation_stage": "bounded_operator_apply_preflight_summary",
+        "retrieval_ranking_gate": ranking_gate,
+        "operator_apply_bundle_gate": bundle_gate,
+        "quality_gate": {
+            "pass": green,
+            "decision": "bounded_g4_preflight_summary_green_for_manual_operator_apply" if green else "bounded_g4_preflight_summary_blocked",
+            "blocked_reasons": blocked_reasons,
+        },
+        "next_step": "manual_operator_apply_requires_separate_explicit_approval",
+        "safety_exclusions": {
+            "broad_g4_background_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_migration": False,
+            "collapse_delete_apply": False,
+            "live_telemetry_reset": False,
+        },
+        "privacy": {
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "raw_reason_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_g4_operator_apply_bundle_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.max_apply < 1:
         raise ValueError("dogfood g4-operator-apply-bundle max-apply must be >= 1")
@@ -12114,6 +12309,14 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_apply_readiness_parser.add_argument("--queue-preview-report", type=Path, required=True)
     dogfood_g4_apply_readiness_parser.add_argument("--max-apply", type=int, default=1)
     dogfood_g4_apply_readiness_parser.add_argument("--output", type=Path)
+    dogfood_g4_readiness_gate_summary_parser = dogfood_subparsers.add_parser(
+        "g4-readiness-gate-summary",
+        help="Summarize retrieval-ranking and G4 operator bundle artifacts as a read-only preflight gate; does not apply mutations.",
+    )
+    dogfood_g4_readiness_gate_summary_parser.add_argument("db_path", type=Path)
+    dogfood_g4_readiness_gate_summary_parser.add_argument("--retrieval-ranking-report", type=Path, required=True)
+    dogfood_g4_readiness_gate_summary_parser.add_argument("--operator-apply-bundle-report", type=Path, required=True)
+    dogfood_g4_readiness_gate_summary_parser.add_argument("--output", type=Path)
     dogfood_g4_operator_apply_bundle_parser = dogfood_subparsers.add_parser(
         "g4-operator-apply-bundle",
         help="Generate read-only G4 approval, preview, readiness artifacts and an exact manual apply command preview; does not apply mutations.",
@@ -13194,6 +13397,9 @@ def main() -> None:
             return
         if args.dogfood_action == "g4-apply-readiness":
             print(json.dumps(_dogfood_g4_apply_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-readiness-gate-summary":
+            print(json.dumps(_dogfood_g4_readiness_gate_summary_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-operator-apply-bundle":
             print(json.dumps(_dogfood_g4_operator_apply_bundle_payload(args), indent=2))
