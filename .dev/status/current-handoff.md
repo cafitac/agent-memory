@@ -1,7 +1,19 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 22:38 KST
+Last updated: 2026-05-14 11:50 KST
+
+## v0.1.157 OSS README/npm install checkpoint
+
+- Release: `v0.1.157` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.157`).
+- npm: `@cafitac/agent-memory@0.1.157`.
+- PyPI: `cafitac-agent-memory==0.1.157`.
+- PR #341 reduced `README.md` to an npm-install-only OSS entrypoint. PR #342 synced release metadata.
+- Published npm smoke passed with `UV_NO_CACHE=1 npm exec --yes --package @cafitac/agent-memory@0.1.157 -- agent-memory doctor`.
+- Public README should stay intentionally short: install, bootstrap, doctor, one-shot npm usage, local DB path, trust/deeper-doc links, and license only.
+- Do not add dogfood/G-stage/operator runbooks, raw runtime report details, Hermes integration walkthroughs, long examples, or Python-first install paths back into README. Put them in linked docs or `.dev` instead.
+- Next OSS slice: audit `package.json` metadata and `npm pack --dry-run` contents so the npm page/package match the new README surface.
+- Memory automation state is unchanged by this docs cleanup: `conservative_legacy` remains the live default; `graph_reinforced_v1` is shadow-only; broad G4/background apply, default ranking migration, collapse/delete apply, live telemetry reset, unreviewed automatic promotion, and ordinary conversation auto-approval remain blocked.
 
 
 

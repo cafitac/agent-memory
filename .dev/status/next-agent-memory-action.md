@@ -1,7 +1,35 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 22:38 KST
+Last updated: 2026-05-14 11:50 KST
+
+## v0.1.157 OSS README checkpoint
+
+This is the newest verified public-surface checkpoint. The code/runtime automation runway remains as described below, but the OSS-facing README was intentionally reset to a minimal npm-install-only entrypoint.
+
+Verified state:
+
+- Release: `v0.1.157` (`https://github.com/cafitac/agent-memory/releases/tag/v0.1.157`).
+- npm: `@cafitac/agent-memory@0.1.157`.
+- PyPI: `cafitac-agent-memory==0.1.157`.
+- PR #341 made the README npm-install-only. PR #342 synced release metadata.
+- Main CI passed after the README/docs update and release-sync merge.
+- Published npm smoke passed with `UV_NO_CACHE=1 npm exec --yes --package @cafitac/agent-memory@0.1.157 -- agent-memory doctor`.
+
+Public README rule:
+
+- Keep `README.md` short: one-line product description, `npm install -g @cafitac/agent-memory`, `agent-memory bootstrap`, `agent-memory doctor`, npm one-shot usage, default local DB path, trust/deeper-doc links, and license.
+- Do not re-expand README with examples, Hermes integration details, dogfood/G-stage/operator details, raw runtime reports, or Python-first install paths. Put details in linked docs or `.dev`.
+
+Recommended next PR-sized slice:
+
+- Audit and tighten npm package metadata/package contents: `package.json` description/keywords/homepage/repository/bugs/license, `files`, `npm pack --dry-run` contents, and published npm smoke.
+- Keep it OSS-facing and install-surface focused; do not change memory automation policy in that PR.
+
+Automation guardrails remain unchanged:
+
+- Live default ranking remains `conservative_legacy`; `graph_reinforced_v1` remains shadow-only.
+- Broad G4/background apply, collapse/delete apply, live telemetry reset, default ranking migration, unreviewed automatic promotion, and ordinary conversation auto-approval remain blocked.
 
 ## Use this first when the user asks
 

@@ -59,7 +59,7 @@ def test_current_handoff_does_not_advertise_broad_g4_apply_as_ready() -> None:
     assert "docs/RED-test-only" in handoff
 
 
-def test_v0152_status_docs_record_current_brainlike_runway_and_blocked_broad_apply() -> None:
+def test_v0157_status_docs_record_oss_readme_checkpoint_and_blocked_broad_apply() -> None:
     next_action = _read_doc(".dev/status/next-agent-memory-action.md")
     handoff = _read_doc(".dev/status/current-handoff.md")
     current_progress = _read_doc(".dev/roadmap/memory-consolidation/current-progress-and-next-steps.md")
@@ -67,12 +67,21 @@ def test_v0152_status_docs_record_current_brainlike_runway_and_blocked_broad_app
     stage_g = _read_doc(".dev/roadmap/memory-consolidation/stage-g-cautious-automation.md")
 
     for doc in (next_action, handoff, current_progress):
+        assert "v0.1.157" in doc
+        assert "@cafitac/agent-memory@0.1.157" in doc
+        assert "npm-install-only" in doc
+        assert "PR #341" in doc
+        assert "package.json" in doc
+        assert "npm pack --dry-run" in doc
+        assert "conservative_legacy" in doc
+        assert "graph_reinforced_v1" in doc
+        assert "ordinary conversation auto-approval" in doc
+        assert "broad g4/background apply" in doc.lower()
         assert "v0.1.155" in doc
         assert "/Users/reddit/.agent-memory/runtime/v0.1.155/.venv/bin/agent-memory" in doc
         assert "fresh_trace_linkage_gap_not_detected" in doc
         assert "g4-v0138-20260512-132253" in doc
         assert "Overall north-star: 78-80%" in doc
-        assert "broad g4/background apply" in doc.lower()
         assert "50-task expanded retrieval fixture gate" in doc or "50-task expanded retrieval fixture" in doc
         assert "75 checked-in" in doc or "75/75" in doc
         assert "mixed fact/procedure/episode" in doc or "approved facts/procedure/episode" in doc
