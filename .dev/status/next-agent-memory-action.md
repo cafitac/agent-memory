@@ -1,7 +1,81 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 16:34 KST
+Last updated: 2026-05-14 20:15 KST
+
+## Operating policy: develop first, slower release cadence
+
+- Current work branch: `develop`.
+- Do not release every small slice. Accumulate validated develop work and release only when the automation corridor is complete/stable enough to justify a real milestone.
+- Keep QA discipline unchanged: source tests for development plus real QA against actually downloaded/published installs after a release exists.
+
+## Source checkpoint: G4 human review approval artifact corridor
+
+This PR-sized slice adds the missing human approval artifact gate without allowing apply.
+
+Implemented in source:
+
+- New `dogfood g4-review-queue-approval-report` command.
+- The command reads persisted G4 review queue rows and emits a read-only/ref-safe JSON artifact.
+- It requires:
+  - `--actor`
+  - `--policy g4-review-queue-approval-artifact-v1`
+  - `--approval-phrase report-approved-g4-review-queue-v1`
+- It reports aggregate queue counts, status counts, proposal type counts, actor counts, source preview hashes, approved queue refs, and `human_review_queue_approval_pass`.
+- It excludes proposal JSON, raw content, raw reason, sample values, and any raw sensitive strings.
+- `dogfood g4-review-queue-preview` now accepts optional `--human-review-approval-report` so the human approval artifact can be part of gate reassessment.
+- Broad apply remains blocked; this is an artifact/report corridor only.
+
+Verification so far:
+
+- RED observed before implementation: `g4-review-queue-approval-report` was an invalid dogfood action.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate -q` -> `1 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_artifacts_without_broad_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate -q` -> `2 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py -q` -> `133 passed, 1 xfailed`.
+- `.venv/bin/python -m agent_memory.api.cli dogfood g4-review-queue-approval-report --help` -> passed.
+
+Recommended next work:
+
+1. Commit this slice on `develop` after diff review.
+2. Do not release yet.
+3. Continue toward bounded apply readiness only after the human approval artifact gate is green.
+
+## Runtime checkpoint: v0.1.161 fresh runway green and next gate evidence
+
+This checkpoint used the installed v0.1.161 runtime and live `/Users/reddit/.agent-memory/memory.db` in read-only/report-only mode.
+
+Fresh metadata-gap diagnosis from the wide `2026-05-14T00:00:00Z` epoch:
+
+- `retrieval_observations`: 123 fresh observations.
+- Empty retrievals: 60.
+- Unknown empty-outcome rows: 12, all `hook_event_name=pre_llm_call`, `response_mode=unknown`, same aggregate scope bucket `cwd:a439e0c3063d5e5c`.
+- The latest unknown row was at `2026-05-14 10:27:21`; strict post-gap rows after that had 3 observations, 3 traces, 2 empty retrievals, and 0 unknown empty outcomes.
+- Interpretation: the blocker was classified/stale metadata-gap evidence in the wider epoch, not an unresolved adapter payload gap.
+
+Green fresh-runway evidence:
+
+- Runway: `/Users/reddit/.agent-memory/reports/v0.1.161-fresh-runway-green-20260514T103021Z/runway.json`.
+- Epoch: `2026-05-14T10:27:22Z`.
+- Fresh epoch gate: pass, `fresh_epoch_ready_to_compare_against_historical`.
+- Fresh comparison gate: pass, `fresh_epoch_collection_stable_for_historical_comparison`.
+- Telemetry reconciliation gate: pass, `telemetry_only_reconciliation_ready_for_manual_apply`.
+- Coverage: 3 observations, 3 traces, trace coverage `1.0`; empty retrievals were 2/3, all `no_reliable_memory`; unknown/unresolved metadata-gap counts were 0.
+- Telemetry reset preview candidate count: 4771 historical telemetry rows, but this remains preview/reconciliation evidence only.
+
+Next gate evidence collected after the green runway:
+
+- G4 review queue preview: `/Users/reddit/.agent-memory/reports/v0.1.161-next-g4-queue-20260514T103118Z/g4-review-queue-preview.json`; quality gate passed as `review_queue_ready_for_manual_review`, read-only/no-mutation/default unchanged.
+- Broad G4 reassessment still says `broad_g4_apply_allowed=false`; required gates remain retrieval ranking, rollback confidence, rollback replay, live telemetry reconciliation, and human-reviewed queue approval.
+- Ranking shadow gate: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/retrieval-ranking-shadow.json`; live mixed 50-task corpus stayed read-only/no-mutation/default unchanged with 0 baseline regressions.
+- Rollback confidence: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/rollback-confidence.json`; quality gate pass.
+- Rollback replay validate: `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/rollback-replay-validate.json`; quality gate pass.
+
+Recommended next work:
+
+1. Do not run live telemetry reset or default-ranking migration from generic continuation. Both need their own exact approval phrase and operator intent.
+2. The safest PR-sized source slice is now to make the G4/default-ranking readiness report consume the green runway and gate evidence as explicit inputs, so broad apply/default migration remains blocked unless every required artifact is present and green.
+3. If the operator explicitly wants live default ranking migration next, use the existing `retrieval-ranking-migrate-default` command only with `--policy graph_reinforced_v1`, a live config path, actor/reason, backup/audit output, and exact approval phrase `migrate-retrieval-ranking-default-v1`; otherwise keep `conservative_legacy` live.
+4. If the operator explicitly wants telemetry cleanup next, use the telemetry-only reset corridor only after backup and exact approval phrase; do not infer that permission from this green preview.
 
 ## Source checkpoint: telemetry reconciliation consumes fresh-epoch comparison evidence
 

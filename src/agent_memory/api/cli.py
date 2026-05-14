@@ -7967,6 +7967,116 @@ def _g4_background_quality_warning_analysis(
     }
 
 
+def _read_g4_gate_artifact(path: Path | None, expected_kind: str) -> dict[str, Any]:
+    if path is None:
+        return {"provided": False, "path": None, "kind": None, "pass": False, "blocked_reasons": ["artifact_not_provided"]}
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+        payload = json.loads(raw_text)
+    except Exception as exc:
+        return {
+            "provided": True,
+            "path": str(path),
+            "kind": None,
+            "pass": False,
+            "blocked_reasons": ["artifact_unreadable"],
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(payload, dict):
+        return {
+            "provided": True,
+            "path": str(path),
+            "kind": None,
+            "pass": False,
+            "blocked_reasons": ["artifact_not_json_object"],
+        }
+    blocked_reasons: list[str] = []
+    if payload.get("kind") != expected_kind:
+        blocked_reasons.append("artifact_kind_mismatch")
+    if payload.get("read_only") is not True:
+        blocked_reasons.append("artifact_not_read_only")
+    if payload.get("mutated") is True:
+        blocked_reasons.append("artifact_claims_mutation")
+    if payload.get("default_retrieval_unchanged") is False:
+        blocked_reasons.append("default_retrieval_changed")
+    privacy = payload.get("privacy", {}) if isinstance(payload.get("privacy"), dict) else {}
+    if any(
+        privacy.get(flag) is True
+        for flag in (
+            "raw_conversation_content_included",
+            "raw_query_text_included",
+            "raw_trace_summary_included",
+            "sample_values_included",
+        )
+    ):
+        blocked_reasons.append("privacy_flag_claims_raw_content")
+
+    if expected_kind == "dogfood_retrieval_ranking_experiment":
+        shadow = payload.get("shadow_compare", {}) if isinstance(payload.get("shadow_compare"), dict) else {}
+        fixture = payload.get("fixture_expansion", {}) if isinstance(payload.get("fixture_expansion"), dict) else {}
+        if _safe_int(fixture.get("task_count")) < 1:
+            blocked_reasons.append("ranking_fixture_empty")
+        if fixture.get("live_runtime_safe") is False:
+            blocked_reasons.append("ranking_fixture_not_live_runtime_safe")
+        if _safe_int(shadow.get("baseline_regression_count")) != 0:
+            blocked_reasons.append("ranking_baseline_regression_present")
+        if shadow.get("protected_default_order_returned") is False:
+            blocked_reasons.append("ranking_default_order_not_protected")
+        if shadow.get("durable_memory_mutated") is True:
+            blocked_reasons.append("ranking_artifact_claims_durable_mutation")
+    else:
+        quality_gate = payload.get("quality_gate", {}) if isinstance(payload.get("quality_gate"), dict) else {}
+        if quality_gate.get("pass") is not True:
+            blocked_reasons.append("quality_gate_not_green")
+        blocked_reasons.extend(str(reason) for reason in quality_gate.get("blocked_reasons", []) if reason)
+
+    return {
+        "provided": True,
+        "path": str(path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": payload.get("kind"),
+        "pass": not blocked_reasons,
+        "blocked_reasons": sorted(set(blocked_reasons)),
+    }
+
+
+def _g4_artifact_gate_evidence(args: argparse.Namespace) -> dict[str, Any]:
+    reports = {
+        "retrieval_ranking_gate_pass": _read_g4_gate_artifact(
+            getattr(args, "retrieval_ranking_report", None), "dogfood_retrieval_ranking_experiment"
+        ),
+        "rollback_confidence_pass": _read_g4_gate_artifact(
+            getattr(args, "rollback_confidence_report", None), "dogfood_rollback_confidence"
+        ),
+        "rollback_replay_validate_pass": _read_g4_gate_artifact(
+            getattr(args, "rollback_replay_report", None), "dogfood_rollback_replay_validate"
+        ),
+        "live_telemetry_reconciliation_pass": _read_g4_gate_artifact(
+            getattr(args, "telemetry_reconciliation_report", None), "dogfood_telemetry_reconciliation"
+        ),
+    }
+    human_approval_report = _read_g4_gate_artifact(
+        getattr(args, "human_review_approval_report", None), "dogfood_g4_review_queue_approval_report"
+    )
+    gate_evidence = {key: report["pass"] is True for key, report in reports.items()}
+    gate_evidence["human_review_queue_approval_pass"] = human_approval_report["pass"] is True
+    missing = sorted(key for key, report in reports.items() if not report.get("provided"))
+    failed = sorted(key for key, report in reports.items() if report.get("provided") and report.get("pass") is not True)
+    artifact_reports: dict[str, Any] = dict(reports)
+    if human_approval_report.get("provided"):
+        artifact_reports["human_review_queue_approval_pass"] = human_approval_report
+        if human_approval_report.get("pass") is not True:
+            failed.append("human_review_queue_approval_pass")
+    return {
+        "artifact_reports": artifact_reports,
+        "artifact_gate_evidence": gate_evidence,
+        "missing_gate_artifacts": missing,
+        "failed_gate_artifacts": sorted(set(failed)),
+        "provided_gate_artifacts_pass": not missing and not failed,
+        "human_review_queue_approval_source": "artifact" if human_approval_report.get("provided") else "not_supported_by_preview",
+    }
+
+
 def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.limit < 1:
         raise ValueError("dogfood g4-review-queue-preview limit must be >= 1")
@@ -8082,6 +8192,16 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         "live_telemetry_reconciliation_pass",
         "human_review_queue_approval_pass",
     ]
+    artifact_gate_evidence = _g4_artifact_gate_evidence(args)
+    broad_g4_decision = (
+        "broad_g4_apply_still_blocked_pending_separate_apply_corridor"
+        if artifact_gate_evidence["provided_gate_artifacts_pass"]
+        and artifact_gate_evidence["artifact_gate_evidence"].get("human_review_queue_approval_pass") is True
+        and not blocked_reasons
+        else "broad_g4_apply_still_blocked_pending_explicit_human_queue_approval"
+        if artifact_gate_evidence["provided_gate_artifacts_pass"] and not blocked_reasons
+        else "broad_g4_apply_still_blocked_until_all_live_safety_gates_pass"
+    )
 
     payload = {
         "kind": "dogfood_g4_review_queue_preview",
@@ -8105,11 +8225,12 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         },
         "broad_g4_apply_reassessment": {
             "broad_g4_apply_allowed": False,
-            "decision": "broad_g4_apply_still_blocked_until_all_live_safety_gates_pass",
+            "decision": broad_g4_decision,
             "required_green_gates": broad_g4_required_green_gates,
             "current_report_green": not blocked_reasons,
             "default_retrieval_unchanged": True,
             "ordinary_conversation_auto_approval": False,
+            **artifact_gate_evidence,
         },
         "automation_policy": {
             "apply_supported": False,
@@ -8167,6 +8288,11 @@ def _dogfood_g4_review_queue_persist_payload(args: argparse.Namespace) -> dict[s
             min_evidence_count=args.min_evidence_count,
             frequent_threshold=args.frequent_threshold,
             epoch_start=args.epoch_start,
+            retrieval_ranking_report=None,
+            rollback_confidence_report=None,
+            rollback_replay_report=None,
+            telemetry_reconciliation_report=None,
+            human_review_approval_report=None,
             output=None,
             lock_path=args.lock_path,
         )
@@ -8322,6 +8448,103 @@ def _dogfood_g4_review_queue_update_payload(args: argparse.Namespace) -> dict[st
         },
         "privacy": {"raw_reason_included": False, "raw_content_included": False, "sample_values_included": False},
     }
+
+
+def _dogfood_g4_review_queue_approval_report_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "g4-review-queue-approval-artifact-v1"
+    approval_phrase = "report-approved-g4-review-queue-v1"
+    if args.policy != policy:
+        raise ValueError(f"dogfood g4-review-queue-approval-report requires --policy {policy}")
+    if args.approval_phrase != approval_phrase:
+        raise ValueError(f"dogfood g4-review-queue-approval-report requires --approval-phrase {approval_phrase}")
+    if not args.actor.strip():
+        raise ValueError("dogfood g4-review-queue-approval-report requires non-empty --actor")
+
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_g4_review_queue_table(connection)
+        rows = connection.execute(
+            """
+            SELECT queue_id, status, proposal_type, target_ref, source_preview_sha256, actor, reason_sha256, updated_at
+            FROM g4_review_queue_items
+            ORDER BY queue_id
+            """
+        ).fetchall()
+
+    status_counts = Counter(str(row["status"]) for row in rows)
+    actor_counts = Counter(str(row["actor"]) for row in rows)
+    proposal_type_counts = Counter(str(row["proposal_type"]) for row in rows)
+    total_count = len(rows)
+    approved_count = status_counts.get("approved", 0)
+    rejected_count = status_counts.get("rejected", 0)
+    pending_count = status_counts.get("pending", 0)
+    reviewed_count = approved_count + rejected_count
+    blocked_reasons: list[str] = []
+    if total_count == 0:
+        blocked_reasons.append("review_queue_empty")
+    if pending_count > 0:
+        blocked_reasons.append("pending_review_queue_items_present")
+    elif reviewed_count != total_count:
+        blocked_reasons.append("unreviewed_queue_items_present")
+    if approved_count == 0:
+        blocked_reasons.append("no_approved_queue_items")
+
+    human_review_queue_approval_pass = not blocked_reasons
+    decision = (
+        "human_review_queue_approval_artifact_green"
+        if human_review_queue_approval_pass
+        else "human_review_queue_still_has_pending_items"
+        if pending_count > 0
+        else "human_review_queue_not_ready_for_apply_gate"
+    )
+    payload = {
+        "kind": "dogfood_g4_review_queue_approval_report",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "apply_supported": False,
+        "db_path": str(args.db_path),
+        "policy": policy,
+        "approval_phrase_matched": True,
+        "actor": args.actor.strip(),
+        "human_review_queue_approval_pass": human_review_queue_approval_pass,
+        "queue_summary": {
+            "total_count": total_count,
+            "approved_count": approved_count,
+            "rejected_count": rejected_count,
+            "pending_count": pending_count,
+            "reviewed_count": reviewed_count,
+        },
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+        "proposal_type_counts": {key: proposal_type_counts[key] for key in sorted(proposal_type_counts)},
+        "review_actor_counts": {key: actor_counts[key] for key in sorted(actor_counts)},
+        "source_preview_sha256s": sorted({str(row["source_preview_sha256"]) for row in rows}),
+        "approved_queue_refs": [
+            {
+                "queue_id": row["queue_id"],
+                "proposal_type": row["proposal_type"],
+                "target_ref": row["target_ref"],
+                "source_preview_sha256": row["source_preview_sha256"],
+            }
+            for row in rows
+            if row["status"] == "approved"
+        ],
+        "quality_gate": {
+            "pass": human_review_queue_approval_pass,
+            "decision": decision,
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "privacy": {
+            "proposal_json_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+        "next_step": "Use this artifact as the human_review_queue_approval_pass input to preview reassessment; do not apply from this report.",
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 
 def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -11548,6 +11771,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_g4_review_queue_preview_parser.add_argument("db_path", type=Path)
     dogfood_g4_review_queue_preview_parser.add_argument("--output", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--retrieval-ranking-report", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--rollback-confidence-report", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--rollback-replay-report", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--telemetry-reconciliation-report", type=Path)
+    dogfood_g4_review_queue_preview_parser.add_argument("--human-review-approval-report", type=Path)
     dogfood_g4_review_queue_persist_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-persist",
         help="Persist preview queue items for manual approve/reject review without applying memory mutations.",
@@ -11579,6 +11807,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_review_queue_update_parser.add_argument("--reason", required=True)
     dogfood_g4_review_queue_update_parser.add_argument("--policy")
     dogfood_g4_review_queue_update_parser.add_argument("--approval-phrase")
+    dogfood_g4_review_queue_approval_report_parser = dogfood_subparsers.add_parser(
+        "g4-review-queue-approval-report",
+        help="Emit a ref-safe read-only human approval artifact for the persisted G4 review queue; does not apply memory mutations.",
+    )
+    dogfood_g4_review_queue_approval_report_parser.add_argument("db_path", type=Path)
+    dogfood_g4_review_queue_approval_report_parser.add_argument("--actor", required=True)
+    dogfood_g4_review_queue_approval_report_parser.add_argument("--policy", required=True)
+    dogfood_g4_review_queue_approval_report_parser.add_argument("--approval-phrase", required=True)
+    dogfood_g4_review_queue_approval_report_parser.add_argument("--output", type=Path)
     dogfood_g4_review_queue_apply_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-apply",
         help="Apply approved G4 review queue items through a guarded audit-only corridor with backup and rollback hint.",
@@ -12632,6 +12869,9 @@ def main() -> None:
             return
         if args.dogfood_action == "g4-review-queue-update":
             print(json.dumps(_dogfood_g4_review_queue_update_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-review-queue-approval-report":
+            print(json.dumps(_dogfood_g4_review_queue_approval_report_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-review-queue-apply":
             print(json.dumps(_dogfood_g4_review_queue_apply_payload(args), indent=2))

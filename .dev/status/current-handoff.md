@@ -1,7 +1,54 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 17:12 KST
+Last updated: 2026-05-14 20:15 KST
+
+## Branch/release policy update
+
+- Work has moved from `main` to local `develop` for normal source/doc/test slices.
+- Release cadence should slow down: do not cut a release for every small validated slice.
+- Keep the existing QA method: real operational QA continues against actually downloaded/published installs, not just source checkout.
+- Next release should wait for a genuinely complete/stable milestone, then use the existing release verification gates.
+
+## Current source state: G4 human approval artifact corridor started
+
+Completed source work after the G4 artifact-gated preview slice:
+
+- `dogfood g4-review-queue-approval-report` emits a read-only, ref-safe human review summary artifact from persisted G4 review queue rows.
+- The report requires explicit `--actor`, `--policy g4-review-queue-approval-artifact-v1`, and `--approval-phrase report-approved-g4-review-queue-v1`.
+- It reports aggregate queue counts, approved/rejected/pending counts, reviewed count, status/proposal/actor rollups, source preview hashes, and approved queue refs without proposal JSON or raw reason/content.
+- `human_review_queue_approval_pass` is green only when the queue is non-empty, has at least one approved item, and has no pending/unreviewed items.
+- `dogfood g4-review-queue-preview` now has an optional `--human-review-approval-report` input so this artifact can serve as the fifth gate, while preview itself still never applies.
+
+Verification so far:
+
+- RED observed: focused test initially failed because `g4-review-queue-approval-report` was not a valid dogfood action.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate -q` -> `1 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_artifacts_without_broad_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate -q` -> `2 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py -q` -> `133 passed, 1 xfailed`.
+- `.venv/bin/python -m agent_memory.api.cli dogfood g4-review-queue-approval-report --help` -> passed.
+
+Immediate next recommended slice:
+
+- Commit this develop slice after reviewing the diff.
+- Next code slice should build a separate bounded apply readiness/reassessment command using green artifacts; keep actual apply behind exact operator approval and backup.
+- Do not release yet; accumulate develop milestones until the automation corridor is complete/stable.
+
+## Runtime checkpoint: v0.1.161 fresh runway green and next gate evidence
+
+Live/runtime read-only evidence was collected with `/Users/reddit/.agent-memory/runtime/v0.1.161/.venv/bin/agent-memory` against `/Users/reddit/.agent-memory/memory.db`.
+
+- Wide epoch diagnosis from `2026-05-14T00:00:00Z`: 123 observations, 60 empty retrievals, 12 unknown empty outcomes. All unknown rows were aggregate-classified as `pre_llm_call` + `response_mode=unknown` under the same scope bucket, with latest unknown at `2026-05-14 10:27:21`. This is a classified stale/legacy metadata-gap window, not an unresolved adapter payload gap.
+- Strict post-gap runway from `2026-05-14T10:27:22Z`: `/Users/reddit/.agent-memory/reports/v0.1.161-fresh-runway-green-20260514T103021Z/runway.json` passed. Fresh epoch, fresh comparison, and telemetry reconciliation gates are all green; trace coverage is `1.0`; unknown/unresolved metadata-gap counts are 0.
+- The telemetry reconciliation preview reports 4771 candidate historical telemetry rows, but no live reset was run. Treat this as reset-avoidance/reconciliation evidence only.
+- G4 review queue preview: `/Users/reddit/.agent-memory/reports/v0.1.161-next-g4-queue-20260514T103118Z/g4-review-queue-preview.json` passed as read-only/no-mutation/default unchanged. Its broad-G4 reassessment still blocks broad apply.
+- Retrieval ranking shadow, rollback confidence, and rollback replay gates were collected under `/Users/reddit/.agent-memory/reports/v0.1.161-next-gates-20260514T103215Z/` and passed in read-only/no-mutation/default-unchanged mode; ranking used the live mixed approved 50-task corpus with 0 baseline regressions.
+
+Current action boundary:
+
+- Generic continuation authorizes only read-only evidence and source/doc/test slices.
+- Live telemetry reset, live default-ranking migration, broad G4/background apply, collapse/delete, unreviewed promotion, and ordinary-conversation auto-approval remain blocked without a separate exact approval corridor.
+- Best next source slice: wire the green fresh-runway and next-gate artifacts into a single readiness/reassessment command or report contract so broad apply/default migration cannot be considered unless each explicit artifact is present, green, privacy-safe, and recent.
 
 ## Source checkpoint: fresh-epoch runway bundles comparison and reconciliation
 
