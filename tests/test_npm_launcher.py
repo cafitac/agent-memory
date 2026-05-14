@@ -188,21 +188,24 @@ def test_user_docs_show_installed_agent_memory_command_after_npm_install() -> No
     readme = (REPO_ROOT / "README.md").read_text()
     install_smoke = (REPO_ROOT / "docs" / "install-smoke.md").read_text()
 
-    npm_section = readme.split("Alternative Python-first install paths:", maxsplit=1)[0]
-    assert "npm install -g @cafitac/agent-memory" in npm_section
-    assert "agent-memory bootstrap" in npm_section
-    assert "agent-memory doctor" in npm_section
+    assert "npm install -g @cafitac/agent-memory" in readme
+    assert "agent-memory bootstrap" in readme
+    assert "agent-memory doctor" in readme
     assert "uv run agent-memory" not in readme
-    assert "agent-memory [command]" in install_smoke
+    assert "Alternative Python-first install paths" not in readme
+    assert "Basic example" not in readme
+    assert "Hermes dogfood" not in readme
+    assert "npm exec --yes --package @cafitac/agent-memory" in readme
+    assert "agent-memory [command]" not in install_smoke
 
 
-def test_install_smoke_docs_cover_external_user_trust_matrix() -> None:
+def test_install_smoke_docs_cover_npm_first_external_smoke() -> None:
     install_smoke = (REPO_ROOT / "docs" / "install-smoke.md").read_text()
 
-    assert "Fresh-user trust matrix" in install_smoke
-    for surface in ["npm", "npx", "uvx", "Hermes", "Codex/Claude prompts", "Forensic review"]:
-        assert surface in install_smoke
-    assert "external temp directory" in install_smoke
-    assert "approved memory" in install_smoke
-    assert "disputed/deprecated" in install_smoke
-    assert "fails closed" in install_smoke
+    assert "npm global install" in install_smoke
+    assert "npm one-shot install" in install_smoke
+    assert "npm exec --yes --package @cafitac/agent-memory@<version> -- agent-memory doctor" in install_smoke
+    assert "UV_NO_CACHE=1" in install_smoke
+    assert "temporary directory" in install_smoke
+    assert "published-install-smoke.yml" in install_smoke
+    assert "Keep private data private" in install_smoke
