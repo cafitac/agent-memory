@@ -1,9 +1,32 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:53 KST
+Last updated: 2026-05-15 00:14 KST
 
-## Just completed: G4 packet/runbook cross-check contract
+## Just completed: G4 milestone release readiness review
+
+- Reviewed accumulated `develop` G4 corridor after `v0.1.161` / `main`.
+- Compared range: `main..develop`.
+- Included 10 commits from `539f929` through `e6eb7c1`, covering human approval artifacts, apply readiness, operator bundle, readiness summary, post-apply verification, operator packet, runbook contract, and docs/status updates.
+- Wrote release-readiness review: `.dev/roadmap/memory-consolidation/g4-milestone-release-readiness-review.md`.
+- Verdict: source-ready as a release candidate after human maintainer release intent review, but no publish/release action was executed.
+- Candidate release shape if approved later: patch milestone `v0.1.162`, theme `G4 bounded operator apply readiness corridor`.
+- Checks passed:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/ -q` -> `326 passed, 1 xfailed`.
+  - `PYTHONPATH=src .venv/bin/python scripts/check_release_metadata.py` -> package/module versions synced at `0.1.161`.
+  - `PYTHONPATH=src .venv/bin/python scripts/smoke_release_readiness.py` -> Python and Node bootstrap/doctor success in isolated HOME.
+  - `npm pack --dry-run --json` -> tarball only includes `LICENSE`, `README.md`, `bin/agent-memory.js`, `package.json`.
+  - focused release/package tests -> `34 passed`.
+- Safety remains unchanged: no live apply, no release/publish, no telemetry reset, no default-ranking migration, no broad/background G4 apply, no collapse/delete, no unreviewed promotion, no ordinary conversation auto-approval.
+
+Recommended next work now:
+
+1. Commit this release-readiness review checkpoint; still do not publish automatically.
+2. If the operator wants a real release, ask for explicit release approval and then follow the existing project release process for a patch milestone, followed by real downloaded install QA.
+3. If no release approval is given, continue read-only source/docs hardening only.
+4. Live bounded G4 queue apply remains separate and still requires exact approval phrase `apply-approved-g4-review-queue-items-v1` plus actor, private reason, backup path, policy `g4-review-queue-apply-v1`, bounded `--max-apply`, and audit output path.
+
+## Previous checkpoint: G4 packet/runbook cross-check contract
 
 - Source now includes a `runbook_contract` block in `dogfood g4-operator-apply-packet` output.
 - The contract explicitly mirrors the bounded apply runbook checklist:

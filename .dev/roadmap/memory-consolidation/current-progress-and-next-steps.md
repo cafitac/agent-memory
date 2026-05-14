@@ -1,9 +1,45 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:53 KST
+Last updated: 2026-05-15 00:14 KST
 
-## Source checkpoint: packet/runbook cross-check contract
+## Checkpoint: G4 milestone release readiness review
+
+The accumulated `develop` G4 corridor after `v0.1.161` was reviewed for release readiness. This was a review-only checkpoint; no release, publish, or live memory mutation was executed.
+
+Review artifact:
+
+- `.dev/roadmap/memory-consolidation/g4-milestone-release-readiness-review.md`
+
+Reviewed scope:
+
+- Git range: `main..develop`.
+- Commits: 10 commits from `539f929` through `e6eb7c1`.
+- Theme: G4 bounded operator apply readiness corridor.
+- Candidate next version if explicitly released later: `v0.1.162`.
+
+Readiness result:
+
+- Source-ready for a human-approved milestone release.
+- Not auto-approved for publish.
+- Not authorization for live bounded apply.
+
+Evidence:
+
+- Full source gate: `326 passed, 1 xfailed`.
+- Release metadata synced at `0.1.161` before release bump.
+- Release readiness smoke passed for Python and Node bootstrap/doctor in isolated HOME.
+- npm dry-run package contents remain minimal and public-safe: `LICENSE`, `README.md`, `bin/agent-memory.js`, `package.json`.
+- Focused release/package tests: `34 passed`.
+
+Next after this review:
+
+- Commit this release-readiness review checkpoint.
+- If releasing, require explicit release approval and then run the project release process plus real downloaded install QA after publish.
+- If not releasing, continue read-only source/docs hardening.
+- Keep live bounded G4 apply, repeated apply, broad/background apply, default-ranking migration, live telemetry reset, collapse/delete, unreviewed promotion, and ordinary conversation auto-approval blocked unless their exact approval corridors are separately satisfied.
+
+## Previous checkpoint: packet/runbook cross-check contract
 
 Source follow-up after commit `d92b2e9` hardened the final pre-apply packet so the bounded operator apply runbook is represented directly in the generated JSON.
 

@@ -1,9 +1,44 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:53 KST
+Last updated: 2026-05-15 00:14 KST
 
-## Source checkpoint: G4 packet/runbook contract self-check
+## Checkpoint: G4 milestone release readiness review
+
+Completed the requested milestone release-readiness review for the accumulated `develop` G4 corridor. No release or publish action was executed.
+
+Review artifact:
+
+- `.dev/roadmap/memory-consolidation/g4-milestone-release-readiness-review.md`
+
+Scope:
+
+- Compared `main..develop` after `v0.1.161`.
+- Reviewed 10 commits from `539f929` through `e6eb7c1`.
+- Changed tracked files vs main are limited to `.dev` status/roadmap docs, `src/agent_memory/api/cli.py`, and `tests/test_cli.py`.
+
+Verdict:
+
+- Source-ready as a release candidate after human maintainer release intent review.
+- Candidate next release would be `v0.1.162` by patch bump, with theme `G4 bounded operator apply readiness corridor`.
+- Do not publish automatically from generic continuation.
+
+Checks:
+
+- Full source test gate: `326 passed, 1 xfailed`.
+- Release metadata check: package/module versions synced at `0.1.161`.
+- Release readiness smoke: Python and Node bootstrap/doctor succeeded in isolated HOME.
+- npm dry-run tarball: only `LICENSE`, `README.md`, `bin/agent-memory.js`, and `package.json`.
+- Focused release/package tests: `34 passed`.
+
+Immediate next recommended slice:
+
+- Commit this release-readiness review checkpoint.
+- If a real release is desired, get explicit release approval first, then follow the project release process and perform real downloaded install QA after publish.
+- If no release approval is given, continue read-only source/docs hardening only.
+- Live bounded G4 apply remains separate and still requires its exact operator approval corridor.
+
+## Previous checkpoint: G4 packet/runbook contract self-check
 
 Completed the next safe B-direction source/docs slice after docs commit `d92b2e9` without running live apply.
 
