@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/agent-memory",
-  "version": "0.1.159",
+  "version": "0.1.160",
   "description": "Local-first graph memory CLI for AI agents",
   "keywords": [
     "ai",
