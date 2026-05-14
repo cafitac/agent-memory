@@ -3472,6 +3472,111 @@ def _write_fresh_epoch_comparison_report(path: Path, *, passed: bool) -> None:
     )
 
 
+
+def test_python_module_cli_dogfood_fresh_epoch_runway_writes_artifacts_and_reconciliation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "fresh-epoch-runway.db"
+    initialize_database(db_path)
+    epoch_start = "2026-05-10T00:00:00Z"
+    _seed_minimal_fresh_epoch_gate_pass(db_path, epoch_start=epoch_start)
+    previous_report = tmp_path / "fresh-epoch-previous.json"
+    previous_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_fresh_epoch_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "epoch": {
+                    "started_at": "2026-05-10 00:00:00",
+                    "latest_created_at": "2026-05-10 00:03:00",
+                },
+                "coverage": {
+                    "observation_count": 2,
+                    "trace_count": 2,
+                    "observation_trace_coverage_ratio": 1.0,
+                },
+                "empty_retrieval_diagnostics": {
+                    "count": 1,
+                    "ratio": 0.5,
+                    "unknown_outcome_drilldown": {"count": 0, "unresolved_count": 0},
+                    "metadata_gap_diagnostic": {
+                        "unknown_empty_outcome_count": 0,
+                        "unresolved_adapter_payload_gap_count": 0,
+                        "classified_missing_outcome_count": 0,
+                        "dominant_blocker": "none",
+                        "classification_confidence": "complete",
+                    },
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "fresh_epoch_ready_to_compare_against_historical",
+                    "blocked_reasons": [],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "runway"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "fresh-epoch-runway",
+            str(db_path),
+            "--epoch-start",
+            epoch_start,
+            "--report-dir",
+            str(report_dir),
+            "--baseline-report",
+            str(previous_report),
+            "--artifact-prefix",
+            "test-runway",
+            "--high-empty-threshold",
+            "1.0",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_fresh_epoch_runway"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "fresh_epoch_runway_ready_for_manual_telemetry_reconciliation",
+        "blocked_reasons": [],
+    }
+    artifacts = payload["artifacts"]
+    for key in ["fresh_epoch_report", "fresh_epoch_comparison_report", "telemetry_reconciliation_report"]:
+        assert Path(artifacts[key]).exists(), key
+    assert json.loads(Path(artifacts["fresh_epoch_report"]).read_text())["kind"] == "dogfood_fresh_epoch_readiness"
+    comparison = json.loads(Path(artifacts["fresh_epoch_comparison_report"]).read_text())
+    assert comparison["report_count"] == 2
+    assert comparison["quality_gate"]["pass"] is True
+    reconciliation = json.loads(Path(artifacts["telemetry_reconciliation_report"]).read_text())
+    assert reconciliation["fresh_epoch_comparison_evidence"]["usable_for_reset_avoidance"] is True
+    assert reconciliation["quality_gate"]["pass"] is True
+    assert payload["automation_policy"]["telemetry_reset_apply_supported"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
 def test_python_module_cli_dogfood_telemetry_reconciliation_accepts_green_fresh_epoch_comparison_evidence(
     tmp_path: Path,
 ) -> None:

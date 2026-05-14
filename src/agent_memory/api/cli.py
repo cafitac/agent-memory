@@ -5522,6 +5522,108 @@ def _fresh_epoch_comparison_report(
     return payload
 
 
+
+def _dogfood_fresh_epoch_runway_payload(args: argparse.Namespace) -> dict[str, Any]:
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    artifact_prefix = (args.artifact_prefix or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")).strip()
+    if not artifact_prefix:
+        raise ValueError("dogfood fresh-epoch-runway artifact-prefix must be non-empty")
+    fresh_report_path = report_dir / f"{artifact_prefix}-fresh-epoch.json"
+    comparison_report_path = report_dir / f"{artifact_prefix}-fresh-epoch-compare.json"
+    reconciliation_report_path = report_dir / f"{artifact_prefix}-telemetry-reconciliation.json"
+
+    fresh_payload = _dogfood_fresh_epoch_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            epoch_start=args.epoch_start,
+            output=fresh_report_path,
+            min_trace_coverage=args.min_trace_coverage,
+            min_evidence_count=args.min_evidence_count,
+            high_empty_threshold=args.high_empty_threshold,
+        )
+    )
+    baseline_reports = [path.expanduser().resolve(strict=False) for path in (args.baseline_reports or [])]
+    comparison_reports = [*baseline_reports, fresh_report_path]
+    comparison_payload = _fresh_epoch_comparison_report(
+        report_paths=comparison_reports,
+        output_path=comparison_report_path,
+        min_report_count=args.min_report_count,
+    )
+    reconciliation_payload = _dogfood_telemetry_reconciliation_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            epoch_start=args.epoch_start,
+            output=reconciliation_report_path,
+            min_trace_coverage=args.min_trace_coverage,
+            min_evidence_count=args.min_evidence_count,
+            high_empty_threshold=args.high_empty_threshold,
+            fresh_epoch_comparison_report=comparison_report_path,
+        )
+    )
+    blocked_reasons: list[str] = []
+    fresh_gate = fresh_payload.get("quality_gate", {}) if isinstance(fresh_payload.get("quality_gate"), dict) else {}
+    comparison_gate = comparison_payload.get("quality_gate", {}) if isinstance(comparison_payload.get("quality_gate"), dict) else {}
+    reconciliation_gate = reconciliation_payload.get("quality_gate", {}) if isinstance(reconciliation_payload.get("quality_gate"), dict) else {}
+    if fresh_gate.get("pass") is not True:
+        blocked_reasons.append("fresh_epoch_quality_gate_not_green")
+    if comparison_gate.get("pass") is not True:
+        blocked_reasons.append("fresh_epoch_comparison_not_green")
+    if reconciliation_gate.get("pass") is not True:
+        blocked_reasons.append("telemetry_reconciliation_not_green")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_fresh_epoch_runway",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path.expanduser().resolve(strict=False)),
+        "epoch_start": args.epoch_start,
+        "report_dir": str(report_dir),
+        "artifacts": {
+            "fresh_epoch_report": str(fresh_report_path),
+            "fresh_epoch_comparison_report": str(comparison_report_path),
+            "telemetry_reconciliation_report": str(reconciliation_report_path),
+        },
+        "input_reports": {
+            "baseline_report_count": len(baseline_reports),
+            "baseline_reports": [str(path) for path in baseline_reports],
+            "comparison_report_count": len(comparison_reports),
+        },
+        "fresh_epoch_quality_gate": fresh_gate,
+        "fresh_epoch_comparison_quality_gate": comparison_gate,
+        "telemetry_reconciliation_quality_gate": reconciliation_gate,
+        "quality_gate": {
+            "pass": passed,
+            "decision": "fresh_epoch_runway_ready_for_manual_telemetry_reconciliation"
+            if passed
+            else "continue_fresh_epoch_collection_before_manual_telemetry_reconciliation",
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "telemetry_reset_apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "requires_human_review": True,
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "raw_report_included": False,
+            "aggregate_only": True,
+        },
+        "suggested_next_steps": [
+            "Inspect the saved aggregate reports before any manual telemetry-only reset decision.",
+            "Treat a green runway as reset-avoidance evidence only; it does not authorize live reset/apply.",
+            "Keep broad G4 apply, default ranking migration, collapse/delete, and ordinary auto-approval blocked.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
 def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> dict[str, Any]:
     report_path = args.report.expanduser().resolve(strict=False)
     raw_text = report_path.read_text(encoding="utf-8")
@@ -11384,6 +11486,28 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_fresh_epoch_compare_parser.add_argument("--output", type=Path)
     dogfood_fresh_epoch_compare_parser.add_argument("--min-report-count", type=int, default=2)
+
+    dogfood_fresh_epoch_runway_parser = dogfood_subparsers.add_parser(
+        "fresh-epoch-runway",
+        help="Run the read-only fresh-epoch -> comparison -> telemetry-reconciliation artifact workflow.",
+    )
+    dogfood_fresh_epoch_runway_parser.add_argument("db_path", type=Path)
+    dogfood_fresh_epoch_runway_parser.add_argument("--epoch-start", required=True, help="ISO timestamp for the fresh telemetry epoch.")
+    dogfood_fresh_epoch_runway_parser.add_argument("--report-dir", type=Path, required=True)
+    dogfood_fresh_epoch_runway_parser.add_argument(
+        "--baseline-report",
+        type=Path,
+        action="append",
+        default=[],
+        dest="baseline_reports",
+        help="Existing dogfood fresh-epoch report to include in the comparison; repeat for multiple saved runs.",
+    )
+    dogfood_fresh_epoch_runway_parser.add_argument("--output", type=Path)
+    dogfood_fresh_epoch_runway_parser.add_argument("--artifact-prefix")
+    dogfood_fresh_epoch_runway_parser.add_argument("--min-report-count", type=int, default=2)
+    dogfood_fresh_epoch_runway_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
+    dogfood_fresh_epoch_runway_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_fresh_epoch_runway_parser.add_argument("--high-empty-threshold", type=float, default=0.5)
     dogfood_telemetry_reset_preview_parser = dogfood_subparsers.add_parser(
         "telemetry-reset-preview",
         help="Preview aggregate telemetry-only reset candidates without deleting or mutating rows.",
@@ -12467,6 +12591,17 @@ def main() -> None:
                     indent=2,
                 )
             )
+            return
+        if args.dogfood_action == "fresh-epoch-runway":
+            if args.min_report_count < 1:
+                raise ValueError("dogfood fresh-epoch-runway min-report-count must be >= 1")
+            if not 0 <= args.min_trace_coverage <= 1:
+                raise ValueError("dogfood fresh-epoch-runway min-trace-coverage must be between 0 and 1")
+            if args.min_evidence_count < 1:
+                raise ValueError("dogfood fresh-epoch-runway min-evidence-count must be >= 1")
+            if not 0 <= args.high_empty_threshold <= 1:
+                raise ValueError("dogfood fresh-epoch-runway high-empty-threshold must be between 0 and 1")
+            print(json.dumps(_dogfood_fresh_epoch_runway_payload(args), indent=2))
             return
         if args.dogfood_action == "telemetry-reset-preview":
             print(json.dumps(_dogfood_telemetry_reset_preview_payload(args), indent=2))
