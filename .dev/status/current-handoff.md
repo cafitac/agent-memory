@@ -1,38 +1,42 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:15 KST
+Last updated: 2026-05-14 21:24 KST
 
-## Source checkpoint: G4 post-apply verification gate added
+## Docs checkpoint: G4 bounded operator apply runbook/checklist hardened
 
-Implemented the next safe B-direction source slice without running live apply: a read-only post-apply verification gate for the separate `g4-review-queue-apply` corridor.
+Completed the next safe B-direction work after source commit `e0bc642`. This was a docs/checklist hardening slice only; no live apply was run and no source behavior changed.
 
-- New command: `dogfood g4-post-apply-verification`.
-- Inputs:
-  - `--apply-report`: saved `dogfood_g4_review_queue_apply` artifact from an already approved apply.
-  - `--post-apply-bundle-report`: saved post-apply `dogfood_g4_operator_apply_bundle` artifact.
-  - `--rollback-replay-report`: saved `dogfood_rollback_replay_validate` artifact.
-- Output kind: `dogfood_g4_post_apply_verification`.
-- It verifies apply artifact contract: exact policy `g4-review-queue-apply-v1`, approval phrase matched, `mutated=true`, `read_only=false` only for the saved apply artifact, `applied_count <= max_apply`, default retrieval unchanged, memory status not mutated, ordinary auto-approval false, privacy/ref-safe, and backup file SHA-256 matches the apply artifact.
-- It verifies post-apply bundle contract: read-only/no-mutation/default-unchanged, quality gate green, broad apply false, apply-executed false, apply-supported false, ordinary auto-approval false, and privacy/ref-safe.
-- It verifies rollback replay contract: read-only/no-mutation/default-unchanged, quality gate green, and privacy/ref-safe.
-- It emits `next_step=stop_or_collect_operator_review_before_any_further_mutation`; it does not run apply and does not authorize another mutation.
+Updated file:
+
+- `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md`
+
+What changed:
+
+- Added a one-screen operator checklist covering:
+  - explicit live-apply authorization phrase and policy;
+  - actor/private reason/backup/audit/max-apply inputs;
+  - green pre-apply operator bundle and readiness-summary evidence;
+  - post-apply `dogfood g4-post-apply-verification` stop gate;
+  - prohibition on repeated apply without fresh approval.
+- Updated pre-apply verification to check both:
+  - `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json`
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json`
+- Recorded the intentional no-live-apply red verifier smoke:
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`
+- Updated post-apply procedure to run `dogfood g4-post-apply-verification` and require `quality_gate.decision=g4_post_apply_verification_green_stop_before_next_mutation` before stopping.
 
 Verification:
 
-- RED observed first: `g4-post-apply-verification` was not a valid dogfood action and the two new tests failed.
-- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_post_apply_verification'` -> `2 passed, 140 deselected`.
-- `.venv/bin/python -m pytest tests/test_cli.py -q -k 'g4_post_apply_verification or g4_readiness_gate_summary or g4_operator_apply_bundle or g4_review_queue_apply'` -> `7 passed, 135 deselected`.
-- `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-post-apply-verification --help` -> passed.
-- Source-checkout live read-only blocked smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`; it stayed read-only/no-mutation and correctly blocked because no real live apply artifact exists.
-- `.venv/bin/python -m pytest tests/ -q` -> `324 passed, 1 xfailed`.
-- `git diff --check` -> passed.
+- Docs only; no behavior tests required.
+- Run `git diff --check` before committing.
+- Confirm no report JSON, private reason, backup DB, `.agent-learner/`, `.claude/`, `.omc/`, or `.worktrees/` content is staged.
 
 Immediate next recommended slice:
 
-- Commit this source/test/doc slice.
+- Commit this docs/checklist slice.
 - Still do not release yet.
-- If no exact live apply approval is given, the next safe B-direction work should be manual-review/checklist/runbook hardening around the verified pre-apply and post-apply gates, not another mutation command.
+- If no exact live apply approval is given, next safe source work is a read-only machine-readable operator apply packet/checklist command. It should emit checklist/evidence status and exact required inputs, but must still set `apply_executed=false`, `apply_supported=false`, and `broad_g4_apply_allowed=false`.
 - Live apply remains blocked unless separately approved with exact operator phrase, policy, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Source-checkout live read-only smoke: G4 operator bundle over saved v0.1.161 artifacts

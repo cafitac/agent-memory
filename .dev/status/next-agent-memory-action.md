@@ -1,23 +1,24 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:15 KST
+Last updated: 2026-05-14 21:24 KST
 
-## Just completed: source G4 post-apply verification gate
+## Just completed: G4 bounded operator apply runbook/checklist hardening
 
-- Added read-only `dogfood g4-post-apply-verification`.
-- It consumes a saved `dogfood_g4_review_queue_apply` artifact, a saved post-apply `dogfood_g4_operator_apply_bundle` artifact, and a saved `dogfood_rollback_replay_validate` artifact.
-- It validates the apply artifact confirms exact policy/approval, bounded `applied_count <= max_apply`, backup path/hash integrity, no memory-status mutation, default retrieval unchanged, ordinary auto-approval false, and ref-safe privacy flags.
-- It validates the post-apply operator bundle remains read-only/no-mutation/default-unchanged, broad apply false, apply execution/support false, ordinary auto-approval false, quality-gate green, and privacy/ref-safe.
-- It validates rollback replay remains read-only/no-mutation/default-unchanged, quality-gate green, and privacy/ref-safe.
-- It is a stop gate after an already-approved apply; it does not run apply and does not authorize another apply.
-- Source-checkout live read-only smoke intentionally used a no-live-apply placeholder and wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json` with `quality_gate.pass=false` for the expected blocker `apply_report_mutation_not_confirmed`.
-- Full verification: `.venv/bin/python -m pytest tests/ -q` -> `324 passed, 1 xfailed`.
+- Updated `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md` after source commit `e0bc642` added `dogfood g4-post-apply-verification`.
+- The runbook now has a one-screen operator checklist for pre-authorization, pre-apply evidence, post-apply stop checks, and repeated-apply prevention.
+- It now references both green pre-apply artifacts:
+  - `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json`
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json`
+- It also records the intentional no-live-apply red verifier smoke:
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`
+- The post-apply section now uses `dogfood g4-post-apply-verification` and requires `quality_gate.decision=g4_post_apply_verification_green_stop_before_next_mutation` before any further discussion.
+- This was docs/checklist only. It did not run live apply, did not mutate live memory, and did not change source behavior.
 
 Recommended next work now:
 
-1. Commit this source/test/doc slice; no release yet.
-2. If staying in safe B-direction and still no exact apply approval is given, strengthen the manual operator review packet/checklist around the already verified pre-apply and post-apply gates, still without running live apply.
+1. Commit this docs/checklist slice; no release yet.
+2. If staying in safe B-direction without exact live apply approval, the next useful work is a source-level read-only `g4-operator-apply-packet`/`g4-manual-apply-checklist` command that emits the same checklist as machine-readable JSON and still refuses to apply.
 3. Only run live bounded G4 queue apply if the operator separately gives the exact approval phrase `apply-approved-g4-review-queue-items-v1` plus actor, private reason, backup path, policy `g4-review-queue-apply-v1`, bounded `--max-apply`, and audit output path.
 4. Keep live telemetry reset, default-ranking migration, broad/background G4 apply, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 

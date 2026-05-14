@@ -1,28 +1,27 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:15 KST
+Last updated: 2026-05-14 21:24 KST
 
-## Source checkpoint: G4 post-apply verification gate after readiness summary
+## Docs checkpoint: operator runbook catches up to post-apply verifier
 
-This B-direction slice strengthens the operator corridor after an explicitly approved bounded apply, without running live apply now. It turns the runbook's post-apply expectations into a source-level read-only contract.
+After source commit `e0bc642` added `dogfood g4-post-apply-verification`, the G4 bounded operator apply runbook was hardened so future sessions do not treat readiness artifacts as authorization.
 
 Implemented/evidence:
 
-- New read-only command: `dogfood g4-post-apply-verification`.
-- It accepts `--apply-report`, `--post-apply-bundle-report`, and `--rollback-replay-report`.
-- It emits `dogfood_g4_post_apply_verification` with `apply_artifact_gate`, `backup_integrity_gate`, `post_apply_bundle_gate`, `rollback_replay_gate`, and combined `quality_gate`.
-- The apply gate requires the saved apply artifact to prove exact policy/approval, bounded apply count, default retrieval unchanged, no memory-status mutation, no ordinary auto-approval, privacy/ref-safety, and backup SHA-256 integrity.
-- The post-apply bundle and rollback replay gates require read-only/no-mutation/default-unchanged green evidence after the apply.
-- Source-checkout live blocked smoke: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json` intentionally stayed red because no actual live apply artifact exists; this proves the command remains a verification/stop gate, not an apply trigger.
-- Full tests: `.venv/bin/python -m pytest tests/ -q` -> `324 passed, 1 xfailed`.
+- Updated `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md`.
+- Added one-screen operator checklist for authorization, pre-apply evidence, post-apply stop gate, and repeated-apply prevention.
+- Pre-apply verification now checks both green evidence artifacts: operator bundle and readiness summary.
+- Post-apply verification now uses `dogfood g4-post-apply-verification` and requires the green stop decision before any further mutation is discussed.
+- The no-live-apply placeholder verifier smoke remains intentionally red and documented as proof that the verifier is not an apply trigger.
+- This checkpoint is docs/checklist only; it did not run live apply or mutate live memory.
 
 Next after this slice:
 
-- Commit this source/test/doc checkpoint.
+- Commit the docs/checklist checkpoint.
 - Do not release solely for this checkpoint.
-- If staying in B-direction without explicit apply approval, next harden the manual operator checklist/review packet around pre-apply and post-apply gates.
-- Live apply remains blocked unless separately approved with exact operator phrase, policy, actor, private reason, backup path, bounded max-apply, and audit output.
+- If still staying in safe B-direction without explicit apply approval, implement a read-only source command that emits a machine-readable operator apply packet/checklist from saved artifacts while still refusing to apply.
+- Live apply remains blocked unless separately approved with exact operator phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Source-checkout smoke: G4 operator bundle consumes saved green v0.1.161 gate artifacts
 
