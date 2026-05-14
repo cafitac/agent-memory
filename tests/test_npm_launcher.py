@@ -209,3 +209,52 @@ def test_install_smoke_docs_cover_npm_first_external_smoke() -> None:
     assert "temporary directory" in install_smoke
     assert "published-install-smoke.yml" in install_smoke
     assert "Keep private data private" in install_smoke
+
+
+def test_npm_package_metadata_is_oss_facing() -> None:
+    package_json = json.loads((REPO_ROOT / "package.json").read_text())
+
+    assert package_json["name"] == "@cafitac/agent-memory"
+    assert package_json["description"] == "Local-first graph memory CLI for AI agents"
+    assert package_json["license"] == "MIT"
+    assert package_json["homepage"] == "https://github.com/cafitac/agent-memory#readme"
+    assert package_json["repository"] == {
+        "type": "git",
+        "url": "https://github.com/cafitac/agent-memory",
+    }
+    assert package_json["bugs"] == {"url": "https://github.com/cafitac/agent-memory/issues"}
+    assert package_json["bin"] == {"agent-memory": "bin/agent-memory.js"}
+    assert package_json["files"] == ["bin/agent-memory.js", "README.md"]
+    assert package_json["publishConfig"] == {"access": "public"}
+    assert set(package_json["keywords"]) == {
+        "ai",
+        "agent-memory",
+        "cli",
+        "graph-memory",
+        "hermes",
+        "local-first",
+    }
+
+
+def test_npm_pack_dry_run_contains_only_public_launcher_files() -> None:
+    result = subprocess.run(
+        ["npm", "pack", "--dry-run", "--json"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+    payload = json.loads(result.stdout)[0]
+    paths = {entry["path"] for entry in payload["files"]}
+    assert paths == {
+        "LICENSE",
+        "README.md",
+        "bin/agent-memory.js",
+        "package.json",
+    }
+    assert not any(path.startswith(".dev/") for path in paths)
+    assert not any(path.startswith(".agent-learner/") for path in paths)
+    assert not any(path.startswith(".claude/") for path in paths)
+    assert not any(path.startswith(".worktrees/") for path in paths)
+    assert not any("report" in path.lower() or "dogfood" in path.lower() for path in paths)

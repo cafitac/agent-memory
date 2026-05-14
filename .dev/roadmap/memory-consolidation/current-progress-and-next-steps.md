@@ -1,7 +1,22 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 11:50 KST
+Last updated: 2026-05-14 12:45 KST
+
+## v0.1.158 npm package metadata/package-contents audit checkpoint
+
+This source slice completes the OSS package-surface follow-up after the npm-install-only README cleanup.
+
+Verified source state before release:
+
+- `package.json` now has an OSS-facing description, keywords, repository, bugs, license, bin, `files`, and public `publishConfig`.
+- `npm pack --dry-run --json` shows the npm tarball contains only `LICENSE`, `README.md`, `bin/agent-memory.js`, and `package.json`.
+- Internal `.dev`, `.agent-learner`, `.claude`, `.worktrees`, report, cache, and dogfood artifacts remain excluded from the npm package.
+- Focused test coverage asserts package metadata and tarball contents in `tests/test_npm_launcher.py`.
+
+Next after this package-surface slice:
+
+- Return to the brain-like memory runway: continue metadata-rich dogfooding with explicit fresh epoch windows, compare fresh trace/retrieval coverage, and keep all broad apply/default ranking/collapse-delete/telemetry-reset automation blocked until real runtime evidence clears the gates.
 
 ## v0.1.157 OSS public-surface checkpoint
 
