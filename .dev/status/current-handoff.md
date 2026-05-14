@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 20:21 KST
+Last updated: 2026-05-14 20:45 KST
 
 ## Branch/release policy update
 
@@ -10,31 +10,29 @@ Last updated: 2026-05-14 20:21 KST
 - Keep the existing QA method: real operational QA continues against actually downloaded/published installs after a milestone release, not just source checkout.
 - Next release should wait for a genuinely complete/stable milestone, then use the existing release verification gates.
 
-## Current source state: G4 bounded apply readiness corridor started
+## Current source state: G4 read-only operator apply bundle added
 
-Completed source work on `develop` after the human approval artifact slice:
+Completed source work on `develop` after the human approval artifact and bounded apply-readiness slices:
 
 - Commit `539f929` records the human approval artifact gate: `dogfood g4-review-queue-approval-report` plus `--human-review-approval-report` consumption in `g4-review-queue-preview`.
-- New read-only `dogfood g4-apply-readiness` consumes a saved green `dogfood_g4_review_queue_preview` report.
-- It validates the preview as read-only, no mutation, default retrieval unchanged, quality-gate green, privacy-safe, non-empty queue, all required artifact gates green, and human approval sourced from an artifact.
-- It emits a bounded readiness artifact with `bounded_partial_apply_ready=true` only when those gates pass.
-- It still sets `apply_supported=false` and `broad_g4_apply_allowed=false`; the only next mutating step is the existing separate `g4-review-queue-apply` command with exact operator approval, actor, reason, backup, and `--max-apply` bound.
+- `dogfood g4-apply-readiness` consumes a saved green `dogfood_g4_review_queue_preview` report and emits `bounded_partial_apply_ready=true` only when the preview is read-only, no-mutation, privacy-safe, non-empty, quality-gate green, and backed by green retrieval ranking, rollback confidence, rollback replay, telemetry reconciliation, and human-review approval artifacts.
+- New read-only `dogfood g4-operator-apply-bundle` generates the operator workflow artifacts in one command: human approval report, queue preview, apply-readiness report, and an exact `g4-review-queue-apply` command preview.
+- The bundle is still report-only: `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, default retrieval unchanged, and ordinary conversation auto-approval false.
+- Actual mutation remains only in the separate `g4-review-queue-apply` corridor requiring exact `--policy g4-review-queue-apply-v1`, `--approval-phrase apply-approved-g4-review-queue-items-v1`, actor, private reason, backup path, and bounded `--max-apply`.
 
-Verification so far:
+Verification:
 
-- RED observed: focused test initially failed because `g4-apply-readiness` was not a valid dogfood action.
-- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply -q` -> `1 passed`.
-- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_blocks_unsafe_preview_artifact -q` -> `2 passed`.
-- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_artifacts_without_broad_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply -q` -> `3 passed`.
-- `.venv/bin/python -m agent_memory.api.cli dogfood g4-apply-readiness --help` -> passed.
-- `.venv/bin/python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py` -> passed.
-- `git diff --check -- src/agent_memory/api/cli.py tests/test_cli.py .dev/status/current-handoff.md .dev/status/next-agent-memory-action.md` -> passed.
-- `.venv/bin/python -m pytest tests/test_cli.py -q` -> `135 passed, 1 xfailed`.
+- RED observed: focused operator-bundle tests initially failed because `g4-operator-apply-bundle` was not a valid dogfood action.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_is_ref_safe_read_only_command_preview tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_blocks_failed_artifact_without_apply -q` -> `2 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_artifacts_without_broad_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_blocks_unsafe_preview_artifact tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_is_ref_safe_read_only_command_preview tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_blocks_failed_artifact_without_apply -q` -> `6 passed`.
+- `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-bundle --help` -> passed.
+- `.venv/bin/python -m pytest tests/ -q` -> `320 passed, 1 xfailed`.
 
 Immediate next recommended slice:
 
 - Commit this develop slice.
 - Do not release yet; accumulate develop milestones until the automation corridor is complete/stable.
+- Next source slice can either add a live read-only bundle smoke/runbook against saved v0.1.161 artifacts or start the next explicit operator-approved apply dry-run plan; do not execute live apply from generic continuation.
 
 ## Runtime checkpoint: v0.1.161 fresh runway green and next gate evidence
 

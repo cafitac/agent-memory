@@ -1,7 +1,31 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 17:12 KST
+Last updated: 2026-05-14 20:45 KST
+
+## Source checkpoint: G4 read-only operator apply bundle
+
+This source slice makes the final pre-apply operator workflow easier without changing the safety boundary.
+
+Implemented and verified in source:
+
+- `dogfood g4-operator-apply-bundle` generates the G4 approval artifact, queue preview, bounded apply-readiness artifact, and exact manual apply command preview in one read-only workflow.
+- The bundle requires explicit green artifact inputs for retrieval ranking, rollback confidence, rollback replay, and telemetry reconciliation, then generates the human-review approval report internally from the persisted review queue.
+- The output remains aggregate/ref-safe: it records artifact paths, hashes, quality-gate decisions, queue counts, and a command preview, but no raw proposal JSON, raw content, raw query text, raw trace summary, sample values, or raw reason.
+- The command explicitly reports `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, and ordinary conversation auto-approval false. Actual mutation remains only through the separate exact `g4-review-queue-apply` corridor.
+
+Verification:
+
+- RED observed before implementation: focused operator-bundle tests failed because `g4-operator-apply-bundle` was not a valid dogfood action.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_is_ref_safe_read_only_command_preview tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_blocks_failed_artifact_without_apply -q` -> `2 passed`.
+- `.venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_artifacts_without_broad_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_read_only_gate tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_apply_readiness_blocks_unsafe_preview_artifact tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_is_ref_safe_read_only_command_preview tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_bundle_blocks_failed_artifact_without_apply -q` -> `6 passed`.
+- `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-bundle --help` -> passed.
+- `.venv/bin/python -m pytest tests/ -q` -> `320 passed, 1 xfailed`.
+
+Next after this slice:
+
+- Commit/push/PR this source checkpoint when desired, but do not release solely for this narrow operator-bundle slice.
+- If continuing source work first, either add a read-only source-checkout live bundle smoke/runbook against saved v0.1.161 gate artifacts or write the exact operator-approved apply plan. Do not execute live apply, default-ranking migration, telemetry reset, collapse/delete, unreviewed promotion, or ordinary-conversation auto-approval from generic continuation.
 
 ## Source checkpoint: fresh-epoch runway bundles comparison and reconciliation
 
