@@ -71,9 +71,12 @@ Be careful when sharing:
 ## More docs
 
 - [First-run memory layer setup](docs/first-run-memory-layer.md)
-- [Privacy and safety model](docs/privacy-and-safety.md)
 - [Install smoke recipes](docs/install-smoke.md)
+- [Hermes dogfood guide](docs/hermes-dogfood.md)
+- [Privacy policy](PRIVACY.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 
-MIT
+[MIT](LICENSE)
