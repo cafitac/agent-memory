@@ -1,24 +1,22 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:24 KST
+Last updated: 2026-05-14 23:12 KST
 
-## Just completed: G4 bounded operator apply runbook/checklist hardening
+## Just completed: source-level read-only G4 operator apply packet
 
-- Updated `.dev/roadmap/memory-consolidation/g4-bounded-operator-apply-runbook.md` after source commit `e0bc642` added `dogfood g4-post-apply-verification`.
-- The runbook now has a one-screen operator checklist for pre-authorization, pre-apply evidence, post-apply stop checks, and repeated-apply prevention.
-- It now references both green pre-apply artifacts:
+- Source commit `c7b6e0c` added `dogfood g4-operator-apply-packet`.
+- The command consumes saved green pre-apply artifacts:
   - `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json`
   - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json`
-- It also records the intentional no-live-apply red verifier smoke:
-  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`
-- The post-apply section now uses `dogfood g4-post-apply-verification` and requires `quality_gate.decision=g4_post_apply_verification_green_stop_before_next_mutation` before any further discussion.
-- This was docs/checklist only. It did not run live apply, did not mutate live memory, and did not change source behavior.
+- It emits a machine-readable manual checklist plus exact command templates for `g4-review-queue-apply` and `g4-post-apply-verification`.
+- Safety remains unchanged: `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, default retrieval unchanged, no raw content/query/trace/reason/sample values.
+- Source live smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-operator-apply-packet-20260514T141141Z/g4-operator-apply-packet.json` with `quality_gate.pass=true` and decision `operator_apply_packet_ready_for_manual_review_only`.
 
 Recommended next work now:
 
-1. Commit this docs/checklist slice; no release yet.
-2. If staying in safe B-direction without exact live apply approval, the next useful work is a source-level read-only `g4-operator-apply-packet`/`g4-manual-apply-checklist` command that emits the same checklist as machine-readable JSON and still refuses to apply.
+1. Commit this docs/status checkpoint; no release yet.
+2. If staying in safe B-direction without exact live apply approval, the next useful work is a read-only packet/runbook cross-check or operator-facing docs polish around the packet output. Do not create another apply-enabling command from generic continuation.
 3. Only run live bounded G4 queue apply if the operator separately gives the exact approval phrase `apply-approved-g4-review-queue-items-v1` plus actor, private reason, backup path, policy `g4-review-queue-apply-v1`, bounded `--max-apply`, and audit output path.
 4. Keep live telemetry reset, default-ranking migration, broad/background G4 apply, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 

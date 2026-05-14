@@ -1,7 +1,44 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:24 KST
+Last updated: 2026-05-14 23:12 KST
+
+## Source checkpoint: G4 operator apply packet/checklist command added
+
+Completed the next safe B-direction source slice after docs commit `204e63f` without running live apply.
+
+What changed:
+
+- Source commit `c7b6e0c` added `dogfood g4-operator-apply-packet`.
+- The command consumes saved pre-apply evidence artifacts and emits a ref-safe JSON packet for manual review:
+  - `operator_checklist` with required policy, approval phrase, actor, private reason, backup path, audit output path, bounded `max_apply`, post-apply verification, and repeated-apply prevention;
+  - exact `g4-review-queue-apply` command preview with placeholders for private reason/backup/audit output;
+  - exact `g4-post-apply-verification` command template.
+- The command does not apply anything and reports `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, default retrieval unchanged, and ordinary conversation auto-approval false.
+- It blocks unsafe/stale artifacts instead of treating any packet as approval.
+
+Source live smoke:
+
+- Command path: source checkout `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-packet`.
+- Live DB checked: `/Users/reddit/.agent-memory/memory.db`.
+- Inputs:
+  - `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json`
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json`
+- Output: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-operator-apply-packet-20260514T141141Z/g4-operator-apply-packet.json`.
+- Result: `quality_gate.pass=true`, decision `operator_apply_packet_ready_for_manual_review_only`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`.
+
+Verification:
+
+- RED observed: focused packet tests initially failed because the dogfood action did not exist.
+- Focused tests: `2 passed`.
+- Full source gate: `PYTHONPATH=src .venv/bin/python -m compileall src && PYTHONPATH=src .venv/bin/python -m pytest tests/ -q` -> `326 passed, 1 xfailed`.
+
+Immediate next recommended slice:
+
+- Commit this docs/status checkpoint.
+- Do not release yet; continue accumulating develop milestones until the corridor is complete/stable.
+- Generic continuation may do read-only packet/runbook cross-checks or docs polish, but must not execute live apply.
+- Live apply remains blocked unless separately approved with exact operator phrase, policy, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Docs checkpoint: G4 bounded operator apply runbook/checklist hardened
 

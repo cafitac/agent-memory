@@ -1,7 +1,7 @@
 # G4 bounded operator apply runbook
 
 Status: AI-authored draft. Not yet human-approved. Do not execute live apply without explicit operator approval.
-Last updated: 2026-05-14 21:24 KST
+Last updated: 2026-05-14 23:12 KST
 
 ## Purpose
 
@@ -14,6 +14,12 @@ The current verified readiness artifacts are:
 - no-live-apply post-apply verifier smoke: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-post-apply-verification-smoke-20260514T121220Z/g4-post-apply-verification.json`
 
 The first two artifacts are green and show bounded readiness. The third is intentionally red because no real apply artifact exists. None of them authorizes live apply by itself.
+
+Additional source-checkout packet artifact:
+
+- operator packet: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-operator-apply-packet-20260514T141141Z/g4-operator-apply-packet.json`
+
+The operator packet is also read-only and exists to make the checklist machine-readable. It is not authorization and does not execute apply.
 
 ## One-screen operator checklist
 
@@ -32,6 +38,7 @@ Pre-authorization checks:
 
 Pre-apply evidence checks:
 
+- [ ] Optional machine-readable packet `g4-operator-apply-packet.json` has `kind=dogfood_g4_operator_apply_packet`, `quality_gate.pass=true`, and `apply_executed=false`.
 - [ ] `g4-operator-apply-bundle.json` has `quality_gate.pass=true`.
 - [ ] `g4-readiness-gate-summary.json` has `quality_gate.pass=true`.
 - [ ] All pre-apply artifacts say `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`.
@@ -97,6 +104,20 @@ Without all eight items, stop after read-only verification.
 ## Pre-apply read-only verification
 
 Use this only to re-check saved readiness artifacts. It is safe because it is read-only and no-mutation.
+
+Machine-readable packet command, also read-only/no-mutation:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-packet \
+  /Users/reddit/.agent-memory/memory.db \
+  --operator-apply-bundle-report /Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json \
+  --readiness-gate-summary-report /Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json \
+  --actor <operator-or-agent-id> \
+  --max-apply 1 \
+  --output /Users/reddit/.agent-memory/reports/<private-run-dir>/g4-operator-apply-packet.json
+```
+
+Expected packet state: `kind=dogfood_g4_operator_apply_packet`, `quality_gate.pass=true`, `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`.
 
 ```bash
 RUN_DIR=/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z

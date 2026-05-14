@@ -1,7 +1,34 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 21:24 KST
+Last updated: 2026-05-14 23:12 KST
+
+## Source checkpoint: read-only operator apply packet/checklist command
+
+Source commit `c7b6e0c` completed the safe B-direction follow-up after the runbook/checklist hardening slice. It makes the manual G4 bounded apply corridor inspectable as JSON without granting or executing apply authority.
+
+Implemented/evidence:
+
+- Added `dogfood g4-operator-apply-packet`.
+- The command validates a saved green `dogfood_g4_operator_apply_bundle` artifact plus a saved green `dogfood_g4_readiness_gate_summary` artifact.
+- It emits a machine-readable `operator_checklist`, an exact manual `g4-review-queue-apply` command preview, and a `g4-post-apply-verification` command template.
+- It refuses unsafe/stale artifacts through blocked reasons such as `operator_apply_bundle_apply_executed`, `operator_apply_bundle_broad_apply_allowed`, `operator_apply_bundle_privacy_flags_not_ref_safe`, and `readiness_gate_summary_not_green`.
+- It remains read-only/report-only: `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, default retrieval unchanged, and ordinary conversation auto-approval false.
+- Source live smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-operator-apply-packet-20260514T141141Z/g4-operator-apply-packet.json` with `quality_gate.pass=true` and decision `operator_apply_packet_ready_for_manual_review_only`.
+
+Verification:
+
+- RED observed: focused packet tests initially failed because `g4-operator-apply-packet` was not a valid dogfood action.
+- `PYTHONPATH=src .venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_packet_emits_machine_readable_checklist_without_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_packet_blocks_unsafe_or_stale_artifacts -q` -> `2 passed`.
+- `PYTHONPATH=src .venv/bin/python -m compileall src && PYTHONPATH=src .venv/bin/python -m pytest tests/ -q` -> `326 passed, 1 xfailed`.
+- Source live smoke against saved pre-apply artifacts passed and did not mutate live memory.
+
+Next after this slice:
+
+- Commit the docs/status checkpoint.
+- Do not release solely for this checkpoint.
+- Generic continuation still must not execute live apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, or ordinary conversation auto-approval.
+- Live apply remains blocked unless separately approved with exact operator phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded max-apply, and audit output.
 
 ## Docs checkpoint: operator runbook catches up to post-apply verifier
 
