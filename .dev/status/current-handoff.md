@@ -1,9 +1,47 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:12 KST
+Last updated: 2026-05-14 23:53 KST
 
-## Source checkpoint: G4 operator apply packet/checklist command added
+## Source checkpoint: G4 packet/runbook contract self-check
+
+Completed the next safe B-direction source/docs slice after docs commit `d92b2e9` without running live apply.
+
+What changed:
+
+- `dogfood g4-operator-apply-packet` now emits a `runbook_contract` block.
+- The block makes the runbook/checklist alignment machine-readable:
+  - required authorization inputs are enumerated;
+  - pre-apply evidence requirements are enumerated;
+  - post-apply stop requirements are enumerated;
+  - manual apply command preview is checked for required flags;
+  - post-apply verification template is checked for required flags;
+  - `readiness_is_not_authorization=true` remains explicit.
+- This is a read-only contract hardening only; it does not grant apply authority or run mutation.
+
+Source live smoke:
+
+- Command path: source checkout `PYTHONPATH=src .venv/bin/python -m agent_memory.api.cli dogfood g4-operator-apply-packet`.
+- Live DB checked: `/Users/reddit/.agent-memory/memory.db`.
+- Inputs:
+  - `/Users/reddit/.agent-memory/reports/v0.1.161-source-g4-operator-bundle-smoke-20260514T114822Z/g4-operator-apply-bundle.json`
+  - `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-readiness-summary-20260514T115854Z/g4-readiness-gate-summary.json`
+- Output: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-packet-runbook-crosscheck-20260514T145334Z/g4-operator-apply-packet.json`.
+- Result: `quality_gate.pass=true`, decision `operator_apply_packet_ready_for_manual_review_only`, `runbook_contract.matches_g4_bounded_operator_apply_runbook=true`, required apply/verifier flag checks true, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`.
+
+Verification:
+
+- RED observed: focused packet test failed with `KeyError: 'runbook_contract'` before source implementation.
+- Focused tests after implementation: `2 passed`.
+- Full source gate: `PYTHONPATH=src .venv/bin/python -m compileall src && PYTHONPATH=src .venv/bin/python -m pytest tests/ -q` -> `326 passed, 1 xfailed`.
+
+Immediate next recommended slice:
+
+- Commit this checkpoint.
+- Do not release solely for this checkpoint.
+- After commit, next safe work is milestone-release readiness review for the accumulated develop G4 corridor, or exact-approved bounded live apply if and only if the operator supplies the required live-apply approval packet.
+
+## Previous checkpoint: G4 operator apply packet/checklist command added
 
 Completed the next safe B-direction source slice after docs commit `204e63f` without running live apply.
 

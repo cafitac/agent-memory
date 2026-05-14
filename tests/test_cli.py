@@ -4904,6 +4904,35 @@ def test_python_module_cli_dogfood_g4_operator_apply_packet_emits_machine_readab
         "--output",
         "<post-apply-verification.json>",
     ]
+    assert payload["runbook_contract"] == {
+        "matches_g4_bounded_operator_apply_runbook": True,
+        "required_authorization_items": [
+            "live_bounded_g4_review_queue_apply_intent",
+            "approval_phrase",
+            "policy",
+            "actor",
+            "private_reason",
+            "backup_path",
+            "audit_output_path",
+            "bounded_max_apply",
+        ],
+        "pre_apply_evidence_items": [
+            "g4_operator_apply_packet_green",
+            "g4_operator_apply_bundle_green",
+            "g4_readiness_gate_summary_green",
+            "read_only_no_mutation_default_unchanged",
+            "pre_apply_bundle_no_apply_support_or_execution",
+            "privacy_ref_safe",
+        ],
+        "post_apply_stop_items": [
+            "new_post_apply_operator_bundle_required",
+            "g4_post_apply_verification_required",
+            "stop_after_first_bounded_apply_without_fresh_approval",
+        ],
+        "manual_apply_command_contains_all_required_flags": True,
+        "post_apply_verification_template_contains_all_required_flags": True,
+        "readiness_is_not_authorization": True,
+    }
     assert payload["artifact_gates"]["operator_apply_bundle"]["pass"] is True
     assert payload["artifact_gates"]["readiness_gate_summary"]["pass"] is True
     assert payload["privacy"] == {

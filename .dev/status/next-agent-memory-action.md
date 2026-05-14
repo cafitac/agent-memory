@@ -1,9 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:12 KST
+Last updated: 2026-05-14 23:53 KST
 
-## Just completed: source-level read-only G4 operator apply packet
+## Just completed: G4 packet/runbook cross-check contract
+
+- Source now includes a `runbook_contract` block in `dogfood g4-operator-apply-packet` output.
+- The contract explicitly mirrors the bounded apply runbook checklist:
+  - required authorization items: live bounded G4 intent, exact approval phrase, exact policy, actor, private reason, backup path, audit output path, and bounded max apply;
+  - pre-apply evidence items: green packet, green operator bundle, green readiness summary, read-only/no-mutation/default-unchanged, pre-apply bundle no-apply/no-support state, and ref-safe privacy;
+  - post-apply stop items: new post-apply operator bundle, `g4-post-apply-verification`, and no repeated apply without fresh approval.
+- The packet self-checks that the manual apply preview contains all required apply flags and that the post-apply verification template contains all required verifier flags.
+- Source live smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-packet-runbook-crosscheck-20260514T145334Z/g4-operator-apply-packet.json` with `quality_gate.pass=true`, `runbook_contract.matches_g4_bounded_operator_apply_runbook=true`, and both command-template flag checks true.
+- Safety remains unchanged: `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, default retrieval unchanged, and no live apply was run.
+
+Recommended next work now:
+
+1. Commit this source/docs checkpoint; no release yet.
+2. After commit, the best next step is a milestone-release readiness review for the accumulated develop G4 corridor, still without live apply.
+3. Only run live bounded G4 queue apply if the operator separately gives the exact approval phrase `apply-approved-g4-review-queue-items-v1` plus actor, private reason, backup path, policy `g4-review-queue-apply-v1`, bounded `--max-apply`, and audit output path.
+4. Keep live telemetry reset, default-ranking migration, broad/background G4 apply, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
+
+## Previous checkpoint: source-level read-only G4 operator apply packet
 
 - Source commit `c7b6e0c` added `dogfood g4-operator-apply-packet`.
 - The command consumes saved green pre-apply artifacts:

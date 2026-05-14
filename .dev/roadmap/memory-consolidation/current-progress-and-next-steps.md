@@ -1,9 +1,34 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-14 23:12 KST
+Last updated: 2026-05-14 23:53 KST
 
-## Source checkpoint: read-only operator apply packet/checklist command
+## Source checkpoint: packet/runbook cross-check contract
+
+Source follow-up after commit `d92b2e9` hardened the final pre-apply packet so the bounded operator apply runbook is represented directly in the generated JSON.
+
+Implemented/evidence:
+
+- `dogfood g4-operator-apply-packet` now emits `runbook_contract`.
+- The contract records the required authorization inputs, pre-apply evidence checklist, post-apply stop checklist, command-preview flag checks, and `readiness_is_not_authorization=true`.
+- The manual apply preview still requires exact policy/approval phrase, actor, private reason placeholder, backup path placeholder, bounded max apply, and audit output placeholder.
+- The post-apply verifier template still requires apply report, post-apply operator bundle, rollback replay report, and verifier output.
+- Source live smoke wrote `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-packet-runbook-crosscheck-20260514T145334Z/g4-operator-apply-packet.json` with `quality_gate.pass=true`, runbook contract alignment true, read-only/no-mutation/no-apply state, and no broad apply.
+
+Verification:
+
+- RED observed: focused packet test failed before source implementation because `runbook_contract` was missing.
+- `PYTHONPATH=src .venv/bin/python -m pytest tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_packet_emits_machine_readable_checklist_without_apply tests/test_cli.py::test_python_module_cli_dogfood_g4_operator_apply_packet_blocks_unsafe_or_stale_artifacts -q` -> `2 passed`.
+- Full source gate: `PYTHONPATH=src .venv/bin/python -m compileall src && PYTHONPATH=src .venv/bin/python -m pytest tests/ -q` -> `326 passed, 1 xfailed`.
+
+Next after this slice:
+
+- Commit this source/docs checkpoint.
+- Do not release solely for this checkpoint.
+- Generic continuation still must not execute live apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, or ordinary conversation auto-approval.
+- Live apply remains blocked unless separately approved with exact operator phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded max-apply, and audit output.
+
+## Previous checkpoint: read-only operator apply packet/checklist command
 
 Source commit `c7b6e0c` completed the safe B-direction follow-up after the runbook/checklist hardening slice. It makes the manual G4 bounded apply corridor inspectable as JSON without granting or executing apply authority.
 

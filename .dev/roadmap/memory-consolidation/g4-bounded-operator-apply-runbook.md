@@ -1,7 +1,7 @@
 # G4 bounded operator apply runbook
 
 Status: AI-authored draft. Not yet human-approved. Do not execute live apply without explicit operator approval.
-Last updated: 2026-05-14 23:12 KST
+Last updated: 2026-05-14 23:53 KST
 
 ## Purpose
 
@@ -18,8 +18,9 @@ The first two artifacts are green and show bounded readiness. The third is inten
 Additional source-checkout packet artifact:
 
 - operator packet: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-operator-apply-packet-20260514T141141Z/g4-operator-apply-packet.json`
+- packet/runbook cross-check: `/Users/reddit/.agent-memory/reports/v0.1.162-source-g4-packet-runbook-crosscheck-20260514T145334Z/g4-operator-apply-packet.json`
 
-The operator packet is also read-only and exists to make the checklist machine-readable. It is not authorization and does not execute apply.
+The operator packet is also read-only and exists to make the checklist machine-readable. The cross-check artifact adds `runbook_contract` so the authorization checklist, pre-apply evidence list, post-apply stop list, and required command flags are represented directly in JSON. Neither artifact is authorization and neither executes apply.
 
 ## One-screen operator checklist
 
