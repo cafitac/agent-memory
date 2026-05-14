@@ -8547,6 +8547,146 @@ def _dogfood_g4_review_queue_approval_report_payload(args: argparse.Namespace) -
     return payload
 
 
+def _read_g4_preview_readiness_artifact(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {"provided": False, "path": None, "pass": False, "blocked_reasons": ["queue_preview_report_not_provided"]}
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+        payload = json.loads(raw_text)
+    except Exception as exc:
+        return {
+            "provided": True,
+            "path": str(path),
+            "pass": False,
+            "blocked_reasons": ["queue_preview_report_unreadable"],
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(payload, dict):
+        return {
+            "provided": True,
+            "path": str(path),
+            "pass": False,
+            "blocked_reasons": ["queue_preview_report_not_json_object"],
+        }
+
+    blocked_reasons: list[str] = []
+    if payload.get("kind") != "dogfood_g4_review_queue_preview":
+        blocked_reasons.append("queue_preview_kind_mismatch")
+    if payload.get("read_only") is not True:
+        blocked_reasons.append("queue_preview_not_read_only")
+    if payload.get("mutated") is True:
+        blocked_reasons.append("queue_preview_claims_mutation")
+    if payload.get("default_retrieval_unchanged") is False:
+        blocked_reasons.append("queue_preview_default_retrieval_changed")
+    if _safe_int(payload.get("queue_count")) < 1:
+        blocked_reasons.append("queue_preview_empty")
+
+    quality_gate = payload.get("quality_gate", {}) if isinstance(payload.get("quality_gate"), dict) else {}
+    if quality_gate.get("pass") is not True:
+        blocked_reasons.append("queue_preview_quality_gate_not_green")
+    blocked_reasons.extend(str(reason) for reason in quality_gate.get("blocked_reasons", []) if reason)
+
+    privacy = payload.get("privacy", {}) if isinstance(payload.get("privacy"), dict) else {}
+    if any(
+        privacy.get(flag) is True
+        for flag in (
+            "raw_conversation_content_included",
+            "raw_query_text_included",
+            "raw_trace_summary_included",
+            "raw_content_included",
+            "sample_values_included",
+        )
+    ):
+        blocked_reasons.append("queue_preview_privacy_flag_claims_raw_content")
+
+    reassessment = payload.get("broad_g4_apply_reassessment", {}) if isinstance(payload.get("broad_g4_apply_reassessment"), dict) else {}
+    if reassessment.get("broad_g4_apply_allowed") is not False:
+        blocked_reasons.append("queue_preview_claims_broad_apply_allowed")
+    if reassessment.get("current_report_green") is not True:
+        blocked_reasons.append("queue_preview_current_report_not_green")
+    if reassessment.get("provided_gate_artifacts_pass") is not True:
+        blocked_reasons.append("queue_preview_artifact_gates_not_green")
+    if reassessment.get("human_review_queue_approval_source") != "artifact":
+        blocked_reasons.append("queue_preview_missing_human_approval_artifact")
+    blocked_reasons.extend(str(reason) for reason in reassessment.get("missing_gate_artifacts", []) if reason)
+    blocked_reasons.extend(str(reason) for reason in reassessment.get("failed_gate_artifacts", []) if reason)
+
+    gate_evidence = reassessment.get("artifact_gate_evidence", {}) if isinstance(reassessment.get("artifact_gate_evidence"), dict) else {}
+    required_gates = [
+        "retrieval_ranking_gate_pass",
+        "rollback_confidence_pass",
+        "rollback_replay_validate_pass",
+        "live_telemetry_reconciliation_pass",
+        "human_review_queue_approval_pass",
+    ]
+    for gate_name in required_gates:
+        if gate_evidence.get(gate_name) is not True:
+            blocked_reasons.append(f"{gate_name}_not_green")
+
+    return {
+        "provided": True,
+        "path": str(path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "pass": not blocked_reasons,
+        "blocked_reasons": sorted(set(blocked_reasons)),
+        "queue_count": _safe_int(payload.get("queue_count")),
+        "required_green_gates": required_gates,
+        "artifact_gate_evidence": {gate: gate_evidence.get(gate) is True for gate in required_gates},
+    }
+
+
+def _dogfood_g4_apply_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.max_apply < 1:
+        raise ValueError("dogfood g4-apply-readiness max-apply must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    preview_evidence = _read_g4_preview_readiness_artifact(args.queue_preview_report)
+    blocked_reasons = list(preview_evidence.get("blocked_reasons", []))
+    bounded_ready = not blocked_reasons
+    payload = {
+        "kind": "dogfood_g4_apply_readiness",
+        "read_only": True,
+        "mutated": False,
+        "db_path": str(db_path),
+        "apply_supported": False,
+        "broad_g4_apply_allowed": False,
+        "bounded_partial_apply_ready": bounded_ready,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "preview_evidence": preview_evidence,
+        "quality_gate": {
+            "pass": bounded_ready,
+            "decision": "bounded_apply_ready_pending_exact_operator_approval" if bounded_ready else "continue_read_only_gate_evidence_before_apply_readiness",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "required_operator_approval": {
+            "command": "g4-review-queue-apply",
+            "policy": "g4-review-queue-apply-v1",
+            "approval_phrase": "apply-approved-g4-review-queue-items-v1",
+            "backup_required": True,
+            "max_apply": args.max_apply,
+        },
+        "safety_exclusions": {
+            "broad_g4_background_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_migration": False,
+            "collapse_delete_apply": False,
+            "live_telemetry_reset": False,
+        },
+        "next_step": "If and only if an operator explicitly approves, run g4-review-queue-apply with the exact policy, phrase, actor, reason, backup, and max-apply bound.",
+        "privacy": {
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_telemetry_reset_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     epoch_start = _parse_epoch_start(args.epoch_start) if args.epoch_start else None
@@ -11816,6 +11956,14 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_g4_review_queue_approval_report_parser.add_argument("--policy", required=True)
     dogfood_g4_review_queue_approval_report_parser.add_argument("--approval-phrase", required=True)
     dogfood_g4_review_queue_approval_report_parser.add_argument("--output", type=Path)
+    dogfood_g4_apply_readiness_parser = dogfood_subparsers.add_parser(
+        "g4-apply-readiness",
+        help="Read-only bounded G4 apply readiness report from a green queue preview artifact; does not apply mutations.",
+    )
+    dogfood_g4_apply_readiness_parser.add_argument("db_path", type=Path)
+    dogfood_g4_apply_readiness_parser.add_argument("--queue-preview-report", type=Path, required=True)
+    dogfood_g4_apply_readiness_parser.add_argument("--max-apply", type=int, default=1)
+    dogfood_g4_apply_readiness_parser.add_argument("--output", type=Path)
     dogfood_g4_review_queue_apply_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-apply",
         help="Apply approved G4 review queue items through a guarded audit-only corridor with backup and rollback hint.",
@@ -12872,6 +13020,9 @@ def main() -> None:
             return
         if args.dogfood_action == "g4-review-queue-approval-report":
             print(json.dumps(_dogfood_g4_review_queue_approval_report_payload(args), indent=2))
+            return
+        if args.dogfood_action == "g4-apply-readiness":
+            print(json.dumps(_dogfood_g4_apply_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "g4-review-queue-apply":
             print(json.dumps(_dogfood_g4_review_queue_apply_payload(args), indent=2))

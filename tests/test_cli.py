@@ -4375,6 +4375,193 @@ def test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_r
     assert after_counts == before_counts
 
 
+def test_python_module_cli_dogfood_g4_apply_readiness_consumes_green_preview_without_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-apply-readiness.db"
+    initialize_database(db_path)
+    preview_report = tmp_path / "g4-preview-green.json"
+    preview_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_review_queue_preview",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "queue_count": 2,
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "broad_g4_apply_reassessment": {
+                    "broad_g4_apply_allowed": False,
+                    "decision": "broad_g4_apply_still_blocked_pending_separate_apply_corridor",
+                    "current_report_green": True,
+                    "provided_gate_artifacts_pass": True,
+                    "missing_gate_artifacts": [],
+                    "failed_gate_artifacts": [],
+                    "human_review_queue_approval_source": "artifact",
+                    "artifact_gate_evidence": {
+                        "retrieval_ranking_gate_pass": True,
+                        "rollback_confidence_pass": True,
+                        "rollback_replay_validate_pass": True,
+                        "live_telemetry_reconciliation_pass": True,
+                        "human_review_queue_approval_pass": True,
+                    },
+                    "required_green_gates": [
+                        "retrieval_ranking_gate_pass",
+                        "rollback_confidence_pass",
+                        "rollback_replay_validate_pass",
+                        "live_telemetry_reconciliation_pass",
+                        "human_review_queue_approval_pass",
+                    ],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "sample_values_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "aggregate_or_ref_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with sqlite3.connect(db_path) as connection:
+        before_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("facts", "procedures", "episodes")
+        }
+
+    output_path = tmp_path / "readiness.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-apply-readiness",
+            str(db_path),
+            "--queue-preview-report",
+            str(preview_report),
+            "--max-apply",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_g4_apply_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["apply_supported"] is False
+    assert payload["broad_g4_apply_allowed"] is False
+    assert payload["bounded_partial_apply_ready"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "bounded_apply_ready_pending_exact_operator_approval",
+        "blocked_reasons": [],
+    }
+    assert payload["required_operator_approval"] == {
+        "command": "g4-review-queue-apply",
+        "policy": "g4-review-queue-apply-v1",
+        "approval_phrase": "apply-approved-g4-review-queue-items-v1",
+        "backup_required": True,
+        "max_apply": 1,
+    }
+    assert payload["preview_evidence"]["report_sha256"] == hashlib.sha256(preview_report.read_text(encoding="utf-8").encode()).hexdigest()
+    assert payload["privacy"]["raw_content_included"] is False
+    assert payload["privacy"]["sample_values_included"] is False
+
+    with sqlite3.connect(db_path) as connection:
+        after_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in before_counts
+        }
+    assert after_counts == before_counts
+
+
+def test_python_module_cli_dogfood_g4_apply_readiness_blocks_unsafe_preview_artifact(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-apply-readiness-blocked.db"
+    initialize_database(db_path)
+    preview_report = tmp_path / "g4-preview-unsafe.json"
+    preview_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_review_queue_preview",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "queue_count": 0,
+                "quality_gate": {"pass": False, "blocked_reasons": ["pending_review_queue_items_present"]},
+                "broad_g4_apply_reassessment": {
+                    "broad_g4_apply_allowed": False,
+                    "current_report_green": False,
+                    "provided_gate_artifacts_pass": False,
+                    "missing_gate_artifacts": ["human_review_queue_approval_report"],
+                    "failed_gate_artifacts": ["rollback_replay_validate_pass"],
+                    "human_review_queue_approval_source": "absent",
+                    "artifact_gate_evidence": {
+                        "retrieval_ranking_gate_pass": True,
+                        "rollback_confidence_pass": True,
+                        "rollback_replay_validate_pass": False,
+                        "live_telemetry_reconciliation_pass": True,
+                        "human_review_queue_approval_pass": False,
+                    },
+                },
+                "privacy": {"sample_values_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-apply-readiness",
+            str(db_path),
+            "--queue-preview-report",
+            str(preview_report),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["apply_supported"] is False
+    assert payload["broad_g4_apply_allowed"] is False
+    assert payload["bounded_partial_apply_ready"] is False
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "continue_read_only_gate_evidence_before_apply_readiness"
+    assert set(payload["quality_gate"]["blocked_reasons"]) >= {
+        "queue_preview_empty",
+        "queue_preview_quality_gate_not_green",
+        "pending_review_queue_items_present",
+        "queue_preview_current_report_not_green",
+        "queue_preview_artifact_gates_not_green",
+        "queue_preview_missing_human_approval_artifact",
+        "queue_preview_privacy_flag_claims_raw_content",
+        "human_review_queue_approval_report",
+        "rollback_replay_validate_pass",
+        "rollback_replay_validate_pass_not_green",
+        "human_review_queue_approval_pass_not_green",
+    }
+
+
 def test_python_module_cli_dogfood_g4_review_queue_preview_splits_historical_unknowns_with_fresh_epoch(
     tmp_path: Path,
 ) -> None:
