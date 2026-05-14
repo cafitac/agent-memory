@@ -1,7 +1,15 @@
 {
   "name": "@cafitac/agent-memory",
   "version": "0.1.158",
-  "description": "Thin npm launcher for the cafitac-agent-memory Python CLI",
+  "description": "Local-first graph memory CLI for AI agents",
+  "keywords": [
+    "ai",
+    "agent-memory",
+    "cli",
+    "graph-memory",
+    "hermes",
+    "local-first"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/cafitac/agent-memory#readme",
   "bugs": {
@@ -18,6 +26,9 @@
     "bin/agent-memory.js",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   }
