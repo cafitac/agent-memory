@@ -1,8 +1,39 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:15 KST
+Last updated: 2026-05-15 18:29 KST
 
+
+## Checkpoint: live lifecycle readiness smoke and pending reinforcement review queue
+
+The new readiness gate has been exercised against the real source memory DB. It correctly refused to greenlight apply when no candidates had been approved, then the safest available next step persisted reinforcement candidates for explicit review without changing retrieval defaults or applying lifecycle mutation.
+
+Live artifacts:
+
+- Initial readiness: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-apply-readiness-20260515T092750Z/lifecycle-apply-readiness.json`.
+- Lifecycle previews: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-preview-20260515T092837Z/`.
+- Candidate persistence/list/after-readiness: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-persist-20260515T092910Z/`.
+
+Live result:
+
+- Initial readiness stayed red with `decision=no_exact_lifecycle_apply_candidates_ready` because all lifecycle candidate counts were zero.
+- Read-only reinforcement preview found four reviewable candidates and passed its quality gate; decay and supersession found no candidates.
+- `lifecycle-candidate-persist --candidate-kind reinforcement` persisted four pending reinforcement candidates for review only. This was a narrow candidate-registry mutation, not memory apply: raw content was not emitted, the reason was stored as SHA-256, and `default_retrieval_unchanged=true`.
+- After-persist readiness reports reinforcement `pending=4`, `approved=0`, `eligible_approved_count=0`, and still does not allow apply.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress remains approximately 93-94%.
+- Literal fully autonomous human-brain-like progress remains approximately 70-72%: the live DB now has pending lifecycle review objects, but approval/apply is still exact-gated rather than autonomous.
+- The next proof is one explicit human-reviewed reinforcement approval followed by at most one exact guarded reinforcement apply with backup/audit/rollback checks. Do not batch-approve or broad-apply from this checkpoint.
+
+Next after this slice:
+
+1. Review one pending reinforcement candidate from `lifecycle-candidate-list-reinforcement.json`.
+2. If approved by the operator, use `dogfood lifecycle-candidate-update` with approval phrase `approve-g5-lifecycle-candidate-v1`.
+3. Then apply only that candidate with policy `g5-lifecycle-reinforcement-apply-v1` and apply phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+4. Rerun `lifecycle-apply-readiness`, rollback replay/confidence, and record the post-apply artifact before considering another candidate.
+5. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without fresh approval.
 
 ## Checkpoint: lifecycle apply readiness/audit gate
 

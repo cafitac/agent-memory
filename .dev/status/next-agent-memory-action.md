@@ -1,8 +1,30 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:15 KST
+Last updated: 2026-05-15 18:29 KST
 
+
+## Just completed: live lifecycle readiness smoke and pending reinforcement review queue
+
+- Ran source-checkout `dogfood lifecycle-apply-readiness` against the real source DB at `/Users/reddit/.agent-memory/memory.db`.
+- Initial live readiness artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-apply-readiness-20260515T092750Z/lifecycle-apply-readiness.json`.
+- Result: read-only/no-mutation/default-unchanged passed, but quality gate stayed red with `decision=no_exact_lifecycle_apply_candidates_ready` because there were no approved lifecycle candidates yet.
+- Ran read-only lifecycle previews:
+  - reinforcement preview found `candidate_count=4` and quality gate passed;
+  - decay preview found `candidate_count=0`;
+  - supersession preview found `candidate_count=0`.
+- Persisted the four reinforcement candidates for explicit operator review only:
+  - artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-persist-20260515T092910Z/`;
+  - `lifecycle-candidate-persist-reinforcement.json`: `mutated=true`, `default_retrieval_unchanged=true`, `candidate_count=4`, raw content not included, reason stored as SHA-256;
+  - `lifecycle-candidate-list-reinforcement.json`: four pending reinforcement candidates targeting refs `fact:4`, `episode:1`, `fact:1`, and `procedure:1`.
+- After-persist readiness remains read-only/no-mutation/default-unchanged, with reinforcement counts `pending=4`, `approved=0`, and still `decision=no_exact_lifecycle_apply_candidates_ready`.
+
+Recommended next work now:
+
+1. Do not apply yet: there are pending candidates but no approved candidates.
+2. If the operator wants to proceed with live reinforcement apply, review one pending candidate and approve it with the exact update phrase `approve-g5-lifecycle-candidate-v1`, then apply with policy `g5-lifecycle-reinforcement-apply-v1` and exact apply phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+3. Apply at most one candidate family and preferably one candidate first; capture backup/audit output and rerun readiness/rollback verification.
+4. Keep ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default-ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without new approval blocked.
 
 ## Just completed: lifecycle apply readiness/audit source checkpoint
 

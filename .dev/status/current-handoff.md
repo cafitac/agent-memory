@@ -1,8 +1,36 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:15 KST
+Last updated: 2026-05-15 18:29 KST
 
+
+## Checkpoint: live lifecycle readiness smoke and pending reinforcement review queue
+
+Exercised the new lifecycle readiness gate against the real source DB at `/Users/reddit/.agent-memory/memory.db`. The gate correctly blocked apply because there were no approved candidates. The next safe action was to persist review candidates, not apply them.
+
+What happened:
+
+- Initial live readiness artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-apply-readiness-20260515T092750Z/lifecycle-apply-readiness.json`.
+- Initial result: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, quality gate red with `decision=no_exact_lifecycle_apply_candidates_ready`.
+- Read-only previews found:
+  - reinforcement `candidate_count=4`, gate green;
+  - decay `candidate_count=0`;
+  - supersession `candidate_count=0`.
+- Persisted four reinforcement lifecycle candidates for explicit review only at `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-persist-20260515T092910Z/`.
+- After-persist readiness reports reinforcement `pending=4`, `approved=0`, `eligible_approved_count=0`, so apply remains blocked.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 93-94%.
+- Literal fully autonomous human-brain-like memory remains approximately 70-72% because the system can now produce live pending lifecycle candidates, but review/approval/apply is still exact-gated.
+
+Immediate next recommended slice:
+
+1. Review exactly one pending reinforcement candidate from `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-persist-20260515T092910Z/lifecycle-candidate-list-reinforcement.json`.
+2. If approved, run `dogfood lifecycle-candidate-update` with exact phrase `approve-g5-lifecycle-candidate-v1`.
+3. Then run `dogfood lifecycle-candidate-apply` for that candidate only with policy `g5-lifecycle-reinforcement-apply-v1` and exact phrase `apply-approved-g5-lifecycle-reinforcement-v1`, capturing backup/output artifacts.
+4. Rerun readiness/rollback verification and stop; do not batch-apply.
+5. Keep ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default-ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without fresh approval blocked.
 
 ## Checkpoint: lifecycle apply readiness/audit gate added
 
