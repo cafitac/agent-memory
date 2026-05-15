@@ -1,8 +1,42 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:28 KST
+Last updated: 2026-05-15 16:43 KST
 
+
+## Just completed: read-only live evidence bundle comparison source checkpoint
+
+- Added `dogfood live-evidence-bundle-compare` for repeated saved bundle reports.
+- Required input: at least one `--report`; practical gate defaults to `--min-report-count 2`.
+- Output kind: `dogfood_live_evidence_bundle_comparison`.
+- Output remains aggregate/hash/ref-safe:
+  - top-level report SHA-256 per input;
+  - nested artifact hashes per input;
+  - quality-gate pass/decision counts;
+  - fixture count min/max;
+  - fixture retrieval/reliability pass counts;
+  - ranking baseline regression total/max;
+  - rollback/audit count ranges;
+  - audit required-evidence pass count;
+  - blocker diagnostics.
+- Safety contract remains strict:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - `ordinary_conversation_auto_approval=false`
+  - `apply_supported=false`
+  - no raw report embedding, raw source/transcript/query/trace content, reviewed payload, backup content, broad G4 apply, ranking-default mutation, collapse/delete, telemetry reset, unreviewed promotion, or repeated apply without new approval.
+- Verification so far:
+  - RED observed on missing dogfood action.
+  - Focused compare test passed: `1 passed`.
+  - Evidence/audit subset passed: `6 passed, 147 deselected`.
+  - Full source gate passed: `335 passed, 1 xfailed`.
+  - Live read-only compare smoke: `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-compare-20260515T074353Z/live-evidence-bundle-comparison.json`; quality gate green over two same-window reports, fixture task count `4`, baseline regression max `0`, rollback/audit counts `3`.
+
+Recommended next work now:
+
+1. Commit/push source/test/docs and watch CI.
+2. Next safe source slice: read-only automation-policy readiness report over one or more green bundle comparisons. It may classify the next narrow auto-decision lane, but must not execute apply, mutate default ranking, collapse/delete, reset telemetry, or auto-approve ordinary conversation memories.
 
 ## Just completed: read-only live evidence bundle source checkpoint
 

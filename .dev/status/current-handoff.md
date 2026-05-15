@@ -1,8 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:28 KST
+Last updated: 2026-05-15 16:43 KST
 
+
+## Checkpoint: read-only live evidence bundle comparison added
+
+Completed the next read-only accumulation slice after `dogfood live-evidence-bundle`. Saved bundle reports can now be compared without embedding raw report bodies, so repeated live dogfood windows can be summarized before any broader automation policy work.
+
+What changed:
+
+- Added `dogfood live-evidence-bundle-compare --report <bundle.json> --report <bundle.json> --output <comparison.json>`.
+- The command emits `kind=dogfood_live_evidence_bundle_comparison`.
+- Each input report is summarized by path, top-level SHA-256, generated timestamp, quality-gate decision, ref-safe rollup counts, and nested artifact hashes only.
+- Aggregate output includes pass count, decision counts, fixture coverage min/max, fixture retrieval/reliability pass counts, ranking baseline regression totals/max, rollback/audit count ranges, audit evidence pass count, and blocker trends.
+- The comparison remains read-only and policy-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`, no raw report embedding, and no apply/default-ranking/collapse-delete/telemetry-reset authority.
+
+Verification:
+
+- RED observed: focused CLI test failed because `live-evidence-bundle-compare` was not a recognized dogfood action.
+- Focused compare test: `uv run pytest tests/test_cli.py::test_dogfood_live_evidence_bundle_compare_summarizes_repeated_reports_without_raw_content -q` -> `1 passed`.
+- Evidence/audit subset: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'live_evidence_bundle_compare or live_evidence_bundle or live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit or rollback_replay_validate'` -> `6 passed, 147 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `335 passed, 1 xfailed`.
+- Live read-only compare smoke wrote `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-compare-20260515T074353Z/live-evidence-bundle-comparison.json` using the existing green source bundle twice as a same-window stability smoke; quality gate passed, report count `2`, fixture task count min/max `4/4`, baseline regression max `0`, rollback/audit min/max `3/3`.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 90-91%.
+- Literal fully autonomous human-brain-like memory is approximately 63-66%: trend comparison is now automated, but mutation/apply/default ranking/ordinary auto-approval remain deliberately blocked pending narrow policy slices.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for this comparison slice.
+2. Next safe source slice: use stable comparison evidence to draft/implement a read-only automation-policy readiness report that decides which narrowly scoped auto-decision lane is eligible next without executing apply.
+3. Keep broad/background apply, live G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked unless a later exact policy slice implements its own guardrails.
 
 ## Checkpoint: read-only live evidence bundle added
 

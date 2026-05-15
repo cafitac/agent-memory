@@ -1,8 +1,39 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:28 KST
+Last updated: 2026-05-15 16:43 KST
 
+
+## Checkpoint: read-only live evidence bundle comparison
+
+The repeated-window accumulation slice is implemented in source. It closes the immediate gap after `dogfood live-evidence-bundle`: saved live bundle reports can now be compared as a ref-safe trend artifact before any broader automation-policy decision.
+
+Implemented:
+
+- Added `dogfood live-evidence-bundle-compare --report <path> [--report <path> ...] --output <path>`.
+- The comparison summarizes each input report with the report path, top-level SHA-256, generated timestamp, quality-gate decision, ref-safe rollup counts, and nested artifact hashes.
+- The aggregate block reports quality-gate pass counts, decision counts, fixture count min/max, retrieval/reliability pass counts, ranking baseline regression total/max, rollback/audit count ranges, audit evidence pass count, and blocker trends.
+- The command is explicitly read-only and no-apply: no durable memory mutation, default ranking mutation, broad G4 apply, collapse/delete, telemetry reset, unreviewed promotion, repeated apply, raw report embedding, or ordinary-conversation auto-approval.
+
+Verification:
+
+- RED observed: `live-evidence-bundle-compare` was not a recognized dogfood action.
+- Focused compare test: `1 passed`.
+- Evidence/audit subset: `6 passed, 147 deselected`.
+- Full source gate: `335 passed, 1 xfailed`.
+- Live read-only comparison smoke passed at `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-compare-20260515T074353Z/live-evidence-bundle-comparison.json` with report count `2`, quality gate green, fixture task count min/max `4/4`, zero ranking baseline regressions, rollback count min/max `3/3`, and audit count min/max `3/3`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 90-91%.
+- Literal fully autonomous human-brain-like progress is approximately 63-66% because trend evidence is now automated, but autonomous mutation/apply/default-ranking/ordinary-auto-approval remain intentionally blocked.
+- The next proof is not more raw evidence plumbing; it is a read-only automation-policy readiness classifier that decides which narrow auto-decision lane can be safely implemented next.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Next code slice: read-only automation-policy readiness report over green live evidence bundle comparisons. It should classify eligible next lanes, preserve all false authority flags, and not execute apply.
+3. Still forbidden without a later guarded implementation slice: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking migration, collapse/delete, repeated apply without new approval, and unreviewed promotion.
 
 ## Checkpoint: read-only live evidence bundle
 
