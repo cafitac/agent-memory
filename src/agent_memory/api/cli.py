@@ -5355,6 +5355,105 @@ def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str
     return payload
 
 
+def _dogfood_trace_candidate_application_audit_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood trace-candidate-application-audit limit must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_trace_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT
+                app.candidate_id,
+                app.proposal_type,
+                app.promoted_ref,
+                app.policy,
+                app.action,
+                app.actor,
+                app.reason_sha256,
+                app.backup_path,
+                app.backup_sha256,
+                app.rollback_hint_json,
+                app.created_at,
+                review.status AS review_status,
+                review.cluster_sha256 AS candidate_sha256
+            FROM g5_trace_candidate_applications AS app
+            LEFT JOIN g5_trace_candidate_reviews AS review ON review.candidate_id = app.candidate_id
+            WHERE (? IS NULL OR app.policy = ?)
+            ORDER BY app.id DESC
+            LIMIT ?
+            """,
+            (args.policy, args.policy, args.limit),
+        ).fetchall()
+    applications: list[dict[str, Any]] = []
+    blocked_reasons: list[str] = []
+    status_counts: Counter[str] = Counter()
+    policy_counts: Counter[str] = Counter()
+    for row in rows:
+        rollback = _rollback_confidence_for_backup(row["backup_path"], row["backup_sha256"])
+        current_status = _current_status_for_memory_ref(db_path, str(row["promoted_ref"] or "")) if row["promoted_ref"] else None
+        review_status = str(row["review_status"] or "missing")
+        status_counts[review_status] += 1
+        policy_counts[str(row["policy"])] += 1
+        if not rollback["backup_exists"]:
+            blocked_reasons.append("missing_backup")
+        if not rollback["backup_sha256_matches"]:
+            blocked_reasons.append("backup_checksum_mismatch")
+        if review_status != "promoted":
+            blocked_reasons.append("application_review_status_not_promoted")
+        applications.append(
+            {
+                "candidate_id": row["candidate_id"],
+                "candidate_kind": "trace",
+                "candidate_sha256": row["candidate_sha256"],
+                "proposal_type": row["proposal_type"],
+                "policy": row["policy"],
+                "action": row["action"],
+                "promoted_ref": row["promoted_ref"],
+                "current_memory_status": current_status,
+                "review_status": review_status,
+                "created_at": row["created_at"],
+                "actor": row["actor"],
+                "reason_sha256": row["reason_sha256"],
+                "rollback_confidence": rollback,
+                "rollback_hint": _safe_json_dict_from_db(row["rollback_hint_json"]),
+            }
+        )
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_trace_candidate_application_audit",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "db_path": str(db_path),
+        "application_count": len(applications),
+        "applications": applications,
+        "rollup": {
+            "policy_counts": {key: policy_counts[key] for key in sorted(policy_counts)},
+            "review_status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+            "current_memory_status_counts": dict(sorted(Counter(str(app.get("current_memory_status")) for app in applications).items())),
+            "backup_replay_required_before_broader_automation": True,
+            "default_retrieval_policy_checked": "unchanged_by_report",
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "blocked_reasons": blocked_unique,
+            "decision": "trace_candidate_applications_ready_for_post_apply_review" if not blocked_unique else "fix_trace_candidate_application_audit_before_broader_automation",
+        },
+        "privacy": {
+            "cluster_json_included": False,
+            "reviewed_payload_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
     if path is None:
         return
@@ -12954,6 +13053,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Explicitly allow fact/preference promotion when same subject/predicate/scope facts conflict.",
     )
     dogfood_trace_candidate_apply_parser.add_argument("--output", type=Path)
+    dogfood_trace_candidate_application_audit_parser = dogfood_subparsers.add_parser(
+        "trace-candidate-application-audit",
+        help="Read-only audit of reviewed G5 trace candidate applications before broader automation.",
+    )
+    dogfood_trace_candidate_application_audit_parser.add_argument("db_path", type=Path)
+    dogfood_trace_candidate_application_audit_parser.add_argument("--limit", type=int, default=50)
+    dogfood_trace_candidate_application_audit_parser.add_argument("--policy")
+    dogfood_trace_candidate_application_audit_parser.add_argument("--output", type=Path)
     dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
         "fresh-epoch",
         help="Build a read-only epoch-filtered readiness report so new telemetry can be judged apart from historical rows.",
@@ -14135,6 +14242,9 @@ def main() -> None:
             return
         if args.dogfood_action == "trace-candidate-apply":
             print(json.dumps(_dogfood_trace_candidate_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "trace-candidate-application-audit":
+            print(json.dumps(_dogfood_trace_candidate_application_audit_payload(args), indent=2))
             return
         if args.dogfood_action == "fresh-epoch":
             if not 0 <= args.min_trace_coverage <= 1:

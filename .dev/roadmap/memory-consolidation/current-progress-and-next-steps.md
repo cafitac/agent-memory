@@ -1,7 +1,38 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 13:24 KST
+Last updated: 2026-05-15 13:18 KST
+
+## Checkpoint: G5 trace candidate application audit
+
+The next read-only post-apply comparison slice is implemented in source. It audits reviewed trace-candidate application records before any broader automation can be considered.
+
+Implemented:
+
+- Added `dogfood trace-candidate-application-audit <db>`.
+- The report includes application refs, policy/action rollups, review status rollups, current memory status, backup checksum confidence, rollback hints, and a quality gate.
+- The report is read-only and asserts `mutated=false`, `default_retrieval_unchanged=true`, and ordinary conversation auto-approval false.
+- Quality gate fails on missing backup, backup checksum mismatch, or application records whose review state is not `promoted`.
+- Privacy flags confirm no cluster JSON, reviewed payload, raw content, raw reason, or backup content is emitted.
+
+Verification:
+
+- Focused audit/apply tests passed: `2 passed`.
+- Trace candidate regression subset passed: `8 passed, 140 deselected`.
+- Full source gate passed: `330 passed, 1 xfailed`.
+- Live read-only source smoke passed: `/Users/reddit/.agent-memory/reports/source-g5-trace-candidate-application-audit-smoke-20260515T041836Z.json` with `read_only=true`, `mutated=false`, application count `3`, and quality gate pass.
+
+Current interpretation:
+
+- Overall north-star progress is approximately 85-87%.
+- The system is closer to 90% because reviewed promotion now has both a contradiction preflight and a post-apply audit surface.
+- Still below 90% because rollback replay and retrieval-ranking evidence are not yet linked into this application audit, and broader/background apply remains intentionally blocked.
+
+Next after this slice:
+
+1. Finish full source test gate, docs, commit/push, and CI watch.
+2. Next code slice: wire application audit into rollback replay validation and retrieval-ranking gate evidence as read-only required artifacts.
+3. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply without exact operator corridor, telemetry reset, default ranking migration, collapse/delete, and unreviewed promotion.
 
 ## Checkpoint: G5 trace candidate apply conflict preflight
 

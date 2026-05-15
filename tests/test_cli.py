@@ -13430,6 +13430,174 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
     assert payload["privacy"]["reviewed_payload_included"] is False
     assert "raw-secret-token" not in apply_result.stdout
 
+    audit_output = tmp_path / "trace-candidate-application-audit.json"
+    audit_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-application-audit",
+            str(db_path),
+            "--limit",
+            "5",
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--output",
+            str(audit_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert audit_result.returncode == 0, audit_result.stderr
+    audit_payload = json.loads(audit_result.stdout)
+    assert audit_output.exists()
+    assert json.loads(audit_output.read_text(encoding="utf-8")) == audit_payload
+    assert audit_payload["kind"] == "dogfood_trace_candidate_application_audit"
+    assert audit_payload["read_only"] is True
+    assert audit_payload["mutated"] is False
+    assert audit_payload["default_retrieval_unchanged"] is True
+    assert audit_payload["ordinary_conversation_auto_approval"] is False
+    assert audit_payload["application_count"] == 1
+    assert audit_payload["quality_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "decision": "trace_candidate_applications_ready_for_post_apply_review",
+    }
+    assert audit_payload["rollup"]["policy_counts"] == {"g5-reviewed-candidate-promotion-v1": 1}
+    assert audit_payload["rollup"]["review_status_counts"] == {"promoted": 1}
+    assert audit_payload["applications"][0]["candidate_id"] == candidate_id
+    assert audit_payload["applications"][0]["promoted_ref"] == promoted_ref
+    assert audit_payload["applications"][0]["current_memory_status"] == "approved"
+    assert audit_payload["applications"][0]["rollback_confidence"]["backup_exists"] is True
+    assert audit_payload["applications"][0]["rollback_confidence"]["backup_sha256_matches"] is True
+    assert audit_payload["privacy"] == {
+        "cluster_json_included": False,
+        "reviewed_payload_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+    }
+    assert "raw-secret-token" not in audit_result.stdout
+
+
+def test_dogfood_trace_candidate_application_audit_flags_missing_backup(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-candidate-application-audit-missing-backup.db"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS g5_trace_candidate_reviews (
+                candidate_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'snoozed', 'promoted')),
+                proposal_type TEXT NOT NULL,
+                target_ref TEXT,
+                cluster_json TEXT NOT NULL,
+                cluster_sha256 TEXT NOT NULL,
+                reviewed_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                actor TEXT NOT NULL,
+                reason_sha256 TEXT NOT NULL,
+                audit_json TEXT NOT NULL DEFAULT '[]'
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS g5_trace_candidate_applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                candidate_id TEXT NOT NULL,
+                proposal_type TEXT NOT NULL,
+                promoted_ref TEXT,
+                policy TEXT NOT NULL,
+                action TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                reason_sha256 TEXT NOT NULL,
+                backup_path TEXT NOT NULL,
+                backup_sha256 TEXT NOT NULL,
+                rollback_hint_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(candidate_id, policy)
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_reviews (
+                candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                reviewed_json, created_at, updated_at, actor, reason_sha256, audit_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "trace:missing-backup",
+                "promoted",
+                "fact",
+                "fact:99999",
+                "{}",
+                "1" * 64,
+                "{}",
+                "2026-05-15T00:00:00Z",
+                "2026-05-15T00:00:00Z",
+                "tester",
+                "2" * 64,
+                "[]",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                backup_path, backup_sha256, rollback_hint_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "trace:missing-backup",
+                "fact",
+                "fact:99999",
+                "g5-reviewed-candidate-promotion-v1",
+                "promote_reviewed_fact",
+                "tester",
+                "3" * 64,
+                str(tmp_path / "missing-backup.db"),
+                "4" * 64,
+                "{}",
+                "2026-05-15T00:00:00Z",
+            ),
+        )
+        connection.commit()
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    audit_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-application-audit",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert audit_result.returncode == 0, audit_result.stderr
+    audit_payload = json.loads(audit_result.stdout)
+    assert audit_payload["read_only"] is True
+    assert audit_payload["mutated"] is False
+    assert audit_payload["quality_gate"] == {
+        "pass": False,
+        "blocked_reasons": ["backup_checksum_mismatch", "missing_backup"],
+        "decision": "fix_trace_candidate_application_audit_before_broader_automation",
+    }
+    assert audit_payload["applications"][0]["current_memory_status"] == "missing"
+    assert audit_payload["applications"][0]["rollback_confidence"]["backup_exists"] is False
+    assert audit_payload["applications"][0]["rollback_confidence"]["backup_sha256_matches"] is False
+
 
 def test_dogfood_trace_candidate_apply_blocks_fact_claim_slot_conflicts_by_default(tmp_path: Path) -> None:
     db_path = tmp_path / "trace-candidate-apply-conflict.db"

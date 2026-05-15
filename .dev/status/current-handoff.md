@@ -1,7 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 13:24 KST
+Last updated: 2026-05-15 13:18 KST
+
+## Checkpoint: G5 trace candidate application audit added
+
+Completed the next read-only post-apply comparison slice toward the 90% runway. Reviewed trace-candidate promotions can now be audited after application without changing retrieval, ranking, or memory status.
+
+What changed:
+
+- Added `dogfood trace-candidate-application-audit <db>`.
+- The command reads `g5_trace_candidate_applications` joined to review state and emits a ref-safe audit report with application refs, policy/action, current memory status, backup/rollback confidence, status/policy rollups, and a quality gate.
+- The report is explicitly read-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, and ordinary conversation auto-approval remains false.
+- The quality gate blocks broader automation when backups are missing/checksum-mismatched or application review state is not `promoted`.
+- Raw clusters, reviewed payloads, raw content, raw reasons, and backup contents are not included.
+- This is comparison/audit only; it does not apply candidates, replay rollback, mutate ranking defaults, collapse/delete memory, or approve ordinary conversation memories.
+
+Verification:
+
+- Focused audit/apply tests: `uv run pytest tests/test_cli.py::test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_candidates tests/test_cli.py::test_dogfood_trace_candidate_application_audit_flags_missing_backup -q` -> `2 passed`.
+- Trace candidate regression subset: `uv run pytest tests/test_cli.py -q -k 'trace_candidate_application_audit or trace_candidate_apply or trace_candidate_update or trace_candidate_generate or trace_candidate_review_flow'` -> `8 passed, 140 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `330 passed, 1 xfailed`.
+- Live read-only source smoke wrote `/Users/reddit/.agent-memory/reports/source-g5-trace-candidate-application-audit-smoke-20260515T041836Z.json` against `/Users/reddit/.agent-memory/memory.db`; result `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, application count `3`, quality gate pass, ordinary conversation auto-approval false.
+
+Current interpretation:
+
+- Brainlike-memory north-star is approximately 85-87% complete.
+- This narrows the gap to 90% by adding the post-apply audit layer needed before any broader automation: humans/operators can verify that reviewed promotions have rollback evidence and did not imply default retrieval/ranking mutation.
+- Still below 90% until rollback replay is tied into this audit, repeated live reports show stable quality, and background/broader apply remains dry-run gated.
+
+Immediate next recommended slice:
+
+1. Finish full source gate, update docs, commit/push, and verify CI for this audit slice.
+2. Next safe source slice: connect application audit output to rollback replay validation and retrieval-ranking gate evidence, still read-only.
+3. Keep broad/background apply, live G4 apply, telemetry reset, ranking default migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: G5 trace candidate apply conflict preflight added
 

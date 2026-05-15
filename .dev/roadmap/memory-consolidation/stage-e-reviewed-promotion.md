@@ -13,6 +13,17 @@ Turn trusted consolidation candidates into durable memory only through explicit 
 - Conflict/supersession preflight prevents silent contradictions.
 - Default retrieval remains approved-only.
 
+## G5 dogfood follow-up: trace candidate application audit
+
+### Status
+
+- Source slice completed on `develop` after the trace candidate apply conflict preflight checkpoint.
+- Added read-only `dogfood trace-candidate-application-audit <db>` for post-apply comparison before broader automation.
+- The audit reports application refs, policy/action rollups, current memory status, rollback/backup checksum confidence, and a quality gate.
+- Quality gate fails on missing backup, checksum mismatch, or application rows whose review status is not `promoted`.
+- The report does not emit raw cluster JSON, reviewed payloads, raw content, raw reasons, or backup contents.
+- This remains audit-only: no candidate apply, rollback replay, retrieval/ranking mutation, collapse/delete, broad/background apply, unreviewed promotion, or ordinary conversation auto-approval.
+
 ## G5 dogfood follow-up: trace candidate apply conflict preflight
 
 ### Status
