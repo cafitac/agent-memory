@@ -1,7 +1,42 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 00:14 KST
+Last updated: 2026-05-15 11:40 KST
+
+## Just completed: v0.1.162 milestone release and published-install QA
+
+- Released the accumulated G4 bounded operator apply readiness corridor as `v0.1.162`.
+- Release trigger path:
+  - fast-forwarded `main` from reviewed `develop` commit `b26be71`;
+  - `auto-release` created release-sync branch `release-sync/v0.1.162` because protected `main` rejected metadata write-back;
+  - verified release-sync CI green;
+  - fast-forwarded `main` to release commit `cda5696` (`chore: release v0.1.162 [skip release]`);
+  - `auto-release` tagged and dispatched `publish.yml` for `v0.1.162`.
+- Release evidence:
+  - `ci` on `b26be71`: success, run `25896978955`.
+  - `auto-release` on `b26be71`: success, run `25896978967`.
+  - release-sync `ci` on `cda5696`: success, run `25897050696`.
+  - `ci` on `cda5696`: success, run `25897160173`.
+  - release-sync `auto-release` on `cda5696`: success, run `25897160181`.
+  - `publish` on `v0.1.162`: success, run `25897165575`.
+  - GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.162`.
+  - npm latest: `@cafitac/agent-memory@0.1.162`.
+  - PyPI latest: `cafitac-agent-memory==0.1.162`.
+- Published-install QA:
+  - Local outside-source smoke wrote `/tmp/agent-memory-v0162-published-smoke/published-install-smoke.json`.
+  - Smoke status: `ok`, attempt `1`, no propagation retry needed after the first early npm wrapper resolver miss.
+  - Covered npm registry lookup, `npx --help`, `npm exec` help/bootstrap/doctor/hook, `uvx` help/bootstrap/doctor/hook, and `pipx run` help/bootstrap/doctor/hook against exact version `0.1.162`.
+  - `doctor` status was `ok` on npm/uvx/pipx isolated temp DB/config paths.
+  - Hook smoke returned the expected verify-first no-memory context from isolated empty DBs.
+- GitHub hosted `published-install-smoke.yml` was not dispatched because the currently available `gh` token could not create workflow dispatch events (`HTTP 403: Must have admin rights to Repository`). Local exact-version published smoke passed and is the authoritative completed QA for this session.
+- Local `develop` was fast-forwarded to release commit `cda5696`; tracked tree is clean except pre-existing untracked local agent/worktree artifacts.
+
+Recommended next work now:
+
+1. Do not rerun release or publish for `v0.1.162`; it is complete and externally verified.
+2. If proceeding with priority 2, prepare the bounded G4 live apply packet from the released/runtime state, but do not execute apply unless the exact live-apply approval corridor is satisfied.
+3. Required live-apply inputs remain: exact approval phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
+4. Keep broad/background G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Just completed: G4 milestone release readiness review
 

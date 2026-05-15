@@ -1,7 +1,53 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 00:14 KST
+Last updated: 2026-05-15 11:40 KST
+
+## Checkpoint: v0.1.162 released and published-install QA passed
+
+The accumulated G4 bounded operator apply readiness corridor has been released as `v0.1.162` and verified from real published artifacts. This checkpoint completed priority 1 from the recommended sequence. No live memory apply, telemetry reset, default ranking migration, collapse/delete, broad/background apply, unreviewed promotion, or ordinary conversation auto-approval was executed.
+
+Release path:
+
+- Source release candidate commit: `b26be71`.
+- Release metadata commit on `main`: `cda5696` (`chore: release v0.1.162 [skip release]`).
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.162`.
+- npm: `@cafitac/agent-memory@0.1.162`.
+- PyPI: `cafitac-agent-memory==0.1.162`.
+
+GitHub Actions evidence:
+
+- `ci` on source commit `b26be71`: success, run `25896978955`.
+- `auto-release` on source commit `b26be71`: success, run `25896978967`.
+- release-sync `ci` on `cda5696`: success, run `25897050696`.
+- `ci` on release commit `cda5696`: success, run `25897160173`.
+- release-sync `auto-release` on `cda5696`: success, run `25897160181`.
+- `publish` workflow for `v0.1.162`: success, run `25897165575`; verify, PyPI publish, npm publish, and GitHub Release jobs all succeeded.
+
+Local published-install QA:
+
+- Artifact: `/tmp/agent-memory-v0162-published-smoke/published-install-smoke.json`.
+- Result: `status=ok`, `attempt=1`, `propagation_retry_used=false`.
+- Exact version verified: `0.1.162`.
+- Surfaces covered: npm registry lookup, `npx`, `npm exec`, `uvx`, and `pipx run`.
+- Commands covered: help, bootstrap, doctor, and hermes-pre-llm-hook where applicable.
+- Isolated doctor checks passed with `status=ok`, `db_exists=true`, `config_exists=true`, and `hook_installed=true` for npm/uvx/pipx temp paths.
+
+Operational note:
+
+- The hosted `published-install-smoke.yml` workflow dispatch was attempted but blocked by the currently available `gh` token with `HTTP 403: Must have admin rights to Repository`. Do not treat that as package failure; the local exact-version published smoke passed against real npm/PyPI artifacts.
+
+Current local state:
+
+- Branch: `develop`.
+- Local `develop` has been fast-forwarded to release commit `cda5696` and matches release metadata version `0.1.162`.
+- Tracked tree is clean.
+- Existing untracked local artifacts remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+
+Immediate next recommended slice:
+
+- Priority 2 is the bounded G4 live apply decision/evidence step. Prepare/refresh the released-runtime operator packet and backup/audit paths first, but only execute apply if the operator provides the exact approval corridor: phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
+- If exact live-apply approval is not provided, continue with read-only G5 brainlike consolidation runway work instead.
 
 ## Checkpoint: G4 milestone release readiness review
 

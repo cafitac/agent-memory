@@ -1,7 +1,47 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 00:14 KST
+Last updated: 2026-05-15 11:40 KST
+
+## Checkpoint: v0.1.162 milestone released and externally verified
+
+Priority 1 from the recommended sequence is complete: the accumulated G4 bounded operator apply readiness corridor was released as `v0.1.162`, published to npm/PyPI, and verified from real installed artifacts outside the source checkout. This was a release/QA action only; it did not authorize or execute live bounded G4 apply.
+
+Release artifacts:
+
+- Release commit: `cda5696` (`chore: release v0.1.162 [skip release]`).
+- GitHub Release: `https://github.com/cafitac/agent-memory/releases/tag/v0.1.162`.
+- npm latest: `@cafitac/agent-memory@0.1.162`.
+- PyPI latest: `cafitac-agent-memory==0.1.162`.
+
+Workflow evidence:
+
+- Source `main` push `ci`: run `25896978955`, success.
+- Source `main` push `auto-release`: run `25896978967`, success.
+- Release-sync validation `ci`: run `25897050696`, success.
+- Release metadata commit `ci`: run `25897160173`, success.
+- Release-sync `auto-release`: run `25897160181`, success.
+- Publish workflow: run `25897165575`, success; verify, PyPI publish, npm publish, and GitHub Release jobs passed.
+
+Published-install QA:
+
+- Local exact-version smoke artifact: `/tmp/agent-memory-v0162-published-smoke/published-install-smoke.json`.
+- Result: `status=ok`, attempt `1`, no propagation retry needed after the initial early manual npm-wrapper resolver miss.
+- Covered `npx`, `npm exec`, `uvx`, and `pipx run` against exact version `0.1.162`.
+- Bootstrap/doctor/hook surfaces passed on isolated temp DB/config paths; no source checkout import was used by the published smoke.
+
+Current interpretation:
+
+- Overall north-star remains about 78-80% complete.
+- The release strengthens the operational trust boundary but does not by itself increase automation authority.
+- The next meaningful progress toward brain-like automation is either one exact-approved bounded G4 live apply, or, without live-apply approval, a read-only G5 consolidation-candidate/explainability slice.
+
+Next after this release:
+
+1. Do not republish `v0.1.162`; it is complete.
+2. If the operator explicitly authorizes priority 2 live apply, refresh the released-runtime operator packet and execute only the bounded `g4-review-queue-apply` corridor with exact phrase/policy/actor/private reason/backup/audit/max-apply inputs, then stop at `g4-post-apply-verification`.
+3. If those exact live-apply inputs are not present, do not infer authorization from this release. Continue read-only/source work on the G5 brainlike consolidation runway.
+4. Keep broad/background G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: G4 milestone release readiness review
 
