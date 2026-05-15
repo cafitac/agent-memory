@@ -1,8 +1,46 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:43 KST
+Last updated: 2026-05-15 17:51 KST
 
+
+## Checkpoint: read-only automation policy readiness classifier added
+
+Completed the next read-only policy slice after live evidence bundle comparison. The source checkout can now turn a green saved `dogfood_live_evidence_bundle_comparison` report into an explicit lane-by-lane automation readiness artifact without executing apply or changing defaults.
+
+What changed:
+
+- Added `dogfood automation-policy-readiness --comparison-report <comparison.json> --output <readiness.json>`.
+- The command emits `kind=dogfood_automation_policy_readiness`.
+- It summarizes the comparison artifact by path, SHA-256, quality decision, report count, fixture coverage, regression max, rollback/audit minima, and audit evidence pass count.
+- It classifies the requested 1-7 automation lanes:
+  - readiness report: complete;
+  - narrow reviewed apply: eligible only for a later exact approval slice;
+  - reinforcement: review-candidate generation only;
+  - decay/forgetting: reviewed deprecate corridor only, collapse/delete still blocked;
+  - conflict/supersession: reviewed supersession corridor only;
+  - ordinary conversation auto-approval: blocked;
+  - default ranking migration: exact migration review only.
+- The readiness report is explicitly read-only and policy-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`, no raw report embedding, and no apply/default-ranking/collapse-delete/telemetry-reset authority.
+
+Verification:
+
+- RED observed: focused CLI test failed because `automation-policy-readiness` was not a recognized dogfood action.
+- Focused readiness test: `uv run pytest tests/test_cli.py::test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply -q` -> `1 passed`.
+- Evidence/policy subset: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'automation_policy_readiness or live_evidence_bundle_compare or live_evidence_bundle or reinforcement_refinement_preview or decay_collapse_decision or supersession_preview or lifecycle_candidate_apply or retrieval_ranking_migrate_default or remember_preference'` -> `9 passed, 145 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `336 passed, 1 xfailed`.
+- Live read-only readiness smoke wrote `/Users/reddit/.agent-memory/reports/source-automation-policy-readiness-20260515T084816Z/automation-policy-readiness.json` from the existing green comparison report; quality gate passed, narrow reviewed apply is eligible for exact approval slice, ordinary conversation auto-approval remains blocked.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 91-92%.
+- Literal fully autonomous human-brain-like memory is approximately 66-68%: the system now chooses the next automation lane from live evidence, but mutation/apply/default ranking/ordinary auto-approval remain intentionally separated into guarded exact slices.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for this readiness classifier slice.
+2. Next safe source slice: implement the first exact narrow reviewed-candidate apply policy from this readiness artifact, with backup/audit/rollback and no broad/background apply.
+3. Keep ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, and repeated apply without new approval blocked unless their own exact policy slices implement guardrails.
 
 ## Checkpoint: read-only live evidence bundle comparison added
 

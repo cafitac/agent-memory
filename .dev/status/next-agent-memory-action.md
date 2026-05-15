@@ -1,8 +1,41 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:43 KST
+Last updated: 2026-05-15 17:51 KST
 
+
+## Just completed: read-only automation policy readiness classifier source checkpoint
+
+- Added `dogfood automation-policy-readiness --comparison-report <comparison.json> --output <readiness.json>`.
+- Required input: one green `dogfood_live_evidence_bundle_comparison` report.
+- Output kind: `dogfood_automation_policy_readiness`.
+- Output remains aggregate/hash/ref-safe:
+  - comparison path and SHA-256;
+  - quality-gate pass/decision/blockers;
+  - report count and pass count;
+  - fixture coverage minimum;
+  - ranking baseline regression max;
+  - rollback/audit minima;
+  - audit required-evidence pass count;
+  - lane decisions for the requested 1-7 automation path.
+- Safety contract remains strict:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - `ordinary_conversation_auto_approval=false`
+  - `executes_apply=false`
+  - no raw report embedding, raw source/transcript/query/trace content, reviewed payload, backup content, broad G4 apply, ranking-default mutation, collapse/delete, telemetry reset, unreviewed promotion, or repeated apply without new approval.
+- Verification so far:
+  - RED observed on missing dogfood action.
+  - Focused readiness test passed: `1 passed`.
+  - Evidence/policy subset passed: `9 passed, 145 deselected`.
+  - Full source gate passed: `336 passed, 1 xfailed`.
+  - Live read-only readiness smoke: `/Users/reddit/.agent-memory/reports/source-automation-policy-readiness-20260515T084816Z/automation-policy-readiness.json`; quality gate green, narrow reviewed apply eligible for exact approval slice, ordinary conversation auto-approval blocked.
+
+Recommended next work now:
+
+1. Commit/push source/test/docs and watch CI.
+2. Next safe source slice: first exact narrow reviewed-candidate apply automation lane from the readiness report. It may apply only already-reviewed candidates with backup/audit/rollback guardrails and must not enable broad/background apply, default ranking migration, collapse/delete, telemetry reset, unreviewed promotion, repeated apply without new approval, or ordinary conversation auto-approval.
 
 ## Just completed: read-only live evidence bundle comparison source checkpoint
 

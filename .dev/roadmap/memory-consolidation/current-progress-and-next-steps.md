@@ -1,8 +1,39 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 16:43 KST
+Last updated: 2026-05-15 17:51 KST
 
+
+## Checkpoint: read-only automation policy readiness classifier
+
+The policy-classification slice is implemented in source. It closes the gap after repeated-window live evidence comparison: a saved green comparison can now be turned into a lane-by-lane automation readiness artifact before any mutation or default change.
+
+Implemented:
+
+- Added `dogfood automation-policy-readiness --comparison-report <path> --output <path>`.
+- The command reads only the comparison report and summarizes comparison evidence by path, SHA-256, kind, read-only/mutation/default flags, quality decision, report/pass counts, fixture coverage, regression max, rollback/audit minima, and audit evidence pass count.
+- Lane decisions now explicitly cover the requested 1-7 path: readiness complete; narrow reviewed apply eligible only for later exact approval; reinforcement candidate generation only; decay reviewed-deprecate only; supersession reviewed-corridor only; ordinary conversation auto-approval blocked; default ranking migration exact-review only.
+- The command is explicitly read-only and no-apply: no durable memory mutation, default ranking mutation, broad G4 apply, collapse/delete, telemetry reset, unreviewed promotion, repeated apply, raw report embedding, or ordinary-conversation auto-approval.
+
+Verification:
+
+- RED observed: `automation-policy-readiness` was not a recognized dogfood action.
+- Focused readiness test: `1 passed`.
+- Evidence/policy subset: `9 passed, 145 deselected`.
+- Full source gate: `336 passed, 1 xfailed`.
+- Live read-only readiness smoke passed at `/Users/reddit/.agent-memory/reports/source-automation-policy-readiness-20260515T084816Z/automation-policy-readiness.json` from the existing green bundle comparison.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 91-92%.
+- Literal fully autonomous human-brain-like progress is approximately 66-68% because the system can now classify the next automation lane, but actual autonomous mutation/default migration/ordinary-auto-approval remain deliberately split into exact guarded policy slices.
+- The next proof is the first narrow reviewed-candidate apply automation lane, not broader background apply.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Next code slice: exact narrow reviewed-candidate apply automation lane with backup/audit/rollback, constrained to already-reviewed candidates and no repeated apply without new approval.
+3. Still forbidden without later guarded slices: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking migration, collapse/delete, unreviewed promotion, and repeated apply without new approval.
 
 ## Checkpoint: read-only live evidence bundle comparison
 
