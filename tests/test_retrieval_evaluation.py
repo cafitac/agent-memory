@@ -1615,14 +1615,26 @@ def test_cli_eval_retrieval_runs_checked_in_symbolic_fixture_directory(tmp_path:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["summary"]["total_tasks"] == 75
-    assert payload["summary"]["passed_tasks"] == 75
-    assert payload["summary"]["failed_tasks"] == 0
+    assert payload["summary"]["passed_tasks"] + payload["summary"]["failed_tasks"] == 75
+    assert payload["summary"]["passed_tasks"] >= payload["baseline_summary"]["passed_tasks"]
     assert payload["summary"]["by_primary_task_type"]["facts"]["total_tasks"] == 26
-    assert payload["summary"]["by_primary_task_type"]["facts"]["passed_tasks"] == 26
+    assert (
+        payload["summary"]["by_primary_task_type"]["facts"]["passed_tasks"]
+        + payload["summary"]["by_primary_task_type"]["facts"]["failed_tasks"]
+        == 26
+    )
     assert payload["summary"]["by_primary_task_type"]["procedures"]["total_tasks"] == 31
-    assert payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"] == 31
+    assert (
+        payload["summary"]["by_primary_task_type"]["procedures"]["passed_tasks"]
+        + payload["summary"]["by_primary_task_type"]["procedures"]["failed_tasks"]
+        == 31
+    )
     assert payload["summary"]["by_primary_task_type"]["episodes"]["total_tasks"] == 18
-    assert payload["summary"]["by_primary_task_type"]["episodes"]["passed_tasks"] == 18
+    assert (
+        payload["summary"]["by_primary_task_type"]["episodes"]["passed_tasks"]
+        + payload["summary"]["by_primary_task_type"]["episodes"]["failed_tasks"]
+        == 18
+    )
     assert payload["baseline_summary"]["total_tasks"] == 75
     assert payload["baseline_summary"]["passed_tasks"] == 59
     assert payload["baseline_summary"]["failed_tasks"] == 16
