@@ -3300,7 +3300,7 @@ def _ensure_trace_candidate_review_tables(connection: sqlite3.Connection) -> Non
         """
         CREATE TABLE IF NOT EXISTS g5_trace_candidate_reviews (
             candidate_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'promoted')),
+            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'snoozed', 'promoted')),
             proposal_type TEXT NOT NULL,
             target_ref TEXT,
             cluster_json TEXT NOT NULL,
@@ -3314,6 +3314,57 @@ def _ensure_trace_candidate_review_tables(connection: sqlite3.Connection) -> Non
         )
         """
     )
+    table_sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'g5_trace_candidate_reviews'"
+    ).fetchone()
+    if table_sql and "'snoozed'" not in str(table_sql[0]):
+        legacy_columns = {row[1] for row in connection.execute("PRAGMA table_info(g5_trace_candidate_reviews)").fetchall()}
+        legacy_has_candidate_kind = "candidate_kind" in legacy_columns
+        connection.execute("ALTER TABLE g5_trace_candidate_reviews RENAME TO g5_trace_candidate_reviews_legacy")
+        connection.execute(
+            """
+            CREATE TABLE g5_trace_candidate_reviews (
+                candidate_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'snoozed', 'promoted')),
+                proposal_type TEXT NOT NULL,
+                target_ref TEXT,
+                cluster_json TEXT NOT NULL,
+                cluster_sha256 TEXT NOT NULL,
+                reviewed_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                actor TEXT NOT NULL,
+                reason_sha256 TEXT NOT NULL,
+                audit_json TEXT NOT NULL DEFAULT '[]'
+            )
+            """
+        )
+        if legacy_has_candidate_kind:
+            connection.execute("ALTER TABLE g5_trace_candidate_reviews ADD COLUMN candidate_kind TEXT NOT NULL DEFAULT 'trace'")
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_reviews (
+                    candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                    reviewed_json, created_at, updated_at, actor, reason_sha256, audit_json, candidate_kind
+                )
+                SELECT candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                       reviewed_json, created_at, updated_at, actor, reason_sha256, audit_json, candidate_kind
+                FROM g5_trace_candidate_reviews_legacy
+                """
+            )
+        else:
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_reviews (
+                    candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                    reviewed_json, created_at, updated_at, actor, reason_sha256, audit_json
+                )
+                SELECT candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                       reviewed_json, created_at, updated_at, actor, reason_sha256, audit_json
+                FROM g5_trace_candidate_reviews_legacy
+                """
+            )
+        connection.execute("DROP TABLE g5_trace_candidate_reviews_legacy")
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS g5_trace_candidate_applications (
@@ -3505,7 +3556,7 @@ def _dogfood_lifecycle_candidate_update_payload(args: argparse.Namespace) -> dic
         raise ValueError("dogfood lifecycle-candidate-update status must be approved or rejected")
     if not args.actor.strip() or not args.reason.strip():
         raise ValueError("dogfood lifecycle-candidate-update requires non-empty --actor and --reason")
-    expected_phrase = f"{args.status[:-1] if args.status.endswith('d') else args.status}-g5-lifecycle-candidate-v1"
+    expected_phrase = _g5_candidate_approval_phrase(args.status, candidate_family="lifecycle")
     if args.approval_phrase != expected_phrase:
         raise ValueError(f"dogfood lifecycle-candidate-update requires --approval-phrase {expected_phrase}")
     reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
@@ -3997,6 +4048,59 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
     return payload
 
 
+def _g5_candidate_approval_phrase(status: str, *, candidate_family: str) -> str:
+    verb_by_status = {"approved": "approve", "rejected": "reject", "snoozed": "snooze"}
+    verb = verb_by_status.get(status)
+    if verb is None:
+        raise ValueError(f"unsupported candidate status for approval phrase: {status}")
+    return f"{verb}-g5-{candidate_family}-candidate-v1"
+
+
+def _parse_snooze_until(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _isoformat_z(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _trace_candidate_suppression_index(db_path: Path) -> dict[str, dict[str, str | None]]:
+    if not db_path.exists():
+        return {}
+    now = datetime.now(timezone.utc)
+    suppressed: dict[str, dict[str, str | None]] = {}
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_trace_candidate_review_tables(connection)
+        rows = connection.execute(
+            "SELECT candidate_id, status, reviewed_json FROM g5_trace_candidate_reviews WHERE status IN ('rejected', 'snoozed')"
+        ).fetchall()
+    for row in rows:
+        snooze_until = None
+        if row["status"] == "snoozed":
+            reviewed = _safe_json_dict_from_db(row["reviewed_json"])
+            snooze_until = str(reviewed.get("snooze_until") or "") or None
+            parsed = _parse_snooze_until(snooze_until)
+            if parsed is None or parsed <= now:
+                continue
+        suppressed[str(row["candidate_id"])] = {
+            "candidate_id": str(row["candidate_id"]),
+            "status": str(row["status"]),
+            "snooze_until": snooze_until,
+        }
+    return suppressed
+
+
 def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[str, Any]:
     preview = _dogfood_trace_cluster_preview_payload(
         argparse.Namespace(
@@ -4008,8 +4112,14 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
         )
     )
     generated: list[dict[str, Any]] = []
+    suppressed_index = _trace_candidate_suppression_index(args.db_path)
+    suppressed_candidates: list[dict[str, str | None]] = []
     for cluster in preview.get("clusters", []):
         if not isinstance(cluster, dict):
+            continue
+        candidate_id = str(cluster.get("candidate_id") or "")
+        if candidate_id in suppressed_index:
+            suppressed_candidates.append(suppressed_index[candidate_id])
             continue
         guessed_type = str(cluster.get("guessed_memory_type") or "fact")
         proposal_type = "preference" if guessed_type == "preference" else guessed_type
@@ -4066,6 +4176,13 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
         "generation_mode": "automatic_graph_cluster_to_reviewed_candidate_skeletons",
         "candidate_count": len(generated),
         "generated_candidates": generated,
+        "suppressed_candidate_count": len(suppressed_candidates),
+        "suppressed_candidates": suppressed_candidates,
+        "suppression_policy": {
+            "rejected_fingerprints_filtered": True,
+            "future_snoozed_fingerprints_filtered": True,
+            "raw_review_payload_included": False,
+        },
         "automation_policy": {
             "ordinary_conversation_auto_approval": False,
             "promotion_supported_without_human_fields": False,
@@ -4980,15 +5097,20 @@ def _reviewed_promotion_payload_from_args(args: argparse.Namespace) -> dict[str,
 
 
 def _dogfood_trace_candidate_update_payload(args: argparse.Namespace) -> dict[str, Any]:
-    if args.status not in {"approved", "rejected"}:
-        raise ValueError("dogfood trace-candidate-update status must be approved or rejected")
+    if args.status not in {"approved", "rejected", "snoozed"}:
+        raise ValueError("dogfood trace-candidate-update status must be approved, rejected, or snoozed")
     if not args.actor.strip() or not args.reason.strip():
         raise ValueError("dogfood trace-candidate-update requires non-empty --actor and --reason")
-    expected_phrase = f"{args.status[:-1] if args.status.endswith('d') else args.status}-g5-trace-candidate-v1"
+    expected_phrase = _g5_candidate_approval_phrase(args.status, candidate_family="trace")
     if args.approval_phrase != expected_phrase:
         raise ValueError(f"dogfood trace-candidate-update requires --approval-phrase {expected_phrase}")
+    snooze_until = _isoformat_z(_parse_snooze_until(getattr(args, "snooze_until", None))) if args.status == "snoozed" else None
+    if args.status == "snoozed" and snooze_until is None:
+        raise ValueError("dogfood trace-candidate-update --status snoozed requires --snooze-until")
     reviewed_payload = _reviewed_promotion_payload_from_args(args)
-    proposal_type = f"{reviewed_payload['promotion_type']}_promotion" if reviewed_payload is not None else "trace_cluster_review"
+    if args.status == "snoozed":
+        reviewed_payload = {"snooze_until": snooze_until}
+    proposal_type = f"{reviewed_payload['promotion_type']}_promotion" if reviewed_payload is not None and "promotion_type" in reviewed_payload else "trace_cluster_review"
     reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
     with sqlite3.connect(args.db_path) as connection:
         connection.row_factory = sqlite3.Row
@@ -5040,6 +5162,7 @@ def _dogfood_trace_candidate_update_payload(args: argparse.Namespace) -> dict[st
         "status": args.status,
         "proposal_type": proposal_type,
         "promotion_ready": args.status == "approved" and proposal_type in {"fact_promotion", "preference_promotion", "procedure_promotion", "episode_promotion"},
+        "snooze_until": snooze_until,
         "reason_sha256": reason_sha256,
         "privacy": {"reviewed_payload_included": False, "raw_reason_included": False, "raw_content_included": False},
     }
@@ -12773,7 +12896,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_trace_candidate_update_parser.add_argument("db_path", type=Path)
     dogfood_trace_candidate_update_parser.add_argument("candidate_id")
-    dogfood_trace_candidate_update_parser.add_argument("--status", required=True, choices=["approved", "rejected"])
+    dogfood_trace_candidate_update_parser.add_argument("--status", required=True, choices=["approved", "rejected", "snoozed"])
+    dogfood_trace_candidate_update_parser.add_argument("--snooze-until")
     dogfood_trace_candidate_update_parser.add_argument("--actor", required=True)
     dogfood_trace_candidate_update_parser.add_argument("--reason", required=True)
     dogfood_trace_candidate_update_parser.add_argument("--approval-phrase", required=True)

@@ -13146,6 +13146,151 @@ def test_dogfood_trace_candidate_review_flow_persists_lists_and_updates_without_
     assert _table_counts(db_path, ["facts", "memory_status_transitions", "experience_traces"]) == before_counts
 
 
+def test_dogfood_trace_candidate_generate_suppresses_rejected_and_snoozed_existing_candidates(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-candidate-suppression.db"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "persist before suppression",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+
+    reject_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "rejected",
+            "--actor",
+            "tester",
+            "--reason",
+            "not useful for durable memory",
+            "--approval-phrase",
+            "reject-g5-trace-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert reject_result.returncode == 0, reject_result.stderr
+
+    generate_after_reject = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "trace-candidate-generate", str(db_path), "--limit", "20", "--top", "5"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert generate_after_reject.returncode == 0, generate_after_reject.stderr
+    rejected_payload = json.loads(generate_after_reject.stdout)
+    assert rejected_payload["candidate_count"] == 0
+    assert rejected_payload["suppressed_candidate_count"] == 1
+    assert rejected_payload["suppression_policy"] == {
+        "rejected_fingerprints_filtered": True,
+        "future_snoozed_fingerprints_filtered": True,
+        "raw_review_payload_included": False,
+    }
+    assert rejected_payload["suppressed_candidates"] == [
+        {"candidate_id": candidate_id, "status": "rejected", "snooze_until": None}
+    ]
+
+    snooze_db_path = tmp_path / "trace-candidate-snooze.db"
+    initialize_database(snooze_db_path)
+    _seed_trace_cluster_for_candidate_flow(snooze_db_path)
+    snooze_persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(snooze_db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "persist before snooze",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert snooze_persist_result.returncode == 0, snooze_persist_result.stderr
+    snoozed_candidate_id = json.loads(snooze_persist_result.stdout)["candidate_ids"][0]
+    snooze_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(snooze_db_path),
+            snoozed_candidate_id,
+            "--status",
+            "snoozed",
+            "--snooze-until",
+            "2999-01-01T00:00:00Z",
+            "--actor",
+            "tester",
+            "--reason",
+            "review later after more evidence",
+            "--approval-phrase",
+            "snooze-g5-trace-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert snooze_result.returncode == 0, snooze_result.stderr
+    snooze_payload = json.loads(snooze_result.stdout)
+    assert snooze_payload["status_after"] == "snoozed"
+    assert snooze_payload["snooze_until"] == "2999-01-01T00:00:00Z"
+
+    generate_after_snooze = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "trace-candidate-generate", str(snooze_db_path), "--limit", "20", "--top", "5"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert generate_after_snooze.returncode == 0, generate_after_snooze.stderr
+    snoozed_payload = json.loads(generate_after_snooze.stdout)
+    assert snoozed_payload["candidate_count"] == 0
+    assert snoozed_payload["suppressed_candidates"] == [
+        {"candidate_id": snoozed_candidate_id, "status": "snoozed", "snooze_until": "2999-01-01T00:00:00Z"}
+    ]
+    assert "raw-secret-token" not in reject_result.stdout + generate_after_reject.stdout + snooze_result.stdout + generate_after_snooze.stdout
+
+
 def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_candidates(tmp_path: Path) -> None:
     db_path = tmp_path / "trace-candidate-apply.db"
     backup_path = tmp_path / "trace-candidate-apply.bak"

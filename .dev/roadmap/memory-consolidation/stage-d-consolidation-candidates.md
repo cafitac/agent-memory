@@ -102,6 +102,15 @@ agent-memory consolidation explain <db> <candidate-id>
 
 ## PR D4: Add candidate rejection/snooze state
 
+### Status
+
+- Source slice completed on `develop` after G5 consolidation explainability.
+- Implemented first dogfood path for persisted trace candidates:
+  - `agent-memory dogfood trace-candidate-update <db> <candidate-id> --status rejected --approval-phrase reject-g5-trace-candidate-v1 ...`
+  - `agent-memory dogfood trace-candidate-update <db> <candidate-id> --status snoozed --snooze-until <iso-date> --approval-phrase snooze-g5-trace-candidate-v1 ...`
+- `dogfood trace-candidate-generate` now suppresses previously rejected candidates and future-snoozed candidates by candidate fingerprint/id, without exposing raw review payloads.
+- This still does not delete traces, promote long-term memory, change default retrieval ranking, or allow ordinary conversation auto-approval.
+
 ### Objective
 
 Avoid repeatedly annoying users with bad candidates.

@@ -1,7 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 12:14 KST
+Last updated: 2026-05-15 12:41 KST
+
+## Checkpoint: G5 trace candidate reject/snooze suppression added
+
+Completed the next D4 boundary after the G5 consolidation explainability slice. This adds the first explicit "do not keep showing me this same bad candidate" state for persisted trace-cluster candidates, while keeping memory creation and default retrieval behavior gated.
+
+What changed:
+
+- Fixed the G5 candidate review approval phrase helper so rejected candidates require `reject-g5-trace-candidate-v1` instead of the previous malformed `rejecte-...` derivation.
+- Extended persisted trace candidate review state with `snoozed` and migration support for existing review tables.
+- Added `--snooze-until` for `dogfood trace-candidate-update --status snoozed`, with exact phrase `snooze-g5-trace-candidate-v1`.
+- `dogfood trace-candidate-generate` now filters candidates whose same candidate id/fingerprint was already rejected or is snoozed until a future timestamp.
+- The generate report exposes only ref-safe suppression metadata: `suppressed_candidate_count`, `suppressed_candidates` with candidate id/status/snooze-until, and `suppression_policy`; it does not expose raw review payloads or raw trace content.
+- No trace deletion, long-term memory promotion, default ranking migration, live G4 apply, telemetry reset, collapse/delete, broad/background apply, or ordinary conversation auto-approval was executed.
+
+Verification:
+
+- RED observed: new suppression test first failed on the malformed reject phrase and missing snooze support.
+- Focused GREEN: `uv run pytest tests/test_cli.py::test_dogfood_trace_candidate_generate_suppresses_rejected_and_snoozed_existing_candidates -q` -> `1 passed`.
+- Candidate flow regression: `uv run pytest tests/test_cli.py -q -k 'trace_candidate or lifecycle_candidate'` -> `8 passed, 138 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` initially hit one transient `uvx build` isolated pip-install failure in `tests/test_release_smoke.py::test_built_distributions_include_schema_sql`; exact rerun passed, then full rerun passed with `328 passed, 1 xfailed`.
+- Live read-only source smoke wrote `/Users/reddit/.agent-memory/reports/source-g5-d4-trace-candidate-generate-20260515T035054Z.json` against `/Users/reddit/.agent-memory/memory.db`; result `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, candidate count `10`, suppressed count `0`, suppression policy present, and ordinary conversation auto-approval false.
+
+Current interpretation:
+
+- Brainlike-memory north-star remains approximately 81-83% complete.
+- The system now has a safer negative-feedback path: humans can reject/snooze bad persisted trace candidates and the generator will stop resurfacing the same fingerprint.
+- Remaining gap to human-brain-like automation is still substantial: promotion/apply must remain exact-approved; background consolidation still needs dry-run comparison, rollback proof, conflict-safe mutation, and ranking gates before any autonomous behavior.
+
+Immediate next recommended slice:
+
+1. Commit and push this D4 source/docs/test checkpoint on `develop`; no release solely for this narrow slice.
+2. Continue with the E1/D5 boundary only after this is green in CI: manual reviewed promotion/apply should stay exact-approved with backup, audit, rollback, provenance, conflict/supersession preflight, and no ordinary conversation auto-approval.
 
 ## Checkpoint: G5 consolidation explainability source slice added
 
