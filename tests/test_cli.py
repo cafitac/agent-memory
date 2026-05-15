@@ -12824,6 +12824,193 @@ def test_dogfood_live_evidence_bundle_chains_read_only_artifacts(tmp_path: Path)
 
 
 
+def _write_live_evidence_bundle_report(
+    path: Path,
+    *,
+    generated_at: str,
+    pass_gate: bool = True,
+    fixture_task_count: int = 3,
+    ranking_baseline_regression_count: int = 0,
+    blocked_reasons: list[str] | None = None,
+) -> None:
+    blocked = blocked_reasons or ([] if pass_gate else ["retrieval_ranking_experiment_not_green"])
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_live_evidence_bundle",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "generated_at": generated_at,
+                "db_path": "/tmp/live-evidence.db",
+                "output_dir": "/tmp/live-evidence-output",
+                "artifacts": {
+                    "live_retrieval_ranking_fixtures": {
+                        "provided": True,
+                        "path": "/tmp/fixtures-report.json",
+                        "report_sha256": "a" * 64,
+                        "kind": "dogfood_live_retrieval_ranking_fixtures",
+                        "read_only": True,
+                        "mutated": False,
+                        "default_retrieval_unchanged": True,
+                        "error": None,
+                    },
+                    "retrieval_ranking_experiment": {
+                        "provided": True,
+                        "path": "/tmp/ranking-report.json",
+                        "report_sha256": "b" * 64,
+                        "kind": "dogfood_retrieval_ranking_experiment",
+                        "read_only": True,
+                        "mutated": False,
+                        "default_retrieval_unchanged": True,
+                        "error": None,
+                    },
+                },
+                "rollup": {
+                    "fixture_task_count": fixture_task_count,
+                    "fixture_memory_type_task_counts": {"facts": 1, "procedures": 1, "episodes": 1},
+                    "fixture_retrieval_pass": pass_gate,
+                    "fixture_reliability_pass": pass_gate,
+                    "ranking_change_allowed": pass_gate,
+                    "ranking_baseline_regression_count": ranking_baseline_regression_count,
+                    "rollback_checked_application_count": 3,
+                    "audit_application_count": 3,
+                    "audit_required_evidence_gate_pass": pass_gate,
+                },
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "blocked_reasons": blocked,
+                    "decision": "live_evidence_bundle_ready_for_repeated_read_only_accumulation"
+                    if pass_gate
+                    else "continue_collecting_or_fixing_live_evidence_before_broader_automation",
+                },
+                "safety_contract": {
+                    "bundle_executes_apply": False,
+                    "default_ranking_mutated": False,
+                    "broad_g4_apply_allowed": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {
+                    "raw_source_content_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_trace_summary_included": False,
+                    "reviewed_payload_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                },
+                "private_raw_body": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+
+def test_dogfood_live_evidence_bundle_compare_summarizes_repeated_reports_without_raw_content(
+    tmp_path: Path,
+) -> None:
+    report_a = tmp_path / "bundle-a.json"
+    report_b = tmp_path / "bundle-b.json"
+    output_path = tmp_path / "bundle-compare.json"
+    _write_live_evidence_bundle_report(report_a, generated_at="2026-05-15T07:00:00Z", fixture_task_count=3)
+    _write_live_evidence_bundle_report(report_b, generated_at="2026-05-15T08:00:00Z", fixture_task_count=4)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-evidence-bundle-compare",
+            "--report",
+            str(report_a),
+            "--report",
+            str(report_b),
+            "--output",
+            str(output_path),
+            "--min-report-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_live_evidence_bundle_comparison"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["report_count"] == 2
+    assert len(payload["reports"]) == 2
+    assert payload["reports"][0]["report_sha256"]
+    assert payload["reports"][0]["artifact_hashes"] == {
+        "live_retrieval_ranking_fixtures": "a" * 64,
+        "retrieval_ranking_experiment": "b" * 64,
+    }
+    assert payload["reports"][0]["fixture_task_count"] == 3
+    assert payload["aggregate"] == {
+        "quality_gate_pass_count": 2,
+        "quality_gate_decision_counts": {"live_evidence_bundle_ready_for_repeated_read_only_accumulation": 2},
+        "fixture_task_count_min": 3,
+        "fixture_task_count_max": 4,
+        "fixture_retrieval_pass_count": 2,
+        "fixture_reliability_pass_count": 2,
+        "ranking_allowed_count": 2,
+        "ranking_baseline_regression_count_total": 0,
+        "ranking_baseline_regression_count_max": 0,
+        "rollback_checked_application_count_min": 3,
+        "rollback_checked_application_count_max": 3,
+        "audit_application_count_min": 3,
+        "audit_application_count_max": 3,
+        "audit_required_evidence_gate_pass_count": 2,
+        "blocked_reasons": [],
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "live_evidence_bundle_stable_for_next_read_only_automation_policy_slice",
+        "blocked_reasons": [],
+        "blocker_diagnostics": {
+            "bundle_quality_gate_not_stable": {"blocked": False, "affected_report_count": 0, "report_count": 2},
+            "ranking_baseline_regression_present": {"blocked": False, "regression_count_max": 0},
+            "fixture_coverage_unstable": {"blocked": False, "fixture_task_count_min": 3, "fixture_task_count_max": 4},
+        },
+    }
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "broad_g4_apply_allowed": False,
+        "default_ranking_mutation_allowed": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_separate_policy_slice": True,
+    }
+    assert payload["privacy"] == {
+        "raw_source_content_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "reviewed_payload_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+        "aggregate_only": True,
+    }
+    serialized = json.dumps(payload)
+    assert "SHOULD_NOT_LEAK" not in serialized
+    assert "private_raw_body" not in serialized
+
+
+
 def test_dogfood_live_retrieval_ranking_fixtures_reports_generation_blockers_for_sparse_db(tmp_path: Path) -> None:
     db_path = tmp_path / "sparse-live-ranking-fixtures.db"
     fixture_path = tmp_path / "sparse-live-ranking-fixtures.json"

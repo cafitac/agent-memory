@@ -4564,6 +4564,193 @@ def _write_ranking_policy_to_config(config_path: Path, policy: str) -> None:
     config_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _live_evidence_bundle_report_summary(path: Path) -> dict[str, Any]:
+    payload, artifact = _read_json_artifact_summary(path)
+    raw = payload if isinstance(payload, dict) else {}
+    rollup = raw.get("rollup", {}) if isinstance(raw.get("rollup"), dict) else {}
+    quality_gate = raw.get("quality_gate", {}) if isinstance(raw.get("quality_gate"), dict) else {}
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    safety_contract = raw.get("safety_contract", {}) if isinstance(raw.get("safety_contract"), dict) else {}
+    artifacts = raw.get("artifacts", {}) if isinstance(raw.get("artifacts"), dict) else {}
+    artifact_hashes = {
+        str(name): str(summary.get("report_sha256"))
+        for name, summary in sorted(artifacts.items())
+        if isinstance(summary, dict) and summary.get("report_sha256")
+    }
+    blocked_reasons = sorted(str(reason) for reason in quality_gate.get("blocked_reasons", []) if reason)
+    return {
+        "path": artifact["path"],
+        "report_sha256": artifact["report_sha256"],
+        "kind": artifact["kind"],
+        "read_only": artifact["read_only"],
+        "mutated": artifact["mutated"],
+        "default_retrieval_unchanged": artifact["default_retrieval_unchanged"],
+        "ordinary_conversation_auto_approval": raw.get("ordinary_conversation_auto_approval"),
+        "generated_at": raw.get("generated_at"),
+        "quality_gate_pass": quality_gate.get("pass"),
+        "quality_gate_decision": quality_gate.get("decision", "unknown"),
+        "blocked_reasons": blocked_reasons,
+        "fixture_task_count": _safe_int(rollup.get("fixture_task_count")),
+        "fixture_memory_type_task_counts": rollup.get("fixture_memory_type_task_counts", {})
+        if isinstance(rollup.get("fixture_memory_type_task_counts"), dict)
+        else {},
+        "fixture_retrieval_pass": rollup.get("fixture_retrieval_pass") is True,
+        "fixture_reliability_pass": rollup.get("fixture_reliability_pass") is True,
+        "ranking_change_allowed": rollup.get("ranking_change_allowed") is True,
+        "ranking_baseline_regression_count": _safe_int(rollup.get("ranking_baseline_regression_count")),
+        "rollback_checked_application_count": _safe_int(rollup.get("rollback_checked_application_count")),
+        "audit_application_count": _safe_int(rollup.get("audit_application_count")),
+        "audit_required_evidence_gate_pass": rollup.get("audit_required_evidence_gate_pass") is True,
+        "artifact_hashes": artifact_hashes,
+        "privacy_flags": {
+            "raw_source_content_included": privacy.get("raw_source_content_included") is True,
+            "raw_transcript_included": privacy.get("raw_transcript_included") is True,
+            "raw_query_text_included": privacy.get("raw_query_text_included") is True,
+            "raw_trace_summary_included": privacy.get("raw_trace_summary_included") is True,
+            "reviewed_payload_included": privacy.get("reviewed_payload_included") is True,
+            "backup_content_included": privacy.get("backup_content_included") is True,
+            "raw_report_included": privacy.get("raw_report_included") is True,
+        },
+        "safety_contract": {
+            "bundle_executes_apply": safety_contract.get("bundle_executes_apply") is True,
+            "default_ranking_mutated": safety_contract.get("default_ranking_mutated") is True,
+            "broad_g4_apply_allowed": safety_contract.get("broad_g4_apply_allowed") is True,
+            "collapse_delete_apply_allowed": safety_contract.get("collapse_delete_apply_allowed") is True,
+            "telemetry_reset_apply_allowed": safety_contract.get("telemetry_reset_apply_allowed") is True,
+            "unreviewed_promotion_allowed": safety_contract.get("unreviewed_promotion_allowed") is True,
+            "repeated_apply_without_new_approval_allowed": safety_contract.get("repeated_apply_without_new_approval_allowed") is True,
+        },
+        "error": artifact.get("error"),
+    }
+
+
+
+def _dogfood_live_evidence_bundle_compare_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.reports:
+        raise ValueError("dogfood live-evidence-bundle-compare requires at least one --report path")
+    if args.min_report_count < 1:
+        raise ValueError("dogfood live-evidence-bundle-compare min-report-count must be >= 1")
+
+    summaries = [_live_evidence_bundle_report_summary(path) for path in args.reports]
+    gate_counter = Counter(str(summary.get("quality_gate_decision", "unknown")) for summary in summaries)
+    blocked_reasons = sorted({reason for summary in summaries for reason in summary.get("blocked_reasons", [])})
+    pass_count = sum(1 for summary in summaries if summary.get("quality_gate_pass") is True)
+    fixture_counts = [summary["fixture_task_count"] for summary in summaries]
+    ranking_regressions = [summary["ranking_baseline_regression_count"] for summary in summaries]
+    rollback_counts = [summary["rollback_checked_application_count"] for summary in summaries]
+    audit_counts = [summary["audit_application_count"] for summary in summaries]
+    fixture_task_count_min = min(fixture_counts, default=0)
+    fixture_task_count_max = max(fixture_counts, default=0)
+    regression_count_max = max(ranking_regressions, default=0)
+    quality_fail_count = len(summaries) - pass_count
+
+    comparison_blocked_reasons: list[str] = []
+    if len(summaries) < args.min_report_count:
+        comparison_blocked_reasons.append("not_enough_live_evidence_bundle_reports")
+    if quality_fail_count:
+        comparison_blocked_reasons.append("bundle_quality_gate_not_stable")
+    if blocked_reasons:
+        comparison_blocked_reasons.append("blocked_reasons_present")
+    if any(summary.get("kind") != "dogfood_live_evidence_bundle" for summary in summaries):
+        comparison_blocked_reasons.append("non_live_evidence_bundle_report_present")
+    if any(summary.get("read_only") is not True for summary in summaries):
+        comparison_blocked_reasons.append("report_not_read_only")
+    if any(summary.get("mutated") is True for summary in summaries):
+        comparison_blocked_reasons.append("report_claims_mutation")
+    if any(summary.get("default_retrieval_unchanged") is not True for summary in summaries):
+        comparison_blocked_reasons.append("default_retrieval_changed")
+    if any(summary.get("ordinary_conversation_auto_approval") is True for summary in summaries):
+        comparison_blocked_reasons.append("ordinary_conversation_auto_approval_enabled")
+    if any(any(summary.get("privacy_flags", {}).values()) for summary in summaries):
+        comparison_blocked_reasons.append("privacy_flag_claims_raw_content")
+    if any(any(summary.get("safety_contract", {}).values()) for summary in summaries):
+        comparison_blocked_reasons.append("safety_contract_claims_apply_authority")
+    if regression_count_max > 0:
+        comparison_blocked_reasons.append("ranking_baseline_regression_present")
+    if fixture_task_count_min < 1:
+        comparison_blocked_reasons.append("fixture_coverage_unstable")
+
+    passed = not comparison_blocked_reasons
+    payload = {
+        "kind": "dogfood_live_evidence_bundle_comparison",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "report_count": len(summaries),
+        "reports": summaries,
+        "aggregate": {
+            "quality_gate_pass_count": pass_count,
+            "quality_gate_decision_counts": {key: gate_counter[key] for key in sorted(gate_counter)},
+            "fixture_task_count_min": fixture_task_count_min,
+            "fixture_task_count_max": fixture_task_count_max,
+            "fixture_retrieval_pass_count": sum(1 for summary in summaries if summary.get("fixture_retrieval_pass") is True),
+            "fixture_reliability_pass_count": sum(1 for summary in summaries if summary.get("fixture_reliability_pass") is True),
+            "ranking_allowed_count": sum(1 for summary in summaries if summary.get("ranking_change_allowed") is True),
+            "ranking_baseline_regression_count_total": sum(ranking_regressions),
+            "ranking_baseline_regression_count_max": regression_count_max,
+            "rollback_checked_application_count_min": min(rollback_counts, default=0),
+            "rollback_checked_application_count_max": max(rollback_counts, default=0),
+            "audit_application_count_min": min(audit_counts, default=0),
+            "audit_application_count_max": max(audit_counts, default=0),
+            "audit_required_evidence_gate_pass_count": sum(
+                1 for summary in summaries if summary.get("audit_required_evidence_gate_pass") is True
+            ),
+            "blocked_reasons": blocked_reasons,
+        },
+        "quality_gate": {
+            "pass": passed,
+            "decision": "live_evidence_bundle_stable_for_next_read_only_automation_policy_slice"
+            if passed
+            else "continue_collecting_or_fixing_live_evidence_bundles_before_automation_policy",
+            "blocked_reasons": comparison_blocked_reasons,
+            "blocker_diagnostics": {
+                "bundle_quality_gate_not_stable": {
+                    "blocked": quality_fail_count > 0,
+                    "affected_report_count": quality_fail_count,
+                    "report_count": len(summaries),
+                },
+                "ranking_baseline_regression_present": {
+                    "blocked": regression_count_max > 0,
+                    "regression_count_max": regression_count_max,
+                },
+                "fixture_coverage_unstable": {
+                    "blocked": fixture_task_count_min < 1,
+                    "fixture_task_count_min": fixture_task_count_min,
+                    "fixture_task_count_max": fixture_task_count_max,
+                },
+            },
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "broad_g4_apply_allowed": False,
+            "default_ranking_mutation_allowed": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_separate_policy_slice": True,
+        },
+        "privacy": {
+            "raw_source_content_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "reviewed_payload_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "aggregate_only": True,
+        },
+        "suggested_next_steps": [
+            "Use stable repeated bundle comparisons only to design the next read-only automation policy slice.",
+            "Do not treat this comparison as approval for apply, ranking-default migration, collapse/delete, telemetry reset, or ordinary-conversation auto-approval.",
+            "Keep artifact hashes in summaries and avoid embedding raw report bodies.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     output_dir = args.output_dir.expanduser().resolve(strict=False)
@@ -13424,6 +13611,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_live_evidence_bundle_parser.add_argument("--policy", default="g5-reviewed-candidate-promotion-v1")
     dogfood_live_evidence_bundle_parser.add_argument("--application-limit", type=int, default=50)
     dogfood_live_evidence_bundle_parser.add_argument("--output", type=Path)
+    dogfood_live_evidence_bundle_compare_parser = dogfood_subparsers.add_parser(
+        "live-evidence-bundle-compare",
+        help="Compare saved live evidence bundle reports as a read-only stability trend before automation policy work.",
+    )
+    dogfood_live_evidence_bundle_compare_parser.add_argument("--report", dest="reports", action="append", type=Path, required=True)
+    dogfood_live_evidence_bundle_compare_parser.add_argument("--output", type=Path)
+    dogfood_live_evidence_bundle_compare_parser.add_argument("--min-report-count", type=int, default=2)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -14712,6 +14906,9 @@ def main() -> None:
             return
         if args.dogfood_action == "live-evidence-bundle":
             print(json.dumps(_dogfood_live_evidence_bundle_payload(args), indent=2))
+            return
+        if args.dogfood_action == "live-evidence-bundle-compare":
+            print(json.dumps(_dogfood_live_evidence_bundle_compare_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))
