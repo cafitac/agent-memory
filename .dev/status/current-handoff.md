@@ -46,7 +46,9 @@ Current local state:
 
 Immediate next recommended slice:
 
-- Priority 2 is the bounded G4 live apply decision/evidence step. Prepare/refresh the released-runtime operator packet and backup/audit paths first, but only execute apply if the operator provides the exact approval corridor: phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
+- Priority 2 read-only evidence preparation is complete. The published `v0.1.162` CLI generated `/Users/reddit/.agent-memory/reports/v0.1.162-published-g4-operator-packet-20260515T024457Z/g4-operator-apply-packet.json` from the saved green operator bundle and readiness-summary artifacts.
+- Packet result: `quality_gate.pass=true`, decision `operator_apply_packet_ready_for_manual_review_only`, `runbook_contract.matches_g4_bounded_operator_apply_runbook=true`, required apply/verifier flag checks true, `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, and `max_apply=1` in the manual command preview.
+- Stop here unless the operator provides the exact live-apply approval corridor: phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
 - If exact live-apply approval is not provided, continue with read-only G5 brainlike consolidation runway work instead.
 
 ## Checkpoint: G4 milestone release readiness review

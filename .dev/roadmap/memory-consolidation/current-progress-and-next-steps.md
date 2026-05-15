@@ -39,9 +39,10 @@ Current interpretation:
 Next after this release:
 
 1. Do not republish `v0.1.162`; it is complete.
-2. If the operator explicitly authorizes priority 2 live apply, refresh the released-runtime operator packet and execute only the bounded `g4-review-queue-apply` corridor with exact phrase/policy/actor/private reason/backup/audit/max-apply inputs, then stop at `g4-post-apply-verification`.
-3. If those exact live-apply inputs are not present, do not infer authorization from this release. Continue read-only/source work on the G5 brainlike consolidation runway.
-4. Keep broad/background G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
+2. Released-runtime priority 2 packet preparation is complete: `/Users/reddit/.agent-memory/reports/v0.1.162-published-g4-operator-packet-20260515T024457Z/g4-operator-apply-packet.json` is green for manual review only, with `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, `broad_g4_apply_allowed=false`, and runbook contract alignment true.
+3. If the operator explicitly authorizes live apply later, execute only the bounded `g4-review-queue-apply` corridor with exact phrase/policy/actor/private reason/backup/audit/max-apply inputs, then stop at `g4-post-apply-verification`.
+4. If those exact live-apply inputs are not present, do not infer authorization from this release or packet. Continue read-only/source work on the G5 brainlike consolidation runway.
+5. Keep broad/background G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: G4 milestone release readiness review
 

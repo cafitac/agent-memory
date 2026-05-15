@@ -34,8 +34,8 @@ Last updated: 2026-05-15 11:40 KST
 Recommended next work now:
 
 1. Do not rerun release or publish for `v0.1.162`; it is complete and externally verified.
-2. If proceeding with priority 2, prepare the bounded G4 live apply packet from the released/runtime state, but do not execute apply unless the exact live-apply approval corridor is satisfied.
-3. Required live-apply inputs remain: exact approval phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
+2. Priority 2 read-only preparation is complete: published `v0.1.162` generated `/Users/reddit/.agent-memory/reports/v0.1.162-published-g4-operator-packet-20260515T024457Z/g4-operator-apply-packet.json` with `quality_gate.pass=true`, decision `operator_apply_packet_ready_for_manual_review_only`, `runbook_contract.matches_g4_bounded_operator_apply_runbook=true`, `read_only=true`, `mutated=false`, `apply_executed=false`, `apply_supported=false`, and `broad_g4_apply_allowed=false`.
+3. Stop here for live apply unless the operator supplies the full exact corridor: approval phrase `apply-approved-g4-review-queue-items-v1`, policy `g4-review-queue-apply-v1`, actor, private reason, backup path, bounded `--max-apply`, and audit output path.
 4. Keep broad/background G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Just completed: G4 milestone release readiness review
