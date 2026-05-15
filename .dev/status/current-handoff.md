@@ -1,7 +1,40 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 15:56 KST
+Last updated: 2026-05-15 16:28 KST
+
+
+## Checkpoint: read-only live evidence bundle added
+
+Completed the next read-only evidence orchestration slice after live fixture diagnostics. The source checkout can now produce one ref-safe bundle that generates live fixture diagnostics, runs the ranking experiment, validates rollback replay, and feeds those artifacts into trace-candidate application audit with artifact hashes.
+
+What changed:
+
+- Added `dogfood live-evidence-bundle <db_path> --output-dir <dir>`.
+- The command writes the live fixture JSON, fixture diagnostics report, retrieval-ranking experiment report, rollback replay report, trace-candidate application audit report, and optional bundle report.
+- Bundle output includes artifact paths and SHA-256 hashes instead of embedding raw report bodies.
+- The bundle remains evidence-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`, and `bundle_executes_apply=false`.
+- The safety contract explicitly keeps broad G4 apply, default-ranking mutation, collapse/delete, telemetry reset, unreviewed promotion, and repeated apply without new approval blocked.
+- Privacy flags remain raw-content safe: no raw source/transcript/query/trace content, reviewed payload, backup content, or raw report embedding.
+
+Verification:
+
+- Focused bundle test: `uv run pytest tests/test_cli.py::test_dogfood_live_evidence_bundle_chains_read_only_artifacts -q` -> `1 passed`.
+- Evidence/audit subset: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'live_evidence_bundle or live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit or rollback_replay_validate'` -> `5 passed, 147 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `334 passed, 1 xfailed`.
+- Live source smoke wrote `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-20260515T072811Z/live-evidence-bundle.json` against `/Users/reddit/.agent-memory/memory.db`: quality gate pass, fixture tasks `4` (`facts=2`, `procedures=1`, `episodes=1`), fixture retrieval/reliability pass, ranking baseline regressions `0`, rollback checked application count `3`, audit application count `3`, audit required evidence gate pass.
+
+Current interpretation:
+
+- Brainlike-memory north-star is approximately 89-90% in the safety-gated operational roadmap framing.
+- This reaches the edge of 90% because the live evidence path is now repeatable as one hashed, read-only bundle rather than a manually chained sequence.
+- Literal fully autonomous human-brain-like memory is still materially lower because risky write/apply/delete/consolidation decisions remain human-reviewed or exact-approved.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for this bundle slice.
+2. Next safe source slice: repeated-run bundle comparison/accumulation across two or more saved live evidence bundles, with artifact hashes and no mutation.
+3. Keep broad/background apply, live G4 apply, telemetry reset, ranking default migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: live retrieval-ranking fixture diagnostics hardening added
 

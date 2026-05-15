@@ -4564,6 +4564,150 @@ def _write_ranking_policy_to_config(config_path: Path, policy: str) -> None:
     config_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    output_dir = args.output_dir.expanduser().resolve(strict=False)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fixture_output = output_dir / "live-retrieval-ranking-fixtures.json"
+    fixture_report_path = output_dir / "live-retrieval-ranking-fixtures-report.json"
+    ranking_report_path = output_dir / "retrieval-ranking-experiment.json"
+    rollback_report_path = output_dir / "rollback-replay-validate.json"
+    application_audit_report_path = output_dir / "trace-candidate-application-audit.json"
+
+    fixture_payload = _dogfood_live_retrieval_ranking_fixtures_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            fixture_output=fixture_output,
+            limit_per_type=args.limit_per_type,
+            limit=args.limit,
+            min_reliable_tasks=args.min_reliable_tasks,
+            baseline_mode=args.baseline_mode,
+            max_baseline_regressions=args.max_baseline_regressions,
+            output=fixture_report_path,
+        )
+    )
+    ranking_payload = _dogfood_retrieval_ranking_experiment_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            fixtures=fixture_output,
+            baseline_mode=args.baseline_mode,
+            max_baseline_regressions=args.max_baseline_regressions,
+            max_tasks=args.max_tasks,
+            limit=args.limit,
+            reinforcement_weight=args.reinforcement_weight,
+            reinforcement_cap=args.reinforcement_cap,
+            ranking_policy=args.ranking_policy,
+            shadow_compare=True,
+            output=ranking_report_path,
+        )
+    )
+    rollback_payload = _dogfood_rollback_replay_validate_payload(
+        argparse.Namespace(db_path=db_path, limit=args.application_limit, output=rollback_report_path)
+    )
+    audit_payload = _dogfood_trace_candidate_application_audit_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            limit=args.application_limit,
+            policy=args.policy,
+            rollback_replay_report=rollback_report_path,
+            retrieval_ranking_report=ranking_report_path,
+            output=application_audit_report_path,
+        )
+    )
+
+    _, fixture_artifact = _read_json_artifact_summary(fixture_report_path)
+    _, ranking_artifact = _read_json_artifact_summary(ranking_report_path)
+    _, rollback_artifact = _read_json_artifact_summary(rollback_report_path)
+    _, audit_artifact = _read_json_artifact_summary(application_audit_report_path)
+    fixture_reliability = fixture_payload.get("reliability_gate", {}) if isinstance(fixture_payload.get("reliability_gate"), dict) else {}
+    fixture_retrieval = fixture_payload.get("retrieval_diagnostics", {}) if isinstance(fixture_payload.get("retrieval_diagnostics"), dict) else {}
+    ranking_quality = ranking_payload.get("quality_gate", {}) if isinstance(ranking_payload.get("quality_gate"), dict) else {}
+    if not ranking_quality:
+        ranking_quality = {"pass": bool(ranking_payload.get("gate", {}).get("ranking_change_allowed")), "blocked_reasons": []}
+    rollback_quality = rollback_payload.get("quality_gate", {}) if isinstance(rollback_payload.get("quality_gate"), dict) else {}
+    audit_quality = audit_payload.get("quality_gate", {}) if isinstance(audit_payload.get("quality_gate"), dict) else {}
+    blocked_reasons: list[str] = []
+    if fixture_retrieval.get("pass") is not True:
+        blocked_reasons.append("live_fixture_retrieval_diagnostics_not_green")
+    if fixture_reliability.get("pass") is not True:
+        blocked_reasons.append("live_fixture_reliability_gate_not_green")
+    if ranking_quality.get("pass") is not True:
+        blocked_reasons.append("retrieval_ranking_experiment_not_green")
+    if rollback_quality.get("pass") is not True:
+        blocked_reasons.append("rollback_replay_validate_not_green")
+    if audit_quality.get("pass") is not True:
+        blocked_reasons.append("trace_candidate_application_audit_not_green")
+
+    payload = {
+        "kind": "dogfood_live_evidence_bundle",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "db_path": str(db_path),
+        "output_dir": str(output_dir),
+        "artifacts": {
+            "live_retrieval_ranking_fixtures": fixture_artifact,
+            "retrieval_ranking_experiment": ranking_artifact,
+            "rollback_replay_validate": rollback_artifact,
+            "trace_candidate_application_audit": audit_artifact,
+        },
+        "rollup": {
+            "fixture_task_count": fixture_payload.get("fixture_task_count", 0),
+            "fixture_memory_type_task_counts": fixture_payload.get("memory_type_task_counts", {}),
+            "fixture_retrieval_pass": fixture_retrieval.get("pass") is True,
+            "fixture_reliability_pass": fixture_reliability.get("pass") is True,
+            "ranking_change_allowed": bool(ranking_payload.get("gate", {}).get("ranking_change_allowed")),
+            "ranking_baseline_regression_count": _safe_int(
+                ranking_payload.get("fixture_gate_comparison", {}).get("baseline_regression_count", 0)
+                if isinstance(ranking_payload.get("fixture_gate_comparison"), dict)
+                else 0
+            ),
+            "rollback_checked_application_count": _safe_int(
+                rollback_payload.get("rollup", {}).get("checked_application_count", rollback_payload.get("application_count", 0))
+                if isinstance(rollback_payload.get("rollup"), dict)
+                else rollback_payload.get("application_count", 0)
+            ),
+            "audit_application_count": audit_payload.get("application_count", 0),
+            "audit_required_evidence_gate_pass": bool(audit_payload.get("required_evidence_gate", {}).get("pass"))
+            if isinstance(audit_payload.get("required_evidence_gate"), dict)
+            else False,
+        },
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "blocked_reasons": blocked_reasons,
+            "decision": "live_evidence_bundle_ready_for_repeated_read_only_accumulation"
+            if not blocked_reasons
+            else "continue_collecting_or_fixing_live_evidence_before_broader_automation",
+        },
+        "safety_contract": {
+            "bundle_executes_apply": False,
+            "default_ranking_mutated": False,
+            "broad_g4_apply_allowed": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {
+            "raw_source_content_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "reviewed_payload_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+        },
+        "next_steps": [
+            "Collect this bundle repeatedly across live dogfood windows before changing automation defaults.",
+            "Use artifact hashes, not raw report bodies, when feeding future readiness summaries.",
+            "Do not use a green bundle as authorization for broad apply, default ranking migration, collapse/delete, telemetry reset, or ordinary-conversation auto-approval.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> dict[str, Any]:
     candidate_policy = _ranking_policy_or_default(args)
     shadow_compare_requested = bool(getattr(args, "shadow_compare", False)) or candidate_policy == "shadow_compare"
@@ -13257,6 +13401,29 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--baseline-mode", choices=["lexical", "lexical-global", "source-lexical", "source-global"])
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--max-baseline-regressions", type=int, default=0)
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--output", type=Path)
+    dogfood_live_evidence_bundle_parser = dogfood_subparsers.add_parser(
+        "live-evidence-bundle",
+        help="Generate live retrieval fixtures, ranking experiment, rollback replay, and trace-candidate audit artifacts as one read-only evidence bundle.",
+    )
+    dogfood_live_evidence_bundle_parser.add_argument("db_path", type=Path)
+    dogfood_live_evidence_bundle_parser.add_argument("--output-dir", type=Path, required=True)
+    dogfood_live_evidence_bundle_parser.add_argument("--limit-per-type", type=int, default=20)
+    dogfood_live_evidence_bundle_parser.add_argument("--limit", type=int, default=5)
+    dogfood_live_evidence_bundle_parser.add_argument("--min-reliable-tasks", type=int, default=50)
+    dogfood_live_evidence_bundle_parser.add_argument("--baseline-mode", choices=["lexical", "lexical-global", "source-lexical", "source-global"])
+    dogfood_live_evidence_bundle_parser.add_argument("--max-baseline-regressions", type=int, default=0)
+    dogfood_live_evidence_bundle_parser.add_argument("--max-tasks", type=int, default=5)
+    dogfood_live_evidence_bundle_parser.add_argument("--reinforcement-weight", type=float, default=1.5)
+    dogfood_live_evidence_bundle_parser.add_argument("--reinforcement-cap", type=float, default=1.0)
+    dogfood_live_evidence_bundle_parser.add_argument(
+        "--ranking-policy",
+        choices=list(RANKING_POLICIES),
+        default="graph_reinforced_v1",
+        help="Candidate ranking policy to shadow-compare while keeping conservative legacy returned.",
+    )
+    dogfood_live_evidence_bundle_parser.add_argument("--policy", default="g5-reviewed-candidate-promotion-v1")
+    dogfood_live_evidence_bundle_parser.add_argument("--application-limit", type=int, default=50)
+    dogfood_live_evidence_bundle_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -14542,6 +14709,9 @@ def main() -> None:
             return
         if args.dogfood_action == "live-retrieval-ranking-fixtures":
             print(json.dumps(_dogfood_live_retrieval_ranking_fixtures_payload(args), indent=2))
+            return
+        if args.dogfood_action == "live-evidence-bundle":
+            print(json.dumps(_dogfood_live_evidence_bundle_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

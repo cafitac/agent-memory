@@ -1,7 +1,40 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 15:56 KST
+Last updated: 2026-05-15 16:28 KST
+
+
+## Just completed: read-only live evidence bundle source checkpoint
+
+- Added `dogfood live-evidence-bundle <db_path> --output-dir <dir>` to chain live fixture diagnostics -> retrieval-ranking experiment -> rollback replay validation -> trace-candidate application audit in one read-only run.
+- The command writes hashed artifacts under the requested output directory:
+  - `live-retrieval-ranking-fixtures.json`
+  - `live-retrieval-ranking-fixtures-report.json`
+  - `retrieval-ranking-experiment.json`
+  - `rollback-replay-validate.json`
+  - `trace-candidate-application-audit.json`
+  - optional bundle report via `--output`
+- Bundle output kind: `dogfood_live_evidence_bundle`.
+- Safety contract remains strict:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - `ordinary_conversation_auto_approval=false`
+  - `bundle_executes_apply=false`
+  - no default ranking mutation, broad G4 apply, collapse/delete, telemetry reset, unreviewed promotion, repeated apply without new approval, raw report embedding, raw source/transcript/query/trace content, reviewed payload, or backup content.
+- Focused gates:
+  - `uv run pytest tests/test_cli.py::test_dogfood_live_evidence_bundle_chains_read_only_artifacts -q` -> `1 passed`.
+  - `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'live_evidence_bundle or live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit or rollback_replay_validate'` -> `5 passed, 147 deselected`.
+  - `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `334 passed, 1 xfailed`.
+- Live read-only source smoke: `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-20260515T072811Z/live-evidence-bundle.json`.
+  - `quality_gate.pass=true`, `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`.
+  - Bundle rollup: fixture tasks `4` (`facts=2`, `procedures=1`, `episodes=1`), fixture retrieval/reliability pass, ranking allowed with zero baseline regressions, rollback checked application count `3`, audit application count `3`, audit required evidence gate pass.
+
+Recommended next work now:
+
+1. Commit/push this live evidence bundle source/test/docs checkpoint and watch CI.
+2. Next safe source slice: repeated-run comparison/accumulation over two or more saved bundle reports, still read-only and hash/ref-safe, so stability across live dogfood windows can be measured before any broader automation decision.
+3. Still blocked without exact separate approval: live G4 apply, broad/background apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, and ordinary conversation auto-approval.
 
 ## Just completed: live retrieval-ranking fixture diagnostics hardening source checkpoint
 

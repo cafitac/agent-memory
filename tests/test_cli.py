@@ -12697,6 +12697,133 @@ def test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixtur
 
 
 
+def test_dogfood_live_evidence_bundle_chains_read_only_artifacts(tmp_path: Path) -> None:
+    db_path = tmp_path / "live-evidence-bundle.db"
+    output_dir = tmp_path / "bundle"
+    bundle_output = tmp_path / "bundle-report.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Live evidence bundle source content must not appear in bundle reports.",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Live evidence bundle",
+        predicate="chains",
+        object_ref_or_value="read only artifacts",
+        evidence_ids=[source.id],
+        scope="project:live-evidence-bundle",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    procedure = create_candidate_procedure(
+        db_path=db_path,
+        name="Live evidence bundle procedure",
+        trigger_context="When repeated live evidence is needed",
+        preconditions=["approved live DB memories exist"],
+        steps=["Generate live fixture", "Run ranking experiment", "Audit application evidence"],
+        evidence_ids=[source.id],
+        scope="project:live-evidence-bundle",
+        success_rate=0.9,
+    )
+    approve_procedure(db_path=db_path, procedure_id=procedure.id)
+    episode = create_episode(
+        db_path=db_path,
+        title="Live evidence bundle episode",
+        summary="A source-backed episode proves bundle artifact chaining can include episodic retrieval evidence.",
+        source_ids=[source.id],
+        tags=["live-evidence-bundle"],
+        importance_score=0.8,
+        scope="project:live-evidence-bundle",
+    )
+    approve_memory(db_path=db_path, memory_type="episode", memory_id=episode.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-evidence-bundle",
+            str(db_path),
+            "--output-dir",
+            str(output_dir),
+            "--limit-per-type",
+            "3",
+            "--min-reliable-tasks",
+            "3",
+            "--application-limit",
+            "5",
+            "--output",
+            str(bundle_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(bundle_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_live_evidence_bundle"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "decision": "live_evidence_bundle_ready_for_repeated_read_only_accumulation",
+    }
+    assert payload["rollup"]["fixture_task_count"] == 3
+    assert payload["rollup"]["fixture_memory_type_task_counts"] == {"facts": 1, "procedures": 1, "episodes": 1}
+    assert payload["rollup"]["fixture_retrieval_pass"] is True
+    assert payload["rollup"]["fixture_reliability_pass"] is True
+    assert payload["rollup"]["ranking_change_allowed"] is True
+    assert payload["rollup"]["ranking_baseline_regression_count"] == 0
+    assert payload["rollup"]["rollback_checked_application_count"] == 0
+    assert payload["rollup"]["audit_application_count"] == 0
+    assert payload["rollup"]["audit_required_evidence_gate_pass"] is True
+    assert set(payload["artifacts"]) == {
+        "live_retrieval_ranking_fixtures",
+        "retrieval_ranking_experiment",
+        "rollback_replay_validate",
+        "trace_candidate_application_audit",
+    }
+    for artifact in payload["artifacts"].values():
+        assert artifact["provided"] is True
+        assert artifact["report_sha256"]
+        assert artifact["read_only"] is True
+        assert artifact["mutated"] is False
+        assert artifact["default_retrieval_unchanged"] is True
+        assert Path(artifact["path"]).exists()
+    assert payload["safety_contract"] == {
+        "bundle_executes_apply": False,
+        "default_ranking_mutated": False,
+        "broad_g4_apply_allowed": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_source_content_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "reviewed_payload_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+    }
+    serialized = json.dumps(payload)
+    assert "Live evidence bundle source content" not in serialized
+    assert "must not appear" not in serialized
+
+
+
 def test_dogfood_live_retrieval_ranking_fixtures_reports_generation_blockers_for_sparse_db(tmp_path: Path) -> None:
     db_path = tmp_path / "sparse-live-ranking-fixtures.db"
     fixture_path = tmp_path / "sparse-live-ranking-fixtures.json"

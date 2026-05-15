@@ -1,7 +1,44 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 15:56 KST
+Last updated: 2026-05-15 16:28 KST
+
+
+## Checkpoint: read-only live evidence bundle
+
+The repeated-evidence bundling slice is now implemented in source. It closes the immediate operational gap where an operator had to manually chain live fixture generation, ranking experiment, rollback replay, and application audit before comparing evidence.
+
+Implemented:
+
+- Added `dogfood live-evidence-bundle <db_path> --output-dir <dir>`.
+- The command produces and links these artifacts with paths and SHA-256 hashes:
+  - live retrieval fixture JSON;
+  - live fixture diagnostics report;
+  - retrieval-ranking experiment report;
+  - rollback replay validation report;
+  - trace-candidate application audit report;
+  - optional top-level bundle report.
+- The top-level bundle reports aggregate rollups for fixture count/type coverage, fixture retrieval/reliability pass, ranking baseline regressions, rollback checked applications, audit applications, and audit required evidence gate.
+- The command is explicitly read-only and no-apply: no durable memory mutation, default ranking mutation, broad G4 apply, collapse/delete, telemetry reset, unreviewed promotion, repeated apply, or ordinary-conversation auto-approval.
+
+Verification:
+
+- Focused bundle test: `1 passed`.
+- Evidence/audit subset: `5 passed, 147 deselected`.
+- Full source gate: `334 passed, 1 xfailed`.
+- Live read-only source smoke passed at `/Users/reddit/.agent-memory/reports/source-live-evidence-bundle-20260515T072811Z/live-evidence-bundle.json` with quality gate green, fixture task count `4`, zero ranking baseline regressions, rollback checked application count `3`, audit application count `3`, and audit required evidence gate pass.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 89-90%.
+- This reaches the edge of 90% because live evidence can now be collected as a single repeatable, hash-addressed, read-only bundle.
+- Still not beyond 90% because the next proof is repeated-window stability and the mutation/automation lanes remain exact-approved or blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Next code slice: add read-only repeated-run comparison/accumulation over saved live evidence bundle reports, including artifact hashes, pass counts, blocker trends, and no mutation.
+3. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply without exact operator corridor, telemetry reset, default ranking migration, collapse/delete, repeated apply without new approval, and unreviewed promotion.
 
 ## Checkpoint: live retrieval-ranking fixture diagnostics hardening
 
