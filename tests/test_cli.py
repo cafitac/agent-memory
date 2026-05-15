@@ -13011,6 +13011,142 @@ def test_dogfood_live_evidence_bundle_compare_summarizes_repeated_reports_withou
 
 
 
+
+def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
+    tmp_path: Path,
+) -> None:
+    report_a = tmp_path / "bundle-a.json"
+    report_b = tmp_path / "bundle-b.json"
+    comparison_output = tmp_path / "bundle-compare.json"
+    readiness_output = tmp_path / "automation-readiness.json"
+    _write_live_evidence_bundle_report(report_a, generated_at="2026-05-15T07:00:00Z", fixture_task_count=4)
+    _write_live_evidence_bundle_report(report_b, generated_at="2026-05-15T08:00:00Z", fixture_task_count=4)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    comparison = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-evidence-bundle-compare",
+            "--report",
+            str(report_a),
+            "--report",
+            str(report_b),
+            "--output",
+            str(comparison_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert comparison.returncode == 0, comparison.stderr
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "automation-policy-readiness",
+            "--comparison-report",
+            str(comparison_output),
+            "--output",
+            str(readiness_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(readiness_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_automation_policy_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "automation_policy_readiness_classified_next_lanes",
+        "blocked_reasons": [],
+    }
+    assert payload["comparison_evidence"]["usable_for_policy"] is True
+    assert payload["comparison_evidence"]["report_sha256"]
+    assert payload["comparison_evidence"]["aggregate"] == {
+        "report_count": 2,
+        "quality_gate_pass_count": 2,
+        "fixture_task_count_min": 4,
+        "ranking_baseline_regression_count_max": 0,
+        "rollback_checked_application_count_min": 3,
+        "audit_application_count_min": 3,
+        "audit_required_evidence_gate_pass_count": 2,
+    }
+    assert payload["lane_decisions"] == {
+        "1_readiness_report": {
+            "decision": "complete",
+            "mutation_allowed": False,
+            "next_command": "dogfood automation-policy-readiness",
+        },
+        "2_narrow_reviewed_apply": {
+            "decision": "eligible_for_exact_approval_slice",
+            "mutation_allowed": False,
+            "candidate_policy": "g5-reviewed-candidate-promotion-v1",
+            "evidence": "stable_bundle_comparison_with_rollback_and_application_audit",
+        },
+        "3_reinforcement_refinement": {
+            "decision": "eligible_for_review_candidate_generation_only",
+            "mutation_allowed": False,
+            "next_command": "dogfood reinforcement-refinement-preview",
+        },
+        "4_decay_forgetting": {
+            "decision": "eligible_for_reviewed_deprecate_corridor_only",
+            "mutation_allowed": False,
+            "collapse_delete_allowed": False,
+            "next_command": "dogfood decay-collapse-decision",
+        },
+        "5_conflict_supersession": {
+            "decision": "eligible_for_reviewed_supersession_corridor_only",
+            "mutation_allowed": False,
+            "next_command": "dogfood supersession-preview",
+        },
+        "6_ordinary_conversation_auto_approval": {
+            "decision": "blocked",
+            "mutation_allowed": False,
+            "blocked_reasons": ["ordinary_turns_are_not_explicit_remember_intent"],
+        },
+        "7_default_ranking_migration": {
+            "decision": "eligible_for_exact_migration_review_only",
+            "mutation_allowed": False,
+            "next_command": "dogfood retrieval-ranking-migrate-default",
+        },
+    }
+    assert payload["forbidden_authority"] == {
+        "executes_apply": False,
+        "broad_g4_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_source_content_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_trace_summary_included": False,
+        "reviewed_payload_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+        "aggregate_only": True,
+    }
+    serialized = json.dumps(payload)
+    assert "SHOULD_NOT_LEAK" not in serialized
+    assert "private_raw_body" not in serialized
+
 def test_dogfood_live_retrieval_ranking_fixtures_reports_generation_blockers_for_sparse_db(tmp_path: Path) -> None:
     db_path = tmp_path / "sparse-live-ranking-fixtures.db"
     fixture_path = tmp_path / "sparse-live-ranking-fixtures.json"

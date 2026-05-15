@@ -4751,6 +4751,223 @@ def _dogfood_live_evidence_bundle_compare_payload(args: argparse.Namespace) -> d
 
 
 
+
+
+def _automation_policy_comparison_evidence_from_report(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {
+            "provided": False,
+            "path": None,
+            "report_sha256": None,
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "ordinary_conversation_auto_approval": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "not_provided",
+            "quality_gate_blocked_reasons": [],
+            "usable_for_policy": False,
+            "aggregate": {
+                "report_count": 0,
+                "quality_gate_pass_count": 0,
+                "fixture_task_count_min": 0,
+                "ranking_baseline_regression_count_max": 0,
+                "rollback_checked_application_count_min": 0,
+                "audit_application_count_min": 0,
+                "audit_required_evidence_gate_pass_count": 0,
+            },
+            "privacy_flags": {},
+            "error": None,
+        }
+    report_path = path.expanduser().resolve(strict=False)
+    try:
+        raw_text = report_path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+    except Exception as exc:
+        return {
+            "provided": True,
+            "path": str(report_path),
+            "report_sha256": None,
+            "kind": None,
+            "read_only": None,
+            "mutated": None,
+            "default_retrieval_unchanged": None,
+            "ordinary_conversation_auto_approval": None,
+            "quality_gate_pass": False,
+            "quality_gate_decision": "unreadable",
+            "quality_gate_blocked_reasons": ["comparison_report_unreadable"],
+            "usable_for_policy": False,
+            "aggregate": {
+                "report_count": 0,
+                "quality_gate_pass_count": 0,
+                "fixture_task_count_min": 0,
+                "ranking_baseline_regression_count_max": 0,
+                "rollback_checked_application_count_min": 0,
+                "audit_application_count_min": 0,
+                "audit_required_evidence_gate_pass_count": 0,
+            },
+            "privacy_flags": {},
+            "error": {"type": exc.__class__.__name__, "message": str(exc)},
+        }
+    if not isinstance(raw, dict):
+        raw = {}
+    aggregate = raw.get("aggregate", {}) if isinstance(raw.get("aggregate"), dict) else {}
+    quality_gate = raw.get("quality_gate", {}) if isinstance(raw.get("quality_gate"), dict) else {}
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    privacy_flags = {
+        "raw_source_content_included": privacy.get("raw_source_content_included") is True,
+        "raw_transcript_included": privacy.get("raw_transcript_included") is True,
+        "raw_query_text_included": privacy.get("raw_query_text_included") is True,
+        "raw_trace_summary_included": privacy.get("raw_trace_summary_included") is True,
+        "reviewed_payload_included": privacy.get("reviewed_payload_included") is True,
+        "backup_content_included": privacy.get("backup_content_included") is True,
+        "raw_report_included": privacy.get("raw_report_included") is True,
+    }
+    blocked_reasons = (
+        quality_gate.get("blocked_reasons", []) if isinstance(quality_gate.get("blocked_reasons"), list) else []
+    )
+    report_count = _safe_int(raw.get("report_count"))
+    quality_gate_pass_count = _safe_int(aggregate.get("quality_gate_pass_count"))
+    regression_max = _safe_int(aggregate.get("ranking_baseline_regression_count_max"))
+    rollback_min = _safe_int(aggregate.get("rollback_checked_application_count_min"))
+    audit_min = _safe_int(aggregate.get("audit_application_count_min"))
+    audit_pass = _safe_int(aggregate.get("audit_required_evidence_gate_pass_count"))
+    usable = bool(
+        raw.get("kind") == "dogfood_live_evidence_bundle_comparison"
+        and raw.get("read_only") is True
+        and raw.get("mutated") is False
+        and raw.get("default_retrieval_unchanged") is True
+        and raw.get("ordinary_conversation_auto_approval") is False
+        and quality_gate.get("pass") is True
+        and not blocked_reasons
+        and report_count >= 1
+        and quality_gate_pass_count == report_count
+        and regression_max == 0
+        and rollback_min >= 1
+        and audit_min >= 1
+        and audit_pass == report_count
+        and not any(privacy_flags.values())
+    )
+    return {
+        "provided": True,
+        "path": str(report_path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": raw.get("kind"),
+        "read_only": raw.get("read_only"),
+        "mutated": raw.get("mutated"),
+        "default_retrieval_unchanged": raw.get("default_retrieval_unchanged"),
+        "ordinary_conversation_auto_approval": raw.get("ordinary_conversation_auto_approval"),
+        "quality_gate_pass": quality_gate.get("pass") is True,
+        "quality_gate_decision": str(quality_gate.get("decision", "unknown")),
+        "quality_gate_blocked_reasons": sorted(str(reason) for reason in blocked_reasons if reason),
+        "usable_for_policy": usable,
+        "aggregate": {
+            "report_count": report_count,
+            "quality_gate_pass_count": quality_gate_pass_count,
+            "fixture_task_count_min": _safe_int(aggregate.get("fixture_task_count_min")),
+            "ranking_baseline_regression_count_max": regression_max,
+            "rollback_checked_application_count_min": rollback_min,
+            "audit_application_count_min": audit_min,
+            "audit_required_evidence_gate_pass_count": audit_pass,
+        },
+        "privacy_flags": privacy_flags,
+        "error": None,
+    }
+
+
+def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
+    blocked_reasons: list[str] = []
+    if not comparison["provided"]:
+        blocked_reasons.append("comparison_report_not_provided")
+    elif not comparison["usable_for_policy"]:
+        blocked_reasons.append("comparison_report_not_green_for_policy")
+    passed = not blocked_reasons
+    lane_decisions = {
+        "1_readiness_report": {
+            "decision": "complete" if passed else "blocked",
+            "mutation_allowed": False,
+            "next_command": "dogfood automation-policy-readiness",
+        },
+        "2_narrow_reviewed_apply": {
+            "decision": "eligible_for_exact_approval_slice" if passed else "blocked_until_stable_bundle_comparison",
+            "mutation_allowed": False,
+            "candidate_policy": "g5-reviewed-candidate-promotion-v1",
+            "evidence": "stable_bundle_comparison_with_rollback_and_application_audit" if passed else "missing_green_comparison_evidence",
+        },
+        "3_reinforcement_refinement": {
+            "decision": "eligible_for_review_candidate_generation_only" if passed else "blocked_until_stable_bundle_comparison",
+            "mutation_allowed": False,
+            "next_command": "dogfood reinforcement-refinement-preview",
+        },
+        "4_decay_forgetting": {
+            "decision": "eligible_for_reviewed_deprecate_corridor_only" if passed else "blocked_until_stable_bundle_comparison",
+            "mutation_allowed": False,
+            "collapse_delete_allowed": False,
+            "next_command": "dogfood decay-collapse-decision",
+        },
+        "5_conflict_supersession": {
+            "decision": "eligible_for_reviewed_supersession_corridor_only" if passed else "blocked_until_stable_bundle_comparison",
+            "mutation_allowed": False,
+            "next_command": "dogfood supersession-preview",
+        },
+        "6_ordinary_conversation_auto_approval": {
+            "decision": "blocked",
+            "mutation_allowed": False,
+            "blocked_reasons": ["ordinary_turns_are_not_explicit_remember_intent"],
+        },
+        "7_default_ranking_migration": {
+            "decision": "eligible_for_exact_migration_review_only" if passed else "blocked_until_stable_bundle_comparison",
+            "mutation_allowed": False,
+            "next_command": "dogfood retrieval-ranking-migrate-default",
+        },
+    }
+    payload = {
+        "kind": "dogfood_automation_policy_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "comparison_evidence": comparison,
+        "lane_decisions": lane_decisions,
+        "quality_gate": {
+            "pass": passed,
+            "decision": "automation_policy_readiness_classified_next_lanes"
+            if passed
+            else "continue_collecting_or_fixing_bundle_comparisons_before_policy_readiness",
+            "blocked_reasons": blocked_reasons,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "broad_g4_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {
+            "raw_source_content_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "reviewed_payload_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "aggregate_only": True,
+        },
+        "recommended_order": [
+            "Open only an exact narrow reviewed-candidate apply policy slice next.",
+            "Keep reinforcement/decay/supersession as reviewed candidate lanes before any automatic background mutation.",
+            "Keep ordinary conversation auto-approval blocked until explicit remember-intent-only automation has more evidence.",
+            "Treat default ranking migration as exact-review-only, not as part of this read-only report.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str, Any]:
     db_path = args.db_path.expanduser().resolve(strict=False)
     output_dir = args.output_dir.expanduser().resolve(strict=False)
@@ -13618,6 +13835,12 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_live_evidence_bundle_compare_parser.add_argument("--report", dest="reports", action="append", type=Path, required=True)
     dogfood_live_evidence_bundle_compare_parser.add_argument("--output", type=Path)
     dogfood_live_evidence_bundle_compare_parser.add_argument("--min-report-count", type=int, default=2)
+    dogfood_automation_policy_readiness_parser = dogfood_subparsers.add_parser(
+        "automation-policy-readiness",
+        help="Classify the next narrow automation lanes from green live evidence bundle comparisons without mutation.",
+    )
+    dogfood_automation_policy_readiness_parser.add_argument("--comparison-report", type=Path, required=True)
+    dogfood_automation_policy_readiness_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -14909,6 +15132,9 @@ def main() -> None:
             return
         if args.dogfood_action == "live-evidence-bundle-compare":
             print(json.dumps(_dogfood_live_evidence_bundle_compare_payload(args), indent=2))
+            return
+        if args.dogfood_action == "automation-policy-readiness":
+            print(json.dumps(_dogfood_automation_policy_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))
