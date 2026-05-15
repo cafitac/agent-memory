@@ -12627,7 +12627,14 @@ def test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixtur
     assert payload["mutated"] is False
     assert payload["fixture_task_count"] == 3
     assert payload["memory_type_task_counts"] == {"facts": 1, "procedures": 1, "episodes": 1}
+    assert payload["generation_diagnostics"]["approved_memory_counts"] == {"facts": 1, "procedures": 1, "episodes": 1}
+    assert payload["retrieval_diagnostics"]["evaluated"] is True
+    assert payload["retrieval_diagnostics"]["pass"] is True
+    assert payload["retrieval_diagnostics"]["failure_diagnostics"] == []
+    assert payload["reliability_gate"]["pass"] is False
+    assert payload["reliability_gate"]["blocked_reasons"] == ["fixture_task_count_below_min_reliable_tasks"]
     assert payload["privacy"]["raw_source_content_included"] is False
+    assert payload["privacy"]["failure_diagnostics_include_raw_query_or_content"] is False
     fixture = json.loads(fixture_path.read_text())
     assert fixture["tasks"] == [
         {
@@ -12687,6 +12694,142 @@ def test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixtur
     assert experiment_payload["fixture_expansion"]["live_compatible_task_count"] == 3
     assert experiment_payload["shadow_compare"]["baseline_regression_count"] == 0
     assert experiment_payload["default_retrieval_unchanged"] is True
+
+
+
+def test_dogfood_live_retrieval_ranking_fixtures_reports_generation_blockers_for_sparse_db(tmp_path: Path) -> None:
+    db_path = tmp_path / "sparse-live-ranking-fixtures.db"
+    fixture_path = tmp_path / "sparse-live-ranking-fixtures.json"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-retrieval-ranking-fixtures",
+            str(db_path),
+            "--fixture-output",
+            str(fixture_path),
+            "--min-reliable-tasks",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_live_retrieval_ranking_fixtures"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["fixture_task_count"] == 0
+    assert json.loads(fixture_path.read_text()) == {"tasks": []}
+    assert payload["generation_diagnostics"] == {
+        "approved_memory_counts": {"facts": 0, "procedures": 0, "episodes": 0},
+        "generated_task_counts": {"facts": 0, "procedures": 0, "episodes": 0},
+        "skipped_counts": {"facts": 0, "procedures": 0, "episodes": 0},
+        "skip_reasons": {
+            "facts": "insufficient_approved_memory",
+            "procedures": "insufficient_approved_memory",
+            "episodes": "insufficient_approved_memory",
+        },
+        "limit_per_type": 20,
+        "task_limit": 5,
+    }
+    assert payload["retrieval_diagnostics"] == {
+        "evaluated": False,
+        "pass": False,
+        "failed_task_count": 0,
+        "baseline_regression_count": 0,
+        "blocked_reasons": ["no_generated_fixture_tasks"],
+        "failure_diagnostics": [],
+    }
+    assert payload["reliability_gate"] == {
+        "pass": False,
+        "min_reliable_tasks": 3,
+        "blocked_reasons": [
+            "fixture_task_count_below_min_reliable_tasks",
+            "facts_insufficient_approved_memory",
+            "procedures_insufficient_approved_memory",
+            "episodes_insufficient_approved_memory",
+            "no_generated_fixture_tasks",
+        ],
+        "note": "This gate is diagnostic only; fixture generation remains read-only and does not mutate ranking defaults.",
+    }
+    assert payload["privacy"]["raw_source_content_included"] is False
+    assert payload["privacy"]["failure_diagnostics_include_raw_query_or_content"] is False
+
+
+
+def test_dogfood_live_retrieval_ranking_fixtures_reports_limit_skips_without_raw_content(tmp_path: Path) -> None:
+    db_path = tmp_path / "limited-live-ranking-fixtures.db"
+    fixture_path = tmp_path / "limited-live-ranking-fixtures.json"
+    initialize_database(db_path)
+    for index in range(2):
+        source = ingest_source_text(
+            db_path=db_path,
+            source_type="note",
+            content=f"Limited fixture source {index} remains private while diagnostics count skipped approved facts.",
+        )
+        fact = create_candidate_fact(
+            db_path=db_path,
+            subject_ref=f"Limited fixture fact {index}",
+            predicate="covers",
+            object_ref_or_value="skip diagnostics",
+            evidence_ids=[source.id],
+            scope="project:limited-live-ranking-fixtures",
+            confidence=0.95,
+        )
+        approve_fact(db_path=db_path, fact_id=fact.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-retrieval-ranking-fixtures",
+            str(db_path),
+            "--fixture-output",
+            str(fixture_path),
+            "--limit-per-type",
+            "1",
+            "--min-reliable-tasks",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["fixture_task_count"] == 1
+    assert payload["generation_diagnostics"]["approved_memory_counts"] == {"facts": 2, "procedures": 0, "episodes": 0}
+    assert payload["generation_diagnostics"]["generated_task_counts"] == {"facts": 1, "procedures": 0, "episodes": 0}
+    assert payload["generation_diagnostics"]["skipped_counts"] == {"facts": 1, "procedures": 0, "episodes": 0}
+    assert payload["generation_diagnostics"]["skip_reasons"] == {
+        "facts": "generation_limit_reached",
+        "procedures": "insufficient_approved_memory",
+        "episodes": "insufficient_approved_memory",
+    }
+    assert payload["retrieval_diagnostics"]["pass"] is True
+    assert payload["retrieval_diagnostics"]["failure_diagnostics"] == []
+    assert payload["reliability_gate"]["blocked_reasons"] == [
+        "procedures_insufficient_approved_memory",
+        "episodes_insufficient_approved_memory",
+    ]
+    serialized = json.dumps(payload)
+    assert "Limited fixture source" not in serialized
+    assert "remains private" not in serialized
 
 
 

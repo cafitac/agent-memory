@@ -1,7 +1,40 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 13:18 KST
+Last updated: 2026-05-15 15:56 KST
+
+## Checkpoint: live retrieval-ranking fixture diagnostics hardening
+
+The live fixture generator is now hardened with explicit skip/blocker and retrieval-eval diagnostics. This closes the immediate gap where live fixture generation could succeed with too little explanation about sparse DB coverage or generated-task retrieval failures.
+
+Implemented:
+
+- `dogfood live-retrieval-ranking-fixtures <db_path> --fixture-output <json>` now reports:
+  - `generation_diagnostics` for approved counts, generated counts, skipped counts, and skip reasons by memory type;
+  - `retrieval_diagnostics` for immediate read-only eval pass/failure, failed task count, baseline regression count, and ref/count-only failure diagnostics;
+  - diagnostic-only `reliability_gate` with configurable `--min-reliable-tasks`.
+- Added optional flags `--baseline-mode` and `--max-baseline-regressions` so generated live fixtures can be checked against lexical/source baselines before downstream audit use.
+- Sparse/limited generation no longer looks silently successful: it reports `insufficient_approved_memory`, `generation_limit_reached`, and/or `no_generated_fixture_tasks` as appropriate.
+- Failure diagnostics avoid raw source/query/content and include only task ids, preferred-scope presence, missing/avoid/retrieved counts, and reason labels.
+
+Verification:
+
+- Focused diagnostics tests: `3 passed`.
+- Evidence/audit subset: `4 passed, 147 deselected`.
+- Full source gate: `333 passed, 1 xfailed`.
+- Live read-only source smoke passed at `/Users/reddit/.agent-memory/reports/source-live-ranking-fixture-diagnostics-20260515T065526Z/` with generated fixture count `4`, retrieval diagnostics pass, no baseline regressions, reliability gate pass at `--min-reliable-tasks 4`, and downstream ranking `ranking_change_allowed=true`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 89%.
+- This moves the system closer to 90% because the live evidence path now explains coverage and eval blockers instead of relying on manually inspecting tiny generated fixtures.
+- Still below 90% because repeated end-to-end evidence bundles and larger-volume stability are not automated yet, and all mutation paths remain exact-approved or blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Next code slice: add read-only repeated evidence bundling from live fixture diagnostics to ranking experiment to application audit, with artifact hashes and no mutation.
+3. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply without exact operator corridor, telemetry reset, default ranking migration, collapse/delete, repeated apply without new approval, and unreviewed promotion.
 
 ## Checkpoint: live retrieval-ranking fixture generation
 

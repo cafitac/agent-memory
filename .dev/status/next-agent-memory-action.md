@@ -1,7 +1,38 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 13:34 KST
+Last updated: 2026-05-15 15:56 KST
+
+## Just completed: live retrieval-ranking fixture diagnostics hardening source checkpoint
+
+- Hardened `dogfood live-retrieval-ranking-fixtures <db_path>` with explicit generation, retrieval, and reliability diagnostics while preserving the original read-only fixture output.
+- New report fields:
+  - `generation_diagnostics`: approved memory counts, generated task counts, skipped counts, skip reasons (`insufficient_approved_memory`, `generation_limit_reached`, `none`), per-type limits, and task limit.
+  - `retrieval_diagnostics`: immediate read-only eval of the generated fixture, failed task count, baseline regression count, blocker reasons, and ref/count-only failure diagnostics.
+  - `reliability_gate`: diagnostic-only pass/blocker summary with configurable `--min-reliable-tasks`.
+- Added optional generator flags: `--min-reliable-tasks`, `--baseline-mode`, and `--max-baseline-regressions`.
+- Safety contract remains unchanged:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - writes only requested fixture/report files
+  - no raw source content, raw transcript, raw query/content in failure diagnostics, reviewed payloads, private reasons, backup contents, default-ranking mutation, collapse/delete, or auto-approval.
+- Focused gates:
+  - `uv run pytest tests/test_cli.py::test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixture tests/test_cli.py::test_dogfood_live_retrieval_ranking_fixtures_reports_generation_blockers_for_sparse_db tests/test_cli.py::test_dogfood_live_retrieval_ranking_fixtures_reports_limit_skips_without_raw_content -q` -> `3 passed`.
+  - `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit'` -> `4 passed, 147 deselected`.
+  - `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `333 passed, 1 xfailed`.
+- Live read-only source smoke: `/Users/reddit/.agent-memory/reports/source-live-ranking-fixture-diagnostics-20260515T065526Z/`.
+  - Generated live fixture: `fixture_task_count=4` (`facts=2`, `procedures=1`, `episodes=1`).
+  - Generation diagnostics: all available approved facts/procedures/episodes selected; no skipped items or insufficient-type blockers.
+  - Retrieval diagnostics: `pass=true`, `failed_task_count=0`, `baseline_regression_count=0`, no blocker reasons.
+  - Reliability gate with `--min-reliable-tasks 4`: `pass=true`.
+  - Ranking experiment over generated fixture: `ranking_change_allowed=true`, `baseline_regression_count=0`, `live_compatible_task_count=4`, read-only/no-mutation/default unchanged.
+
+Recommended next work now:
+
+1. Commit/push this diagnostics hardening source/test/docs checkpoint and watch CI.
+2. Next safe source slice: add repeated live evidence-run bundling so one command can generate fixture diagnostics, run ranking experiment, and feed the ranking report into application audit with artifact hashes, still read-only.
+3. Still blocked without exact separate approval: live G4 apply, broad/background apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, and ordinary conversation auto-approval.
 
 ## Just completed: live retrieval-ranking fixture generation source checkpoint
 

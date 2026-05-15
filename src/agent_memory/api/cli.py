@@ -4268,9 +4268,20 @@ def _normalize_fixture_query(value: str, *, max_chars: int = 220) -> str:
     return normalized[:max_chars].rsplit(" ", 1)[0]
 
 
-def _live_retrieval_ranking_fixture_tasks(db_path: Path, *, limit_per_type: int, limit: int) -> list[dict[str, Any]]:
+def _live_retrieval_ranking_fixture_tasks(
+    db_path: Path,
+    *,
+    limit_per_type: int,
+    limit: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
-    for fact in list_approved_facts(db_path)[:limit_per_type]:
+    limit_per_type = max(0, limit_per_type)
+    approved = {
+        "facts": list_approved_facts(db_path),
+        "procedures": list_approved_procedures(db_path),
+        "episodes": list_approved_episodes(db_path),
+    }
+    for fact in approved["facts"][:limit_per_type]:
         tasks.append(
             {
                 "id": f"live-fact-{fact.id}",
@@ -4283,7 +4294,7 @@ def _live_retrieval_ranking_fixture_tasks(db_path: Path, *, limit_per_type: int,
                 "rationale": "Generated from approved live DB fact ref for retrieval-ranking evidence.",
             }
         )
-    for procedure in list_approved_procedures(db_path)[:limit_per_type]:
+    for procedure in approved["procedures"][:limit_per_type]:
         first_step = procedure.steps[0] if procedure.steps else ""
         tasks.append(
             {
@@ -4297,7 +4308,7 @@ def _live_retrieval_ranking_fixture_tasks(db_path: Path, *, limit_per_type: int,
                 "rationale": "Generated from approved live DB procedure ref for retrieval-ranking evidence.",
             }
         )
-    for episode in list_approved_episodes(db_path)[:limit_per_type]:
+    for episode in approved["episodes"][:limit_per_type]:
         tasks.append(
             {
                 "id": f"live-episode-{episode.id}",
@@ -4310,11 +4321,109 @@ def _live_retrieval_ranking_fixture_tasks(db_path: Path, *, limit_per_type: int,
                 "rationale": "Generated from approved live DB episode ref for retrieval-ranking evidence.",
             }
         )
-    return tasks
+    available_counts = {memory_type: len(items) for memory_type, items in approved.items()}
+    generated_counts = {
+        "facts": sum(1 for task in tasks if task.get("expected", {}).get("facts")),
+        "procedures": sum(1 for task in tasks if task.get("expected", {}).get("procedures")),
+        "episodes": sum(1 for task in tasks if task.get("expected", {}).get("episodes")),
+    }
+    diagnostics = {
+        "approved_memory_counts": available_counts,
+        "generated_task_counts": generated_counts,
+        "skipped_counts": {
+            memory_type: max(0, available_counts[memory_type] - generated_counts[memory_type])
+            for memory_type in available_counts
+        },
+        "skip_reasons": {
+            memory_type: (
+                "insufficient_approved_memory"
+                if available_counts[memory_type] == 0
+                else "generation_limit_reached"
+                if available_counts[memory_type] > generated_counts[memory_type]
+                else "none"
+            )
+            for memory_type in available_counts
+        },
+        "limit_per_type": limit_per_type,
+        "task_limit": limit,
+    }
+    return tasks, diagnostics
+
+
+def _live_fixture_retrieval_diagnostics(
+    db_path: Path,
+    fixture_output: Path,
+    *,
+    baseline_mode: str | None,
+    max_baseline_regressions: int,
+) -> dict[str, Any]:
+    tasks = _fixture_tasks_for_preview(fixture_output)
+    if not tasks:
+        return {
+            "evaluated": False,
+            "pass": False,
+            "failed_task_count": 0,
+            "baseline_regression_count": 0,
+            "blocked_reasons": ["no_generated_fixture_tasks"],
+            "failure_diagnostics": [],
+        }
+    result = evaluate_retrieval_fixtures(
+        db_path,
+        fixture_output,
+        baseline_mode=baseline_mode,
+        fail_on_regression=False,
+        fail_on_baseline_regression=False,
+    )
+    data = result.model_dump(mode="json")
+    summary = data.get("summary", {}) if isinstance(data, dict) else {}
+    failed_count = _safe_int(summary.get("failed_count", 0))
+    pass_marker = summary.get("pass", summary.get("pass_"))
+    pass_value = failed_count == 0 if pass_marker is None else bool(pass_marker)
+    baseline_regression_count = _safe_int((data.get("baseline_summary", {}) or {}).get("regression_count", 0)) if isinstance(data, dict) else 0
+    failure_diagnostics = []
+    for item in data.get("results", []) if isinstance(data, dict) else []:
+        if not isinstance(item, dict) or bool(item.get("pass", item.get("pass_", False))):
+            continue
+        missing_expected = item.get("missing_expected", {}) if isinstance(item.get("missing_expected"), dict) else {}
+        avoid_hits = item.get("avoid_hits", {}) if isinstance(item.get("avoid_hits"), dict) else {}
+        retrieved_ids = item.get("retrieved_ids", {}) if isinstance(item.get("retrieved_ids"), dict) else {}
+        failure_diagnostics.append(
+            {
+                "task_id": item.get("task_id"),
+                "preferred_scope_present": bool(item.get("preferred_scope")),
+                "missing_expected_counts": {
+                    memory_type: len(missing_expected.get(memory_type, []) or [])
+                    for memory_type in ("facts", "procedures", "episodes")
+                },
+                "avoid_hit_counts": {
+                    memory_type: len(avoid_hits.get(memory_type, []) or [])
+                    for memory_type in ("facts", "procedures", "episodes")
+                },
+                "retrieved_counts": {
+                    memory_type: len(retrieved_ids.get(memory_type, []) or [])
+                    for memory_type in ("facts", "procedures", "episodes")
+                },
+                "diagnosis": "expected_memory_not_retrieved_or_avoid_hit_present",
+            }
+        )
+    blocked_reasons: list[str] = []
+    if not pass_value or failed_count > 0:
+        blocked_reasons.append("retrieval_eval_failures_present")
+    if baseline_regression_count > max_baseline_regressions:
+        blocked_reasons.append("baseline_regression_threshold_exceeded")
+    return {
+        "evaluated": True,
+        "pass": not blocked_reasons,
+        "failed_task_count": failed_count,
+        "baseline_regression_count": baseline_regression_count,
+        "max_baseline_regressions": max_baseline_regressions,
+        "blocked_reasons": blocked_reasons,
+        "failure_diagnostics": failure_diagnostics,
+    }
 
 
 def _dogfood_live_retrieval_ranking_fixtures_payload(args: argparse.Namespace) -> dict[str, Any]:
-    tasks = _live_retrieval_ranking_fixture_tasks(
+    tasks, generation_diagnostics = _live_retrieval_ranking_fixture_tasks(
         args.db_path,
         limit_per_type=max(0, args.limit_per_type),
         limit=max(1, args.limit),
@@ -4322,11 +4431,22 @@ def _dogfood_live_retrieval_ranking_fixtures_payload(args: argparse.Namespace) -
     fixture = {"tasks": tasks}
     args.fixture_output.parent.mkdir(parents=True, exist_ok=True)
     args.fixture_output.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
-    counts = {
-        "facts": sum(1 for task in tasks if task.get("expected", {}).get("facts")),
-        "procedures": sum(1 for task in tasks if task.get("expected", {}).get("procedures")),
-        "episodes": sum(1 for task in tasks if task.get("expected", {}).get("episodes")),
-    }
+    counts = generation_diagnostics["generated_task_counts"]
+    retrieval_diagnostics = _live_fixture_retrieval_diagnostics(
+        args.db_path,
+        args.fixture_output,
+        baseline_mode=args.baseline_mode,
+        max_baseline_regressions=max(0, args.max_baseline_regressions),
+    )
+    reliability_blockers: list[str] = []
+    if len(tasks) < max(1, args.min_reliable_tasks):
+        reliability_blockers.append("fixture_task_count_below_min_reliable_tasks")
+    reliability_blockers.extend(
+        f"{memory_type}_{reason}"
+        for memory_type, reason in generation_diagnostics["skip_reasons"].items()
+        if reason == "insufficient_approved_memory"
+    )
+    reliability_blockers.extend(retrieval_diagnostics["blocked_reasons"])
     payload = {
         "kind": "dogfood_live_retrieval_ranking_fixtures",
         "read_only": True,
@@ -4335,15 +4455,25 @@ def _dogfood_live_retrieval_ranking_fixtures_payload(args: argparse.Namespace) -
         "fixture_output": str(args.fixture_output),
         "fixture_task_count": len(tasks),
         "memory_type_task_counts": counts,
+        "generation_diagnostics": generation_diagnostics,
+        "retrieval_diagnostics": retrieval_diagnostics,
+        "reliability_gate": {
+            "pass": not reliability_blockers,
+            "min_reliable_tasks": max(1, args.min_reliable_tasks),
+            "blocked_reasons": reliability_blockers,
+            "note": "This gate is diagnostic only; fixture generation remains read-only and does not mutate ranking defaults.",
+        },
         "fixture_expansion": _retrieval_fixture_expansion_summary(tasks),
         "privacy": {
             "raw_source_content_included": False,
             "raw_transcript_included": False,
             "secret_like_fields_included": False,
+            "failure_diagnostics_include_raw_query_or_content": False,
         },
         "next_steps": [
             "Run dogfood retrieval-ranking-experiment with --fixtures pointing at fixture_output.",
             "Feed the generated ranking report into trace-candidate-application-audit as read-only evidence.",
+            "Treat reliability_gate blockers as coverage/eval diagnostics, not mutation approval.",
             "Do not mutate default ranking or ordinary-conversation automation from this fixture generation step.",
         ],
     }
@@ -13123,6 +13253,9 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--fixture-output", type=Path, required=True)
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--limit-per-type", type=int, default=20)
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--limit", type=int, default=5)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--min-reliable-tasks", type=int, default=50)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--baseline-mode", choices=["lexical", "lexical-global", "source-lexical", "source-global"])
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--max-baseline-regressions", type=int, default=0)
     dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",

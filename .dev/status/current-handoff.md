@@ -1,7 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 13:34 KST
+Last updated: 2026-05-15 15:56 KST
+
+## Checkpoint: live retrieval-ranking fixture diagnostics hardening added
+
+Completed the next read-only evidence hardening slice after live fixture generation. The generator now explains not only what fixture tasks it wrote, but also what approved memory coverage was missing/skipped and whether the generated fixture passes a read-only retrieval eval before downstream ranking/application-audit use.
+
+What changed:
+
+- `dogfood live-retrieval-ranking-fixtures <db_path> --fixture-output <json>` now emits `generation_diagnostics`, `retrieval_diagnostics`, and a diagnostic-only `reliability_gate`.
+- New flags: `--min-reliable-tasks`, `--baseline-mode`, and `--max-baseline-regressions`.
+- Sparse DBs now report `insufficient_approved_memory` and `no_generated_fixture_tasks` instead of silently producing a tiny/empty fixture with no explanation.
+- Per-type generation limits now report `generation_limit_reached` with skipped counts.
+- Retrieval diagnostics include only task refs/counts and blocker reason labels; raw source content, raw transcript, raw query/content, reviewed payloads, private reasons, and backup contents remain excluded.
+- The command remains evidence-only: no default ranking mutation, no live apply, no collapse/delete, no telemetry reset, and no ordinary-conversation auto-approval.
+
+Verification:
+
+- Focused diagnostics tests: `3 passed`.
+- Evidence/audit subset: `4 passed, 147 deselected`.
+- Full source gate: `333 passed, 1 xfailed`.
+- Live source smoke wrote `/Users/reddit/.agent-memory/reports/source-live-ranking-fixture-diagnostics-20260515T065526Z/` against `/Users/reddit/.agent-memory/memory.db`: generated fixture `4` tasks (`facts=2`, `procedures=1`, `episodes=1`), generation diagnostics no skipped/insufficient items, retrieval diagnostics `pass=true`, `failed_task_count=0`, `baseline_regression_count=0`, reliability gate `pass=true` with `--min-reliable-tasks 4`, and downstream ranking experiment `ranking_change_allowed=true` with `live_compatible_task_count=4`.
+
+Current interpretation:
+
+- Brainlike-memory north-star is approximately 89% in the safety-gated operational roadmap framing.
+- This moves the system closer to 90% because generated live ranking evidence now has explicit coverage/eval diagnostics instead of treating small live coverage as self-explanatory.
+- Still below 90% because repeated live evidence orchestration and larger-volume stability are not bundled yet, and all mutation/automation gates remain deliberately blocked.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for this diagnostics hardening slice.
+2. Next safe source slice: add a read-only repeated evidence bundle that generates live fixture diagnostics, runs ranking experiment, and feeds the resulting artifact into application audit with hashes and no mutation.
+3. Keep broad/background apply, live G4 apply, telemetry reset, ranking default migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: live retrieval-ranking fixture generation added
 
