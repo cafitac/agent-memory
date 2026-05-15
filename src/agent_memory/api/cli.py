@@ -3878,6 +3878,12 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
             "approval_phrase": "apply-approved-g5-lifecycle-decay-deprecate-v1",
             "apply_mode": "approved_decay_lifecycle_candidates_deprecate_only",
         },
+        "g5-lifecycle-reinforcement-apply-v1": {
+            "candidate_kind": "reinforcement",
+            "proposal_type": "reinforcement_review",
+            "approval_phrase": "apply-approved-g5-lifecycle-reinforcement-v1",
+            "apply_mode": "approved_reinforcement_lifecycle_candidates_only",
+        },
     }
     contract = policy_contracts.get(args.policy)
     if contract is None:
@@ -3944,10 +3950,20 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 "replacement_ref": replacement_ref,
             }
             promoted_ref = replacement_ref
-        else:
+        elif contract["candidate_kind"] == "decay":
             memory_ref = str(candidate.get("memory_ref") or row["target_ref"] or "")
             action = "apply_reviewed_decay_deprecation"
             applied_entry = {"candidate_id": candidate_id, "action": action, "memory_ref": memory_ref}
+            promoted_ref = memory_ref
+        else:
+            memory_ref = str(candidate.get("memory_ref") or row["target_ref"] or "")
+            action = "apply_reviewed_reinforcement_marker"
+            applied_entry = {
+                "candidate_id": candidate_id,
+                "action": action,
+                "memory_ref": memory_ref,
+                "memory_reinforcement_mutated": False,
+            }
             promoted_ref = memory_ref
         if existing is not None:
             applied.append({**applied_entry, "inserted": False})
@@ -3969,7 +3985,7 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 "replacement_ref": applied_entry["replacement_ref"],
                 "default_retrieval_mutated": False,
             }
-        else:
+        elif contract["candidate_kind"] == "decay":
             memory_type, memory_id = _memory_ref_parts(applied_entry["memory_ref"])
             before_status = get_memory_status(db_path, memory_type=memory_type, memory_id=memory_id)
             deprecate_memory(
@@ -3986,6 +4002,31 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
                 "memory_ref": applied_entry["memory_ref"],
                 "status_before": before_status,
                 "status_after": "deprecated",
+                "default_retrieval_mutated": False,
+            }
+        else:
+            memory_type, memory_id = _memory_ref_parts(applied_entry["memory_ref"])
+            table_name = {"fact": "facts", "procedure": "procedures", "episode": "episodes"}[memory_type]
+            with sqlite3.connect(db_path) as connection:
+                before_reinforcement = connection.total_changes
+                connection.execute(
+                    f"""
+                    UPDATE {table_name}
+                    SET reinforcement_count = COALESCE(reinforcement_count, 0.0) + 1.0,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (memory_id,),
+                )
+                reinforcement_mutated = connection.total_changes > before_reinforcement
+            applied_entry["memory_reinforcement_mutated"] = reinforcement_mutated
+            rollback_hint = {
+                "restore_backup_path": str(backup_path),
+                "candidate_id": candidate_id,
+                "policy": policy,
+                "memory_ref": applied_entry["memory_ref"],
+                "memory_status_mutated": False,
+                "memory_reinforcement_mutated": reinforcement_mutated,
                 "default_retrieval_mutated": False,
             }
         with sqlite3.connect(db_path) as connection:
@@ -4045,6 +4086,9 @@ def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict
             "backup_path": str(backup_path),
             "default_retrieval_mutated": False,
         },
+        "memory_status_mutated": contract["candidate_kind"] in {"decay", "supersession"} and any(item.get("inserted") for item in applied),
+        "memory_reinforcement_mutated": any(item.get("memory_reinforcement_mutated") for item in applied),
+        "ordinary_conversation_auto_approval": False,
         "privacy": {"candidate_json_included": False, "raw_reason_included": False, "raw_content_included": False},
     }
     _write_json_report(args.output, payload)

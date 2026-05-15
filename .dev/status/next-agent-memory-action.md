@@ -1,8 +1,36 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 17:51 KST
+Last updated: 2026-05-15 18:06 KST
 
+
+## Just completed: narrow reviewed reinforcement lifecycle apply source checkpoint
+
+- Added `dogfood lifecycle-candidate-apply --policy g5-lifecycle-reinforcement-apply-v1`.
+- Required approval phrase: `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Accepted candidates: approved lifecycle candidates with `candidate_kind=reinforcement` and `proposal_type=reinforcement_review`.
+- Mutation is narrow and reversible via backup: increment target memory `reinforcement_count` and record application/audit metadata.
+- Explicitly unchanged/blocked:
+  - memory status changes for reinforcement;
+  - retrieval default changes;
+  - ordinary conversation auto-approval;
+  - broad/background apply;
+  - collapse/delete;
+  - telemetry reset;
+  - default ranking automatic rollout;
+  - unreviewed promotion;
+  - repeated apply without the existing unique `(candidate_id, policy)` application guard.
+- Verification:
+  - RED observed on unsupported reinforcement policy.
+  - Focused test passed: `1 passed`.
+  - Lifecycle/policy subset passed: `6 passed, 149 deselected`.
+  - Full source gate passed: `337 passed, 1 xfailed`.
+
+Recommended next work now:
+
+1. Commit/push source/test/docs and watch CI.
+2. Next safe source slice: lifecycle apply readiness/audit summary for reinforcement/decay/supersession. It should prove which reviewed candidates are eligible, already-applied, blocked, or missing proof before applying anything else.
+3. Do not implement ordinary conversation auto-approval yet; it is still the highest-risk lane and should remain blocked until much stronger explicit-intent evidence exists.
 
 ## Just completed: read-only automation policy readiness classifier source checkpoint
 

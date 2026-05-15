@@ -1,8 +1,38 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 17:51 KST
+Last updated: 2026-05-15 18:06 KST
 
+
+## Checkpoint: narrow reviewed reinforcement lifecycle apply added
+
+Completed the next lowest-risk auto-apply unification slice after the read-only automation policy readiness classifier. Reinforcement already had preview, lifecycle-candidate persist/update, and G4 review-queue apply coverage; it now also has the same G5 lifecycle-candidate apply corridor used by decay and supersession.
+
+What changed:
+
+- Extended `dogfood lifecycle-candidate-apply` with policy `g5-lifecycle-reinforcement-apply-v1`.
+- Required approval phrase: `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Scope is intentionally narrow: approved `candidate_kind=reinforcement`, `proposal_type=reinforcement_review` lifecycle candidates only.
+- Apply action increments `reinforcement_count` for the reviewed target memory and records the application with backup/rollback metadata.
+- It does not change memory status, retrieval defaults, ordinary conversation auto-approval, broad/background apply, decay collapse/delete, telemetry reset, or ranking defaults.
+
+Verification:
+
+- RED observed: focused test failed because the reinforcement lifecycle apply policy was not accepted.
+- Focused reinforcement lifecycle apply test: `uv run pytest tests/test_cli.py::test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_backup -q` -> `1 passed`.
+- Related lifecycle/policy subset: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'lifecycle_candidate_apply or lifecycle_candidate_registry or reinforcement_refinement_preview or automation_policy_readiness or g4_review_queue_apply'` -> `6 passed, 149 deselected`.
+- Full source gate: `uv run pytest tests/ -q` -> `337 passed, 1 xfailed`.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 92-93%.
+- Literal fully autonomous human-brain-like memory is approximately 68-70%: the first narrow reviewed apply family is now more uniform across reinforcement/decay/supersession, but ordinary conversation auto-approval, broad/background apply, collapse/delete, and automatic default-ranking rollout remain intentionally blocked.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for the reinforcement lifecycle apply slice.
+2. Next safe source slice: a read-only or exact-gated lifecycle apply readiness/audit summary across reinforcement, decay, and supersession so repeated applies cannot happen without fresh review/approval evidence.
+3. Keep ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default-ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without new approval blocked unless their own exact policy slices implement guardrails.
 
 ## Checkpoint: read-only automation policy readiness classifier added
 

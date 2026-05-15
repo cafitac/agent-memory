@@ -11757,6 +11757,164 @@ def test_dogfood_reinforcement_refinement_preview_scores_repeated_activation_wit
     assert "query_preview" not in result.stdout
 
 
+
+def test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_backup(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-reinforcement-apply.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5 reinforcement lifecycle source text token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5-reinforcement"},
+    )
+    repeated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 lifecycle reinforcement",
+        predicate="needs",
+        object_ref_or_value="reviewed marker apply",
+        evidence_ids=[source.id],
+        scope="project:g5-reinforcement",
+        confidence=0.94,
+    )
+    approve_fact(db_path=db_path, fact_id=repeated_fact.id)
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes-pre-llm-hook" if index < 2 else "cli",
+            query="SHOULD_NOT_LEAK repeated lifecycle reinforcement query",
+            preferred_scope="project:g5-reinforcement",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(repeated_fact.id, label="repeated lifecycle reinforcement target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": f"g5-life-reinforce-{index}"},
+        )
+    with sqlite3.connect(db_path) as connection:
+        before_reinforcement = connection.execute(
+            "SELECT reinforcement_count FROM facts WHERE id = ?",
+            (repeated_fact.id,),
+        ).fetchone()[0]
+    before_counts = _table_counts(db_path, ["facts", "relations"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "reinforcement lifecycle apply runway",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "approved reviewed reinforcement marker",
+            "--approval-phrase",
+            "approve-g5-lifecycle-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    backup_path = tmp_path / "reinforcement-apply-backup.db"
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-lifecycle-reinforcement-apply-v1",
+            "--approval-phrase",
+            "apply-approved-g5-lifecycle-reinforcement-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "guarded reviewed reinforcement marker",
+            "--backup-path",
+            str(backup_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["apply_mode"] == "approved_reinforcement_lifecycle_candidates_only"
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["memory_status_mutated"] is False
+    assert payload["memory_reinforcement_mutated"] is True
+    assert payload["applied"] == [
+        {
+            "candidate_id": candidate_id,
+            "action": "apply_reviewed_reinforcement_marker",
+            "memory_ref": f"fact:{repeated_fact.id}",
+            "inserted": True,
+            "memory_reinforcement_mutated": True,
+        }
+    ]
+    assert payload["backup"]["path"] == str(backup_path.resolve(strict=False))
+    assert backup_path.exists()
+    with sqlite3.connect(db_path) as connection:
+        after_reinforcement = connection.execute(
+            "SELECT reinforcement_count FROM facts WHERE id = ?",
+            (repeated_fact.id,),
+        ).fetchone()[0]
+    assert after_reinforcement == before_reinforcement + 1.0
+    assert get_fact(db_path, fact_id=repeated_fact.id).status == "approved"
+    after_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_applications"])
+    assert after_counts["facts"] == before_counts["facts"]
+    assert after_counts["relations"] == before_counts["relations"]
+    assert after_counts["g5_trace_candidate_applications"] == 1
+    assert "SHOULD_NOT_LEAK" not in persist_result.stdout
+    assert "SHOULD_NOT_LEAK" not in apply_result.stdout
+
+
 def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:

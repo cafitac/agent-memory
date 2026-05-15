@@ -1,8 +1,38 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 17:51 KST
+Last updated: 2026-05-15 18:06 KST
 
+
+## Checkpoint: narrow reviewed reinforcement lifecycle apply
+
+The first low-risk narrow auto-apply unification slice is implemented in source. Reinforcement can now use the G5 lifecycle candidate apply corridor, matching the reviewed-candidate pattern already used for decay deprecation and supersession.
+
+Implemented:
+
+- `dogfood lifecycle-candidate-apply` now accepts policy `g5-lifecycle-reinforcement-apply-v1`.
+- It requires exact phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- It applies only approved lifecycle candidates with `candidate_kind=reinforcement` and `proposal_type=reinforcement_review`.
+- It increments the target memory `reinforcement_count`, records a `g5_trace_candidate_applications` audit row, stores backup/rollback metadata, and leaves memory status/default retrieval unchanged.
+
+Verification:
+
+- RED observed: the reinforcement lifecycle apply policy was rejected before implementation.
+- Focused reinforcement lifecycle apply test: `1 passed`.
+- Related lifecycle/policy subset: `6 passed, 149 deselected`.
+- Full source gate: `337 passed, 1 xfailed`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 92-93%.
+- Literal fully autonomous human-brain-like progress is approximately 68-70%. Reviewed candidate apply is becoming consistent across the safer lifecycle lanes, but ordinary turns are not auto-approved and broad mutation/default rollout remains blocked.
+- The next proof should be an aggregate lifecycle apply readiness/audit report before opening any additional mutation lane.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Next code slice: read-only lifecycle apply readiness/audit report across reinforcement, decay, and supersession, including already-applied detection and missing-proof blockers.
+3. Still forbidden without later guarded slices: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without new approval.
 
 ## Checkpoint: read-only automation policy readiness classifier
 
