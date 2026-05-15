@@ -317,17 +317,18 @@ Status: Implemented as `g4-review-queue-apply-v1`. This is the first narrow revi
 
 ## PR G5-brainlike-consolidation-runway: Next human-memory-like automation design
 
-Status: G5a/G5b are merged through `v0.1.139`. The current source branch `g5c-trace-candidate-scoring` adds read-only `review_score` and `review_recommendation` fields to `dogfood trace-cluster-preview` output so reviewers can prioritize clusters without raw summaries, queue persistence, memory promotion, auto-approval, or default retrieval changes.
+Status: G5a/G5b are merged through `v0.1.139`. Current source has advanced beyond the original G5c scoring slice: reviewed trace-candidate promotion/apply exists with review status, policy phrase, backup/audit/rollback hints, conflict preflight, post-apply application audit, and a read-only required evidence gate tying application audit to rollback replay plus retrieval-ranking evidence. Broader/background automation remains blocked.
 
 ### Planned sequence
 
 1. `trace cluster -> consolidation candidate` read-only preview. Done as `dogfood trace-cluster-preview`; no mutation, no default retrieval change, no raw summaries or raw cluster keys in output.
-2. `candidate -> reviewed fact/procedure/preference promotion`. Done as explicit `trace-candidate-persist/list/update/apply`, guarded by review status, policy, approval phrase, actor, reason hash, backup, audit, and rollback hints.
-3. `trace cluster -> review-priority scoring`. Current G5c source slice; read-only `review_score`/`review_recommendation` only, still human-review-only.
-4. repeated activation -> reinforcement.
-5. stale weak evidence -> decay/summary candidate.
-6. conflict -> supersession review.
-7. opt-in retrieval-ranking evaluation before any default behavior change.
+2. `candidate -> reviewed fact/procedure/preference promotion`. Done as explicit `trace-candidate-persist/list/update/apply`, guarded by review status, policy, approval phrase, actor, reason hash, backup, audit, rollback hints, conflict preflight, and post-apply evidence-gated audit.
+3. `trace cluster -> review-priority scoring`. Done as read-only `review_score`/`review_recommendation`; still human-review-only.
+4. `application audit -> required evidence gate`. Done in source: `trace-candidate-application-audit` accepts rollback replay and retrieval-ranking reports, stays read-only, and blocks quality when evidence is missing or unsafe.
+5. repeated activation -> reinforcement.
+6. stale weak evidence -> decay/summary candidate.
+7. conflict -> supersession review.
+8. opt-in retrieval-ranking evaluation before any default behavior change. Next gap: make live retrieval-ranking fixture generation self-contained from current DB refs so application audits can use generated live ranking evidence rather than a minimal compatible artifact.
 
 ### Guardrails
 

@@ -13430,6 +13430,43 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
     assert payload["privacy"]["reviewed_payload_included"] is False
     assert "raw-secret-token" not in apply_result.stdout
 
+    rollback_replay_report = tmp_path / "trace-candidate-rollback-replay.json"
+    rollback_replay_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "application_count": 1,
+                "rollup": {"checked_application_count": 1, "passed_replay_count": 1, "failed_replay_count": 0},
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {"raw_content_included": False, "backup_content_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    retrieval_ranking_report = tmp_path / "trace-candidate-ranking.json"
+    retrieval_ranking_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_retrieval_ranking_experiment",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "fixture_gate_comparison": {
+                    "fixture_task_count": 3,
+                    "baseline_regression_count": 0,
+                    "rank_change_count": 0,
+                    "default_ranking_mutated": False,
+                    "ordinary_conversation_auto_enable": False,
+                },
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+
     audit_output = tmp_path / "trace-candidate-application-audit.json"
     audit_result = subprocess.run(
         [
@@ -13443,6 +13480,10 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
             "5",
             "--policy",
             "g5-reviewed-candidate-promotion-v1",
+            "--rollback-replay-report",
+            str(rollback_replay_report),
+            "--retrieval-ranking-report",
+            str(retrieval_ranking_report),
             "--output",
             str(audit_output),
         ],
@@ -13468,6 +13509,28 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
     }
     assert audit_payload["rollup"]["policy_counts"] == {"g5-reviewed-candidate-promotion-v1": 1}
     assert audit_payload["rollup"]["review_status_counts"] == {"promoted": 1}
+    assert audit_payload["required_evidence_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "rollback_replay": {
+            "provided": True,
+            "kind": "dogfood_rollback_replay_validate",
+            "pass": True,
+            "checked_application_count": 1,
+            "passed_replay_count": 1,
+            "failed_replay_count": 0,
+        },
+        "retrieval_ranking": {
+            "provided": True,
+            "kind": "dogfood_retrieval_ranking_experiment",
+            "pass": True,
+            "fixture_task_count": 3,
+            "baseline_regression_count": 0,
+            "rank_change_count": 0,
+            "default_ranking_mutated": False,
+            "ordinary_conversation_auto_enable": False,
+        },
+    }
     assert audit_payload["applications"][0]["candidate_id"] == candidate_id
     assert audit_payload["applications"][0]["promoted_ref"] == promoted_ref
     assert audit_payload["applications"][0]["current_memory_status"] == "approved"
@@ -13591,8 +13654,35 @@ def test_dogfood_trace_candidate_application_audit_flags_missing_backup(tmp_path
     assert audit_payload["mutated"] is False
     assert audit_payload["quality_gate"] == {
         "pass": False,
-        "blocked_reasons": ["backup_checksum_mismatch", "missing_backup"],
+        "blocked_reasons": [
+            "backup_checksum_mismatch",
+            "missing_backup",
+            "retrieval_ranking_report_not_provided",
+            "rollback_replay_report_not_provided",
+        ],
         "decision": "fix_trace_candidate_application_audit_before_broader_automation",
+    }
+    assert audit_payload["required_evidence_gate"] == {
+        "pass": False,
+        "blocked_reasons": ["retrieval_ranking_report_not_provided", "rollback_replay_report_not_provided"],
+        "rollback_replay": {
+            "provided": False,
+            "kind": None,
+            "pass": False,
+            "checked_application_count": 0,
+            "passed_replay_count": 0,
+            "failed_replay_count": 0,
+        },
+        "retrieval_ranking": {
+            "provided": False,
+            "kind": None,
+            "pass": False,
+            "fixture_task_count": 0,
+            "baseline_regression_count": 0,
+            "rank_change_count": 0,
+            "default_ranking_mutated": False,
+            "ordinary_conversation_auto_enable": False,
+        },
     }
     assert audit_payload["applications"][0]["current_memory_status"] == "missing"
     assert audit_payload["applications"][0]["rollback_confidence"]["backup_exists"] is False

@@ -5420,7 +5420,89 @@ def _dogfood_trace_candidate_application_audit_payload(args: argparse.Namespace)
                 "rollback_hint": _safe_json_dict_from_db(row["rollback_hint_json"]),
             }
         )
-    blocked_unique = sorted(set(blocked_reasons))
+    rollback_payload, rollback_base = _read_json_artifact_summary(args.rollback_replay_report)
+    rollback_payload = rollback_payload or {}
+    rollback_quality = rollback_payload.get("quality_gate", {}) if isinstance(rollback_payload.get("quality_gate"), dict) else {}
+    rollback_rollup = rollback_payload.get("rollup", {}) if isinstance(rollback_payload.get("rollup"), dict) else {}
+    rollback_blocked_reasons: list[str] = []
+    if not rollback_base["provided"]:
+        rollback_blocked_reasons.append("rollback_replay_report_not_provided")
+    elif rollback_base["error"] is not None:
+        rollback_blocked_reasons.append("rollback_replay_report_unreadable")
+    else:
+        if rollback_base["kind"] != "dogfood_rollback_replay_validate":
+            rollback_blocked_reasons.append("rollback_replay_report_kind_invalid")
+        if rollback_base["read_only"] is not True:
+            rollback_blocked_reasons.append("rollback_replay_report_not_read_only")
+        if rollback_base["mutated"] is not False:
+            rollback_blocked_reasons.append("rollback_replay_report_mutated")
+        if rollback_base["default_retrieval_unchanged"] is not True:
+            rollback_blocked_reasons.append("rollback_replay_report_default_retrieval_changed")
+        if rollback_quality.get("pass") is not True:
+            rollback_blocked_reasons.append("rollback_replay_report_not_green")
+    checked_application_count = _safe_int(rollback_rollup.get("checked_application_count", rollback_payload.get("application_count", 0)))
+    passed_replay_count = _safe_int(rollback_rollup.get("passed_replay_count", 0))
+    failed_replay_count = _safe_int(rollback_rollup.get("failed_replay_count", 0))
+    if rollback_base["provided"] and rollback_base["error"] is None and checked_application_count < len(applications):
+        rollback_blocked_reasons.append("rollback_replay_application_count_below_audit_count")
+    if rollback_base["provided"] and rollback_base["error"] is None and failed_replay_count > 0:
+        rollback_blocked_reasons.append("rollback_replay_failed_applications_present")
+
+    ranking_payload, ranking_base = _read_json_artifact_summary(args.retrieval_ranking_report)
+    ranking_payload = ranking_payload or {}
+    ranking_quality = ranking_payload.get("quality_gate", {}) if isinstance(ranking_payload.get("quality_gate"), dict) else {}
+    fixture_gate = ranking_payload.get("fixture_gate_comparison", {}) if isinstance(ranking_payload.get("fixture_gate_comparison"), dict) else {}
+    shadow_compare = ranking_payload.get("shadow_compare", {}) if isinstance(ranking_payload.get("shadow_compare"), dict) else {}
+    ranking_blocked_reasons: list[str] = []
+    if not ranking_base["provided"]:
+        ranking_blocked_reasons.append("retrieval_ranking_report_not_provided")
+    elif ranking_base["error"] is not None:
+        ranking_blocked_reasons.append("retrieval_ranking_report_unreadable")
+    else:
+        if ranking_base["kind"] != "dogfood_retrieval_ranking_experiment":
+            ranking_blocked_reasons.append("retrieval_ranking_report_kind_invalid")
+        if ranking_base["read_only"] is not True:
+            ranking_blocked_reasons.append("retrieval_ranking_report_not_read_only")
+        if ranking_base["mutated"] is not False:
+            ranking_blocked_reasons.append("retrieval_ranking_report_mutated")
+        if ranking_base["default_retrieval_unchanged"] is not True:
+            ranking_blocked_reasons.append("retrieval_ranking_default_changed")
+        if ranking_quality and ranking_quality.get("pass") is not True:
+            ranking_blocked_reasons.append("retrieval_ranking_report_not_green")
+    baseline_regression_count = _safe_int(fixture_gate.get("baseline_regression_count", shadow_compare.get("baseline_regression_count", 0)))
+    rank_change_count = _safe_int(fixture_gate.get("rank_change_count", ranking_payload.get("rank_change_count", 0)))
+    if baseline_regression_count > 0:
+        ranking_blocked_reasons.append("retrieval_ranking_baseline_regressions_present")
+    if fixture_gate.get("default_ranking_mutated") is True:
+        ranking_blocked_reasons.append("retrieval_ranking_default_mutated")
+    if fixture_gate.get("ordinary_conversation_auto_enable") is True:
+        ranking_blocked_reasons.append("retrieval_ranking_ordinary_conversation_auto_enabled")
+
+    evidence_blocked_unique = sorted(set(rollback_blocked_reasons + ranking_blocked_reasons))
+    required_evidence_gate = {
+        "pass": not evidence_blocked_unique,
+        "blocked_reasons": evidence_blocked_unique,
+        "rollback_replay": {
+            "provided": bool(rollback_base["provided"]),
+            "kind": rollback_base["kind"],
+            "pass": not rollback_blocked_reasons,
+            "checked_application_count": checked_application_count,
+            "passed_replay_count": passed_replay_count,
+            "failed_replay_count": failed_replay_count,
+        },
+        "retrieval_ranking": {
+            "provided": bool(ranking_base["provided"]),
+            "kind": ranking_base["kind"],
+            "pass": not ranking_blocked_reasons,
+            "fixture_task_count": _safe_int(fixture_gate.get("fixture_task_count", ranking_payload.get("fixture_expansion", {}).get("task_count", 0) if isinstance(ranking_payload.get("fixture_expansion"), dict) else 0)),
+            "baseline_regression_count": baseline_regression_count,
+            "rank_change_count": rank_change_count,
+            "default_ranking_mutated": fixture_gate.get("default_ranking_mutated") is True,
+            "ordinary_conversation_auto_enable": fixture_gate.get("ordinary_conversation_auto_enable") is True,
+        },
+    }
+
+    blocked_unique = sorted(set(blocked_reasons + evidence_blocked_unique))
     payload = {
         "kind": "dogfood_trace_candidate_application_audit",
         "read_only": True,
@@ -5430,6 +5512,7 @@ def _dogfood_trace_candidate_application_audit_payload(args: argparse.Namespace)
         "db_path": str(db_path),
         "application_count": len(applications),
         "applications": applications,
+        "required_evidence_gate": required_evidence_gate,
         "rollup": {
             "policy_counts": {key: policy_counts[key] for key in sorted(policy_counts)},
             "review_status_counts": {key: status_counts[key] for key in sorted(status_counts)},
@@ -13060,6 +13143,8 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_candidate_application_audit_parser.add_argument("db_path", type=Path)
     dogfood_trace_candidate_application_audit_parser.add_argument("--limit", type=int, default=50)
     dogfood_trace_candidate_application_audit_parser.add_argument("--policy")
+    dogfood_trace_candidate_application_audit_parser.add_argument("--rollback-replay-report", type=Path)
+    dogfood_trace_candidate_application_audit_parser.add_argument("--retrieval-ranking-report", type=Path)
     dogfood_trace_candidate_application_audit_parser.add_argument("--output", type=Path)
     dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
         "fresh-epoch",
