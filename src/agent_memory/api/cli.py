@@ -63,6 +63,9 @@ from agent_memory.storage.sqlite import (
     list_candidate_episodes,
     list_candidate_facts,
     list_candidate_procedures,
+    list_approved_episodes,
+    list_approved_facts,
+    list_approved_procedures,
     list_experience_traces,
     list_fact_conflict_relations,
     list_fact_replacement_relations,
@@ -4256,6 +4259,96 @@ def _retrieval_fixture_expansion_summary(tasks: list[dict[str, Any]]) -> dict[st
         "fixture_source_counts": {key: source_counts[key] for key in sorted(source_counts)},
         "live_runtime_safe": True,
     }
+
+
+def _normalize_fixture_query(value: str, *, max_chars: int = 220) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[:max_chars].rsplit(" ", 1)[0]
+
+
+def _live_retrieval_ranking_fixture_tasks(db_path: Path, *, limit_per_type: int, limit: int) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    for fact in list_approved_facts(db_path)[:limit_per_type]:
+        tasks.append(
+            {
+                "id": f"live-fact-{fact.id}",
+                "query": _normalize_fixture_query(f"{fact.subject_ref} {fact.predicate} {fact.object_ref_or_value}"),
+                "preferred_scope": fact.scope,
+                "limit": limit,
+                "expected": {"facts": [fact.id], "procedures": [], "episodes": []},
+                "avoid": {"facts": [], "procedures": [], "episodes": []},
+                "source": "live-db-approved-memory",
+                "rationale": "Generated from approved live DB fact ref for retrieval-ranking evidence.",
+            }
+        )
+    for procedure in list_approved_procedures(db_path)[:limit_per_type]:
+        first_step = procedure.steps[0] if procedure.steps else ""
+        tasks.append(
+            {
+                "id": f"live-procedure-{procedure.id}",
+                "query": _normalize_fixture_query(f"{procedure.name} {procedure.trigger_context} {first_step}"),
+                "preferred_scope": procedure.scope,
+                "limit": limit,
+                "expected": {"facts": [], "procedures": [procedure.id], "episodes": []},
+                "avoid": {"facts": [], "procedures": [], "episodes": []},
+                "source": "live-db-approved-memory",
+                "rationale": "Generated from approved live DB procedure ref for retrieval-ranking evidence.",
+            }
+        )
+    for episode in list_approved_episodes(db_path)[:limit_per_type]:
+        tasks.append(
+            {
+                "id": f"live-episode-{episode.id}",
+                "query": _normalize_fixture_query(f"{episode.title} {episode.summary}"),
+                "preferred_scope": episode.scope,
+                "limit": limit,
+                "expected": {"facts": [], "procedures": [], "episodes": [episode.id]},
+                "avoid": {"facts": [], "procedures": [], "episodes": []},
+                "source": "live-db-approved-memory",
+                "rationale": "Generated from approved live DB episode ref for retrieval-ranking evidence.",
+            }
+        )
+    return tasks
+
+
+def _dogfood_live_retrieval_ranking_fixtures_payload(args: argparse.Namespace) -> dict[str, Any]:
+    tasks = _live_retrieval_ranking_fixture_tasks(
+        args.db_path,
+        limit_per_type=max(0, args.limit_per_type),
+        limit=max(1, args.limit),
+    )
+    fixture = {"tasks": tasks}
+    args.fixture_output.parent.mkdir(parents=True, exist_ok=True)
+    args.fixture_output.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
+    counts = {
+        "facts": sum(1 for task in tasks if task.get("expected", {}).get("facts")),
+        "procedures": sum(1 for task in tasks if task.get("expected", {}).get("procedures")),
+        "episodes": sum(1 for task in tasks if task.get("expected", {}).get("episodes")),
+    }
+    payload = {
+        "kind": "dogfood_live_retrieval_ranking_fixtures",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "fixture_output": str(args.fixture_output),
+        "fixture_task_count": len(tasks),
+        "memory_type_task_counts": counts,
+        "fixture_expansion": _retrieval_fixture_expansion_summary(tasks),
+        "privacy": {
+            "raw_source_content_included": False,
+            "raw_transcript_included": False,
+            "secret_like_fields_included": False,
+        },
+        "next_steps": [
+            "Run dogfood retrieval-ranking-experiment with --fixtures pointing at fixture_output.",
+            "Feed the generated ranking report into trace-candidate-application-audit as read-only evidence.",
+            "Do not mutate default ranking or ordinary-conversation automation from this fixture generation step.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 
 RANKING_POLICIES = ("conservative_legacy", "graph_reinforced_v1", "shadow_compare")
@@ -13022,6 +13115,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_rollback_replay_validate_parser.add_argument("db_path", type=Path)
     dogfood_rollback_replay_validate_parser.add_argument("--limit", type=int, default=50)
     dogfood_rollback_replay_validate_parser.add_argument("--output", type=Path)
+    dogfood_live_retrieval_ranking_fixtures_parser = dogfood_subparsers.add_parser(
+        "live-retrieval-ranking-fixtures",
+        help="Generate a read-only retrieval-eval fixture from approved memories that already exist in the target DB.",
+    )
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("db_path", type=Path)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--fixture-output", type=Path, required=True)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--limit-per-type", type=int, default=20)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--limit", type=int, default=5)
+    dogfood_live_retrieval_ranking_fixtures_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -14304,6 +14406,9 @@ def main() -> None:
             return
         if args.dogfood_action == "rollback-replay-validate":
             print(json.dumps(_dogfood_rollback_replay_validate_payload(args), indent=2))
+            return
+        if args.dogfood_action == "live-retrieval-ranking-fixtures":
+            print(json.dumps(_dogfood_live_retrieval_ranking_fixtures_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

@@ -3,6 +3,37 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-15 13:34 KST
 
+## Checkpoint: live retrieval-ranking fixture generation added
+
+Completed the next read-only evidence slice after the G5 application-audit gate. Application audits no longer need a manually shaped compatible ranking artifact for live smoke: source can now generate a retrieval-eval fixture from approved memories already present in the target DB, run the ranking experiment on it, and feed that ranking report into the application audit.
+
+What changed:
+
+- Added `dogfood live-retrieval-ranking-fixtures <db_path> --fixture-output <json>`.
+- The generator builds fixture tasks from approved facts, procedures, and episodes in the same DB using numeric live refs, preferred scopes, expected IDs, empty avoid lists, and ref-safe rationales.
+- The generated fixture is directly consumable by `dogfood retrieval-ranking-experiment --fixtures <fixture>`.
+- The report remains evidence-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, no raw source content/transcripts/reviewed payloads/private reasons/backup content.
+- This does not mutate default ranking, run apply, collapse/delete memory, reset telemetry, or enable ordinary-conversation auto-approval.
+
+Verification so far:
+
+- RED: focused test failed because `live-retrieval-ranking-fixtures` was not a recognized dogfood action.
+- Focused test: `uv run pytest tests/test_cli.py::test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixture -q` -> `1 passed`.
+- Evidence/audit subset: `uv run pytest tests/test_cli.py -q -k 'live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit'` -> `2 passed, 147 deselected`.
+- Live source smoke wrote `/Users/reddit/.agent-memory/reports/source-live-ranking-fixtures-20260515T054056Z/` against `/Users/reddit/.agent-memory/memory.db`: generated fixture `4` tasks (`facts=2`, `procedures=1`, `episodes=1`), ranking experiment `ranking_change_allowed=true`, `baseline_regression_count=0`, `live_compatible_task_count=4`, and application audit `required_evidence_gate.pass=true` with quality decision `trace_candidate_applications_ready_for_post_apply_review`.
+
+Current interpretation:
+
+- Brainlike-memory north-star is approximately 88% in the safety-gated operational roadmap framing.
+- This removes the earlier live evidence gap where ranking evidence for application audit was manually shaped instead of generated from current live DB refs.
+- Still below 90% until full source gate/CI are green and live fixture generation reports explicit skip/blocker diagnostics for larger realistic DB coverage across repeated runs.
+
+Immediate next recommended slice:
+
+1. Run full source gate, then commit/push and verify CI for this fixture-generation slice.
+2. Next safe source slice: add skip/blocker diagnostics around generated live fixtures and retrieval-eval failures under realistic live DB volume.
+3. Keep broad/background apply, live G4 apply, telemetry reset, ranking default migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
+
 ## Checkpoint: G5 trace candidate application audit evidence gate added
 
 Completed the next read-only post-apply comparison slice toward the 90% runway. Reviewed trace-candidate promotions can now be audited with required rollback-replay and retrieval-ranking evidence before any broader automation decision.

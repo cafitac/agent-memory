@@ -10,7 +10,15 @@ from pathlib import Path
 import pytest
 
 from agent_memory.api.cli import main
-from agent_memory.core.curation import approve_fact, create_candidate_fact, create_episode, supersede_fact
+from agent_memory.core.curation import (
+    approve_fact,
+    approve_memory,
+    approve_procedure,
+    create_candidate_fact,
+    create_candidate_procedure,
+    create_episode,
+    supersede_fact,
+)
 from agent_memory.core.ingestion import ingest_source_text
 from agent_memory.core.models import RetrievalTraceEntry
 from agent_memory.core.retrieval import retrieve_memory_packet
@@ -12548,6 +12556,137 @@ def test_dogfood_new_brainlike_readiness_commands_are_safe_and_helpful(tmp_path:
     assert ranking_payload["read_only"] is True
     assert "ranking_change_allowed" in ranking_payload
     assert ranking_payload["policy"] == "ranking changes require passing retrieval eval gate before implementation"
+
+
+
+def test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixture(tmp_path: Path) -> None:
+    db_path = tmp_path / "live-ranking-fixtures.db"
+    fixture_path = tmp_path / "live-ranking-fixtures.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Live ranking fixtures cover facts, procedures, and episodes without raw source leakage.",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Live ranking fixture",
+        predicate="covers",
+        object_ref_or_value="approved live fact",
+        evidence_ids=[source.id],
+        scope="project:live-ranking-fixtures",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    procedure = create_candidate_procedure(
+        db_path=db_path,
+        name="Live ranking fixture procedure",
+        trigger_context="When proving live retrieval ranking evidence",
+        preconditions=["approved live DB memories exist"],
+        steps=["Generate fixture from existing refs", "Run retrieval-ranking-experiment against it"],
+        evidence_ids=[source.id],
+        scope="project:live-ranking-fixtures",
+        success_rate=0.9,
+    )
+    approve_procedure(db_path=db_path, procedure_id=procedure.id)
+    episode = create_episode(
+        db_path=db_path,
+        title="Live ranking fixture episode",
+        summary="A source-backed episode proves live retrieval ranking fixture generation can include episodic context.",
+        source_ids=[source.id],
+        tags=["live-ranking-fixtures"],
+        importance_score=0.8,
+        scope="project:live-ranking-fixtures",
+    )
+    approve_memory(db_path=db_path, memory_type="episode", memory_id=episode.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "live-retrieval-ranking-fixtures",
+            str(db_path),
+            "--fixture-output",
+            str(fixture_path),
+            "--limit-per-type",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_live_retrieval_ranking_fixtures"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["fixture_task_count"] == 3
+    assert payload["memory_type_task_counts"] == {"facts": 1, "procedures": 1, "episodes": 1}
+    assert payload["privacy"]["raw_source_content_included"] is False
+    fixture = json.loads(fixture_path.read_text())
+    assert fixture["tasks"] == [
+        {
+            "id": f"live-fact-{fact.id}",
+            "query": "Live ranking fixture covers approved live fact",
+            "preferred_scope": "project:live-ranking-fixtures",
+            "limit": 5,
+            "expected": {"facts": [fact.id], "procedures": [], "episodes": []},
+            "avoid": {"facts": [], "procedures": [], "episodes": []},
+            "source": "live-db-approved-memory",
+            "rationale": "Generated from approved live DB fact ref for retrieval-ranking evidence.",
+        },
+        {
+            "id": f"live-procedure-{procedure.id}",
+            "query": "Live ranking fixture procedure When proving live retrieval ranking evidence Generate fixture from existing refs",
+            "preferred_scope": "project:live-ranking-fixtures",
+            "limit": 5,
+            "expected": {"facts": [], "procedures": [procedure.id], "episodes": []},
+            "avoid": {"facts": [], "procedures": [], "episodes": []},
+            "source": "live-db-approved-memory",
+            "rationale": "Generated from approved live DB procedure ref for retrieval-ranking evidence.",
+        },
+        {
+            "id": f"live-episode-{episode.id}",
+            "query": "Live ranking fixture episode A source-backed episode proves live retrieval ranking fixture generation can include episodic context.",
+            "preferred_scope": "project:live-ranking-fixtures",
+            "limit": 5,
+            "expected": {"facts": [], "procedures": [], "episodes": [episode.id]},
+            "avoid": {"facts": [], "procedures": [], "episodes": []},
+            "source": "live-db-approved-memory",
+            "rationale": "Generated from approved live DB episode ref for retrieval-ranking evidence.",
+        },
+    ]
+
+    experiment_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "retrieval-ranking-experiment",
+            str(db_path),
+            "--fixtures",
+            str(fixture_path),
+            "--ranking-policy",
+            "graph_reinforced_v1",
+            "--shadow-compare",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert experiment_result.returncode == 0, experiment_result.stderr
+    experiment_payload = json.loads(experiment_result.stdout)
+    assert experiment_payload["kind"] == "dogfood_retrieval_ranking_experiment"
+    assert experiment_payload["fixture_expansion"]["live_compatible_task_count"] == 3
+    assert experiment_payload["shadow_compare"]["baseline_regression_count"] == 0
+    assert experiment_payload["default_retrieval_unchanged"] is True
 
 
 

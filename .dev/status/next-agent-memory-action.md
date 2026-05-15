@@ -3,6 +3,32 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-15 13:34 KST
 
+## Just completed: live retrieval-ranking fixture generation source checkpoint
+
+- Added `dogfood live-retrieval-ranking-fixtures <db_path>` to generate retrieval-eval fixture JSON from approved facts/procedures/episodes that already exist in the target DB.
+- Purpose: let `trace-candidate-application-audit` use generated live DB ranking evidence instead of manually shaped compatible artifacts.
+- Output kind: `dogfood_live_retrieval_ranking_fixtures`.
+- Safety contract:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - writes only the requested fixture/report files
+  - no raw source content, raw transcripts, reviewed payloads, private reasons, backup contents, default-ranking mutation, collapse/delete, or auto-approval.
+- Focused gates:
+  - RED: new focused test failed because `live-retrieval-ranking-fixtures` was not a recognized dogfood action.
+  - `uv run pytest tests/test_cli.py::test_dogfood_live_retrieval_ranking_fixtures_generate_live_compatible_fixture -q` -> `1 passed`.
+  - `uv run pytest tests/test_cli.py -q -k 'live_retrieval_ranking_fixtures or retrieval_ranking_experiment or trace_candidate_application_audit'` -> `2 passed, 147 deselected`.
+- Live read-only source smoke: `/Users/reddit/.agent-memory/reports/source-live-ranking-fixtures-20260515T054056Z/`.
+  - Generated live fixture: `fixture_task_count=4` (`facts=2`, `procedures=1`, `episodes=1`).
+  - Ranking experiment over generated fixture: `ranking_change_allowed=true`, `baseline_regression_count=0`, `live_compatible_task_count=4`, read-only/no-mutation.
+  - Application audit with rollback replay + generated ranking evidence: `required_evidence_gate.pass=true`, quality decision `trace_candidate_applications_ready_for_post_apply_review`, read-only/no-mutation.
+
+Recommended next work now:
+
+1. Run full source gate for this slice, then commit/push and watch CI.
+2. Next source slice: harden live fixture generation with skip/blocker diagnostics for generated tasks that fail retrieval eval under realistic live DB volume, instead of treating small live DB coverage as sufficient.
+3. Still blocked without exact separate approval: live G4 apply, broad/background apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, and ordinary conversation auto-approval.
+
 ## Just completed: G5 trace candidate application audit evidence gate source checkpoint
 
 - Extended source command `dogfood trace-candidate-application-audit <db_path>` with `--rollback-replay-report` and `--retrieval-ranking-report`.

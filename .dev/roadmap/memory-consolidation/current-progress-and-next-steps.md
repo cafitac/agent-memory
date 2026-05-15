@@ -3,6 +3,36 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-15 13:18 KST
 
+## Checkpoint: live retrieval-ranking fixture generation
+
+The next read-only live evidence slice is implemented in source. It generates retrieval-eval fixture tasks from approved memories already present in the target DB, so application-audit ranking evidence can be generated from real live refs instead of a hand-shaped compatible artifact.
+
+Implemented:
+
+- Added `dogfood live-retrieval-ranking-fixtures <db_path> --fixture-output <json>`.
+- Generates fact/procedure/episode tasks with live numeric expected refs, preferred scopes, ref-safe rationales, and no raw source/transcript/review payload data.
+- Generated fixture can be passed directly to `dogfood retrieval-ranking-experiment --fixtures <json>`.
+- `trace-candidate-application-audit` can now consume the generated ranking report plus rollback replay evidence and satisfy the required evidence gate.
+
+Verification so far:
+
+- Focused RED observed: command was not a recognized dogfood action.
+- Focused generator test passed: `1 passed`.
+- Evidence/audit subset passed: `2 passed, 147 deselected`.
+- Live read-only source smoke passed at `/Users/reddit/.agent-memory/reports/source-live-ranking-fixtures-20260515T054056Z/` with generated fixture count `4`, ranking `baseline_regression_count=0`, and application audit `required_evidence_gate.pass=true`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 88%.
+- The system is closer to 90% because the application-audit evidence gate can now be backed by generated live DB ranking evidence.
+- Still below 90% because generated live coverage is small on the current DB and needs skip/blocker diagnostics plus repeated green runs before any broader automation decision.
+
+Next after this slice:
+
+1. Run full source test gate, commit/push, and watch CI.
+2. Next code slice: harden generated live retrieval fixtures with explicit skipped-task/blocker diagnostics and realistic-volume reporting.
+3. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply without exact operator corridor, telemetry reset, default ranking migration, collapse/delete, repeated apply without new approval, and unreviewed promotion.
+
 ## Checkpoint: G5 trace candidate application audit
 
 The next read-only post-apply comparison slice is implemented in source. It audits reviewed trace-candidate application records before any broader automation can be considered.

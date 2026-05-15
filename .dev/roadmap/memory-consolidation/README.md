@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-15 12:14 KST, source work is on the G5 consolidation explainability checkpoint after the v0.1.162 G4 release/packet milestone.
-- `current-progress-and-next-steps.md` — current north-star progress, now approximately 80-82%, plus the next G5 reviewed-candidate/promotion boundary.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-15 14:40 KST, source work is on the post-v0.1.162 live retrieval-ranking fixture generation checkpoint after the G5 application-audit evidence gate.
+- `current-progress-and-next-steps.md` — current north-star progress, now approximately 88% in the safety-gated operational roadmap framing, plus the next live-fixture diagnostics hardening boundary.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
