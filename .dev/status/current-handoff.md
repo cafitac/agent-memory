@@ -1,7 +1,42 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 11:40 KST
+Last updated: 2026-05-15 12:14 KST
+
+## Checkpoint: G5 consolidation explainability source slice added
+
+Completed the next read-only G5 brainlike consolidation runway slice after the v0.1.162 G4 release/packet checkpoint. This slice explains why consolidation candidates are review-worthy across trace clustering, reinforcement/refinement, decay/collapse, and supersession signals without granting mutation authority.
+
+What changed:
+
+- Added `dogfood consolidation-explainability <db_path>`.
+- The command emits a ref-safe `dogfood_consolidation_explainability` report with:
+  - `signal_counts` for trace clusters, reinforcement candidates, decay/collapse candidates, and supersession candidates;
+  - an `explainability_ladder` from candidate evidence to `human_review_gate`;
+  - ranked `top_review_candidates` with refs, tiers, scores, decisions, and evidence counts only;
+  - explicit `automation_policy` showing `apply_supported=false`, `ordinary_conversation_auto_approval=false`, `requires_human_review=true`, `default_retrieval_policy=approved_only_unchanged`, and all mutation-contract flags false;
+  - privacy flags that exclude raw conversation content, summaries, sample values, and object values.
+- Fixed supersession enriched evidence to match the current `MemoryActivation` contract by filtering on `memory_ref` instead of nonexistent `memory_type`/`memory_id` attributes.
+- No live apply, telemetry reset, default-ranking migration, broad/background apply, collapse/delete, promotion, or ordinary conversation auto-approval was executed.
+
+Verification:
+
+- Focused test: `.venv/bin/python -m pytest tests/test_cli.py::test_dogfood_consolidation_explainability_reports_stage_reasons_without_mutation -q` -> `1 passed`.
+- Focused G5 preview suite: `.venv/bin/python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && .venv/bin/python -m pytest tests/test_cli.py::test_dogfood_consolidation_explainability_reports_stage_reasons_without_mutation tests/test_cli.py::test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutation tests/test_cli.py::test_dogfood_reinforcement_refinement_preview_scores_repeated_activation_without_mutation tests/test_cli.py::test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation tests/test_cli.py::test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation -q` -> `5 passed`.
+- Source-checkout live read-only smoke wrote `/Users/reddit/.agent-memory/reports/source-g5-consolidation-explainability-smoke.json` against `/Users/reddit/.agent-memory/memory.db`.
+- Smoke result: `quality_gate.pass=true`, decision `consolidation_explainability_ready_for_manual_review`, `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, trace cluster candidates `5`, reinforcement candidates `4`, decay/collapse candidates `0`, supersession candidates `0`, and no blocked reasons.
+
+Current interpretation:
+
+- Overall brainlike-memory north-star is approximately 80-82% complete.
+- The project now has a stronger read-only G5 explanation layer, but it is still not fully autonomous like a human brain because candidate review/promotion, mutation rollback, conflict-safe apply, opt-in ranking changes, and background dry-run/report comparison are still gated.
+- The next meaningful progress is to persist reviewable consolidation candidates with explicit review state and audit/rollback boundaries, still without ordinary conversation auto-approval.
+
+Immediate next recommended slice:
+
+1. Commit and push this G5 source/docs/test checkpoint on `develop`; no release solely for this narrow slice.
+2. If continuing G5, implement the next D4/E1 boundary: explicit candidate rejection/snooze or manual reviewed promotion into long-term memory with provenance, conflict/supersession checks, backup, audit output, and rollback proof.
+3. Keep broad/background apply, live G4 apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked unless their exact approval corridors are separately supplied.
 
 ## Checkpoint: v0.1.162 released and published-install QA passed
 

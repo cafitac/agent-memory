@@ -1,7 +1,46 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 11:40 KST
+Last updated: 2026-05-15 12:14 KST
+
+## Checkpoint: G5 consolidation explainability source slice
+
+The next read-only G5 brainlike consolidation runway slice is implemented in source. It does not mutate memory; it makes candidate evidence easier to inspect and reason about before any future human-reviewed promotion/apply corridor.
+
+Implemented:
+
+- `dogfood consolidation-explainability <db_path>` combines existing G5 read-only signals into one explainability report:
+  - trace-cluster candidates;
+  - reinforcement/refinement candidates;
+  - decay/collapse candidates;
+  - same-claim-slot supersession candidates;
+  - human-review gate summary.
+- The report includes `signal_counts`, `explainability_ladder`, `top_review_candidates`, `quality_gate`, `automation_policy`, `privacy`, and `suggested_next_steps`.
+- It is explicitly ref-safe and report-only: no raw conversation content, trace summaries, sample values, object values, review-queue writes, long-term promotion, deprecation/delete, default-ranking change, or ordinary conversation auto-approval.
+- Supersession enriched evidence was corrected for the current activation model by matching activation rows through `memory_ref`.
+
+Verification:
+
+- Focused new test passed: `test_dogfood_consolidation_explainability_reports_stage_reasons_without_mutation`.
+- Focused G5 preview suite passed: consolidation explainability, trace cluster preview, reinforcement/refinement preview, decay/collapse preview, and supersession preview -> `5 passed`.
+- Source-checkout live read-only smoke wrote `/Users/reddit/.agent-memory/reports/source-g5-consolidation-explainability-smoke.json`; quality gate passed with `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, trace cluster candidates `5`, reinforcement candidates `4`, decay/collapse candidates `0`, supersession candidates `0`.
+
+Current interpretation:
+
+- Overall north-star progress is approximately 80-82%.
+- Compared with the previous 78-80% estimate, this adds a small but important G5 explainability layer: candidates are now easier to inspect across multiple consolidation signals, but still cannot promote/apply themselves.
+- Remaining gap to “actual human-brain-like fully automated memory” is not raw signal detection anymore; it is safe autonomous judgement: reviewed promotion, redaction/provenance/conflict checks, rollback, opt-in ranking, background comparison, and narrowly scoped auto-approval.
+
+Next after this slice:
+
+1. Commit/push this G5 source/test/docs checkpoint and watch CI.
+2. Do not cut a release solely for this checkpoint; keep accumulating until the G5 review/promotion corridor is stable enough to justify a milestone release.
+3. Next code slice: explicit review-state path for consolidation candidates, likely D4/E1 boundary:
+   - reject/snooze candidate;
+   - manual promote a reviewed candidate into long-term memory;
+   - require provenance, conflict/supersession checks, actor/reason, backup/audit output, rollback proof;
+   - keep ordinary conversation auto-approval blocked.
+4. Later slices before true automation: retrieval explanation/ranking opt-in, background dry-run report comparison, explicit remember-intent auto-candidate, and only then narrow opt-in auto-approval.
 
 ## Checkpoint: v0.1.162 milestone released and externally verified
 

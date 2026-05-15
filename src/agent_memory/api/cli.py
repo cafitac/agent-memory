@@ -3107,6 +3107,194 @@ def _dogfood_trace_cluster_preview_payload(args: argparse.Namespace) -> dict[str
     return payload
 
 
+def _explainability_top_review_candidate(source: str, candidate: dict[str, Any]) -> dict[str, Any]:
+    review_score = candidate.get("review_score") if isinstance(candidate.get("review_score"), dict) else {}
+    recommendation = (
+        candidate.get("review_recommendation") if isinstance(candidate.get("review_recommendation"), dict) else {}
+    )
+    if source == "trace_cluster":
+        ref = str(candidate.get("candidate_id", "unknown"))
+        evidence_count = _safe_int(candidate.get("evidence_count"))
+    elif source == "reinforcement_refinement":
+        ref = str(candidate.get("memory_ref", "unknown"))
+        evidence_count = _safe_int(candidate.get("activation_count"))
+    elif source == "decay_collapse":
+        ref = str(candidate.get("memory_ref", "unknown"))
+        evidence_count = _safe_int(candidate.get("activation_count"))
+        review_score = {"score": int(round(_safe_float(candidate.get("decay_score")) * 10)), "tier": "review"}
+    else:
+        ref = f"{candidate.get('older_fact_ref', 'unknown')}->{candidate.get('newer_fact_ref', 'unknown')}"
+        claim_slot = candidate.get("claim_slot") if isinstance(candidate.get("claim_slot"), dict) else {}
+        evidence_count = _safe_int(claim_slot.get("fact_count"))
+    return {
+        "source": source,
+        "ref": ref,
+        "tier": str(review_score.get("tier", "unknown")),
+        "score": _safe_int(review_score.get("score")),
+        "decision": str(recommendation.get("decision", "manual_review_required")),
+        "evidence_count": evidence_count,
+    }
+
+
+def _dogfood_consolidation_explainability_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood consolidation-explainability limit must be >= 1")
+    if args.top < 1:
+        raise ValueError("dogfood consolidation-explainability top must be >= 1")
+    if args.min_evidence_count < 1:
+        raise ValueError("dogfood consolidation-explainability min-evidence-count must be >= 1")
+    if args.frequent_threshold < 1:
+        raise ValueError("dogfood consolidation-explainability frequent-threshold must be >= 1")
+    if args.min_decay_score < 0:
+        raise ValueError("dogfood consolidation-explainability min-decay-score must be >= 0")
+
+    cluster_report = _consolidation_candidates_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        min_evidence=args.min_evidence_count,
+    )
+    clusters = [_ref_safe_trace_cluster(candidate) for candidate in cluster_report["candidates"]]
+    reinforcement_report = _activation_reinforcement_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+    )
+    reinforcement_candidates = [
+        _ref_safe_reinforcement_refinement_candidate(candidate, frequent_threshold=args.frequent_threshold)
+        for candidate in reinforcement_report["reinforcement_candidates"]
+    ]
+    decay_report = _activation_decay_risk_report(
+        args.db_path,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+    )
+    decay_candidates = [
+        _ref_safe_decay_collapse_candidate(candidate)
+        for candidate in decay_report["decay_risk_candidates"]
+        if candidate["score"] >= args.min_decay_score
+    ]
+    supersession_candidates = _same_claim_slot_supersession_candidates(args.db_path, limit=args.limit, top=args.top)
+
+    signal_counts = {
+        "trace_cluster_candidates": len(clusters),
+        "reinforcement_candidates": len(reinforcement_candidates),
+        "decay_collapse_candidates": len(decay_candidates),
+        "supersession_candidates": len(supersession_candidates),
+    }
+    blocked_reasons: list[str] = []
+    if not any(signal_counts.values()):
+        blocked_reasons.append("no_consolidation_explainability_signals_ready")
+    if cluster_report.get("quality_warnings"):
+        blocked_reasons.append("trace_cluster_quality_warnings_present")
+    passed = not blocked_reasons
+
+    top_review_candidates = [
+        *[_explainability_top_review_candidate("trace_cluster", candidate) for candidate in clusters],
+        *[
+            _explainability_top_review_candidate("reinforcement_refinement", candidate)
+            for candidate in reinforcement_candidates
+        ],
+        *[_explainability_top_review_candidate("decay_collapse", candidate) for candidate in decay_candidates],
+        *[_explainability_top_review_candidate("supersession", candidate) for candidate in supersession_candidates],
+    ]
+    top_review_candidates.sort(key=lambda candidate: (-_safe_int(candidate["score"]), candidate["source"], candidate["ref"]))
+
+    payload = {
+        "kind": "dogfood_consolidation_explainability",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "db_path": str(args.db_path),
+        "scan": {
+            "limit": args.limit,
+            "top": args.top,
+            "min_evidence_count": args.min_evidence_count,
+            "frequent_threshold": args.frequent_threshold,
+            "min_decay_score": args.min_decay_score,
+            "source_trace_count": cluster_report["trace_count"],
+            "quality_warnings": cluster_report["quality_warnings"],
+        },
+        "signal_counts": signal_counts,
+        "explainability_ladder": [
+            {
+                "stage": "trace_cluster",
+                "candidate_count": len(clusters),
+                "evidence": "metadata-only traces grouped by shared memory refs/scopes and ref-safe fingerprints",
+                "why_it_matters": "shows which repeated experiences could become reviewed consolidation candidates",
+                "mutation_supported": False,
+            },
+            {
+                "stage": "reinforcement_refinement",
+                "candidate_count": len(reinforcement_candidates),
+                "evidence": "repeated retrieval activations summarized by memory refs, counts, and review scores",
+                "why_it_matters": "explains which existing memories look stronger through use without incrementing counters",
+                "mutation_supported": False,
+            },
+            {
+                "stage": "decay_collapse",
+                "candidate_count": len(decay_candidates),
+                "evidence": "weak/stale activation summaries and decay scores without deleting or collapsing records",
+                "why_it_matters": "shows possible cleanup pressure while preserving human review and rollback boundaries",
+                "mutation_supported": False,
+            },
+            {
+                "stage": "supersession",
+                "candidate_count": len(supersession_candidates),
+                "evidence": "same-claim-slot conflicts with hashed subjects and fact refs only",
+                "why_it_matters": "explains candidate replacement chains without exposing object values or changing relations",
+                "mutation_supported": False,
+            },
+            {
+                "stage": "human_review_gate",
+                "candidate_count": len(top_review_candidates[: args.top]),
+                "evidence": "ranked ref-safe candidates are review aids, not approvals",
+                "why_it_matters": "keeps ordinary conversation auto-approval, broad apply, and default ranking changes blocked",
+                "mutation_supported": False,
+            },
+        ],
+        "top_review_candidates": top_review_candidates[: args.top],
+        "quality_gate": {
+            "pass": passed,
+            "decision": (
+                "consolidation_explainability_ready_for_manual_review"
+                if passed
+                else "continue_consolidation_dogfooding_before_manual_review"
+            ),
+            "blocked_reasons": blocked_reasons,
+        },
+        "automation_policy": {
+            "apply_supported": False,
+            "ordinary_conversation_auto_approval": False,
+            "requires_human_review": True,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "mutation_contract": {
+                "writes_review_queue": False,
+                "promotes_long_term_memory": False,
+                "deprecates_or_deletes_memory": False,
+                "changes_default_ranking": False,
+                "raw_content_allowed": False,
+            },
+        },
+        "privacy": {
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "safe_summaries_included": False,
+            "subject_values_hashed": True,
+            "object_values_included": False,
+        },
+        "suggested_next_steps": [
+            "Use this report to explain why a candidate is review-worthy before any persistence/apply corridor.",
+            "Keep the command read-only; it must not approve, promote, deprecate, collapse, or alter ranking.",
+            "For future automation, add a separate exact-approval mutation corridor with backup, audit, and rollback gates.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _ensure_trace_candidate_review_tables(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
@@ -3445,8 +3633,9 @@ def _supersession_enriched_evidence(db_path: Path, *, older_fact, newer_fact) ->
     newer_ref = _fact_review_ref(newer_fact.id)
     older_relations = list_relations_for_node(db_path, node_ref=older_ref)
     newer_relations = list_relations_for_node(db_path, node_ref=newer_ref)
-    older_activations = [a for a in list_memory_activations(db_path, limit=500) if a.memory_type == "fact" and a.memory_id == older_fact.id]
-    newer_activations = [a for a in list_memory_activations(db_path, limit=500) if a.memory_type == "fact" and a.memory_id == newer_fact.id]
+    activations = list_memory_activations(db_path, limit=500)
+    older_activations = [a for a in activations if a.memory_ref == older_ref]
+    newer_activations = [a for a in activations if a.memory_ref == newer_ref]
     older_history = list_memory_status_history(db_path, memory_type="fact", memory_id=older_fact.id)
     newer_history = list_memory_status_history(db_path, memory_type="fact", memory_id=newer_fact.id)
     temporal_order = "newer_fact_id_after_older" if newer_fact.id > older_fact.id else "ambiguous"
@@ -12398,6 +12587,17 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_candidate_generate_parser.add_argument("--limit", type=int, default=200)
     dogfood_trace_candidate_generate_parser.add_argument("--top", type=int, default=20)
     dogfood_trace_candidate_generate_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_consolidation_explainability_parser = dogfood_subparsers.add_parser(
+        "consolidation-explainability",
+        help="Explain G5 consolidation/reinforcement/decay/supersession signals as a read-only ref-safe manual-review report.",
+    )
+    dogfood_consolidation_explainability_parser.add_argument("db_path", type=Path)
+    dogfood_consolidation_explainability_parser.add_argument("--output", type=Path)
+    dogfood_consolidation_explainability_parser.add_argument("--limit", type=int, default=200)
+    dogfood_consolidation_explainability_parser.add_argument("--top", type=int, default=20)
+    dogfood_consolidation_explainability_parser.add_argument("--min-evidence-count", type=int, default=2)
+    dogfood_consolidation_explainability_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_consolidation_explainability_parser.add_argument("--min-decay-score", type=float, default=0.5)
     dogfood_reinforcement_refinement_preview_parser = dogfood_subparsers.add_parser(
         "reinforcement-refinement-preview",
         help="Build a read-only G5d preview of repeated activation -> reinforcement refinement candidates.",
@@ -13726,6 +13926,9 @@ def main() -> None:
             return
         if args.dogfood_action == "trace-candidate-generate":
             print(json.dumps(_dogfood_trace_candidate_generate_payload(args), indent=2))
+            return
+        if args.dogfood_action == "consolidation-explainability":
+            print(json.dumps(_dogfood_consolidation_explainability_payload(args), indent=2))
             return
         if args.dogfood_action == "reinforcement-refinement-preview":
             print(json.dumps(_dogfood_reinforcement_refinement_preview_payload(args), indent=2))

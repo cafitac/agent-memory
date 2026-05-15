@@ -11450,6 +11450,159 @@ def test_dogfood_trace_cluster_preview_reports_ref_safe_clusters_without_mutatio
     assert "source text" not in result.stdout
 
 
+def test_dogfood_consolidation_explainability_reports_stage_reasons_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "consolidation-explainability.db"
+    output_path = tmp_path / "consolidation-explainability.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5 explainability source text token=SHOULD_NOT_LEAK must never appear.",
+    )
+    stable_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 explainability",
+        predicate="needs",
+        object_ref_or_value="ref safe stage reasons",
+        evidence_ids=[source.id],
+        scope="project:g5-explainability",
+        confidence=0.94,
+    )
+    approve_fact(db_path=db_path, fact_id=stable_fact.id)
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 explainability conflict",
+        predicate="status",
+        object_ref_or_value="old workflow",
+        evidence_ids=[source.id],
+        scope="project:g5-explainability",
+        confidence=0.72,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    new_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 explainability conflict",
+        predicate="status",
+        object_ref_or_value="new workflow",
+        evidence_ids=[source.id],
+        scope="project:g5-explainability",
+        confidence=0.91,
+    )
+    approve_fact(db_path=db_path, fact_id=new_fact.id)
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            query="token=SHOULD_NOT_LEAK explainability reinforcement query",
+            preferred_scope="project:g5-explainability",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(stable_fact.id, label="explainability stable fact")],
+            response_mode="verify_first",
+            metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": f"g5-explain-{index}"},
+        )
+    for index in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=f"{index + 7}" * 64,
+            summary=f"token=SHOULD_NOT_LEAK explainability secret {index}",
+            scope="project:g5-explainability",
+            related_memory_refs=[f"fact:{stable_fact.id}"],
+            related_observation_ids=[index + 20],
+            retention_policy="ephemeral",
+            metadata={
+                "trace_recording": "default_metadata_only",
+                "candidate_policy": "evidence_only",
+                "auto_approved": False,
+            },
+        )
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "source_records", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "consolidation-explainability",
+            str(db_path),
+            "--min-evidence-count",
+            "2",
+            "--frequent-threshold",
+            "3",
+            "--top",
+            "5",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_consolidation_explainability"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["signal_counts"]["trace_cluster_candidates"] == 1
+    assert payload["signal_counts"]["reinforcement_candidates"] >= 1
+    assert payload["signal_counts"]["supersession_candidates"] == 1
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "consolidation_explainability_ready_for_manual_review",
+        "blocked_reasons": [],
+    }
+    assert payload["automation_policy"] == {
+        "apply_supported": False,
+        "ordinary_conversation_auto_approval": False,
+        "requires_human_review": True,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "mutation_contract": {
+            "writes_review_queue": False,
+            "promotes_long_term_memory": False,
+            "deprecates_or_deletes_memory": False,
+            "changes_default_ranking": False,
+            "raw_content_allowed": False,
+        },
+    }
+    stages = {stage["stage"]: stage for stage in payload["explainability_ladder"]}
+    assert stages["trace_cluster"]["candidate_count"] == 1
+    assert stages["reinforcement_refinement"]["candidate_count"] >= 1
+    assert stages["supersession"]["candidate_count"] == 1
+    assert stages["human_review_gate"]["mutation_supported"] is False
+    top_candidate = payload["top_review_candidates"][0]
+    assert set(top_candidate) == {"source", "ref", "tier", "score", "decision", "evidence_count"}
+    assert payload["privacy"] == {
+        "raw_conversation_content_included": False,
+        "sample_values_included": False,
+        "safe_summaries_included": False,
+        "subject_values_hashed": True,
+        "object_values_included": False,
+    }
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "source_records", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "token=" not in result.stdout
+    assert "source text" not in result.stdout
+    assert "old workflow" not in result.stdout
+    assert "new workflow" not in result.stdout
+
+
 def test_dogfood_reinforcement_refinement_preview_scores_repeated_activation_without_mutation(
     tmp_path: Path,
 ) -> None:

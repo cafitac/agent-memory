@@ -1,7 +1,34 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 11:40 KST
+Last updated: 2026-05-15 12:14 KST
+
+## Just completed: G5 consolidation explainability source checkpoint
+
+- Added source command `dogfood consolidation-explainability <db_path>`.
+- Purpose: explain G5 consolidation readiness across trace clusters, reinforcement/refinement, decay/collapse, supersession, and human-review gate in one ref-safe read-only report.
+- Output kind: `dogfood_consolidation_explainability`.
+- Safety contract:
+  - `read_only=true`
+  - `mutated=false`
+  - `default_retrieval_unchanged=true`
+  - `apply_supported=false`
+  - `ordinary_conversation_auto_approval=false`
+  - `requires_human_review=true`
+  - no review-queue writes, long-term promotion, deprecation/delete, default-ranking change, or raw content exposure.
+- Source smoke artifact: `/Users/reddit/.agent-memory/reports/source-g5-consolidation-explainability-smoke.json`.
+- Smoke result: quality gate passed as `consolidation_explainability_ready_for_manual_review`; signal counts were trace clusters `5`, reinforcement `4`, decay/collapse `0`, supersession `0`.
+- Regression/focused gates:
+  - single new test: `1 passed`.
+  - focused G5 preview suite plus compileall: `5 passed`.
+
+Recommended next work now:
+
+1. Commit and push the tracked source/test/docs changes for this checkpoint; do not stage unrelated local artifacts (`.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`).
+2. Watch CI after push.
+3. Do not release solely for this narrow G5 explainability slice unless a separate milestone-release decision is made.
+4. Next G5 implementation slice should add an explicit review-state corridor around consolidation candidates: reject/snooze/manual promote with provenance, conflict/supersession checks, backup/audit output, and rollback proof.
+5. Still blocked without exact separate approval: live G4 apply, broad/background apply, telemetry reset, default-ranking migration, collapse/delete, unreviewed promotion, repeated apply, and ordinary conversation auto-approval.
 
 ## Just completed: v0.1.162 milestone release and published-install QA
 
