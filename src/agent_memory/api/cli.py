@@ -5224,6 +5224,23 @@ def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str
             applied.append({"candidate_id": candidate_id, "action": action, "inserted": False, "promoted_ref": existing["promoted_ref"]})
             continue
         if promotion_type in {"fact", "preference"}:
+            conflict_preflight = _promotion_conflict_preflight(
+                db_path,
+                subject_ref=str(reviewed["subject_ref"]),
+                predicate=str(reviewed["predicate"]),
+                object_ref_or_value=str(reviewed["object_ref_or_value"]),
+                scope=str(reviewed.get("scope") or "global"),
+                allow_conflict=bool(args.allow_conflict),
+            )
+            if conflict_preflight["result"] == "blocked":
+                skipped.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "reason": "claim_slot_conflict",
+                        "conflict_preflight": conflict_preflight,
+                    }
+                )
+                continue
             fact = create_candidate_fact(
                 db_path=db_path,
                 subject_ref=str(reviewed["subject_ref"]),
@@ -5319,6 +5336,11 @@ def _dogfood_trace_candidate_apply_payload(args: argparse.Namespace) -> dict[str
         "memory_status_mutated": any(item.get("inserted") for item in applied),
         "default_retrieval_unchanged": True,
         "ordinary_conversation_auto_approval": False,
+        "conflict_preflight_policy": {
+            "fact_and_preference_promotions_checked": True,
+            "claim_slot_conflicts_block_by_default": True,
+            "allow_conflict_explicitly_requested": bool(args.allow_conflict),
+        },
         "privacy": {
             "cluster_json_included": False,
             "reviewed_payload_included": False,
@@ -12926,6 +12948,11 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_trace_candidate_apply_parser.add_argument("--actor", required=True)
     dogfood_trace_candidate_apply_parser.add_argument("--reason", required=True)
     dogfood_trace_candidate_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_trace_candidate_apply_parser.add_argument(
+        "--allow-conflict",
+        action="store_true",
+        help="Explicitly allow fact/preference promotion when same subject/predicate/scope facts conflict.",
+    )
     dogfood_trace_candidate_apply_parser.add_argument("--output", type=Path)
     dogfood_fresh_epoch_parser = dogfood_subparsers.add_parser(
         "fresh-epoch",

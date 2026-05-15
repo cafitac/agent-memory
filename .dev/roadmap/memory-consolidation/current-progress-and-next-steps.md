@@ -1,7 +1,38 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 12:14 KST
+Last updated: 2026-05-15 13:24 KST
+
+## Checkpoint: G5 trace candidate apply conflict preflight
+
+The next E1/D5 safety boundary is implemented in source. It keeps reviewed trace-candidate promotion exact-approved, but now blocks silent same-claim contradictions at apply time.
+
+Implemented:
+
+- `dogfood trace-candidate-apply` runs claim-slot conflict preflight for reviewed fact/preference promotions.
+- A candidate whose reviewed payload conflicts with an existing fact in the same `subject_ref` + `predicate` + `scope` is skipped with `reason=claim_slot_conflict` by default.
+- `--allow-conflict` is an explicit reviewer override and is reported in `conflict_preflight_policy`.
+- The blocked path leaves facts, status transitions, and application audit rows unchanged.
+- Procedure/episode promotion behavior is unchanged.
+
+Verification:
+
+- Focused conflict test passed: `uv run pytest tests/test_cli.py::test_dogfood_trace_candidate_apply_blocks_fact_claim_slot_conflicts_by_default -q` -> `1 passed`.
+- Trace-candidate regression subset passed: `uv run pytest tests/test_cli.py -q -k 'trace_candidate_apply or trace_candidate_update or trace_candidate_generate or trace_candidate_review_flow'` -> `7 passed, 140 deselected`.
+- Full source gate passed: `329 passed, 1 xfailed`.
+- Live read-only source smoke passed: `/Users/reddit/.agent-memory/reports/source-g5-trace-candidate-conflict-preflight-smoke-20260515T040859Z.json` with `read_only=true`, `mutated=false`, and default retrieval unchanged.
+
+Current interpretation:
+
+- Overall north-star progress is approximately 83-85%.
+- The system is closer to safe autonomous consolidation because reviewed promotion now has a contradiction brake, but 90% still requires post-apply impact comparison, stronger rollback/report replay, and more default-off background dry-run/apply gates.
+
+Next after this slice:
+
+1. Finish full source test gate and live read-only smoke.
+2. Commit/push this source/test/docs checkpoint and watch CI.
+3. Next code slice: read-only trace candidate application audit/comparison report that proves reviewed promotions did not unexpectedly alter default retrieval/ranking behavior.
+4. Still forbidden: ordinary conversation auto-approval, broad/background apply, live G4 apply without exact operator corridor, telemetry reset, default ranking migration, collapse/delete, and unreviewed promotion.
 
 ## Checkpoint: G5 consolidation explainability source slice
 

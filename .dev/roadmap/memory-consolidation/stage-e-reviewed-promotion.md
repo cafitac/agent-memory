@@ -13,6 +13,16 @@ Turn trusted consolidation candidates into durable memory only through explicit 
 - Conflict/supersession preflight prevents silent contradictions.
 - Default retrieval remains approved-only.
 
+## G5 dogfood follow-up: trace candidate apply conflict preflight
+
+### Status
+
+- Source slice completed on `develop` after the D4 reject/snooze suppression checkpoint.
+- `dogfood trace-candidate-apply` now runs claim-slot conflict preflight for reviewed fact/preference promotions before creating durable memory.
+- Same `subject_ref` + `predicate` + `scope` with a different object is skipped with `reason=claim_slot_conflict` by default, leaving facts/status/applications unchanged.
+- `--allow-conflict` is available only as an explicit reviewer override, and the output records `conflict_preflight_policy.allow_conflict_explicitly_requested`.
+- Procedure/episode promotion behavior is unchanged; broad/background apply, ordinary conversation auto-approval, ranking migration, collapse/delete, and unreviewed promotion remain blocked.
+
 ## PR E1: Add manual consolidation promotion for semantic facts
 
 ### Status

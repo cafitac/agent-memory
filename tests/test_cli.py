@@ -13431,6 +13431,144 @@ def test_dogfood_trace_candidate_apply_promotes_only_approved_reviewed_fact_cand
     assert "raw-secret-token" not in apply_result.stdout
 
 
+def test_dogfood_trace_candidate_apply_blocks_fact_claim_slot_conflicts_by_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "trace-candidate-apply-conflict.db"
+    initialize_database(db_path)
+    _seed_trace_cluster_for_candidate_flow(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-persist",
+            str(db_path),
+            "--actor",
+            "tester",
+            "--reason",
+            "persist conflict candidate",
+            "--min-evidence-count",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "approve conflicting reviewed fact",
+            "--approval-phrase",
+            "approve-g5-trace-candidate-v1",
+            "--promotion-type",
+            "fact",
+            "--subject",
+            "G5 candidate flow",
+            "--predicate",
+            "needs",
+            "--object",
+            "different reviewed promotion",
+            "--scope",
+            "project:g5-candidates",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    before_counts = _table_counts(db_path, ["facts", "memory_status_transitions", "g5_trace_candidate_applications"])
+
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--approval-phrase",
+            "apply-approved-g5-reviewed-candidates-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "blocked conflict apply",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    payload = json.loads(apply_result.stdout)
+    assert payload["applied_count"] == 0
+    assert payload["skipped_count"] == 1
+    assert payload["skipped_items"][0]["reason"] == "claim_slot_conflict"
+    assert payload["skipped_items"][0]["conflict_preflight"]["result"] == "blocked"
+    assert payload["skipped_items"][0]["conflict_preflight"]["conflict_count"] == 1
+    assert payload["conflict_preflight_policy"] == {
+        "fact_and_preference_promotions_checked": True,
+        "claim_slot_conflicts_block_by_default": True,
+        "allow_conflict_explicitly_requested": False,
+    }
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert _table_counts(db_path, ["facts", "memory_status_transitions", "g5_trace_candidate_applications"]) == before_counts
+    assert "raw-secret-token" not in apply_result.stdout
+
+    allowed_apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "trace-candidate-apply",
+            str(db_path),
+            "--candidate-id",
+            candidate_id,
+            "--policy",
+            "g5-reviewed-candidate-promotion-v1",
+            "--approval-phrase",
+            "apply-approved-g5-reviewed-candidates-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "explicitly allow reviewed conflict",
+            "--allow-conflict",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert allowed_apply_result.returncode == 0, allowed_apply_result.stderr
+    allowed_payload = json.loads(allowed_apply_result.stdout)
+    assert allowed_payload["applied_count"] == 1
+    assert allowed_payload["skipped_count"] == 0
+    assert allowed_payload["conflict_preflight_policy"]["allow_conflict_explicitly_requested"] is True
+
+
 @pytest.mark.parametrize(
     ("promotion_type", "update_args", "expected_action", "expected_ref_prefix", "table", "columns", "expected_row"),
     [

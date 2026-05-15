@@ -1,7 +1,39 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 12:41 KST
+Last updated: 2026-05-15 13:24 KST
+
+## Checkpoint: G5 trace candidate apply conflict preflight added
+
+Completed the next E1/D5 safety boundary after D4 reject/snooze suppression. This narrows the remaining automation risk around reviewed candidate promotion: explicit review can promote durable memory, but same-claim contradictions are now preflighted before mutation.
+
+What changed:
+
+- `dogfood trace-candidate-apply` now runs `_promotion_conflict_preflight` for reviewed fact/preference promotions.
+- Same claim slot (`subject_ref`, `predicate`, `scope`) with a different object is skipped by default with `reason=claim_slot_conflict`; no fact/status/application rows are created for that candidate.
+- Added explicit `--allow-conflict` override for reviewers who intentionally accept coexisting claims after inspection.
+- Apply output now includes `conflict_preflight_policy` showing fact/preference checking, default conflict blocking, and whether `--allow-conflict` was explicitly requested.
+- Procedure/episode reviewed promotions are unchanged.
+- No live DB apply, trace deletion, default ranking migration, broad/background apply, telemetry reset, collapse/delete, unreviewed promotion, or ordinary conversation auto-approval was executed.
+
+Verification:
+
+- Focused new conflict test: `uv run pytest tests/test_cli.py::test_dogfood_trace_candidate_apply_blocks_fact_claim_slot_conflicts_by_default -q` -> `1 passed`.
+- Trace candidate regression subset: `uv run pytest tests/test_cli.py -q -k 'trace_candidate_apply or trace_candidate_update or trace_candidate_generate or trace_candidate_review_flow'` -> `7 passed, 140 deselected`.
+- Full source gate: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/ -q` -> `329 passed, 1 xfailed`.
+- Live read-only source smoke wrote `/Users/reddit/.agent-memory/reports/source-g5-trace-candidate-conflict-preflight-smoke-20260515T040859Z.json` against `/Users/reddit/.agent-memory/memory.db`; result `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, candidate count `10`, suppressed count `0`, ordinary conversation auto-approval false, raw content disallowed.
+
+Current interpretation:
+
+- Brainlike-memory north-star is approximately 83-85% complete.
+- This improves the “human brain-like but safe” path by adding contradiction avoidance at the exact point where reviewed trace candidates become durable memory.
+- Still below 90% because autonomous background mutation, ranking changes, collapse/delete, and ordinary-conversation approval remain deliberately blocked until rollback/retrieval/conflict evidence is stronger.
+
+Immediate next recommended slice:
+
+1. Finish full test + live read-only smoke for this checkpoint, then commit/push and verify CI.
+2. Next safe source slice toward 90%: add a read-only post-apply comparison/audit report for trace candidate applications, so every reviewed promotion can be checked against retrieval/default-policy impact before any broader automation.
+3. Keep broad/background apply, live G4 apply, telemetry reset, ranking default migration, collapse/delete, unreviewed promotion, repeated apply without new approval, and ordinary conversation auto-approval blocked.
 
 ## Checkpoint: G5 trace candidate reject/snooze suppression added
 
