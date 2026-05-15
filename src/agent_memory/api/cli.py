@@ -3864,26 +3864,153 @@ def _dogfood_rollback_replay_validate_payload(args: argparse.Namespace) -> dict[
     return payload
 
 
+
+_LIFECYCLE_APPLY_POLICY_CONTRACTS: dict[str, dict[str, str]] = {
+    "reinforcement": {
+        "policy": "g5-lifecycle-reinforcement-apply-v1",
+        "proposal_type": "reinforcement_review",
+        "approval_phrase": "apply-approved-g5-lifecycle-reinforcement-v1",
+    },
+    "decay": {
+        "policy": "g5-lifecycle-decay-deprecate-apply-v1",
+        "proposal_type": "decay_review",
+        "approval_phrase": "apply-approved-g5-lifecycle-decay-deprecate-v1",
+    },
+    "supersession": {
+        "policy": "g5-lifecycle-supersession-apply-v1",
+        "proposal_type": "supersession_review",
+        "approval_phrase": "apply-approved-g5-lifecycle-supersession-v1",
+    },
+}
+
+
+def _empty_lifecycle_status_counts() -> dict[str, int]:
+    return {"approved": 0, "pending": 0, "promoted": 0, "rejected": 0, "other": 0}
+
+
+def _dogfood_lifecycle_apply_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    candidate_counts = {kind: _empty_lifecycle_status_counts() for kind in _LIFECYCLE_APPLY_POLICY_CONTRACTS}
+    policy_readiness: dict[str, dict[str, Any]] = {}
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id, status, candidate_kind, proposal_type
+            FROM g5_trace_candidate_reviews
+            WHERE candidate_kind IN ('reinforcement', 'decay', 'supersession')
+            ORDER BY candidate_kind, candidate_id
+            """
+        ).fetchall()
+        applied_rows = connection.execute(
+            """
+            SELECT candidate_id, policy
+            FROM g5_trace_candidate_applications
+            WHERE policy IN (?, ?, ?)
+            """,
+            tuple(contract["policy"] for contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.values()),
+        ).fetchall()
+    applied_by_policy = {(row["candidate_id"], row["policy"]) for row in applied_rows}
+    approved_by_kind: dict[str, list[sqlite3.Row]] = {kind: [] for kind in _LIFECYCLE_APPLY_POLICY_CONTRACTS}
+    blocked_by_kind: dict[str, list[dict[str, str]]] = {kind: [] for kind in _LIFECYCLE_APPLY_POLICY_CONTRACTS}
+    for row in rows:
+        kind = str(row["candidate_kind"])
+        status = str(row["status"])
+        if kind not in candidate_counts:
+            continue
+        if status in candidate_counts[kind]:
+            candidate_counts[kind][status] += 1
+        else:
+            candidate_counts[kind]["other"] += 1
+        contract = _LIFECYCLE_APPLY_POLICY_CONTRACTS[kind]
+        if status == "approved" and row["proposal_type"] == contract["proposal_type"]:
+            approved_by_kind[kind].append(row)
+        elif status == "approved":
+            blocked_by_kind[kind].append({"candidate_id": str(row["candidate_id"]), "reason": "proposal_type_mismatch"})
+    for kind, contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.items():
+        approved_rows = approved_by_kind[kind]
+        already_applied = [
+            row for row in approved_rows if (row["candidate_id"], contract["policy"]) in applied_by_policy
+        ]
+        eligible_count = len(approved_rows) - len(already_applied)
+        blocked_count = len(blocked_by_kind[kind])
+        if eligible_count > 0 and blocked_count == 0:
+            decision = "eligible_for_exact_reviewed_apply"
+        elif eligible_count > 0:
+            decision = "eligible_with_blocked_candidates_present"
+        elif len(already_applied) > 0:
+            decision = "all_approved_candidates_already_applied"
+        elif candidate_counts[kind]["approved"] == 0:
+            decision = "no_approved_candidates"
+        else:
+            decision = "approved_candidates_blocked"
+        policy_readiness[kind] = {
+            "policy": contract["policy"],
+            "approval_phrase": contract["approval_phrase"],
+            "eligible_approved_count": eligible_count,
+            "already_applied_count": len(already_applied),
+            "blocked_count": blocked_count,
+            "decision": decision,
+        }
+    total_eligible = sum(item["eligible_approved_count"] for item in policy_readiness.values())
+    total_blocked = sum(item["blocked_count"] for item in policy_readiness.values())
+    blocked_reasons: list[str] = []
+    if total_blocked:
+        blocked_reasons.append("approved_lifecycle_candidates_blocked_by_policy_contract")
+    payload = {
+        "kind": "dogfood_lifecycle_apply_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "db_path": str(db_path),
+        "candidate_counts": candidate_counts,
+        "policy_readiness": policy_readiness,
+        "quality_gate": {
+            "pass": total_eligible > 0 and not blocked_reasons,
+            "decision": "reviewed_lifecycle_apply_candidates_ready_for_exact_policy_apply"
+            if total_eligible > 0 and not blocked_reasons
+            else "no_exact_lifecycle_apply_candidates_ready",
+            "blocked_reasons": blocked_reasons,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "broad_background_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "candidate_json_included": False,
+            "reviewed_payload_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     policy_contracts = {
-        "g5-lifecycle-supersession-apply-v1": {
-            "candidate_kind": "supersession",
-            "proposal_type": "supersession_review",
-            "approval_phrase": "apply-approved-g5-lifecycle-supersession-v1",
-            "apply_mode": "approved_supersession_lifecycle_candidates_only",
-        },
-        "g5-lifecycle-decay-deprecate-apply-v1": {
-            "candidate_kind": "decay",
-            "proposal_type": "decay_review",
-            "approval_phrase": "apply-approved-g5-lifecycle-decay-deprecate-v1",
-            "apply_mode": "approved_decay_lifecycle_candidates_deprecate_only",
-        },
-        "g5-lifecycle-reinforcement-apply-v1": {
-            "candidate_kind": "reinforcement",
-            "proposal_type": "reinforcement_review",
-            "approval_phrase": "apply-approved-g5-lifecycle-reinforcement-v1",
-            "apply_mode": "approved_reinforcement_lifecycle_candidates_only",
-        },
+        contract["policy"]: {
+            "candidate_kind": kind,
+            "proposal_type": contract["proposal_type"],
+            "approval_phrase": contract["approval_phrase"],
+            "apply_mode": {
+                "reinforcement": "approved_reinforcement_lifecycle_candidates_only",
+                "decay": "approved_decay_lifecycle_candidates_deprecate_only",
+                "supersession": "approved_supersession_lifecycle_candidates_only",
+            }[kind],
+        }
+        for kind, contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.items()
     }
     contract = policy_contracts.get(args.policy)
     if contract is None:
@@ -13814,6 +13941,12 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_apply_parser.add_argument("--reason", required=True)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_apply_readiness_parser = dogfood_subparsers.add_parser(
+        "lifecycle-apply-readiness",
+        help="Summarize reviewed lifecycle apply eligibility across reinforcement/decay/supersession without mutation.",
+    )
+    dogfood_lifecycle_apply_readiness_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_apply_readiness_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_gate_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-gate",
         help="Run retrieval eval as a read-only gate before any opt-in ranking policy change.",
@@ -15158,6 +15291,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-apply":
             print(json.dumps(_dogfood_lifecycle_candidate_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-apply-readiness":
+            print(json.dumps(_dogfood_lifecycle_apply_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-gate":
             print(json.dumps(_dogfood_retrieval_ranking_gate_payload(args), indent=2))

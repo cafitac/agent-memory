@@ -1,8 +1,40 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:06 KST
+Last updated: 2026-05-15 18:15 KST
 
+
+## Checkpoint: lifecycle apply readiness/audit gate added
+
+Completed the approval-gate cleanup slice for roadmap lanes 3-7. The source checkout can now summarize reviewed lifecycle apply eligibility across reinforcement, decay, and supersession before any mutation, while explicitly keeping ordinary conversation auto-approval and default-ranking automatic rollout blocked.
+
+What changed:
+
+- Added `dogfood lifecycle-apply-readiness <db_path> --output <readiness.json>`.
+- The command is read-only and aggregate-only. It reports candidate status counts by lifecycle kind and policy readiness for:
+  - reinforcement: `g5-lifecycle-reinforcement-apply-v1`;
+  - decay: `g5-lifecycle-decay-deprecate-apply-v1`;
+  - supersession: `g5-lifecycle-supersession-apply-v1`.
+- For each lane it reports exact policy, exact approval phrase, eligible approved count, already-applied count, blocked count, and decision.
+- Forbidden authority is explicit: no apply execution, no broad/background apply, no ordinary conversation auto-approval, no default ranking mutation, no collapse/delete apply, no telemetry reset, and no unreviewed promotion.
+
+Verification:
+
+- RED observed: focused test failed because `lifecycle-apply-readiness` was not a recognized dogfood action.
+- Focused readiness test: `uv run pytest tests/test_cli.py::test_dogfood_lifecycle_apply_readiness_summarizes_gates_without_mutation -q` -> `1 passed`.
+- Related lifecycle/policy subset: `uv run python -m compileall -q src/agent_memory/api/cli.py tests/test_cli.py && uv run pytest tests/test_cli.py -q -k 'lifecycle_apply_readiness or lifecycle_candidate_apply or lifecycle_candidate_registry or automation_policy_readiness or retrieval_ranking_migrate_default or remember_intent'` -> `10 passed, 146 deselected`.
+- Full source gate: `uv run pytest tests/ -q` -> `338 passed, 1 xfailed`.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 93-94%.
+- Literal fully autonomous human-brain-like memory is approximately 70-72%: reinforcement/decay/supersession now have consistent reviewed candidate corridors plus a read-only readiness/audit gate; ordinary conversation auto-approval, broad/background mutation, destructive forgetting, and automatic default-ranking rollout remain intentionally blocked.
+
+Immediate next recommended slice:
+
+1. Commit/push and verify CI for the lifecycle readiness gate slice.
+2. Next safe source slice: live dogfood run of `lifecycle-apply-readiness` on the real source DB and, only if green, one exact reviewed apply on a single approved candidate family.
+3. Keep ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default-ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without new approval blocked unless their own exact policy slices implement guardrails.
 
 ## Checkpoint: narrow reviewed reinforcement lifecycle apply added
 

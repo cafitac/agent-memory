@@ -1,8 +1,33 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:06 KST
+Last updated: 2026-05-15 18:15 KST
 
+
+## Just completed: lifecycle apply readiness/audit source checkpoint
+
+- Added `dogfood lifecycle-apply-readiness <db_path> --output <readiness.json>`.
+- It summarizes reviewed lifecycle apply eligibility across reinforcement, decay, and supersession without mutation.
+- It reports per-kind status counts and per-policy readiness:
+  - policy;
+  - exact approval phrase;
+  - eligible approved count;
+  - already-applied count;
+  - blocked count;
+  - decision.
+- It explicitly forbids apply execution, broad/background apply, ordinary conversation auto-approval, default ranking mutation, collapse/delete apply, telemetry reset, and unreviewed promotion.
+- Verification:
+  - RED observed on missing dogfood action.
+  - Focused readiness test passed: `1 passed`.
+  - Lifecycle/policy subset passed: `10 passed, 146 deselected`.
+  - Full source gate passed: `338 passed, 1 xfailed`.
+
+Recommended next work now:
+
+1. Commit/push source/test/docs and watch CI.
+2. Run the new readiness command on the real source memory DB.
+3. If it reports eligible reviewed candidates, choose exactly one approved candidate family for an exact guarded apply.
+4. Do not implement ordinary conversation auto-approval yet; it remains the largest safety gap and should stay blocked.
 
 ## Just completed: narrow reviewed reinforcement lifecycle apply source checkpoint
 

@@ -11915,6 +11915,153 @@ def test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_ba
     assert "SHOULD_NOT_LEAK" not in apply_result.stdout
 
 
+
+def test_dogfood_lifecycle_apply_readiness_summarizes_gates_without_mutation(tmp_path: Path) -> None:
+    db_path = tmp_path / "lifecycle-apply-readiness.db"
+    output_path = tmp_path / "lifecycle-apply-readiness.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5 lifecycle readiness source text token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5-readiness"},
+    )
+    repeated_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 readiness reinforcement",
+        predicate="needs",
+        object_ref_or_value="reviewed readiness marker",
+        evidence_ids=[source.id],
+        scope="project:g5-readiness",
+        confidence=0.94,
+    )
+    approve_fact(db_path=db_path, fact_id=repeated_fact.id)
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK lifecycle readiness reinforcement query",
+            preferred_scope="project:g5-readiness",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(repeated_fact.id, label="readiness reinforcement target")],
+            response_mode="verify_first",
+            metadata={"raw_query": "SHOULD_NOT_LEAK", "session_id": f"g5-readiness-{index}"},
+        )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "readiness persist",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    candidate_id = json.loads(persist_result.stdout)["candidate_ids"][0]
+    update_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-update",
+            str(db_path),
+            candidate_id,
+            "--status",
+            "approved",
+            "--actor",
+            "tester",
+            "--reason",
+            "readiness approved",
+            "--approval-phrase",
+            "approve-g5-lifecycle-candidate-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+    before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-apply-readiness",
+            str(db_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_lifecycle_apply_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "reviewed_lifecycle_apply_candidates_ready_for_exact_policy_apply",
+        "blocked_reasons": [],
+    }
+    assert payload["candidate_counts"] == {
+        "reinforcement": {"approved": 1, "pending": 0, "promoted": 0, "rejected": 0, "other": 0},
+        "decay": {"approved": 0, "pending": 0, "promoted": 0, "rejected": 0, "other": 0},
+        "supersession": {"approved": 0, "pending": 0, "promoted": 0, "rejected": 0, "other": 0},
+    }
+    assert payload["policy_readiness"]["reinforcement"] == {
+        "policy": "g5-lifecycle-reinforcement-apply-v1",
+        "approval_phrase": "apply-approved-g5-lifecycle-reinforcement-v1",
+        "eligible_approved_count": 1,
+        "already_applied_count": 0,
+        "blocked_count": 0,
+        "decision": "eligible_for_exact_reviewed_apply",
+    }
+    assert payload["policy_readiness"]["decay"]["decision"] == "no_approved_candidates"
+    assert payload["policy_readiness"]["supersession"]["decision"] == "no_approved_candidates"
+    assert payload["forbidden_authority"] == {
+        "executes_apply": False,
+        "broad_background_apply_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews"]) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
+
+
 def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:

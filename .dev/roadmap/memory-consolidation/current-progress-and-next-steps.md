@@ -1,8 +1,40 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:06 KST
+Last updated: 2026-05-15 18:15 KST
 
+
+## Checkpoint: lifecycle apply readiness/audit gate
+
+The roadmap lanes 3-7 are now cleaned up behind an explicit read-only gate. Reinforcement, decay, and supersession share reviewed lifecycle candidate corridors, while ordinary conversation auto-approval and automatic default-ranking rollout remain blocked by policy.
+
+Implemented:
+
+- `dogfood lifecycle-apply-readiness <db_path> --output <path>`.
+- Aggregates lifecycle candidate status counts for reinforcement, decay, and supersession.
+- Reports exact policy readiness for each reviewed apply lane, including eligible approved candidates, already-applied candidates, blocked candidates, policy, phrase, and decision.
+- Emits a quality gate indicating whether exact reviewed lifecycle apply candidates are ready.
+- Confirms forbidden authority: no apply execution, broad/background apply, ordinary auto-approval, default ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Verification:
+
+- RED observed: command did not exist.
+- Focused readiness test: `1 passed`.
+- Related lifecycle/policy subset: `10 passed, 146 deselected`.
+- Full source gate: `338 passed, 1 xfailed`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 93-94%.
+- Literal fully autonomous human-brain-like progress is approximately 70-72%. The project now has consistent reviewed lifecycle gates, but true autonomous ordinary-turn learning, destructive forgetting, and autonomous default policy rollout remain intentionally unimplemented.
+- The next proof should be real-source readiness smoke plus one single-family exact apply only if the gate finds eligible reviewed candidates.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Run live source `lifecycle-apply-readiness` and archive the report.
+3. If green, perform only one exact guarded reviewed apply family at a time.
+4. Still forbidden without later guarded slices: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without new approval.
 
 ## Checkpoint: narrow reviewed reinforcement lifecycle apply
 
