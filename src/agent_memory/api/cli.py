@@ -7070,6 +7070,23 @@ def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tupl
     return False, "none"
 
 
+def _ordinary_turn_memory_worthiness_classification_for_trace(trace: Any) -> tuple[bool, str]:
+    predicted, reason = _ordinary_turn_memory_worthiness_classification(trace.summary)
+    if predicted or reason == "secret_like":
+        return predicted, reason
+    hint = trace.metadata.get("ordinary_turn_memory_hint") if isinstance(trace.metadata, dict) else None
+    if not isinstance(hint, dict):
+        return predicted, reason
+    if hint.get("classifier_policy") != "ordinary-turn-memory-worthiness-heuristic-v1":
+        return predicted, reason
+    if hint.get("raw_text_stored") is not False:
+        return predicted, reason
+    hint_reason = hint.get("classified_reason")
+    if hint.get("predicted_memory_worthy") is True and hint_reason in {"durable_context", "ordinary_procedure"}:
+        return True, str(hint_reason)
+    return predicted, reason
+
+
 def _metadata_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -7154,7 +7171,7 @@ def _dogfood_ordinary_turn_label_packet_payload(args: argparse.Namespace) -> dic
     selected = eligible_unlabeled_nonsecret[: args.max_items]
     review_items: list[dict[str, Any]] = []
     for trace in selected:
-        predicted, reason = _ordinary_turn_memory_worthiness_classification(trace.summary)
+        predicted, reason = _ordinary_turn_memory_worthiness_classification_for_trace(trace)
         summary_sha256 = hashlib.sha256((trace.summary or "").encode("utf-8")).hexdigest()
         item_ref = hashlib.sha256(f"ordinary-turn-label:{trace.id}:{trace.content_sha256}".encode("utf-8")).hexdigest()[:24]
         review_items.append(
@@ -7347,7 +7364,7 @@ def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> 
     unlabeled_count = 0
     expected_positive_nonsecret = 0
     for trace in ordinary_turns:
-        predicted, reason = _ordinary_turn_memory_worthiness_classification(trace.summary)
+        predicted, reason = _ordinary_turn_memory_worthiness_classification_for_trace(trace)
         classified_reasons[reason] += 1
         if reason == "secret_like":
             prediction_counts["blocked_secret_like"] += 1

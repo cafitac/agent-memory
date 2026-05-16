@@ -8121,6 +8121,53 @@ def test_python_module_cli_hermes_pre_llm_hook_records_metadata_only_turn_trace_
     }
 
 
+def test_hermes_pre_llm_hook_records_safe_ordinary_turn_memory_hint_without_raw_text(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "module-cli-hermes-ordinary-turn-memory-hint.db"
+    initialize_database(db_path)
+
+    class EmptyContext:
+        prompt_text = ""
+
+    monkeypatch.setattr(hermes_hooks, "prepare_hermes_memory_context", lambda *args, **kwargs: EmptyContext())
+
+    durable_message = "앞으로 agent-memory project에서는 autonomous roadmap progress를 계속 진행해줘"
+    response = hermes_hooks.build_pre_llm_hook_context(
+        HermesShellHookPayload(
+            hook_event_name="pre_llm_call",
+            session_id="real-session-ordinary-turn-memory-hint",
+            cwd=str(tmp_path),
+            extra={
+                "user_message": durable_message,
+                "platform": "cli",
+                "model": "gpt-test",
+            },
+        ),
+        HermesPreLlmHookOptions(
+            db_path=db_path,
+            preferred_scope="project:ordinary-turn-memory-hint",
+            top_k=1,
+        ),
+    )
+
+    assert response == {}
+    traces = list_experience_traces(db_path)
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.event_kind == "turn"
+    assert trace.summary is None
+    assert trace.metadata["trace_recording"] == "default_metadata_only"
+    assert trace.metadata["ordinary_turn_memory_hint"] == {
+        "classifier_policy": "ordinary-turn-memory-worthiness-heuristic-v1",
+        "predicted_memory_worthy": True,
+        "classified_reason": "durable_context",
+        "raw_text_stored": False,
+    }
+    trace_json = trace.model_dump_json()
+    assert durable_message not in trace_json
+    assert "user_message" not in trace_json
+    assert "autonomous roadmap progress" not in trace_json
+
+
 
 def test_hermes_pre_llm_hook_records_metadata_only_trace_for_empty_retrieval_turn(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-hermes-empty-retrieval-turn-trace.db"
@@ -15759,6 +15806,13 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
             "secret_like",
             "2",
         ),
+        (
+            None,
+            True,
+            "true_positive",
+            "durable_context",
+            "3",
+        ),
     ]
     for summary, expected, _outcome, _reason, digest_seed in labeled_turns:
         insert_experience_trace(
@@ -15769,7 +15823,22 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
             summary=summary,
             scope="project:g2",
             retention_policy="ephemeral",
-            metadata={"ordinary_turn": True, "expected_memory_worthy": expected},
+            metadata={
+                "ordinary_turn": True,
+                "expected_memory_worthy": expected,
+                **(
+                    {
+                        "ordinary_turn_memory_hint": {
+                            "classifier_policy": "ordinary-turn-memory-worthiness-heuristic-v1",
+                            "predicted_memory_worthy": True,
+                            "classified_reason": "durable_context",
+                            "raw_text_stored": False,
+                        }
+                    }
+                    if summary is None
+                    else {}
+                ),
+            },
         )
     before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
     env = {**os.environ, "PYTHONPATH": "src"}
@@ -15783,7 +15852,7 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
             "ordinary-turn-classifier-eval",
             str(db_path),
             "--min-labeled",
-            "3",
+            "4",
             "--min-precision-percent",
             "100",
             "--output",
@@ -15807,27 +15876,28 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
     assert payload["ordinary_conversation_auto_approval"] is False
     assert payload["classifier_policy"] == "ordinary-turn-memory-worthiness-heuristic-v1"
     assert payload["trace_counts"] == {
-        "total": 3,
-        "ordinary_turn": 3,
-        "labeled_ordinary_turn": 3,
+        "total": 4,
+        "ordinary_turn": 4,
+        "labeled_ordinary_turn": 4,
         "unlabeled_ordinary_turn": 0,
     }
     assert payload["prediction_counts"] == {
-        "predicted_memory_worthy": 1,
+        "predicted_memory_worthy": 2,
         "predicted_not_memory_worthy": 1,
         "blocked_secret_like": 1,
     }
     assert payload["evaluation"] == {
-        "true_positive": 1,
+        "true_positive": 2,
         "false_positive": 0,
         "true_negative": 1,
         "false_negative": 0,
         "blocked_secret_like": 1,
         "precision_percent": 100,
         "recall_percent": 100,
-        "secret_block_rate_percent": 33,
+        "secret_block_rate_percent": 25,
     }
     assert payload["classified_reasons"] == {
+        "durable_context": 1,
         "ordinary_preference": 1,
         "none": 1,
         "secret_like": 1,

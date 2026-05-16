@@ -57,6 +57,36 @@ def is_synthetic_hermes_doctor_payload(payload: "HermesShellHookPayload") -> boo
     )
 
 
+def _ordinary_turn_memory_hint_from_user_message(user_message: str) -> dict[str, Any] | None:
+    """Return a raw-text-free classifier hint for metadata-only ordinary turns."""
+    lowered = user_message.strip().lower()
+    if not lowered:
+        return None
+    durable_markers = (
+        "next time",
+        "from now on",
+        "remember that",
+        "my setup",
+        "my workflow",
+        "우리 ",
+        "앞으로 ",
+    )
+    if any(marker in lowered for marker in durable_markers):
+        reason = "durable_context"
+    elif lowered.startswith(("use ", "run ", "when ", "always ", "never ", "prefer ", "default ")) and any(
+        marker in lowered for marker in ("project", "repo", "workflow")
+    ):
+        reason = "ordinary_procedure"
+    else:
+        return None
+    return {
+        "classifier_policy": "ordinary-turn-memory-worthiness-heuristic-v1",
+        "predicted_memory_worthy": True,
+        "classified_reason": reason,
+        "raw_text_stored": False,
+    }
+
+
 class HermesShellHookPayload(BaseModel):
     hook_event_name: str
     tool_name: str | None = None
@@ -540,6 +570,16 @@ def _record_pre_llm_experience_trace(
         )
         return
 
+    metadata = {
+        **_safe_hermes_trace_metadata(payload),
+        "trace_recording": "default_metadata_only",
+        "candidate_policy": "evidence_only",
+        "auto_approved": False,
+    }
+    ordinary_turn_memory_hint = _ordinary_turn_memory_hint_from_user_message(user_message)
+    if ordinary_turn_memory_hint is not None:
+        metadata["ordinary_turn_memory_hint"] = ordinary_turn_memory_hint
+
     insert_experience_trace(
         options.db_path,
         surface="hermes-pre-llm-hook",
@@ -553,12 +593,7 @@ def _record_pre_llm_experience_trace(
         related_memory_refs=_memory_refs_from_packet(packet),
         related_observation_ids=_resolve_related_observation_ids(options=options, packet=packet, user_message=user_message),
         retention_policy="ephemeral",
-        metadata={
-            **_safe_hermes_trace_metadata(payload),
-            "trace_recording": "default_metadata_only",
-            "candidate_policy": "evidence_only",
-            "auto_approved": False,
-        },
+        metadata=metadata,
     )
 
 
