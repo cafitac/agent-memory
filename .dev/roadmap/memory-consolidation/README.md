@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 02:20 KST, source work is on the post-v0.1.162 repeated ordinary-turn eval-window summary gate checkpoint.1.162 exact-ref ordinary-turn label-update checkpoint.
-- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.4-99.5% for the scoped local human-brain-like lifecycle; the next boundary is strict repeated labeled ordinary-turn windows with positive/negative coverage, then a separate inferred-approval readiness design before any apply.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 02:38 KST, source work is on the post-v0.1.162 ordinary-turn metadata memory-hint checkpoint.
+- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.55-99.65% for the scoped local human-brain-like lifecycle; the next boundary is larger strict hinted/labeled ordinary-turn windows, then a separate inferred-approval readiness design before any apply.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
@@ -118,4 +118,7 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 
 ## References
 
+- `references/post-v0.1.162-ordinary-turn-memory-hints.md` - raw-text-free ordinary-turn metadata hints for future positive eval evidence without storing ordinary-turn summaries.
+- `references/post-v0.1.162-ordinary-turn-eval-window-summary.md` - read-only repeated eval-window summary gate over saved ordinary-turn classifier reports.
+- `references/post-v0.1.162-ordinary-turn-label-update.md` - exact-ref label update corridor for locally reviewed ordinary-turn refs.
 - `references/post-v0.1.162-ordinary-turn-classifier-eval.md` - read-only ordinary-turn memory-worthiness classifier/eval gate; live smoke is correctly red until labels exist.

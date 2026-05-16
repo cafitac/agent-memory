@@ -1,7 +1,32 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:20 KST
+Last updated: 2026-05-17 02:38 KST
+
+## Checkpoint: ordinary-turn metadata memory hints without raw text
+
+- Added raw-text-free `ordinary_turn_memory_hint` metadata for ordinary `hermes-pre-llm-hook` traces when the transient user message has obvious durable markers such as `next time`, `from now on`, `remember that`, `my setup`, `my workflow`, `우리`, or `앞으로`.
+- Ordinary turn traces still store `summary=None`, no raw user message, no transcript/query/content, `trace_recording=default_metadata_only`, `candidate_policy=evidence_only`, and `auto_approved=false`.
+- `ordinary-turn-label-packet` and `ordinary-turn-classifier-eval` now consume the hint only when `classifier_policy=ordinary-turn-memory-worthiness-heuristic-v1` and `raw_text_stored=false`.
+- This closes the immediate blocker where strict repeated windows could not get positive predictions because live ordinary turns were intentionally summary-free.
+- Copy-DB smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-memory-hint-smoke-20260516T173512Z/`.
+  - The smoke copied `/Users/reddit/.agent-memory/memory.db`; it did not mutate the live DB.
+  - Two hook-created metadata-only ordinary turns were exact-ref labeled on the copy.
+  - Strict repeated-window summary passed with `quality_gate.pass=true`, `precision_percent_min=100`, `false_positive_total=0`, `false_negative_total=0`, `labeled_ordinary_turn_total=3`, `mutated=false`, and `ordinary_conversation_auto_approval=false`.
+- Validation: RED hook/classifier tests failed first; focused GREEN `2 passed`; ordinary-turn/hook focus `11 passed, 171 deselected`; full suite `364 passed, 1 xfailed`; release/workflow metadata `7 passed`; release metadata script and `npm pack --dry-run` passed.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.55-99.65%.
+- Remaining gap: larger real hinted/labeled windows, then a separate read-only inferred ordinary-turn approval readiness gate. Ordinary-turn apply and ordinary conversation auto-approval remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this metadata-hint checkpoint and watch CI.
+2. Let future real turns accumulate raw-text-free hints, or continue copy-DB hook smokes for controlled window evidence.
+3. Label locally reviewed refs with `ordinary-turn-label-update`, then rerun strict repeated-window summaries with more positive and negative examples.
+4. Design read-only inferred ordinary-turn approval readiness only after strict larger windows stay green; keep apply blocked.
 
 ## Checkpoint: repeated ordinary-turn eval-window summary gate
 
