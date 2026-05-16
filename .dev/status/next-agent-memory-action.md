@@ -1,38 +1,33 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 23:38 KST
+Last updated: 2026-05-17 00:31 KST
 
-## Just completed: remember-preferences post-apply verifier + explicit queue drain
+## Just completed: remember-preferences bounded-batch graduation/operator packet
 
-- Added `consolidation auto-approve remember-preferences-post-apply-verification`, a read-only verifier for the G2 remember-preferences mutation lane.
-- The verifier checks an apply artifact plus a post-apply dry-run artifact and fails closed on malformed artifacts, over-broad counts, missing audit shape, wrong policy, non-fact writes, missing relation ids, default retrieval mutation in the post dry-run, or duplicate/blocked post state.
-- It emits aggregate/ref-only summaries only; no raw trace summaries, raw reason text, raw query text, source content, or backup contents.
-- Live prior-topic-slot verification: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/previous-remember-preferences-post-apply-verification.json`.
-  - Gate passed: `remember_preference_post_apply_verification_green_stop_before_next_apply`.
-- Live third bounded apply + verifier: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/`.
-  - Applied one explicit preference only: `approved_count=1`, approved `fact:7`.
-  - Post dry-run: `eligible_count=2`, `blocked_count=0`, `skipped_count=3`.
-  - Verifier passed.
-- Live queue drain: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-drain-20260516T143804Z/`.
-  - Step 1 approved `fact:8`; verifier passed; post dry-run left `eligible_count=1`.
-  - Step 2 approved `fact:9`; verifier passed; final dry-run has `eligible_count=0`, `blocked_count=0`, `skipped_count=5`, `mutated=false`.
-- Validation completed from the source checkout:
-  - Focused remember-preferences/ordinary-turn coverage: `13 passed, 158 deselected`.
-  - Full suite: `353 passed, 1 xfailed`.
-  - Release metadata smoke, isolated Python/npm bootstrap+doctor smoke, `npm pack --dry-run`, and `git diff --check` all passed.
+- Added `consolidation auto-approve remember-preferences-batch-graduation-readiness`, a read-only gate that consumes prior green one-at-a-time post-apply verifier artifacts plus a current dry-run artifact.
+- Added `consolidation auto-approve remember-preferences-bounded-batch-operator-packet`, a read-only/manual-only packet that emits aggregate inventory, an exact `remember-preferences --max-apply 2` command template, and the required post-apply verifier template.
+- No batch apply was executed. The new packet reports `apply_executed=false`, `apply_supported=false`, and keeps unattended/broad/background/default-ranking/collapse-delete/telemetry-reset/unreviewed-promotion authority false.
+- Live read-only smoke artifacts: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-packet-20260516T152736Z/`.
+  - `graduation-readiness.json`: gate passed, `green_verified_apply_count=4`, historical current dry-run fixture had `eligible_count=2`, `blocked_count=0`, `mutated=false`.
+  - `operator-packet.json`: gate passed, `eligible_count=2`, `selected_preview_count=2`, `max_apply=2`, `apply_executed=false`, `mutated=false`.
+- Validation from source checkout:
+  - New focused tests: `2 passed` after observed RED parser failures.
+  - Remember-preferences focused coverage: `9 passed, 164 deselected`.
+  - Full suite: `355 passed, 1 xfailed`.
+  - Release metadata + release-readiness smoke, `npm pack --dry-run`, and `git diff --check` passed.
 
 Current estimate:
 
 - Safety-gated operational north-star: approximately 99%.
-- Literal fully autonomous human-brain-like memory, within this repo's local-memory scope: approximately 97-98%.
-- The explicit-memory lane is now very close: explicit remember-intent evidence can be created, low-risk preferences can be applied one at a time, duplicate writes are skipped, and every mutation has a verifier stop. The remaining gap is not basic plumbing; it is safe unattended generalization.
+- Literal fully autonomous human-brain-like memory within this repo's local-memory scope: approximately 98%.
+- The explicit-memory lane is now nearly complete, including read-only batch preparation. Remaining progress to 100% is mostly about safely proving unattended generalization, not basic plumbing.
 
 Recommended next work now:
 
-1. Commit/push this verifier + live queue-drain checkpoint and watch CI.
-2. Add the next report-first automation gate: either a remember-preferences bounded-batch operator packet/verifier graduation gate, or an ordinary-turn classifier evaluation harness that proves precision before any inferred approval.
-3. Keep `--max-apply` at 1 until batch-specific RED tests and live artifact gates exist.
+1. Commit/push this batch-packet checkpoint and watch CI.
+2. Next PR-sized safety gate: add a batch-specific remember-preferences post-apply verifier before any real live batch, or build the ordinary-turn classifier/evaluation harness that can prove high precision while still read-only.
+3. Keep live `remember-preferences --max-apply 2` as a manual-only future command template until the batch verifier exists and exact operator approval is given.
 4. Still blocked: broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: preference topic-slot semantics + second bounded auto-approval

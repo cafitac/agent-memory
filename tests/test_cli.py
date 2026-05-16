@@ -11150,6 +11150,222 @@ def test_consolidation_auto_approve_remember_preferences_post_apply_verification
     assert payload["privacy"]["raw_reason_included"] is False
 
 
+def test_consolidation_auto_approve_remember_preferences_batch_graduation_readiness_is_read_only(
+    tmp_path: Path,
+) -> None:
+    verification_reports: list[Path] = []
+    for index in range(3):
+        report_path = tmp_path / f"verify-{index}.json"
+        report_path.write_text(
+            json.dumps(
+                {
+                    "kind": "remember_preference_post_apply_verification",
+                    "read_only": True,
+                    "mutated": False,
+                    "default_retrieval_unchanged": True,
+                    "expected_policy": "remember-preferences-v1",
+                    "max_approved": 1,
+                    "apply_report_summary": {
+                        "approved_count": 1,
+                        "max_apply": 1,
+                        "scope": "project:g2",
+                        "approved_refs": [{"trace_id": index + 1, "memory_ref": f"fact:{index + 1}"}],
+                    },
+                    "quality_gate": {
+                        "pass": True,
+                        "decision": "remember_preference_post_apply_verification_green_stop_before_next_apply",
+                        "blocked_reasons": [],
+                    },
+                    "forbidden_authority": {
+                        "ordinary_conversation_auto_approval": False,
+                        "broad_background_apply": False,
+                        "batch_apply_without_separate_verifier": False,
+                        "default_retrieval_ranking_mutation": False,
+                        "collapse_delete_apply": False,
+                        "telemetry_reset": False,
+                        "unreviewed_promotion": False,
+                    },
+                    "privacy": {"aggregate_or_ref_only": True, "raw_trace_summary_included": False},
+                }
+            ),
+            encoding="utf-8",
+        )
+        verification_reports.append(report_path)
+    current_dry_run_path = tmp_path / "current-dry-run.json"
+    current_dry_run_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": False,
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "scope": "project:g2",
+                "max_apply": 1,
+                "eligible_count": 2,
+                "approved_count": 0,
+                "blocked_count": 0,
+                "deferred_count": 0,
+                "skipped_count": 3,
+                "candidates": [
+                    {"trace_id": 11, "decision": "would_approve"},
+                    {"trace_id": 12, "decision": "would_approve"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "graduation.json"
+
+    args = [
+        sys.executable,
+        "-m",
+        "agent_memory.api.cli",
+        "consolidation",
+        "auto-approve",
+        "remember-preferences-batch-graduation-readiness",
+        "--current-dry-run-report",
+        str(current_dry_run_path),
+        "--expected-policy",
+        "remember-preferences-v1",
+        "--min-prior-verified-applies",
+        "3",
+        "--max-batch-size",
+        "2",
+        "--output",
+        str(output_path),
+    ]
+    for report_path in verification_reports:
+        args.extend(["--post-apply-verification-report", str(report_path)])
+    result = subprocess.run(
+        args,
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_preference_batch_graduation_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["prior_verification_summary"]["green_verified_apply_count"] == 3
+    assert payload["current_dry_run_summary"]["eligible_count"] == 2
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "remember_preference_bounded_batch_operator_packet_ready",
+        "blocked_reasons": [],
+    }
+    assert payload["bounded_batch_apply_supported"] is False
+    assert payload["requires_separate_exact_operator_approval"] is True
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert "User prefers" not in result.stdout
+
+
+def test_consolidation_auto_approve_remember_preferences_bounded_batch_operator_packet_is_manual_only(
+    tmp_path: Path,
+) -> None:
+    graduation_path = tmp_path / "graduation.json"
+    current_dry_run_path = tmp_path / "current-dry-run.json"
+    graduation_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_batch_graduation_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "expected_policy": "remember-preferences-v1",
+                "scope": "project:g2",
+                "max_batch_size": 2,
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "remember_preference_bounded_batch_operator_packet_ready",
+                    "blocked_reasons": [],
+                },
+                "bounded_batch_apply_supported": False,
+                "requires_separate_exact_operator_approval": True,
+                "privacy": {"aggregate_or_ref_only": True, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    current_dry_run_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": False,
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "scope": "project:g2",
+                "eligible_count": 2,
+                "approved_count": 0,
+                "blocked_count": 0,
+                "skipped_count": 3,
+                "candidates": [{"trace_id": 11}, {"trace_id": 12}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "packet.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences-bounded-batch-operator-packet",
+            "--graduation-readiness-report",
+            str(graduation_path),
+            "--current-dry-run-report",
+            str(current_dry_run_path),
+            "--expected-policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--actor",
+            "agent-memory:g2-test",
+            "--max-apply",
+            "2",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_preference_bounded_batch_operator_packet"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["apply_executed"] is False
+    assert payload["apply_supported"] is False
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["candidate_inventory"] == {
+        "eligible_count": 2,
+        "selected_preview_count": 2,
+        "max_apply": 2,
+        "candidate_json_included": False,
+        "trace_ids_included": False,
+    }
+    assert "remember-preferences" in payload["bounded_batch_apply_command_template"]
+    assert "--max-apply 2" in payload["bounded_batch_apply_command_template"]
+    assert "remember-preferences-post-apply-verification" in payload["post_apply_verification_command_template"]
+    assert payload["forbidden_authority"]["unattended_batch_apply"] is False
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert "User prefers" not in result.stdout
+
+
 def test_consolidation_auto_approve_remember_preferences_blocks_same_topic_conflicts_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-conflict.db"
     initialize_database(db_path)

@@ -712,6 +712,301 @@ def _remember_preference_post_apply_verification_payload(
     return payload
 
 
+def _remember_preference_forbidden_authority_payload() -> dict[str, bool]:
+    return {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply": False,
+        "unattended_batch_apply": False,
+        "batch_apply_without_separate_verifier": False,
+        "default_retrieval_ranking_mutation": False,
+        "collapse_delete_apply": False,
+        "telemetry_reset": False,
+        "unreviewed_promotion": False,
+    }
+
+
+def _remember_preference_privacy_payload() -> dict[str, bool]:
+    return {
+        "raw_reason_included": False,
+        "raw_trace_summary_included": False,
+        "raw_content_included": False,
+        "raw_query_text_included": False,
+        "candidate_json_included": False,
+        "trace_ids_included": False,
+        "backup_contents_included": False,
+        "aggregate_or_ref_only": True,
+    }
+
+
+def _remember_preference_artifact_privacy_safe(payload: dict[str, Any]) -> bool:
+    privacy = payload.get("privacy", {})
+    if not isinstance(privacy, dict):
+        return False
+    forbidden_true_keys = (
+        "raw_reason_included",
+        "raw_trace_summary_included",
+        "raw_content_included",
+        "raw_query_text_included",
+        "candidate_json_included",
+        "trace_ids_included",
+        "backup_contents_included",
+        "sample_values_included",
+    )
+    return privacy.get("aggregate_or_ref_only") is True and not any(privacy.get(key) is True for key in forbidden_true_keys)
+
+
+def _remember_preference_batch_graduation_readiness_payload(
+    *,
+    post_apply_verification_report_paths: list[Path],
+    current_dry_run_report_path: Path,
+    expected_policy: str,
+    min_prior_verified_applies: int,
+    max_batch_size: int,
+    output: Path | None,
+) -> dict[str, Any]:
+    if expected_policy not in _REMEMBER_PREFERENCE_POLICIES:
+        raise ValueError("unsupported auto-approval policy")
+    blocked_reasons: list[str] = []
+    if min_prior_verified_applies < 1:
+        blocked_reasons.append("min_prior_verified_applies_must_be_positive")
+    if max_batch_size < 2 or max_batch_size > 5:
+        blocked_reasons.append("max_batch_size_outside_guardrail")
+
+    green_verified_apply_count = 0
+    verified_approved_count = 0
+    scopes: set[str] = set()
+    verification_artifacts: list[dict[str, Any]] = []
+    for report_path in post_apply_verification_report_paths:
+        report, artifact = _read_json_artifact_summary(report_path)
+        verification_artifacts.append(artifact)
+        if report is None:
+            blocked_reasons.append("post_apply_verification_report_unreadable")
+            continue
+        if report.get("kind") != "remember_preference_post_apply_verification":
+            blocked_reasons.append("post_apply_verification_kind_mismatch")
+        if report.get("expected_policy") != expected_policy:
+            blocked_reasons.append("post_apply_verification_policy_mismatch")
+        if report.get("read_only") is not True or report.get("mutated") is not False:
+            blocked_reasons.append("post_apply_verification_not_read_only")
+        if report.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("post_apply_verification_default_retrieval_changed")
+        quality_gate = report.get("quality_gate", {}) if isinstance(report.get("quality_gate"), dict) else {}
+        if quality_gate.get("pass") is not True:
+            blocked_reasons.append("post_apply_verification_gate_not_green")
+        if not _remember_preference_artifact_privacy_safe(report):
+            blocked_reasons.append("post_apply_verification_privacy_not_ref_safe")
+        forbidden = report.get("forbidden_authority", {}) if isinstance(report.get("forbidden_authority"), dict) else {}
+        if any(forbidden.get(key) is True for key in forbidden):
+            blocked_reasons.append("post_apply_verification_forbidden_authority_granted")
+        apply_summary = report.get("apply_report_summary", {}) if isinstance(report.get("apply_report_summary"), dict) else {}
+        approved_count = _safe_int(apply_summary.get("approved_count"))
+        if approved_count < 1:
+            blocked_reasons.append("post_apply_verification_missing_approved_apply")
+        if _safe_int(apply_summary.get("max_apply")) > 1:
+            blocked_reasons.append("prior_apply_was_not_one_at_a_time")
+        scope = apply_summary.get("scope")
+        if isinstance(scope, str) and scope:
+            scopes.add(scope)
+        if quality_gate.get("pass") is True and approved_count >= 1:
+            green_verified_apply_count += 1
+            verified_approved_count += approved_count
+
+    current_dry_run, current_artifact = _read_json_artifact_summary(current_dry_run_report_path)
+    eligible_count = 0
+    blocked_count = 0
+    skipped_count = 0
+    current_scope = None
+    if current_dry_run is None:
+        blocked_reasons.append("current_dry_run_report_unreadable")
+    else:
+        eligible_count = _safe_int(current_dry_run.get("eligible_count"))
+        blocked_count = _safe_int(current_dry_run.get("blocked_count"))
+        skipped_count = _safe_int(current_dry_run.get("skipped_count"))
+        current_scope = current_dry_run.get("scope")
+        if current_dry_run.get("kind") != "remember_preference_auto_approval_report":
+            blocked_reasons.append("current_dry_run_kind_mismatch")
+        if current_dry_run.get("policy") != expected_policy:
+            blocked_reasons.append("current_dry_run_policy_mismatch")
+        if current_dry_run.get("apply") is not False:
+            blocked_reasons.append("current_dry_run_not_dry_run")
+        if current_dry_run.get("read_only") is not True or current_dry_run.get("mutated") is not False:
+            blocked_reasons.append("current_dry_run_not_read_only")
+        if current_dry_run.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("current_dry_run_default_retrieval_changed")
+        if blocked_count != 0:
+            blocked_reasons.append("current_dry_run_has_blocked_candidates")
+        if eligible_count < 1:
+            blocked_reasons.append("current_dry_run_has_no_eligible_candidates")
+        if current_scope:
+            scopes.add(str(current_scope))
+
+    if green_verified_apply_count < min_prior_verified_applies:
+        blocked_reasons.append("prior_verified_apply_count_below_minimum")
+    if len(scopes) > 1:
+        blocked_reasons.append("mixed_scope_reports_require_separate_packets")
+
+    green = not blocked_reasons
+    payload = {
+        "kind": "remember_preference_batch_graduation_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "expected_policy": expected_policy,
+        "scope": next(iter(scopes)) if len(scopes) == 1 else current_scope,
+        "min_prior_verified_applies": min_prior_verified_applies,
+        "max_batch_size": max_batch_size,
+        "prior_verification_summary": {
+            "report_count": len(post_apply_verification_report_paths),
+            "green_verified_apply_count": green_verified_apply_count,
+            "verified_approved_count": verified_approved_count,
+            "one_at_a_time_prior_apply_required": True,
+            "artifacts": verification_artifacts,
+        },
+        "current_dry_run_summary": {
+            "artifact": current_artifact,
+            "eligible_count": eligible_count,
+            "blocked_count": blocked_count,
+            "skipped_count": skipped_count,
+            "selected_preview_count": min(eligible_count, max_batch_size),
+        },
+        "quality_gate": {
+            "pass": green,
+            "decision": "remember_preference_bounded_batch_operator_packet_ready"
+            if green
+            else "fix_remember_preference_batch_graduation_before_operator_packet",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "bounded_batch_apply_supported": False,
+        "requires_separate_exact_operator_approval": True,
+        "requires_post_apply_verifier": True,
+        "forbidden_authority": _remember_preference_forbidden_authority_payload(),
+        "privacy": _remember_preference_privacy_payload(),
+        "next_step": "If green, build a manual-only operator packet; do not run unattended batch apply from this report.",
+    }
+    _write_json_report(output, payload)
+    return payload
+
+
+def _remember_preference_bounded_batch_operator_packet_payload(
+    *,
+    graduation_readiness_report_path: Path,
+    current_dry_run_report_path: Path,
+    expected_policy: str,
+    scope: str,
+    actor: str,
+    max_apply: int,
+    output: Path | None,
+) -> dict[str, Any]:
+    if expected_policy not in _REMEMBER_PREFERENCE_POLICIES:
+        raise ValueError("unsupported auto-approval policy")
+    blocked_reasons: list[str] = []
+    if not scope:
+        blocked_reasons.append("scope_required")
+    if not actor:
+        blocked_reasons.append("actor_required")
+    if max_apply < 2 or max_apply > 5:
+        blocked_reasons.append("max_apply_outside_manual_packet_guardrail")
+
+    graduation, graduation_artifact = _read_json_artifact_summary(graduation_readiness_report_path)
+    if graduation is None:
+        blocked_reasons.append("graduation_readiness_report_unreadable")
+    else:
+        if graduation.get("kind") != "remember_preference_batch_graduation_readiness":
+            blocked_reasons.append("graduation_readiness_kind_mismatch")
+        if graduation.get("expected_policy") != expected_policy:
+            blocked_reasons.append("graduation_readiness_policy_mismatch")
+        if graduation.get("scope") != scope:
+            blocked_reasons.append("graduation_readiness_scope_mismatch")
+        quality_gate = graduation.get("quality_gate", {}) if isinstance(graduation.get("quality_gate"), dict) else {}
+        if quality_gate.get("pass") is not True:
+            blocked_reasons.append("graduation_readiness_gate_not_green")
+        if graduation.get("read_only") is not True or graduation.get("mutated") is not False:
+            blocked_reasons.append("graduation_readiness_not_read_only")
+        if graduation.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("graduation_readiness_default_retrieval_changed")
+        if max_apply > _safe_int(graduation.get("max_batch_size"), default=max_apply):
+            blocked_reasons.append("max_apply_exceeds_graduation_batch_size")
+
+    current_dry_run, current_artifact = _read_json_artifact_summary(current_dry_run_report_path)
+    eligible_count = 0
+    blocked_count = 0
+    if current_dry_run is None:
+        blocked_reasons.append("current_dry_run_report_unreadable")
+    else:
+        eligible_count = _safe_int(current_dry_run.get("eligible_count"))
+        blocked_count = _safe_int(current_dry_run.get("blocked_count"))
+        if current_dry_run.get("kind") != "remember_preference_auto_approval_report":
+            blocked_reasons.append("current_dry_run_kind_mismatch")
+        if current_dry_run.get("policy") != expected_policy:
+            blocked_reasons.append("current_dry_run_policy_mismatch")
+        if current_dry_run.get("scope") != scope:
+            blocked_reasons.append("current_dry_run_scope_mismatch")
+        if current_dry_run.get("apply") is not False:
+            blocked_reasons.append("current_dry_run_not_dry_run")
+        if current_dry_run.get("read_only") is not True or current_dry_run.get("mutated") is not False:
+            blocked_reasons.append("current_dry_run_not_read_only")
+        if current_dry_run.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("current_dry_run_default_retrieval_changed")
+        if blocked_count != 0:
+            blocked_reasons.append("current_dry_run_has_blocked_candidates")
+        if eligible_count < 1:
+            blocked_reasons.append("current_dry_run_has_no_eligible_candidates")
+
+    selected_preview_count = min(eligible_count, max_apply)
+    green = not blocked_reasons
+    apply_command = (
+        "agent-memory consolidation auto-approve remember-preferences <DB> "
+        f"--policy {expected_policy} --scope {scope} --apply --actor {actor} "
+        "--reason <PRIVATE_REVIEW_REASON> "
+        f"--max-apply {max_apply} --limit 200 > <APPLY_REPORT>"
+    )
+    verify_command = (
+        "agent-memory consolidation auto-approve remember-preferences-post-apply-verification "
+        "--apply-report <APPLY_REPORT> --post-dry-run-report <POST_DRY_RUN_REPORT> "
+        f"--expected-policy {expected_policy} --max-approved {max_apply} --output <VERIFY_REPORT>"
+    )
+    payload = {
+        "kind": "remember_preference_bounded_batch_operator_packet",
+        "read_only": True,
+        "mutated": False,
+        "apply_executed": False,
+        "apply_supported": False,
+        "default_retrieval_unchanged": True,
+        "expected_policy": expected_policy,
+        "scope": scope,
+        "actor": actor,
+        "graduation_readiness_artifact": graduation_artifact,
+        "current_dry_run_artifact": current_artifact,
+        "candidate_inventory": {
+            "eligible_count": eligible_count,
+            "selected_preview_count": selected_preview_count,
+            "max_apply": max_apply,
+            "candidate_json_included": False,
+            "trace_ids_included": False,
+        },
+        "bounded_batch_apply_command_template": apply_command,
+        "post_apply_verification_command_template": verify_command,
+        "quality_gate": {
+            "pass": green,
+            "decision": "remember_preference_bounded_batch_packet_ready_for_exact_manual_apply"
+            if green
+            else "fix_remember_preference_bounded_batch_packet_inputs",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "runbook_contract": {
+            "requires_exact_operator_review": True,
+            "requires_private_reason": True,
+            "requires_immediate_post_apply_verification": True,
+            "packet_is_not_authorization": True,
+            "readiness_is_not_authorization": True,
+        },
+        "forbidden_authority": _remember_preference_forbidden_authority_payload(),
+        "privacy": _remember_preference_privacy_payload(),
+    }
+    _write_json_report(output, payload)
+    return payload
+
+
 def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
     def parse_fact_ref(value: str) -> int | None:
         prefix = "fact:"
@@ -15610,6 +15905,41 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_auto_verify_parser.add_argument("--expected-policy", required=True, choices=sorted(_REMEMBER_PREFERENCE_POLICIES))
     consolidation_auto_verify_parser.add_argument("--max-approved", type=int, default=1)
     consolidation_auto_verify_parser.add_argument("--output", type=Path)
+    consolidation_auto_batch_graduation_parser = consolidation_auto_subparsers.add_parser(
+        "remember-preferences-batch-graduation-readiness",
+        help="Read-only gate summarizing repeated one-at-a-time remember-preferences proofs before any batch packet.",
+    )
+    consolidation_auto_batch_graduation_parser.add_argument(
+        "--post-apply-verification-report",
+        type=Path,
+        action="append",
+        default=[],
+        required=True,
+    )
+    consolidation_auto_batch_graduation_parser.add_argument("--current-dry-run-report", type=Path, required=True)
+    consolidation_auto_batch_graduation_parser.add_argument(
+        "--expected-policy",
+        required=True,
+        choices=sorted(_REMEMBER_PREFERENCE_POLICIES),
+    )
+    consolidation_auto_batch_graduation_parser.add_argument("--min-prior-verified-applies", type=int, default=3)
+    consolidation_auto_batch_graduation_parser.add_argument("--max-batch-size", type=int, default=2)
+    consolidation_auto_batch_graduation_parser.add_argument("--output", type=Path)
+    consolidation_auto_batch_packet_parser = consolidation_auto_subparsers.add_parser(
+        "remember-preferences-bounded-batch-operator-packet",
+        help="Build a read-only manual operator packet for a bounded remember-preferences batch apply.",
+    )
+    consolidation_auto_batch_packet_parser.add_argument("--graduation-readiness-report", type=Path, required=True)
+    consolidation_auto_batch_packet_parser.add_argument("--current-dry-run-report", type=Path, required=True)
+    consolidation_auto_batch_packet_parser.add_argument(
+        "--expected-policy",
+        required=True,
+        choices=sorted(_REMEMBER_PREFERENCE_POLICIES),
+    )
+    consolidation_auto_batch_packet_parser.add_argument("--scope", required=True)
+    consolidation_auto_batch_packet_parser.add_argument("--actor", required=True)
+    consolidation_auto_batch_packet_parser.add_argument("--max-apply", type=int, default=2)
+    consolidation_auto_batch_packet_parser.add_argument("--output", type=Path)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -17123,6 +17453,33 @@ def main() -> None:
                     post_dry_run_report_path=args.post_dry_run_report,
                     expected_policy=args.expected_policy,
                     max_approved=args.max_approved,
+                    output=args.output,
+                )
+                print(json.dumps(payload, indent=2))
+                if payload["quality_gate"]["pass"] is not True:
+                    sys.exit(1)
+                return
+            if args.auto_approval_policy_kind == "remember-preferences-batch-graduation-readiness":
+                payload = _remember_preference_batch_graduation_readiness_payload(
+                    post_apply_verification_report_paths=args.post_apply_verification_report,
+                    current_dry_run_report_path=args.current_dry_run_report,
+                    expected_policy=args.expected_policy,
+                    min_prior_verified_applies=args.min_prior_verified_applies,
+                    max_batch_size=args.max_batch_size,
+                    output=args.output,
+                )
+                print(json.dumps(payload, indent=2))
+                if payload["quality_gate"]["pass"] is not True:
+                    sys.exit(1)
+                return
+            if args.auto_approval_policy_kind == "remember-preferences-bounded-batch-operator-packet":
+                payload = _remember_preference_bounded_batch_operator_packet_payload(
+                    graduation_readiness_report_path=args.graduation_readiness_report,
+                    current_dry_run_report_path=args.current_dry_run_report,
+                    expected_policy=args.expected_policy,
+                    scope=args.scope,
+                    actor=args.actor,
+                    max_apply=args.max_apply,
                     output=args.output,
                 )
                 print(json.dumps(payload, indent=2))

@@ -1,50 +1,52 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 23:38 KST
+Last updated: 2026-05-17 00:31 KST
 
-## Checkpoint: remember-preferences post-apply verifier + explicit queue drain
+## Checkpoint: remember-preferences bounded-batch graduation/operator packet
 
-The G2 remember-preferences lane now has the missing post-apply stop gate. `consolidation auto-approve remember-preferences-post-apply-verification` validates an apply artifact and a follow-up dry-run artifact without reading raw memory contents or mutating the DB. It confirms one-at-a-time approval bounds, policy/audit shape, fact-only writes, duplicate skip behavior, default retrieval unchanged on the post dry-run, privacy flags, and forbidden authority flags before another apply can be considered.
+The G2 remember-preferences lane now has a report-first batch-preparation gate. After proving repeated one-at-a-time preference applies with post-apply verification, `consolidation auto-approve remember-preferences-batch-graduation-readiness` can summarize the prior verifier artifacts and a current dry-run artifact. If the evidence is green, `consolidation auto-approve remember-preferences-bounded-batch-operator-packet` produces a manual-only packet with aggregate candidate inventory, exact apply command template, and post-apply verifier template.
 
 Source hardening added in this checkpoint:
 
-- Added the read-only post-apply verifier for `remember-preferences-v1` artifacts.
-- Added regression tests for a green stop-after-one verifier and a red malformed artifact verifier.
-- Preserved `--max-apply 1`, explicit `--apply --actor --reason`, duplicate `auto_approved_as` skipping, topic-slot conflict checks, and the block on ordinary-turn inferred approval.
-- The verifier emits aggregate/ref-only artifact summaries and does not include raw trace summaries, raw reason text, backup contents, raw query text, or source content.
+- Added the read-only batch graduation readiness command for `remember-preferences-v1`.
+- Added the read-only bounded-batch operator packet command for `remember-preferences-v1`.
+- Added regression tests that first failed because the CLI subcommands did not exist, then passed after implementation.
+- Preserved the important boundary: the packet is not authorization and does not run apply. It keeps `bounded_batch_apply_supported=false` / `apply_supported=false`, `apply_executed=false`, and forbidden authority flags false.
+- Output is aggregate/ref-only: no raw trace summaries, no raw reason text, no raw candidate JSON, no trace ids, no backup contents, and no raw query/source content.
 
 Live evidence artifacts:
 
-- Previous topic-slot apply verified: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/previous-remember-preferences-post-apply-verification.json`.
-  - Gate passed with `remember_preference_post_apply_verification_green_stop_before_next_apply`.
-- Third bounded apply verified: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/post-apply-verification.json`.
-  - `approved_count=1`, approved `fact:7`, post dry-run `eligible_count=2`, `blocked_count=0`, `skipped_count=3`, gate passed.
-- Final queue drain: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-drain-20260516T143804Z/`.
-  - Step 1 approved `fact:8`, post dry-run `eligible_count=1`, `blocked_count=0`, verifier passed.
-  - Step 2 approved `fact:9`, post dry-run `eligible_count=0`, `blocked_count=0`, verifier passed.
-  - Final dry-run: `eligible_count=0`, `blocked_count=0`, `skipped_count=5`, `mutated=false`.
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-packet-20260516T152736Z/graduation-readiness.json`.
+  - Gate passed: `remember_preference_bounded_batch_operator_packet_ready`.
+  - `green_verified_apply_count=4` from prior verifier artifacts.
+  - Current dry-run artifact had `eligible_count=2`, `blocked_count=0`, `skipped_count=3`.
+  - `read_only=true`, `mutated=false`.
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-packet-20260516T152736Z/operator-packet.json`.
+  - Gate passed: `remember_preference_bounded_batch_packet_ready_for_exact_manual_apply`.
+  - Candidate inventory: `eligible_count=2`, `selected_preview_count=2`, `max_apply=2`.
+  - `apply_executed=false`, `apply_supported=false`, `mutated=false`.
 
 Verification run from source checkout:
 
-- Focused: `13 passed, 158 deselected` for remember-preferences / ordinary-turn readiness coverage.
-- Full: `353 passed, 1 xfailed`.
-- Release metadata smoke: package/module version `0.1.162`.
-- Runtime smoke: Python and npm bootstrap/doctor `status=ok` in an isolated HOME.
-- `npm pack --dry-run` completed for `@cafitac/agent-memory@0.1.162`.
+- New focused tests: `2 passed` after RED parser failures.
+- Remember-preferences focused coverage: `9 passed, 164 deselected`.
+- Full suite: `355 passed, 1 xfailed`.
+- Release metadata and release-readiness smoke passed on `0.1.162`.
+- `npm pack --dry-run` passed.
 - `git diff --check` passed.
 
 Current interpretation:
 
 - Safety-gated operational north-star remains approximately 99%.
-- Literal fully autonomous human-brain-like memory is approximately 97-98% for the currently scoped local memory lifecycle: explicit remember-intent preference consolidation can now record evidence, apply low-risk preferences one at a time, verify after each mutation, and drain the safe explicit queue without duplicates. This is close to the target for explicitly requested memories, but not yet broad human-like autonomy because ordinary conversation inference, background broad apply, decay/delete, default ranking rollout, and unreviewed promotion remain intentionally blocked.
+- Literal fully autonomous human-brain-like memory is approximately 98% for the currently scoped local memory lifecycle. The system has explicit remember-intent evidence, low-risk preference consolidation, topic-aware conflict checks, one-at-a-time apply, duplicate relation guards, post-apply verifier stops, queue-drain proof, and a manual-only batch operator packet. It is still not 100% because the remaining transitions from reviewed/manual gates to unattended inference and mutation are intentionally blocked.
 
 Next after this slice:
 
 1. Commit/push and watch CI.
-2. Add the next report-first source gate for unattended operation: either an ordinary-turn classifier evaluation harness that stays read-only, or a bounded batch operator packet for remember-preferences now that one-at-a-time verifier proof is green and the explicit queue is drained.
-3. Do not increase `--max-apply`, enable broad/background apply, or infer memories from ordinary turns until separate RED-tested gates prove precision, conflict handling, rollback, and privacy.
-4. Keep default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn inferred approval blocked.
+2. Add a batch-specific remember-preferences post-apply verifier before any live batch use, or add an ordinary-turn classifier/evaluation harness that proves precision without applying inferred memories.
+3. Keep `--max-apply 2` as a packet/template only until the batch verifier and exact operator approval exist.
+4. Keep broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked behind separate RED-tested gates.
 
 ## Checkpoint: preference topic-slot semantics + second bounded G2 auto-approval
 
