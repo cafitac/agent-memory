@@ -1,7 +1,25 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 03:48 KST
+Last updated: 2026-05-17 04:06 KST
+
+## Just completed: ordinary-turn inferred evidence rollup
+
+- Added `dogfood ordinary-turn-inferred-evidence-rollup`, a read-only aggregate gate over repeated ordinary-turn inferred post-apply verifier artifacts.
+- It validates repeated verifier reports for green quality gates, one-at-a-time apply evidence, backup SHA evidence, rollback replay, audit row, relation evidence, privacy safety, policy match, default retrieval unchanged, and no forbidden authority.
+- Validation: RED invalid subcommand; focused GREEN `2 passed, 188 deselected`; broader ordinary-turn GREEN `17 passed, 173 deselected`; full suite GREEN `372 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.9-99.93%.
+- Remaining gap: explicit broader-automation design and independently repeated one-at-a-time evidence before default/background ordinary-turn automation. Ordinary-turn auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this rollup checkpoint and watch CI.
+2. Collect another copy/live-safe one-at-a-time ordinary-turn inferred apply + post-apply verification artifact only when there is a clearly eligible non-secret preference-shaped ordinary turn and fresh exact approval.
+3. Design any broader ordinary-turn automation as a separate explicit gate; do not broaden to default/background ordinary conversation auto-approval.
 
 ## Just completed: ordinary-turn inferred post-apply verification
 

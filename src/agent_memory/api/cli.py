@@ -8184,6 +8184,137 @@ def _dogfood_ordinary_turn_inferred_post_apply_verification_payload(args: argpar
     return payload
 
 
+def _dogfood_ordinary_turn_inferred_evidence_rollup_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_green_reports < 1:
+        raise ValueError("dogfood ordinary-turn-inferred-evidence-rollup --min-green-reports must be >= 1")
+    blocked_reasons: list[str] = []
+    green_report_count = 0
+    applied_memory_count = 0
+    trace_refs: set[str] = set()
+    memory_refs: set[str] = set()
+    verification_artifacts: list[dict[str, Any]] = []
+
+    for report_path in args.post_apply_verification_report:
+        report, artifact = _read_json_artifact_summary(report_path)
+        verification_artifacts.append(artifact)
+        if report is None:
+            blocked_reasons.append("post_apply_verification_report_unreadable")
+            continue
+        if report.get("kind") != "dogfood_ordinary_turn_inferred_post_apply_verification":
+            blocked_reasons.append("post_apply_verification_kind_mismatch")
+        if report.get("read_only") is not True or report.get("mutated") is not False:
+            blocked_reasons.append("post_apply_verification_not_read_only")
+        if report.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("post_apply_verification_default_retrieval_changed")
+        if report.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("post_apply_verification_ordinary_auto_approval_enabled")
+        if report.get("expected_policy") != args.expected_policy:
+            blocked_reasons.append("post_apply_verification_policy_mismatch")
+        quality_gate = report.get("quality_gate", {}) if isinstance(report.get("quality_gate"), dict) else {}
+        report_green = quality_gate.get("pass") is True
+        if not report_green:
+            blocked_reasons.append("post_apply_verification_gate_not_green")
+        privacy = report.get("privacy", {}) if isinstance(report.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+            blocked_reasons.append("post_apply_verification_privacy_not_ref_safe")
+        forbidden = report.get("forbidden_authority", {}) if isinstance(report.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in forbidden.values()):
+            blocked_reasons.append("post_apply_verification_forbidden_authority_granted")
+        apply_report = report.get("apply_report", {}) if isinstance(report.get("apply_report"), dict) else {}
+        applied_count = _safe_int(apply_report.get("applied_count"))
+        if applied_count != 1:
+            blocked_reasons.append("post_apply_verification_exceeds_one_at_a_time_apply")
+        trace_ref = str(apply_report.get("trace_ref") or "")
+        memory_ref = str(apply_report.get("memory_ref") or "")
+        if trace_ref.startswith("experience_trace:"):
+            trace_refs.add(trace_ref)
+        else:
+            blocked_reasons.append("post_apply_verification_trace_ref_invalid")
+        if memory_ref.startswith("fact:"):
+            memory_refs.add(memory_ref)
+        else:
+            blocked_reasons.append("post_apply_verification_memory_ref_invalid")
+        backup_evidence = report.get("backup_evidence", {}) if isinstance(report.get("backup_evidence"), dict) else {}
+        if backup_evidence.get("sha256_matches_file") is not True or backup_evidence.get("content_included") is True:
+            blocked_reasons.append("post_apply_verification_backup_sha_missing")
+        rollback_replay = report.get("rollback_replay_report", {}) if isinstance(report.get("rollback_replay_report"), dict) else {}
+        if rollback_replay.get("pass") is not True or _safe_int(rollback_replay.get("failed_replay_count")) > 0:
+            blocked_reasons.append("post_apply_verification_rollback_replay_not_green")
+        audit = report.get("application_audit", {}) if isinstance(report.get("application_audit"), dict) else {}
+        if audit.get("audit_row_found") is not True:
+            blocked_reasons.append("post_apply_verification_audit_row_missing")
+        relation_evidence = report.get("relation_evidence", {}) if isinstance(report.get("relation_evidence"), dict) else {}
+        if relation_evidence.get("ordinary_turn_relation_found") is not True or relation_evidence.get("relation_ref_safe") is not True:
+            blocked_reasons.append("post_apply_verification_relation_missing")
+        if report_green and applied_count == 1:
+            green_report_count += 1
+            applied_memory_count += applied_count
+
+    report_count = len(args.post_apply_verification_report)
+    if green_report_count < args.min_green_reports:
+        blocked_reasons.append("green_report_count_below_minimum")
+    if report_count < args.min_green_reports:
+        blocked_reasons.append("report_count_below_minimum")
+    if len(trace_refs) != applied_memory_count:
+        blocked_reasons.append("trace_ref_reuse_detected")
+    if len(memory_refs) != applied_memory_count:
+        blocked_reasons.append("memory_ref_reuse_detected")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    ready_for_broader_design = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_inferred_evidence_rollup",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "expected_policy": args.expected_policy,
+        "verification_artifacts": verification_artifacts,
+        "evidence_summary": {
+            "report_count": report_count,
+            "green_report_count": green_report_count,
+            "applied_memory_count": applied_memory_count,
+            "unique_trace_ref_count": len(trace_refs),
+            "unique_memory_ref_count": len(memory_refs),
+            "min_green_reports": args.min_green_reports,
+            "ready_for_broader_design": ready_for_broader_design,
+            "apply_supported": False,
+            "apply_executed": False,
+        },
+        "quality_gate": {
+            "pass": ready_for_broader_design,
+            "blocked_reasons": blocked_unique,
+            "decision": "ordinary_turn_inferred_repeated_evidence_green_for_design_only"
+            if ready_for_broader_design
+            else "collect_more_ordinary_turn_inferred_evidence_before_broader_design",
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+        },
+        "recommended_next_step": "design_broader_ordinary_turn_automation_gate_without_enabling_default_auto_approval"
+        if ready_for_broader_design
+        else "collect_more_one_at_a_time_exact_approved_post_apply_verification_artifacts",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -17788,6 +17919,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--expected-policy", required=True)
     dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--max-applied", type=int, default=1)
     dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_inferred_evidence_rollup_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-inferred-evidence-rollup",
+        help="Roll up repeated ordinary-turn inferred post-apply verifier artifacts as a read-only design gate.",
+    )
+    dogfood_ordinary_turn_inferred_evidence_rollup_parser.add_argument(
+        "--post-apply-verification-report", type=Path, action="append", required=True
+    )
+    dogfood_ordinary_turn_inferred_evidence_rollup_parser.add_argument("--expected-policy", required=True)
+    dogfood_ordinary_turn_inferred_evidence_rollup_parser.add_argument("--min-green-reports", type=int, default=2)
+    dogfood_ordinary_turn_inferred_evidence_rollup_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -19191,6 +19332,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-inferred-post-apply-verification":
             print(json.dumps(_dogfood_ordinary_turn_inferred_post_apply_verification_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-inferred-evidence-rollup":
+            print(json.dumps(_dogfood_ordinary_turn_inferred_evidence_rollup_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

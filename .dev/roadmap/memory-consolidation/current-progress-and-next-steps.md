@@ -1,7 +1,37 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 03:48 KST
+Last updated: 2026-05-17 04:06 KST
+
+## Checkpoint: ordinary-turn inferred evidence rollup
+
+The source checkout now has `dogfood ordinary-turn-inferred-evidence-rollup`, a read-only aggregate gate over repeated `dogfood_ordinary_turn_inferred_post_apply_verification` artifacts.
+
+What changed:
+
+- The command consumes repeated saved post-apply verifier reports plus an expected policy and minimum green-report count.
+- It verifies each artifact is the expected kind, read-only, non-mutating, default-retrieval-safe, ordinary-auto-approval false, policy-matched, quality-gate green, ref/privacy safe, backup/rollback/audit/relation evidenced, and one-at-a-time.
+- It detects insufficient green reports and trace/memory ref reuse across the rollup window.
+- It does not execute apply and reports `read_only=true`, `mutated=false`, `ordinary_conversation_auto_approval=false`, and all broad/default/destructive authority flags false.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-inferred-evidence-rollup` subcommand.
+- Focused GREEN: `2 passed, 188 deselected`.
+- Broader ordinary-turn GREEN: `17 passed, 173 deselected`.
+- Full suite GREEN: `372 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.9-99.93%.
+- Remaining gap: explicit broader-automation design and independently repeated green one-at-a-time evidence before any default/background ordinary conversation auto-approval.
+
+Recommended next work now:
+
+1. Commit/push this rollup checkpoint and watch CI.
+2. Collect another exact-approved one-at-a-time apply + post-apply verifier artifact only if a clearly eligible non-secret preference-shaped ordinary turn exists and the operator explicitly approves the mutation scope.
+3. Design broader ordinary-turn automation as a separate gate; keep default/background ordinary conversation auto-approval blocked.
 
 ## Checkpoint: ordinary-turn inferred post-apply verification
 
