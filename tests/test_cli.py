@@ -11916,6 +11916,155 @@ def test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_ba
 
 
 
+def test_dogfood_lifecycle_candidate_refresh_preview_separates_new_from_promoted_targets(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-refresh-preview.db"
+    output_path = tmp_path / "lifecycle-refresh-preview.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="refresh preview source token=SHOULD_NOT_LEAK",
+    )
+    facts = []
+    for label in ["old promoted", "fresh candidate"]:
+        fact = create_candidate_fact(
+            db_path=db_path,
+            subject_ref=f"refresh {label}",
+            predicate="needs",
+            object_ref_or_value="reinforcement",
+            evidence_ids=[source.id],
+            scope="project:refresh-preview",
+            confidence=0.92,
+        )
+        approve_fact(db_path=db_path, fact_id=fact.id)
+        facts.append(fact)
+        for index in range(3):
+            record_retrieval_observation(
+                db_path,
+                surface="cli",
+                query="SHOULD_NOT_LEAK refresh preview query",
+                preferred_scope="project:refresh-preview",
+                limit=5,
+                statuses=("approved",),
+                retrieval_trace=[_fact_trace(fact.id, label=f"refresh target {label}")],
+                response_mode="verify_first",
+                metadata={"query_preview": "SHOULD_NOT_LEAK", "session_id": f"refresh-{label}-{index}"},
+            )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    persist_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "seed refresh preview candidates",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert persist_result.returncode == 0, persist_result.stderr
+    persisted = json.loads(persist_result.stdout)
+    assert persisted["candidate_count"] == 2
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            "SELECT candidate_id, target_ref FROM g5_trace_candidate_reviews ORDER BY target_ref"
+        ).fetchall()
+        promoted_id = next(str(row["candidate_id"]) for row in rows if row["target_ref"] == f"fact:{facts[0].id}")
+        fresh_id = next(str(row["candidate_id"]) for row in rows if row["target_ref"] == f"fact:{facts[1].id}")
+        connection.execute("UPDATE g5_trace_candidate_reviews SET status = 'promoted' WHERE candidate_id = ?", (promoted_id,))
+        connection.execute("DELETE FROM g5_trace_candidate_reviews WHERE candidate_id = ?", (fresh_id,))
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                backup_path, backup_sha256, rollback_hint_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                promoted_id,
+                "reinforcement_review",
+                f"fact:{facts[0].id}",
+                "g5-lifecycle-reinforcement-apply-v1",
+                "apply_reviewed_reinforcement_marker",
+                "tester",
+                "a" * 64,
+                str(tmp_path / "refresh-backup.db"),
+                "b" * 64,
+                json.dumps({"default_retrieval_mutated": False}),
+            ),
+        )
+    before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-refresh-preview",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_candidate_refresh_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["candidate_kind"] == "reinforcement"
+    assert payload["preview_candidate_count"] == 2
+    assert payload["new_candidate_count"] == 1
+    assert payload["new_unapplied_target_candidate_count"] == 1
+    assert payload["existing_by_status"]["promoted"] == 1
+    assert payload["target_already_applied_count"] == 1
+    assert payload["recommended_next_action"] == "persist_new_lifecycle_candidates_for_review"
+    assert payload["persist_command_preview"][:3] == ["agent-memory", "dogfood", "lifecycle-candidate-persist"]
+    assert payload["privacy"] == {
+        "candidate_json_included": False,
+        "reviewed_payload_included": False,
+        "raw_content_included": False,
+        "raw_query_text_included": False,
+        "sample_values_included": False,
+        "aggregate_or_ref_only": True,
+    }
+    assert _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"]) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
 def test_dogfood_lifecycle_apply_readiness_summarizes_gates_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "lifecycle-apply-readiness.db"
     output_path = tmp_path / "lifecycle-apply-readiness.json"

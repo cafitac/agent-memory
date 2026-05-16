@@ -3,7 +3,7 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-16 11:30 KST
 
-## Checkpoint: lifecycle bounded-batch operator packet source gate
+## Checkpoint: lifecycle bounded-batch operator packet + candidate refresh preview source gates
 
 The source checkout now has a read-only operator packet for the lifecycle bounded-batch corridor. This is the missing pre-apply runbook artifact after the bounded-batch apply command and bounded-batch post-apply verifier: it lets an operator see whether graduation proof, apply readiness, candidate inventory, exact command arguments, backup/output placeholders, and post-apply verification are all aligned before any mutation.
 
@@ -20,6 +20,12 @@ What changed:
   - safety exclusions for ordinary auto-approval, broad/background apply, default retrieval migration, collapse/delete, telemetry reset, unreviewed promotion, and apply without exact operator approval.
 - Live smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-batch-operator-packet-20260516T022916Z/lifecycle-bounded-batch-operator-packet.json`.
 - Live result: graduation readiness passed (`prior_one_at_a_time_apply_count=4`), but apply readiness and candidate inventory blocked the packet because `approved_eligible_count=0`. No live batch apply was executed.
+
+Additional refresh preview slice:
+
+- Added `dogfood lifecycle-candidate-refresh-preview`, a read-only source gate that separates fresh lifecycle preview candidates from existing review rows and already-applied/promoted target refs.
+- Live reinforcement refresh artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-refresh-preview-20260516T025334Z/lifecycle-candidate-refresh-preview-reinforcement.json`.
+- Live result: preview still found four reinforcement-shaped candidates, but all four target refs were already applied; `new_unapplied_target_candidate_count=0`, so candidate persistence remains blocked until genuinely fresh unapplied dogfood evidence appears.
 
 Current interpretation:
 

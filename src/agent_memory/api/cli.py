@@ -3524,6 +3524,145 @@ def _dogfood_lifecycle_candidate_persist_payload(args: argparse.Namespace) -> di
     return payload
 
 
+def _dogfood_lifecycle_candidate_refresh_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    preview, candidates = _lifecycle_preview_for_kind(
+        args.db_path,
+        candidate_kind=args.candidate_kind,
+        limit=args.limit,
+        top=args.top,
+        frequent_threshold=args.frequent_threshold,
+        min_decay_score=args.min_decay_score,
+    )
+    proposal_type = f"{args.candidate_kind}_review"
+    source_preview_sha256 = hashlib.sha256(json.dumps(preview, sort_keys=True).encode("utf-8")).hexdigest()
+    candidate_refs = [
+        (
+            _lifecycle_candidate_id(args.candidate_kind, candidate),
+            _lifecycle_candidate_target_ref(args.candidate_kind, candidate),
+        )
+        for candidate in candidates
+    ]
+    candidate_ids = [candidate_id for candidate_id, _target_ref in candidate_refs]
+    target_refs = [target_ref for _candidate_id, target_ref in candidate_refs if target_ref]
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        existing_rows = connection.execute(
+            f"""
+            SELECT candidate_id, status, target_ref
+            FROM g5_trace_candidate_reviews
+            WHERE candidate_kind = ? AND proposal_type = ?
+              AND candidate_id IN ({','.join(['?'] * len(candidate_ids))})
+            """
+            if candidate_ids
+            else """
+            SELECT candidate_id, status, target_ref
+            FROM g5_trace_candidate_reviews
+            WHERE 0
+            """,
+            (args.candidate_kind, proposal_type, *candidate_ids) if candidate_ids else (),
+        ).fetchall()
+        applied_rows = connection.execute(
+            f"""
+            SELECT DISTINCT promoted_ref
+            FROM g5_trace_candidate_applications
+            WHERE promoted_ref IN ({','.join(['?'] * len(target_refs))})
+            """
+            if target_refs
+            else """
+            SELECT DISTINCT promoted_ref
+            FROM g5_trace_candidate_applications
+            WHERE 0
+            """,
+            tuple(target_refs),
+        ).fetchall()
+    existing_by_id = {str(row["candidate_id"]): dict(row) for row in existing_rows}
+    applied_targets = {str(row["promoted_ref"]) for row in applied_rows if row["promoted_ref"]}
+    existing_by_status = Counter(str(row["status"]) for row in existing_rows)
+    new_candidate_ids = [candidate_id for candidate_id in candidate_ids if candidate_id not in existing_by_id]
+    new_unapplied_candidate_ids = [
+        candidate_id
+        for candidate_id, target_ref in candidate_refs
+        if candidate_id not in existing_by_id and target_ref not in applied_targets
+    ]
+    target_already_applied_count = sum(1 for _candidate_id, target_ref in candidate_refs if target_ref in applied_targets)
+    blocked_reasons: list[str] = []
+    if preview.get("quality_gate", {}).get("pass") is not True:
+        blocked_reasons.append("source_preview_quality_gate_not_green")
+    if not new_candidate_ids:
+        blocked_reasons.append("no_new_lifecycle_candidates")
+    if not new_unapplied_candidate_ids:
+        blocked_reasons.append("no_new_unapplied_target_lifecycle_candidates")
+    persist_command_preview = [
+        "agent-memory",
+        "dogfood",
+        "lifecycle-candidate-persist",
+        str(args.db_path.expanduser().resolve(strict=False)),
+        "--candidate-kind",
+        args.candidate_kind,
+        "--actor",
+        "<reviewer>",
+        "--reason",
+        "<operator-private-reason>",
+        "--limit",
+        str(args.limit),
+        "--top",
+        str(args.top),
+        "--frequent-threshold",
+        str(args.frequent_threshold),
+    ]
+    if args.candidate_kind == "decay":
+        persist_command_preview.extend(["--min-decay-score", str(args.min_decay_score)])
+    payload = {
+        "kind": "dogfood_lifecycle_candidate_refresh_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "apply_executed": False,
+        "candidate_kind": args.candidate_kind,
+        "db_path": str(args.db_path.expanduser().resolve(strict=False)),
+        "source_preview_kind": preview.get("kind"),
+        "source_preview_sha256": source_preview_sha256,
+        "preview_candidate_count": len(candidate_ids),
+        "new_candidate_count": len(new_candidate_ids),
+        "new_unapplied_target_candidate_count": len(new_unapplied_candidate_ids),
+        "existing_candidate_count": len(existing_rows),
+        "existing_by_status": dict(sorted(existing_by_status.items())),
+        "target_already_applied_count": target_already_applied_count,
+        "candidate_ids_included": False,
+        "target_refs_included": False,
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "decision": "new_lifecycle_candidates_ready_for_review_persistence"
+            if not blocked_reasons
+            else "no_new_lifecycle_review_persistence_ready",
+            "blocked_reasons": blocked_reasons,
+        },
+        "persist_command_preview": persist_command_preview,
+        "recommended_next_action": "persist_new_lifecycle_candidates_for_review"
+        if new_unapplied_candidate_ids
+        else "wait_for_fresh_unapplied_dogfood_evidence_or_adjust_thresholds",
+        "safety_exclusions": {
+            "candidate_approval": False,
+            "candidate_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply": False,
+            "default_retrieval_migration": False,
+            "unreviewed_promotion": False,
+        },
+        "privacy": {
+            "candidate_json_included": False,
+            "reviewed_payload_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_list_payload(args: argparse.Namespace) -> dict[str, Any]:
     with sqlite3.connect(args.db_path) as connection:
         connection.row_factory = sqlite3.Row
@@ -14726,6 +14865,19 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_persist_parser.add_argument("--top", type=int, default=20)
     dogfood_lifecycle_candidate_persist_parser.add_argument("--frequent-threshold", type=int, default=3)
     dogfood_lifecycle_candidate_persist_parser.add_argument("--min-decay-score", type=float, default=0.5)
+    dogfood_lifecycle_candidate_refresh_preview_parser = dogfood_subparsers.add_parser(
+        "lifecycle-candidate-refresh-preview",
+        help="Preview fresh lifecycle candidates and separate them from existing/promoted review rows without mutation.",
+    )
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument(
+        "--candidate-kind", required=True, choices=["reinforcement", "decay", "supersession"]
+    )
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--top", type=int, default=20)
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
+    dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--min-decay-score", type=float, default=0.5)
     dogfood_lifecycle_candidate_list_parser = dogfood_subparsers.add_parser(
         "lifecycle-candidate-list",
         help="List persisted lifecycle candidates without raw candidate/review payloads.",
@@ -16153,6 +16305,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-persist":
             print(json.dumps(_dogfood_lifecycle_candidate_persist_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-candidate-refresh-preview":
+            print(json.dumps(_dogfood_lifecycle_candidate_refresh_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-candidate-list":
             if args.limit < 1:

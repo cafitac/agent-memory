@@ -3,9 +3,16 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-16 11:30 KST
 
-## Checkpoint: lifecycle bounded-batch operator packet
+## Checkpoint: lifecycle bounded-batch operator packet + candidate refresh preview
 
 A read-only pre-apply operator packet now exists for the exact-approved lifecycle bounded-batch corridor. It bridges the gap between the source-level bounded-batch apply command and the bounded-batch post-apply verifier by producing one machine-readable packet with graduation status, apply readiness, candidate inventory, command preview, and verification template.
+
+
+A second read-only refresh preview source gate now exists for candidate generation hygiene. It reports preview candidates, existing review rows by status, target refs already applied, and the count of new candidates whose targets have not already been applied. Live reinforcement refresh is correctly blocked because all four current preview targets have already been applied (`new_unapplied_target_candidate_count=0`).
+
+Refresh artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-refresh-preview-20260516T025334Z/lifecycle-candidate-refresh-preview-reinforcement.json`.
 
 Live artifact:
 
@@ -27,7 +34,7 @@ Current interpretation:
 Next after this slice:
 
 1. Commit/push and watch CI.
-2. Implement fresh lifecycle candidate refresh/separation from new dogfood evidence so promoted candidates are not recycled and new reviewable candidates can enter the queue.
+2. Implement target-aware persistence/evidence novelty scoring so already-applied targets are not requeued and genuinely fresh dogfood evidence can become reviewable candidates.
 3. Then use the operator packet to prove when a bounded live batch is truly ready.
 4. Still forbidden without separate gates: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 

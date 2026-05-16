@@ -3,7 +3,7 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-16 11:30 KST
 
-## Just completed: lifecycle bounded-batch operator packet source gate
+## Just completed: lifecycle bounded-batch operator packet + candidate refresh preview source gates
 
 - Added `dogfood lifecycle-bounded-batch-operator-packet`, a read-only machine-readable packet for the exact-approved lifecycle bounded-batch corridor.
 - The packet bundles:
@@ -17,10 +17,14 @@ Last updated: 2026-05-16 11:30 KST
 - Live smoke against `/Users/reddit/.agent-memory/memory.db` wrote `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-batch-operator-packet-20260516T022916Z/lifecycle-bounded-batch-operator-packet.json`.
 - Live packet result: batch graduation is green with four prior one-at-a-time reinforcement applies, but apply readiness is red because there are no eligible approved lifecycle candidates. Therefore bounded live batch apply remains blocked.
 
+- Added `dogfood lifecycle-candidate-refresh-preview`, a read-only duplicate/recycle gate for fresh lifecycle candidate generation.
+- Live refresh preview artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-candidate-refresh-preview-20260516T025334Z/lifecycle-candidate-refresh-preview-reinforcement.json`.
+- Live result: `preview_candidate_count=4`, `new_candidate_count=4`, but `new_unapplied_target_candidate_count=0` and `target_already_applied_count=4`; therefore these are not safe to persist/review as fresh work.
+
 Recommended next work now:
 
 1. Commit/push this operator packet source/docs checkpoint and watch CI.
-2. Next PR-sized source slice: generate/persist fresh lifecycle candidates from fresh dogfood evidence with duplicate/promoted-candidate separation, so the batch packet can eventually become green with new reviewed approved candidates.
+2. Next PR-sized source slice: add target-aware persistence or evidence novelty scoring so already-applied target refs cannot be requeued and truly fresh dogfood evidence can create reviewable candidates.
 3. Do not live-batch-apply until the operator packet is green, candidates are reviewed approved, backup/output paths are set, exact approval phrases are supplied, and immediate post-apply verification is run.
 4. Still blocked: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
