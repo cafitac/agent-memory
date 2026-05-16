@@ -4087,6 +4087,148 @@ def _dogfood_lifecycle_batch_graduation_readiness_payload(args: argparse.Namespa
     return payload
 
 
+def _dogfood_lifecycle_bounded_batch_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.batch_approval_phrase != "apply-approved-g5-lifecycle-bounded-batch-v1":
+        raise ValueError(
+            "dogfood lifecycle-bounded-batch-apply requires --batch-approval-phrase "
+            "apply-approved-g5-lifecycle-bounded-batch-v1"
+        )
+    if args.max_apply < 1 or args.max_apply > 2:
+        raise ValueError("dogfood lifecycle-bounded-batch-apply requires 1 <= --max-apply <= 2")
+    graduation = _dogfood_lifecycle_batch_graduation_readiness_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            policy=args.policy,
+            min_prior_applies=args.min_prior_applies,
+            output=None,
+        )
+    )
+    if not graduation["quality_gate"]["pass"]:
+        return {
+            "kind": "dogfood_lifecycle_bounded_batch_apply",
+            "read_only": True,
+            "mutated": False,
+            "default_retrieval_unchanged": True,
+            "ordinary_conversation_auto_approval": False,
+            "policy": args.policy,
+            "quality_gate": graduation["quality_gate"],
+            "bounded_batch_apply": {
+                "policy": args.policy,
+                "max_apply": args.max_apply,
+                "applied_count": 0,
+                "graduation_gate_pass": False,
+                "broad_background_apply_allowed": False,
+            },
+            "forbidden_authority": {
+                "ordinary_conversation_auto_approval": False,
+                "broad_background_apply_allowed": False,
+                "unreviewed_promotion_allowed": False,
+            },
+        }
+    policy_contracts = {
+        contract["policy"]: {"candidate_kind": kind, "proposal_type": contract["proposal_type"]}
+        for kind, contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.items()
+    }
+    contract = policy_contracts.get(args.policy)
+    if contract is None:
+        expected = ", ".join(sorted(policy_contracts))
+        raise ValueError(f"dogfood lifecycle-bounded-batch-apply requires --policy one of: {expected}")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id
+            FROM g5_trace_candidate_reviews
+            WHERE status = 'approved' AND candidate_kind = ? AND proposal_type = ?
+            ORDER BY updated_at, candidate_id
+            """,
+            (contract["candidate_kind"], contract["proposal_type"]),
+        ).fetchall()
+        existing_rows = connection.execute(
+            "SELECT candidate_id FROM g5_trace_candidate_applications WHERE policy = ?",
+            (args.policy,),
+        ).fetchall()
+    already_applied = {str(row["candidate_id"]) for row in existing_rows}
+    candidate_ids = [str(row["candidate_id"]) for row in rows if str(row["candidate_id"]) not in already_applied][: args.max_apply]
+    if not candidate_ids:
+        payload = {
+            "kind": "dogfood_lifecycle_bounded_batch_apply",
+            "read_only": True,
+            "mutated": False,
+            "default_retrieval_unchanged": True,
+            "ordinary_conversation_auto_approval": False,
+            "policy": args.policy,
+            "quality_gate": {"pass": False, "decision": "no_approved_lifecycle_candidates_for_bounded_batch", "blocked_reasons": ["no_eligible_approved_lifecycle_candidates"]},
+            "bounded_batch_apply": {
+                "policy": args.policy,
+                "max_apply": args.max_apply,
+                "applied_count": 0,
+                "graduation_gate_pass": True,
+                "broad_background_apply_allowed": False,
+            },
+        }
+        _write_json_report(args.output, payload)
+        return payload
+    apply_payload = _dogfood_lifecycle_candidate_apply_payload(
+        argparse.Namespace(
+            db_path=args.db_path,
+            candidate_id=candidate_ids,
+            policy=args.policy,
+            approval_phrase=args.approval_phrase,
+            actor=args.actor,
+            reason=args.reason,
+            backup_path=args.backup_path,
+            output=None,
+        )
+    )
+    applied_count = len([item for item in apply_payload.get("applied", []) if item.get("inserted")])
+    payload = {
+        "kind": "dogfood_lifecycle_bounded_batch_apply",
+        "read_only": False,
+        "mutated": bool(apply_payload.get("mutated")),
+        "default_retrieval_unchanged": bool(apply_payload.get("default_retrieval_unchanged")),
+        "ordinary_conversation_auto_approval": False,
+        "policy": args.policy,
+        "batch_approval_phrase_matched": True,
+        "graduation_readiness": {
+            "pass": True,
+            "prior_one_at_a_time_apply_count": graduation["prior_one_at_a_time_apply_count"],
+            "min_prior_applies": graduation["min_prior_applies"],
+        },
+        "bounded_batch_apply": {
+            "policy": args.policy,
+            "max_apply": args.max_apply,
+            "applied_count": applied_count,
+            "graduation_gate_pass": True,
+            "broad_background_apply_allowed": False,
+        },
+        "apply_payload": apply_payload,
+        "quality_gate": {
+            "pass": applied_count <= args.max_apply and applied_count > 0,
+            "decision": "bounded_lifecycle_batch_apply_completed_with_stop_gate_required",
+            "blocked_reasons": [] if applied_count <= args.max_apply and applied_count > 0 else ["bounded_batch_apply_count_invalid"],
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "candidate_json_included": False,
+            "backup_content_included": False,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     policy_contracts = {
         contract["policy"]: {
@@ -14195,6 +14337,20 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_apply_parser.add_argument("--reason", required=True)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_bounded_batch_apply_parser = dogfood_subparsers.add_parser(
+        "lifecycle-bounded-batch-apply",
+        help="Apply a small bounded batch of already-approved lifecycle candidates after graduation proof and exact approval.",
+    )
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--policy", required=True)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--batch-approval-phrase", required=True)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--actor", required=True)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--reason", required=True)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--max-apply", type=int, default=2)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--min-prior-applies", type=int, default=4)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--output", type=Path)
     dogfood_lifecycle_apply_readiness_parser = dogfood_subparsers.add_parser(
         "lifecycle-apply-readiness",
         help="Summarize reviewed lifecycle apply eligibility across reinforcement/decay/supersession without mutation.",
@@ -15564,6 +15720,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-apply":
             print(json.dumps(_dogfood_lifecycle_candidate_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-bounded-batch-apply":
+            print(json.dumps(_dogfood_lifecycle_bounded_batch_apply_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-apply-readiness":
             print(json.dumps(_dogfood_lifecycle_apply_readiness_payload(args), indent=2))

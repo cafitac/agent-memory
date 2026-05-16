@@ -21,18 +21,19 @@ What happened:
 - Post-apply live evidence bundle passed with `fixture_task_count=4`, baseline regressions `0`, rollback checked applications `7`, and audit application count `4`.
 - `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
 - New source command `dogfood lifecycle-batch-graduation-readiness` passed on the live DB for `g5-lifecycle-reinforcement-apply-v1` with `prior_one_at_a_time_apply_count=4`, but reports `bounded_batch_apply_supported=false` and `requires_separate_exact_approval_corridor=true`.
+- New source command `dogfood lifecycle-bounded-batch-apply` provides the separate exact-approval corridor with `--max-apply <= 2`; source tests cover a two-candidate batch after graduation proof. Live smoke returned `no_eligible_approved_lifecycle_candidates` without mutation because the current initial queue is exhausted.
 
 Current interpretation:
 
 - Safety-gated operational north-star is now approximately 97-98%.
-- Literal fully autonomous human-brain-like memory is approximately 78-80%: the system has repeated live reviewed lifecycle mutation proof and a batch-graduation readiness classifier, but risky mutation still requires explicit reviewed gates and no batch apply implementation exists yet.
+- Literal fully autonomous human-brain-like memory is approximately 80-82%: the system has repeated live reviewed lifecycle mutation proof, a batch-graduation readiness classifier, and a bounded batch corridor in source, but risky mutation still requires exact reviewed approval and a batch-specific post-apply verifier is the next gap.
 
 Immediate next recommended slice:
 
-1. Commit/push the fourth live apply plus `lifecycle-batch-graduation-readiness` source/test/docs checkpoint and watch CI.
-2. Next code slice should implement a separate bounded lifecycle batch apply corridor for already-approved lifecycle candidates only, with exact policy/approval phrase, actor/reason, backup, `--max-apply` ceiling, post-apply verification, and repeated-apply prevention.
+1. Commit/push the fourth live apply plus `lifecycle-batch-graduation-readiness` and `lifecycle-bounded-batch-apply` source/test/docs checkpoint and watch CI.
+2. Next code slice should implement a bounded-batch post-apply verifier/report with backup/rollback evidence, `applied_count <= max_apply`, default retrieval unchanged, and repeated-apply prevention checks.
 3. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
-4. Do not infer broad automation from the green graduation-readiness gate; it only authorizes designing/testing the next exact-approval corridor.
+4. Do not live-batch-apply from the green no-op smoke; live batch apply requires reviewed approved candidates and the batch post-apply verifier.
 
 ## Checkpoint: third live exact-approved reinforcement lifecycle apply
 

@@ -18,13 +18,14 @@ Last updated: 2026-05-16 10:41 KST
 - Post-apply live evidence bundle passed: fixture task count `4`, baseline regressions `0`, rollback checked applications `7`, audit application count `4`.
 - `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
 - Added `dogfood lifecycle-batch-graduation-readiness`, a read-only source gate. Live run passed for the reinforcement policy with four prior one-at-a-time applies, while keeping `bounded_batch_apply_supported=false`.
+- Added `dogfood lifecycle-bounded-batch-apply`, an exact-approval bounded batch corridor with `--max-apply <= 2`; source tests prove it can apply two already-approved lifecycle candidates after graduation proof. Live smoke was a safe no-op because there are currently no eligible approved lifecycle candidates.
 
 Recommended next work now:
 
-1. Commit/push this fourth live apply and batch-graduation-readiness checkpoint; watch CI.
-2. Next PR-sized code slice: implement a separate bounded lifecycle batch apply corridor for already-approved lifecycle candidates only. Required guardrails: exact policy/approval phrase, actor/reason, backup, `--max-apply` ceiling, post-apply verification, no ordinary conversation auto-approval, no broad/background apply.
-3. Do not live-batch-apply anything until the separate RED-tested corridor exists and there are reviewed approved candidates for it.
-4. Keep default-ranking auto-rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+1. Commit/push this fourth live apply, batch-graduation-readiness, and bounded-batch-apply checkpoint; watch CI.
+2. Next PR-sized code slice: add a bounded-batch post-apply verifier/report that validates batch apply artifacts, backup/rollback, candidate count <= `--max-apply`, and default retrieval unchanged.
+3. Do not live-batch-apply anything until there are reviewed approved candidates and the new batch post-apply verifier exists.
+4. Keep default-ranking auto-rollout, collapse/delete, telemetry reset, ordinary conversation auto-approval, broad/background apply, and unreviewed promotion blocked.
 
 ## Just completed: third live exact-approved reinforcement lifecycle apply
 

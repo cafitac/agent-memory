@@ -12315,6 +12315,146 @@ def test_dogfood_lifecycle_batch_graduation_readiness_reports_prior_one_at_a_tim
     assert _table_counts(db_path, ["g5_trace_candidate_applications", "facts", "relations"]) == before_counts
 
 
+def test_dogfood_lifecycle_bounded_batch_apply_requires_graduation_and_max_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-bounded-batch.db"
+    output_path = tmp_path / "lifecycle-bounded-batch.json"
+    backup_path = tmp_path / "lifecycle-bounded-batch-backup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(db_path=db_path, source_type="note", content="batch apply source token=SHOULD_NOT_LEAK")
+    first = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="batch fact one",
+        predicate="needs",
+        object_ref_or_value="reinforcement",
+        evidence_ids=[source.id],
+        scope="project:batch",
+        confidence=0.9,
+    )
+    second = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="batch fact two",
+        predicate="needs",
+        object_ref_or_value="reinforcement",
+        evidence_ids=[source.id],
+        scope="project:batch",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=first.id)
+    approve_fact(db_path=db_path, fact_id=second.id)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "dogfood", "lifecycle-apply-readiness", str(db_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    with sqlite3.connect(db_path) as connection:
+        for index in range(4):
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_applications (
+                    candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                    backup_path, backup_sha256, rollback_hint_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"prior-proof-{index}",
+                    "reinforcement_review",
+                    f"fact:{index + 10}",
+                    "g5-lifecycle-reinforcement-apply-v1",
+                    "apply_reviewed_reinforcement_marker",
+                    "tester",
+                    "a" * 64,
+                    str(tmp_path / f"prior-backup-{index}.db"),
+                    "b" * 64,
+                    json.dumps({"default_retrieval_mutated": False}),
+                ),
+            )
+        for candidate_id, fact_id in [("batch-candidate-one", first.id), ("batch-candidate-two", second.id)]:
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_reviews (
+                    candidate_id, status, proposal_type, target_ref, cluster_json, cluster_sha256,
+                    reviewed_json, actor, reason_sha256, audit_json, candidate_kind
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    candidate_id,
+                    "approved",
+                    "reinforcement_review",
+                    f"fact:{fact_id}",
+                    json.dumps({"memory_ref": f"fact:{fact_id}", "raw_secret": "SHOULD_NOT_LEAK"}, sort_keys=True),
+                    hashlib.sha256(candidate_id.encode()).hexdigest(),
+                    json.dumps({"reviewed": True}),
+                    "tester",
+                    "c" * 64,
+                    json.dumps([]),
+                    "reinforcement",
+                ),
+            )
+    before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-bounded-batch-apply",
+            str(db_path),
+            "--policy",
+            "g5-lifecycle-reinforcement-apply-v1",
+            "--approval-phrase",
+            "apply-approved-g5-lifecycle-reinforcement-v1",
+            "--batch-approval-phrase",
+            "apply-approved-g5-lifecycle-bounded-batch-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "bounded batch exact approval",
+            "--max-apply",
+            "2",
+            "--backup-path",
+            str(backup_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_bounded_batch_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["bounded_batch_apply"] == {
+        "policy": "g5-lifecycle-reinforcement-apply-v1",
+        "max_apply": 2,
+        "applied_count": 2,
+        "graduation_gate_pass": True,
+        "broad_background_apply_allowed": False,
+    }
+    assert payload["apply_payload"]["mutated"] is True
+    assert len(payload["apply_payload"]["applied"]) == 2
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert payload["forbidden_authority"]["broad_background_apply_allowed"] is False
+    assert backup_path.exists()
+    after_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"])
+    assert after_counts["facts"] == before_counts["facts"]
+    assert after_counts["relations"] == before_counts["relations"]
+    assert after_counts["g5_trace_candidate_reviews"] == before_counts["g5_trace_candidate_reviews"]
+    assert after_counts["g5_trace_candidate_applications"] == before_counts["g5_trace_candidate_applications"] + 2
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
 def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:
