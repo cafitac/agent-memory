@@ -10621,6 +10621,78 @@ def test_consolidation_auto_approve_remember_preferences_is_default_dry_run_with
         assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 0
 
 
+def test_consolidation_auto_approve_remember_preferences_apply_defaults_to_one_candidate_per_run(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-auto-approve-max-apply.db"
+    initialize_database(db_path)
+    for index, summary in enumerate(
+        [
+            "User prefers concise Korean handoffs.",
+            "User prefers verified release QA.",
+        ]
+    ):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=f"{index}" * 64,
+            summary=summary,
+            scope="project:g2",
+            session_ref=f"session:auto-max-{index}",
+            salience=1.0,
+            user_emphasis=1.0,
+            retention_policy="review",
+            metadata={
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+            },
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 bounded apply test",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["apply"] is True
+    assert payload["max_apply"] == 1
+    assert payload["eligible_count"] == 1
+    assert payload["approved_count"] == 1
+    assert payload["deferred_count"] == 1
+    assert payload["deferred"][0]["reason_codes"] == ["max_apply_deferred"]
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 1
+
+
 def test_consolidation_auto_approve_remember_preferences_apply_is_guarded_and_audited(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-apply.db"
     initialize_database(db_path)
@@ -10732,6 +10804,42 @@ def test_consolidation_auto_approve_remember_preferences_apply_is_guarded_and_au
             "SELECT from_ref, relation_type, to_ref FROM relations"
         ).fetchone()
         assert relation == (f"experience_trace:{safe_trace.id}", "auto_approved_as", f"fact:{fact_row[0]}")
+
+    rerun = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 guarded auto-approval duplicate test",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert rerun.returncode != 0
+    rerun_payload = json.loads(rerun.stdout)
+    assert rerun_payload["approved_count"] == 0
+    assert rerun_payload["skipped_count"] == 1
+    assert rerun_payload["skipped"][0]["reason_codes"] == ["already_auto_approved"]
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 1
 
 
 def test_consolidation_auto_approve_remember_preferences_blocks_conflicts_without_mutation(tmp_path: Path) -> None:

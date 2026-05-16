@@ -212,6 +212,18 @@ def _remember_preference_object_from_summary(summary: str | None) -> str | None:
 
 
 def _remember_preference_auto_approval_candidate(db_path: Path, trace: Any, *, scope: str) -> dict[str, Any]:
+    trace_ref = f"experience_trace:{trace.id}" if trace.id is not None else None
+    if trace_ref is not None:
+        for relation in list_relations_for_node(db_path, node_ref=trace_ref):
+            if relation.from_ref == trace_ref and relation.relation_type == "auto_approved_as":
+                return {
+                    "trace_id": trace.id,
+                    "scope": trace.scope,
+                    "decision": "skipped",
+                    "reason_codes": ["already_auto_approved"],
+                    "memory_ref": relation.to_ref,
+                    "relation_id": relation.id,
+                }
     reason_codes: list[str] = []
     proposed_object = _remember_preference_object_from_summary(trace.summary)
     if trace.event_kind != "remember_intent":
@@ -273,20 +285,45 @@ def _remember_preference_auto_approval_report(
     actor: str | None,
     reason: str | None,
     limit: int,
+    max_apply: int,
 ) -> dict[str, Any]:
     if policy not in _REMEMBER_PREFERENCE_POLICIES:
         raise ValueError("unsupported auto-approval policy")
     if not scope:
         raise ValueError("--scope is required for remember preference auto-approval")
+    if max_apply < 1:
+        raise ValueError("--max-apply must be >= 1")
     if apply and (not actor or not reason):
         raise ValueError("--apply requires --actor and --reason for audit history")
     traces = list_experience_traces(db_path, limit=limit, event_kind="remember_intent")
     candidates: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
     approved: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     trace_by_id = {trace.id: trace for trace in traces}
     for trace in traces:
+        if apply and len(approved) >= max_apply:
+            proposed_object = _remember_preference_object_from_summary(trace.summary)
+            if (
+                trace.scope == scope
+                and _remember_intent_trace_is_review_ready(trace)
+                and proposed_object is not None
+                and not _contains_secret_like_report_text(trace.summary)
+            ):
+                deferred.append(
+                    {
+                        "trace_id": trace.id,
+                        "scope": trace.scope,
+                        "decision": "deferred",
+                        "reason_codes": ["max_apply_deferred"],
+                    }
+                )
+                continue
         candidate = _remember_preference_auto_approval_candidate(db_path, trace, scope=scope)
+        if candidate["decision"] == "skipped":
+            skipped.append(candidate)
+            continue
         if candidate["decision"] == "blocked":
             if "not_review_ready" in candidate["reason_codes"] and candidate["reason_codes"] != ["secret_like_summary"]:
                 continue
@@ -296,6 +333,16 @@ def _remember_preference_auto_approval_report(
             preview = dict(candidate)
             preview["decision"] = "would_approve"
             candidates.append(preview)
+            continue
+        if len(approved) >= max_apply:
+            deferred.append(
+                {
+                    "trace_id": candidate["trace_id"],
+                    "scope": candidate["scope"],
+                    "decision": "deferred",
+                    "reason_codes": ["max_apply_deferred"],
+                }
+            )
             continue
         trace_for_apply = trace_by_id[candidate["trace_id"]]
         proposed_fact = candidate["proposed_fact"]
@@ -358,12 +405,17 @@ def _remember_preference_auto_approval_report(
         "default_retrieval_unchanged": not mutated,
         "scope": scope,
         "limit": limit,
+        "max_apply": max_apply,
         "eligible_count": len(candidates) if not apply else len(approved),
         "approved_count": len(approved),
         "blocked_count": len(blocked),
+        "deferred_count": len(deferred),
+        "skipped_count": len(skipped),
         "candidates": candidates,
         "approved": approved,
         "blocked": blocked,
+        "deferred": deferred,
+        "skipped": skipped,
         "guardrails": {
             "default_off": True,
             "requires_apply": True,
@@ -15263,6 +15315,12 @@ def _build_parser() -> argparse.ArgumentParser:
     consolidation_auto_remember_parser.add_argument("--actor")
     consolidation_auto_remember_parser.add_argument("--reason")
     consolidation_auto_remember_parser.add_argument("--limit", type=int, default=200)
+    consolidation_auto_remember_parser.add_argument(
+        "--max-apply",
+        type=int,
+        default=1,
+        help="Maximum remember-preference traces to approve in one apply run. Defaults to 1 for stop-after-one safety.",
+    )
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -16780,9 +16838,12 @@ def main() -> None:
                 actor=args.actor,
                 reason=args.reason,
                 limit=args.limit,
+                max_apply=args.max_apply,
             )
             print(json.dumps(payload, indent=2))
-            if args.apply and payload["blocked_count"] > 0 and payload["approved_count"] == 0:
+            if args.apply and payload["approved_count"] == 0 and (
+                payload["blocked_count"] > 0 or payload.get("skipped_count", 0) > 0
+            ):
                 sys.exit(1)
             return
         raise ValueError(f"Unsupported consolidation action: {args.consolidation_action}")

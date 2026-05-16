@@ -1,7 +1,45 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 13:49 KST
+Last updated: 2026-05-16 14:40 KST
+
+## Checkpoint: explicit remember-intent evidence + bounded G2 auto-approval smoke
+
+The live source DB now has the missing explicit remember-intent evidence that previously kept ordinary-turn readiness red. Five safe `remember_intent` review traces were recorded through the source Hermes hook path, the ordinary-turn readiness gate passed at `--min-explicit-ready 5`, and one narrow preference was auto-approved through the default-off G2 policy after adding stop-after-one and duplicate guards.
+
+Live evidence artifacts:
+
+- G1 remember-intent report: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-intent-evidence-20260516T053416Z/remember-intent-dogfood.json`.
+  - `remember_intent=5`, `review_ready_count=5`, inspected total `300`.
+- Ordinary-turn readiness: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-intent-evidence-20260516T053416Z/ordinary-turn-auto-approval-readiness.json`.
+  - `explicit_remember_intent=5`, `review_ready_remember_intent=5`, `ordinary_turn=995`, quality gate passed with decision `ordinary_turn_auto_approval_readiness_measured_keep_blocked`.
+- G2 dry-run before apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-intent-evidence-20260516T053416Z/remember-preferences-auto-approve-dry-run.json`.
+  - `eligible_count=5`, `mutated=false`.
+- G2 bounded apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/remember-preferences-auto-approve-apply.json`.
+  - `approved_count=1`, `deferred_count=4`, `max_apply=1`, `mutated=true`.
+  - Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/pre-auto-approval-memory-backup.db`.
+- Duplicate-guard post dry-run: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/remember-preferences-auto-approve-post-dry-run-after-duplicate-guard.json`.
+  - `eligible_count=0`, `skipped_count=1`, `blocked_count=4`.
+
+Source hardening added in this checkpoint:
+
+- `consolidation auto-approve remember-preferences` now accepts `--max-apply`, defaulting to `1`.
+- Additional eligible traces are reported as `deferred` instead of being approved in the same run.
+- Already approved traces are detected through `auto_approved_as` relations and reported as `skipped` so repeat apply runs cannot duplicate facts, sources, or relations.
+- Tests cover stop-after-one behavior and duplicate fail-closed behavior.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%.
+- Literal fully autonomous human-brain-like memory is approximately 95-96%: explicit remember-intent evidence, readiness, and a first bounded low-risk auto-approval write now work end-to-end, but generic ordinary-turn inference and broad/background mutation remain intentionally blocked.
+- The remaining meaningful gap is not plumbing; it is safe semantics for multiple independent preferences/procedures and unattended operation without over-broad claim-slot conflicts or duplicate writes.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Add a read-only multi-preference semantics/design gate or narrower claim-slot model so independent preferences can coexist safely.
+3. Only after that, consider a second exact-bounded G2 apply.
+4. Keep broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn inferred approval blocked behind separate gates.
 
 ## Checkpoint: repeated recurrent reinforcement applies + ordinary-turn readiness gate
 

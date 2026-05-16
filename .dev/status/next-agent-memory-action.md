@@ -1,7 +1,31 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 13:49 KST
+Last updated: 2026-05-16 14:40 KST
+
+## Just completed: explicit remember-intent live evidence + first bounded auto-approval
+
+- Recorded five safe source-hook `remember_intent` review traces against `/Users/reddit/.agent-memory/memory.db` from explicit, low-risk operator-approved preference statements. These traces are review-only evidence; they did not by themselves create long-term memories.
+- Live G1 report: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-intent-evidence-20260516T053416Z/remember-intent-dogfood.json`.
+  - `remember_intent=5`, `review_ready_count=5`, `ordinary_turn=295` within the inspected 300 traces.
+- Live ordinary-turn readiness: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-intent-evidence-20260516T053416Z/ordinary-turn-auto-approval-readiness.json`.
+  - `explicit_remember_intent=5`, `review_ready_remember_intent=5`, `ordinary_turn=995`, quality gate passed, but `ordinary_conversation_auto_approval=false` remains mandatory.
+- Hardened `consolidation auto-approve remember-preferences` before live apply:
+  - added `--max-apply` with default `1` stop-after-one behavior;
+  - added `deferred` reporting for additional eligible traces;
+  - added duplicate prevention via existing `experience_trace:<id> --auto_approved_as--> fact:<id>` relations;
+  - re-runs now skip already auto-approved traces instead of duplicating facts/sources/relations.
+- Live bounded G2 apply artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/remember-preferences-auto-approve-apply.json`.
+  - `approved_count=1`, `deferred_count=4`, `max_apply=1`, backup SHA-256 recorded at `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/pre-auto-approval-memory-backup.sha256`.
+- Post-apply duplicate guard dry-run: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-auto-approval-20260516T054022Z/remember-preferences-auto-approve-post-dry-run-after-duplicate-guard.json`.
+  - `eligible_count=0`, `skipped_count=1`, `blocked_count=4`; the remaining four are blocked by the conservative same-slot preference conflict preflight after the first approved preference.
+
+Recommended next work now:
+
+1. Commit/push this bounded remember-preference auto-approval hardening checkpoint and watch CI.
+2. Decide the next safe preference semantics: either keep `subject=user,predicate=prefers,scope=project` as one-slot conservative memory, or design a multi-preference relation/object-slot model that can safely approve multiple independent preferences without treating them as claim-slot conflicts.
+3. Do not enable ordinary conversation auto-approval from generic turns. The only proven live G2 mutation is explicit `remember_intent` + narrow preference shape + `--max-apply 1` + audit/relation duplicate guard.
+4. Still blocked: broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn inferred approval.
 
 ## Just completed: repeated recurrent reinforcement applies + ordinary-turn readiness gate
 

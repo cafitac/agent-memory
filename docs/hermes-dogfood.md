@@ -108,10 +108,11 @@ agent-memory consolidation auto-approve remember-preferences ~/.agent-memory/mem
   --scope user:default \
   --apply \
   --actor "reviewer:local" \
-  --reason "explicit remember preference reviewed for auto-approval"
+  --reason "explicit remember preference reviewed for auto-approval" \
+  --max-apply 1
 ```
 
-Only review-ready `remember_intent` traces in the selected scope whose sanitized summary is shaped like `User prefers ...` or `I prefer ...` are eligible. The policy blocks secret-like summaries, ordinary turns, non-matching scopes, unsupported summary shapes, and claim-slot conflicts. Successful apply writes an approved `fact` with predicate `prefers`, normal status-transition audit history, and an `auto_approved_as` relation from the trace to the fact. Use `review history`, `review explain`, and `graph inspect` to inspect or roll forward with explicit human review; do not treat this policy as broad conversation memory automation.
+Only review-ready `remember_intent` traces in the selected scope whose sanitized summary is shaped like `User prefers ...` or `I prefer ...` are eligible. The apply path defaults to stop-after-one with `--max-apply 1`, reports additional eligible traces as `deferred`, and skips traces that already have an `auto_approved_as` relation so re-runs cannot duplicate the same approval. The policy blocks secret-like summaries, ordinary turns, non-matching scopes, unsupported summary shapes, and claim-slot conflicts. Successful apply writes an approved `fact` with predicate `prefers`, normal status-transition audit history, and an `auto_approved_as` relation from the trace to the fact. Use `review history`, `review explain`, and `graph inspect` to inspect or roll forward with explicit human review; do not treat this policy as broad conversation memory automation.
 
 G3 adds a cron-friendly dry-run wrapper over the existing read-only consolidation/activation diagnostics:
 
