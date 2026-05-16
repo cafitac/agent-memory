@@ -1,7 +1,23 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:32 KST
+Last updated: 2026-05-16 12:55 KST
+
+## Just completed: lifecycle refresh source-novelty scoring
+
+- Tightened `dogfood lifecycle-candidate-refresh-preview` with aggregate-only source-level novelty scoring.
+- The preview now distinguishes genuinely new unapplied targets from fresh post-apply evidence that only recycles already-applied targets.
+- The scoring remains read-only/no-mutation/default-unchanged and does not emit candidate ids, target refs, raw observation values, raw query text, query previews, source text, or backup contents.
+- Also fixed the lifecycle bounded-batch operator packet nested artifact gate metadata so nested `mutated` reflects the underlying read-only reports instead of inverted boolean checks.
+- Live source-novelty artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-source-novelty-preview-20260516T035332Z/lifecycle-candidate-refresh-preview-source-novelty.json`.
+- Live result: `preview_candidate_count=4`, `target_already_applied_count=4`, `new_unapplied_target_candidate_count=0`, `fresh_observation_count_for_preview_targets=42`, `applied_target_with_fresh_window_count=4`, decision `fresh_evidence_recycles_already_applied_targets`. Therefore refresh evidence is real, but it still does not create safe new lifecycle review rows under the current target-aware persistence contract.
+
+Recommended next work now:
+
+1. Commit/push this source-novelty checkpoint and watch CI.
+2. Next PR-sized source slice: design an explicit recurrent-reinforcement policy for already-applied targets with fresh evidence windows, or generate genuinely new target refs from broader traces. Do not bypass target-aware persistence silently.
+3. A live bounded batch still requires reviewed approved candidates, exact approval phrases, backup/output paths, and immediate post-apply verification.
+4. Still blocked until separate gates exist: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: lifecycle fresh-evidence preview + target-aware persistence guard
 

@@ -12285,6 +12285,10 @@ def test_dogfood_lifecycle_candidate_refresh_preview_separates_new_from_promoted
                 json.dumps({"default_retrieval_mutated": False}),
             ),
         )
+        connection.execute(
+            "UPDATE g5_trace_candidate_applications SET created_at = '2000-01-01 00:00:00' WHERE candidate_id = ?",
+            (promoted_id,),
+        )
     before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"])
 
     result = subprocess.run(
@@ -12325,6 +12329,16 @@ def test_dogfood_lifecycle_candidate_refresh_preview_separates_new_from_promoted
     assert payload["new_unapplied_target_candidate_count"] == 1
     assert payload["existing_by_status"]["promoted"] == 1
     assert payload["target_already_applied_count"] == 1
+    assert payload["source_novelty"] == {
+        "latest_policy_application_present": True,
+        "fresh_observation_count_for_preview_targets": 6,
+        "fresh_observation_target_count": 2,
+        "applied_target_with_fresh_window_count": 1,
+        "new_unapplied_target_candidate_count": 1,
+        "source_level_novelty_decision": "new_unapplied_targets_ready",
+        "target_refs_included": False,
+        "raw_observation_values_included": False,
+    }
     assert payload["recommended_next_action"] == "persist_new_lifecycle_candidates_for_review"
     assert payload["persist_command_preview"][:3] == ["agent-memory", "dogfood", "lifecycle-candidate-persist"]
     assert payload["privacy"] == {
@@ -13000,7 +13014,9 @@ def test_dogfood_lifecycle_bounded_batch_operator_packet_bundles_readiness_inven
         "blocked_reasons": [],
     }
     assert payload["artifact_gates"]["batch_graduation_readiness"]["pass"] is True
+    assert payload["artifact_gates"]["batch_graduation_readiness"]["mutated"] is False
     assert payload["artifact_gates"]["apply_readiness"]["pass"] is True
+    assert payload["artifact_gates"]["apply_readiness"]["mutated"] is False
     assert payload["candidate_inventory"] == {
         "candidate_kind": "reinforcement",
         "approved_eligible_count": 2,

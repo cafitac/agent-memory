@@ -3640,8 +3640,36 @@ def _dogfood_lifecycle_candidate_refresh_preview_payload(args: argparse.Namespac
             """,
             tuple(target_refs),
         ).fetchall()
+        latest_application = connection.execute(
+            """
+            SELECT created_at
+            FROM g5_trace_candidate_applications
+            WHERE policy = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (_LIFECYCLE_APPLY_POLICY_CONTRACTS.get(args.candidate_kind, {}).get("policy"),),
+        ).fetchone()
+        fresh_observation_rows = connection.execute(
+            f"""
+            SELECT top_memory_ref
+            FROM retrieval_observations
+            WHERE created_at > ? AND top_memory_ref IN ({','.join(['?'] * len(target_refs))})
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?
+            """
+            if latest_application is not None and target_refs
+            else """
+            SELECT top_memory_ref
+            FROM retrieval_observations
+            WHERE 0
+            """,
+            (str(latest_application["created_at"]), *target_refs, args.limit) if latest_application is not None and target_refs else (),
+        ).fetchall()
     existing_by_id = {str(row["candidate_id"]): dict(row) for row in existing_rows}
     applied_targets = {str(row["promoted_ref"]) for row in applied_rows if row["promoted_ref"]}
+    fresh_observation_target_counts = Counter(str(row["top_memory_ref"]) for row in fresh_observation_rows if row["top_memory_ref"])
+    applied_targets_with_fresh_observations = applied_targets.intersection(fresh_observation_target_counts)
     existing_by_status = Counter(str(row["status"]) for row in existing_rows)
     new_candidate_ids = [candidate_id for candidate_id in candidate_ids if candidate_id not in existing_by_id]
     new_unapplied_candidate_ids = [
@@ -3650,6 +3678,9 @@ def _dogfood_lifecycle_candidate_refresh_preview_payload(args: argparse.Namespac
         if candidate_id not in existing_by_id and target_ref not in applied_targets
     ]
     target_already_applied_count = sum(1 for _candidate_id, target_ref in candidate_refs if target_ref in applied_targets)
+    applied_target_with_fresh_window_count = sum(
+        1 for _candidate_id, target_ref in candidate_refs if target_ref in applied_targets_with_fresh_observations
+    )
     blocked_reasons: list[str] = []
     if preview.get("quality_gate", {}).get("pass") is not True:
         blocked_reasons.append("source_preview_quality_gate_not_green")
@@ -3693,6 +3724,22 @@ def _dogfood_lifecycle_candidate_refresh_preview_payload(args: argparse.Namespac
         "existing_candidate_count": len(existing_rows),
         "existing_by_status": dict(sorted(existing_by_status.items())),
         "target_already_applied_count": target_already_applied_count,
+        "source_novelty": {
+            "latest_policy_application_present": latest_application is not None,
+            "fresh_observation_count_for_preview_targets": sum(fresh_observation_target_counts.values()),
+            "fresh_observation_target_count": len(fresh_observation_target_counts),
+            "applied_target_with_fresh_window_count": applied_target_with_fresh_window_count,
+            "new_unapplied_target_candidate_count": len(new_unapplied_candidate_ids),
+            "source_level_novelty_decision": "new_unapplied_targets_ready"
+            if new_unapplied_candidate_ids
+            else (
+                "fresh_evidence_recycles_already_applied_targets"
+                if applied_target_with_fresh_window_count
+                else "no_new_source_level_candidate_novelty"
+            ),
+            "target_refs_included": False,
+            "raw_observation_values_included": False,
+        },
         "candidate_ids_included": False,
         "target_refs_included": False,
         "quality_gate": {
@@ -4658,7 +4705,7 @@ def _dogfood_lifecycle_bounded_batch_operator_packet_payload(args: argparse.Name
                 "blocked_reasons": graduation.get("quality_gate", {}).get("blocked_reasons", []),
                 "prior_one_at_a_time_apply_count": graduation.get("prior_one_at_a_time_apply_count"),
                 "read_only": graduation.get("read_only") is True,
-                "mutated": graduation.get("mutated") is True,
+                "mutated": bool(graduation.get("mutated")),
             },
             "apply_readiness": {
                 "kind": readiness.get("kind"),
@@ -4666,7 +4713,7 @@ def _dogfood_lifecycle_bounded_batch_operator_packet_payload(args: argparse.Name
                 "decision": readiness.get("quality_gate", {}).get("decision"),
                 "blocked_reasons": readiness.get("quality_gate", {}).get("blocked_reasons", []),
                 "read_only": readiness.get("read_only") is True,
-                "mutated": readiness.get("mutated") is True,
+                "mutated": bool(readiness.get("mutated")),
             },
         },
         "candidate_inventory": {

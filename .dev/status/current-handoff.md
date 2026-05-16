@@ -1,7 +1,30 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:32 KST
+Last updated: 2026-05-16 12:55 KST
+
+## Checkpoint: lifecycle refresh source-novelty scoring
+
+Latest source-novelty slice:
+
+- `dogfood lifecycle-candidate-refresh-preview` now includes aggregate-only `source_novelty` scoring.
+- It separates new unapplied target candidates from fresh post-apply evidence windows that only hit already-applied targets.
+- It remains read-only/no-mutation/default-unchanged and does not emit candidate ids, target refs, raw observations, raw query/query-preview/source content, raw candidate JSON, or backup contents.
+- It also fixes nested artifact gate metadata in `dogfood lifecycle-bounded-batch-operator-packet`: nested `mutated` now reflects the nested report's actual mutation value.
+- Live artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-source-novelty-preview-20260516T035332Z/lifecycle-candidate-refresh-preview-source-novelty.json`.
+- Live result: `preview_candidate_count=4`, `target_already_applied_count=4`, `new_unapplied_target_candidate_count=0`, `fresh_observation_count_for_preview_targets=42`, `applied_target_with_fresh_window_count=4`, `source_level_novelty_decision=fresh_evidence_recycles_already_applied_targets`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%.
+- Literal fully autonomous human-brain-like memory is approximately 89-90%. Fresh recurrence evidence is measurable, but write automation still correctly refuses same-target review requeueing without a separate recurrent-reinforcement policy.
+
+Immediate next recommended slice:
+
+1. Commit/push this source-novelty checkpoint and watch CI.
+2. Add a separate exact-reviewed recurrent-reinforcement policy for already-applied targets with fresh evidence windows, or broaden candidate generation until genuinely new target refs appear.
+3. Keep live bounded batch apply blocked until approved eligible candidates exist and the operator packet is green.
+4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Checkpoint: target-aware lifecycle persistence + bounded-batch source gates
 

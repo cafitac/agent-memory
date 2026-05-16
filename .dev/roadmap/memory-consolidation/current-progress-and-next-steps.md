@@ -1,7 +1,44 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:32 KST
+Last updated: 2026-05-16 12:55 KST
+
+## Checkpoint: lifecycle refresh source-novelty scoring
+
+The candidate refresh preview now contains a source-level novelty section. This closes the immediate ambiguity after fresh-evidence went green: the live DB has fresh post-apply retrieval activity, but the generated reinforcement candidates still point at the same four already-applied targets. The preview can now say that explicitly with aggregate counts instead of forcing operators to infer it from candidate ids or target refs.
+
+Live artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-source-novelty-preview-20260516T035332Z/lifecycle-candidate-refresh-preview-source-novelty.json`.
+
+Live source-novelty result:
+
+- `preview_candidate_count=4`.
+- `target_already_applied_count=4`.
+- `new_unapplied_target_candidate_count=0`.
+- `fresh_observation_count_for_preview_targets=42`.
+- `fresh_observation_target_count=4`.
+- `applied_target_with_fresh_window_count=4`.
+- `source_level_novelty_decision=fresh_evidence_recycles_already_applied_targets`.
+
+Safety facts:
+
+- The command remains read-only/no-mutation/default-unchanged.
+- It does not include candidate ids, target refs, raw observation values, raw query text, query previews, source text, raw candidate JSON, or backup contents.
+- The quality gate remains red because there are no new unapplied target candidates. Fresh windows over already-applied targets are evidence for a future explicit recurrent-reinforcement policy, not permission to silently requeue or batch apply those same targets.
+- The lifecycle bounded-batch operator packet also now reports nested artifact `mutated` flags as the actual nested report mutation values.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress remains approximately 99%.
+- Literal fully autonomous human-brain-like progress is approximately 89-90%. The system can now separate fresh evidence from target novelty, which is a necessary brain-like recurrence signal, but the write path still intentionally refuses same-target requeueing without a separate recurrent-reinforcement policy.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Implement an explicit recurrent-reinforcement review/apply policy for already-applied targets with fresh post-apply evidence windows, with its own exact approval phrase and post-apply verifier, or broaden candidate generation until genuinely new target refs appear.
+3. Keep bounded batch live apply blocked until reviewed approved candidates exist and the operator packet is green.
+4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion behind separate gates.
 
 ## Checkpoint: target-aware lifecycle persistence + bounded-batch source gates
 
