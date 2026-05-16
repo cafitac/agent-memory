@@ -1,7 +1,43 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 00:51 KST
+Last updated: 2026-05-17 01:05 KST
+
+## Checkpoint: ordinary-turn classifier evaluation gate
+
+The remaining ordinary-turn lane now has a concrete read-only evaluation harness. `dogfood ordinary-turn-classifier-eval <db_path>` evaluates ordinary-turn memory-worthiness classification against optional `metadata.expected_memory_worthy` labels, reports aggregate prediction/evaluation metrics, and keeps ordinary conversation auto-approval blocked.
+
+Source hardening added in this checkpoint:
+
+- Added the `ordinary-turn-memory-worthiness-heuristic-v1` aggregate classifier/eval payload.
+- Added parser and dispatcher support for `dogfood ordinary-turn-classifier-eval`.
+- Added RED/GREEN CLI coverage proving labeled ordinary turns are scored without mutation or raw-content leakage.
+- Preserved all forbidden authority flags: no apply execution, no broad/background apply, no default-ranking mutation, no collapse/delete, no telemetry reset, no unreviewed promotion, and no ordinary conversation auto-approval.
+
+Live evidence artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-classifier-eval-20260516T160146Z/ordinary-turn-classifier-eval.json`.
+  - Correctly red because no live ordinary-turn labels exist yet.
+  - `ordinary_turn=995`, `labeled_ordinary_turn=0`, `unlabeled_ordinary_turn=995`.
+  - `blocked_secret_like=0`, `mutated=false`, aggregate-only privacy.
+  - Blocked reasons: `labeled_ordinary_turn_count_below_minimum`, `precision_below_minimum`.
+
+Verification run from source checkout:
+
+- New focused test: passed after RED invalid-subcommand failure.
+- Focused ordinary-turn coverage: `2 passed, 174 deselected`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%+.
+- Literal fully autonomous human-brain-like memory is approximately 98.7-99% for the scoped local lifecycle. The system now has the evaluation substrate for ordinary-turn inference, but the live gate proves that labels/evidence are still missing.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Add a read-only ordinary-turn label/evidence packet so humans can label candidate ordinary turns safely.
+3. Rerun classifier eval over repeated labeled windows and only then design a separate inferred-approval readiness/apply corridor.
+4. Keep broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn inferred apply blocked behind separate gates.
 
 ## Checkpoint: remember-preferences bounded-batch post-apply verifier
 

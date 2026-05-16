@@ -1,7 +1,52 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 00:51 KST
+Last updated: 2026-05-17 01:05 KST
+
+## Checkpoint: ordinary-turn classifier evaluation gate
+
+The source checkout now has the first concrete read-only evaluation harness for the remaining ordinary-turn inference layer. `dogfood ordinary-turn-classifier-eval <db_path>` evaluates ordinary-turn memory-worthiness classification against optional aggregate labels before any ordinary conversation auto-approval corridor exists.
+
+What changed in source:
+
+- Added `dogfood ordinary-turn-classifier-eval`.
+  - Inputs: `db_path`, `--limit`, `--min-labeled`, `--min-precision-percent`, optional `--output`.
+  - Classifier policy: `ordinary-turn-memory-worthiness-heuristic-v1`.
+  - Reports only aggregate counts: ordinary/labeled/unlabeled traces, prediction counts, precision/recall, secret-block rate, and safe reason buckets.
+  - Keeps `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`, and all forbidden-authority flags false.
+- Added focused RED/GREEN CLI coverage proving labeled ordinary turns are scored without mutation or raw-content leakage.
+
+Live/source smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-classifier-eval-20260516T160146Z/`.
+- Current live DB has no ordinary-turn labels yet, so the new gate correctly stays red/fail-closed:
+  - `ordinary_turn=995`;
+  - `labeled_ordinary_turn=0`;
+  - `unlabeled_ordinary_turn=995`;
+  - `blocked_secret_like=0`;
+  - blocked reasons: `labeled_ordinary_turn_count_below_minimum`, `precision_below_minimum`.
+- No live memory mutation occurred.
+
+Validation so far:
+
+- New focused test: passed after observed RED invalid-subcommand failure.
+- Focused ordinary-turn coverage: `2 passed, 174 deselected`.
+- Local full suite before push: `358 passed, 1 xfailed`.
+- First pushed CI exposed a known environment-sensitive retrieval-eval comparator-matrix delta (`lexical` `total_avoid_hit_delta` can be `-16` locally or `-15` on GitHub while stable task/pass counts stay fixed); source test tolerance was narrowed to that exact bounded variant.
+- `git diff --check` and docs line-number scan passed after docs update.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%+.
+- Literal fully autonomous human-brain-like memory for the scoped local lifecycle is now about 98.7-99%: explicit-memory and lifecycle automation are late-stage, and the ordinary-turn inference layer now has an eval substrate.
+- The remaining gap to 100% is labeled ordinary-turn evidence, repeated green eval windows, and then a separate exact-gated inferred-approval corridor.
+
+Next after this slice:
+
+1. Run the full source suite/release/package checks, commit/push this checkpoint, and watch CI.
+2. Next PR-sized slice: add a read-only ordinary-turn label/evidence packet for human review, without raw-content leakage in committed docs and without apply.
+3. Only after repeated labeled windows are green should an inferred ordinary-turn approval corridor be designed.
+4. Continue blocking broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion until each has its own evidence gate and rollback path.
 
 ## Checkpoint: remember-preferences bounded-batch post-apply verifier
 

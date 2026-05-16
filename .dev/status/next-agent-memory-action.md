@@ -1,7 +1,31 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 00:51 KST
+Last updated: 2026-05-17 01:05 KST
+
+## Just completed: ordinary-turn classifier evaluation gate
+
+- Added `dogfood ordinary-turn-classifier-eval`, a read-only aggregate evaluation harness for ordinary-turn memory-worthiness classification.
+- The command scans `event_kind=turn` traces, consumes optional `metadata.expected_memory_worthy` labels, reports prediction counts, precision/recall, secret-block rate, reason counts, and keeps all authority blocked.
+- It does not write memories/candidates/review state, expose raw trace summaries, approve ordinary conversation, change default ranking, run broad/background apply, collapse/delete, reset telemetry, or promote unreviewed memories.
+- Focused TDD: new test first failed because the subcommand did not exist, then passed after parser/dispatcher/payload implementation.
+- Focused ordinary-turn verification: `2 passed, 174 deselected`.
+- Live source smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-classifier-eval-20260516T160146Z/ordinary-turn-classifier-eval.json`.
+  - Correctly red/fail-closed: `ordinary_turn=995`, `labeled_ordinary_turn=0`, `unlabeled_ordinary_turn=995`, `blocked_secret_like=0`.
+  - Blocked reasons: `labeled_ordinary_turn_count_below_minimum`, `precision_below_minimum`.
+
+Current estimate:
+
+- Safety-gated operational north-star: approximately 99%+.
+- Literal fully autonomous human-brain-like memory within this repo's scoped local-memory lifecycle: approximately 98.7-99%.
+- The missing piece is no longer an eval command; it is labeled ordinary-turn evidence and a later exact-gated inferred-approval corridor.
+
+Recommended next work now:
+
+1. Commit/push this classifier-eval checkpoint and watch CI.
+2. Next PR-sized safety gate: read-only ordinary-turn label/evidence packet for human review, without raw-content leakage in committed docs and without apply.
+3. After repeated labeled windows are green, design an inferred approval readiness gate; do not jump directly to ordinary-turn apply.
+4. Still blocked: broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: remember-preferences bounded-batch post-apply verifier
 

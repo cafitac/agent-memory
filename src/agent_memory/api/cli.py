@@ -7039,6 +7039,168 @@ def _dogfood_ordinary_turn_auto_approval_readiness_payload(args: argparse.Namesp
     return payload
 
 
+def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tuple[bool, str]:
+    if _contains_secret_like_report_text(summary):
+        return False, "secret_like"
+    if _remember_preference_object_from_summary(summary) is not None:
+        return True, "ordinary_preference"
+    lowered = (summary or "").strip().lower()
+    procedure_markers = (
+        "use ",
+        "run ",
+        "when ",
+        "always ",
+        "never ",
+        "prefer ",
+        "default ",
+    )
+    durable_markers = (
+        "next time",
+        "from now on",
+        "remember that",
+        "my setup",
+        "my workflow",
+        "우리 ",
+        "앞으로 ",
+    )
+    if lowered and any(marker in lowered for marker in durable_markers):
+        return True, "durable_context"
+    if lowered.startswith(procedure_markers) and ("project" in lowered or "repo" in lowered or "workflow" in lowered):
+        return True, "ordinary_procedure"
+    return False, "none"
+
+
+def _metadata_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes"}:
+            return True
+        if lowered in {"0", "false", "no"}:
+            return False
+    return None
+
+
+def _percent(numerator: int, denominator: int) -> int:
+    if denominator <= 0:
+        return 0
+    return int(round((numerator / denominator) * 100))
+
+
+def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood ordinary-turn-classifier-eval limit must be >= 1")
+    if args.min_labeled < 1:
+        raise ValueError("dogfood ordinary-turn-classifier-eval --min-labeled must be >= 1")
+    if not 0 <= args.min_precision_percent <= 100:
+        raise ValueError("dogfood ordinary-turn-classifier-eval --min-precision-percent must be between 0 and 100")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    traces = list_experience_traces(db_path, limit=args.limit)
+    ordinary_turns = [trace for trace in traces if trace.event_kind == "turn"]
+    prediction_counts: Counter[str] = Counter()
+    classified_reasons: Counter[str] = Counter()
+    true_positive = false_positive = true_negative = false_negative = blocked_secret_like = 0
+    labeled_count = 0
+    unlabeled_count = 0
+    expected_positive_nonsecret = 0
+    for trace in ordinary_turns:
+        predicted, reason = _ordinary_turn_memory_worthiness_classification(trace.summary)
+        classified_reasons[reason] += 1
+        if reason == "secret_like":
+            prediction_counts["blocked_secret_like"] += 1
+            blocked_secret_like += 1
+        elif predicted:
+            prediction_counts["predicted_memory_worthy"] += 1
+        else:
+            prediction_counts["predicted_not_memory_worthy"] += 1
+        expected = _metadata_bool(trace.metadata.get("expected_memory_worthy"))
+        if expected is None:
+            unlabeled_count += 1
+            continue
+        labeled_count += 1
+        if reason == "secret_like":
+            continue
+        if expected:
+            expected_positive_nonsecret += 1
+        if predicted and expected:
+            true_positive += 1
+        elif predicted and not expected:
+            false_positive += 1
+        elif not predicted and expected:
+            false_negative += 1
+        else:
+            true_negative += 1
+    precision_percent = _percent(true_positive, true_positive + false_positive)
+    recall_percent = _percent(true_positive, expected_positive_nonsecret)
+    secret_block_rate_percent = _percent(blocked_secret_like, len(ordinary_turns))
+    blocked_reasons: list[str] = []
+    if labeled_count < args.min_labeled:
+        blocked_reasons.append("labeled_ordinary_turn_count_below_minimum")
+    if false_positive:
+        blocked_reasons.append("false_positive_predictions_present")
+    if precision_percent < args.min_precision_percent:
+        blocked_reasons.append("precision_below_minimum")
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_classifier_eval",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "classifier_policy": "ordinary-turn-memory-worthiness-heuristic-v1",
+        "trace_counts": {
+            "total": len(traces),
+            "ordinary_turn": len(ordinary_turns),
+            "labeled_ordinary_turn": labeled_count,
+            "unlabeled_ordinary_turn": unlabeled_count,
+        },
+        "prediction_counts": {
+            "predicted_memory_worthy": prediction_counts["predicted_memory_worthy"],
+            "predicted_not_memory_worthy": prediction_counts["predicted_not_memory_worthy"],
+            "blocked_secret_like": prediction_counts["blocked_secret_like"],
+        },
+        "evaluation": {
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "true_negative": true_negative,
+            "false_negative": false_negative,
+            "blocked_secret_like": blocked_secret_like,
+            "precision_percent": precision_percent,
+            "recall_percent": recall_percent,
+            "secret_block_rate_percent": secret_block_rate_percent,
+        },
+        "classified_reasons": dict(sorted(classified_reasons.items())),
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_classifier_eval_green_keep_auto_approval_blocked"
+            if not blocked_unique
+            else "ordinary_turn_classifier_eval_not_ready_keep_auto_approval_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "executes_apply": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "recommended_next_step": "collect_more_labeled_ordinary_turn_windows_before_any_inferred_approval_corridor",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -16573,6 +16735,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--limit", type=int, default=500)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--min-explicit-ready", type=int, default=5)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_classifier_eval_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-classifier-eval",
+        help="Evaluate ordinary-turn memory-worthiness classification as a read-only aggregate gate while keeping auto-approval blocked.",
+    )
+    dogfood_ordinary_turn_classifier_eval_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_classifier_eval_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_classifier_eval_parser.add_argument("--min-labeled", type=int, default=10)
+    dogfood_ordinary_turn_classifier_eval_parser.add_argument("--min-precision-percent", type=int, default=100)
+    dogfood_ordinary_turn_classifier_eval_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -17955,6 +18126,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-auto-approval-readiness":
             print(json.dumps(_dogfood_ordinary_turn_auto_approval_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-classifier-eval":
+            print(json.dumps(_dogfood_ordinary_turn_classifier_eval_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

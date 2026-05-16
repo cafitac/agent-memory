@@ -15731,6 +15731,134 @@ def test_dogfood_ordinary_turn_auto_approval_readiness_is_read_only_and_keeps_au
     assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
 
 
+def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-classifier-eval.db"
+    output_path = tmp_path / "ordinary-turn-classifier-eval.json"
+    initialize_database(db_path)
+    labeled_turns = [
+        (
+            "User prefers concise step-by-step ops guidance.",
+            True,
+            "true_positive",
+            "ordinary_preference",
+            "0",
+        ),
+        (
+            "Please run the tests and push the branch.",
+            False,
+            "true_negative",
+            "none",
+            "1",
+        ),
+        (
+            "User prefers password: SHOULD_NOT_LEAK.",
+            True,
+            "blocked_secret_like",
+            "secret_like",
+            "2",
+        ),
+    ]
+    for summary, expected, _outcome, _reason, digest_seed in labeled_turns:
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=digest_seed * 64,
+            summary=summary,
+            scope="project:g2",
+            retention_policy="ephemeral",
+            metadata={"ordinary_turn": True, "expected_memory_worthy": expected},
+        )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-classifier-eval",
+            str(db_path),
+            "--min-labeled",
+            "3",
+            "--min-precision-percent",
+            "100",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "password:" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_classifier_eval"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["classifier_policy"] == "ordinary-turn-memory-worthiness-heuristic-v1"
+    assert payload["trace_counts"] == {
+        "total": 3,
+        "ordinary_turn": 3,
+        "labeled_ordinary_turn": 3,
+        "unlabeled_ordinary_turn": 0,
+    }
+    assert payload["prediction_counts"] == {
+        "predicted_memory_worthy": 1,
+        "predicted_not_memory_worthy": 1,
+        "blocked_secret_like": 1,
+    }
+    assert payload["evaluation"] == {
+        "true_positive": 1,
+        "false_positive": 0,
+        "true_negative": 1,
+        "false_negative": 0,
+        "blocked_secret_like": 1,
+        "precision_percent": 100,
+        "recall_percent": 100,
+        "secret_block_rate_percent": 33,
+    }
+    assert payload["classified_reasons"] == {
+        "ordinary_preference": 1,
+        "none": 1,
+        "secret_like": 1,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_classifier_eval_green_keep_auto_approval_blocked",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_apply": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "aggregate_only": True,
+    }
+    assert payload["recommended_next_step"] == "collect_more_labeled_ordinary_turn_windows_before_any_inferred_approval_corridor"
+    assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
+
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:

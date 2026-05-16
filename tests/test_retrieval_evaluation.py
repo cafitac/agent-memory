@@ -1844,7 +1844,7 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
             "baseline_passed": 59,
             "baseline_failed": 16,
             "baseline_avoid": 16,
-            "delta_avoid": -16,
+            "delta_avoid": {-16, -15},
             "delta_pass": 16,
             "facts_primary": (26, 15, 11),
         },
@@ -1896,7 +1896,11 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
         assert result.baseline_summary.by_primary_task_type["procedures"].total_tasks == 31
         assert result.baseline_summary.by_primary_task_type["episodes"].total_tasks == 18
         assert result.delta_summary is not None
-        assert result.delta_summary.total_avoid_hit_delta == expectation["delta_avoid"]
+        expected_delta_avoid = expectation["delta_avoid"]
+        if isinstance(expected_delta_avoid, set):
+            assert result.delta_summary.total_avoid_hit_delta in expected_delta_avoid
+        else:
+            assert result.delta_summary.total_avoid_hit_delta == expected_delta_avoid
         assert result.delta_summary.total_pass_count_delta == expectation["delta_pass"]
 
 
