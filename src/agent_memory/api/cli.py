@@ -7727,6 +7727,232 @@ def _dogfood_ordinary_turn_inferred_approval_readiness_payload(args: argparse.Na
     return payload
 
 
+def _load_ordinary_turn_inferred_readiness_for_apply(report_path: Path) -> dict[str, Any]:
+    raw_text = report_path.expanduser().resolve(strict=False).read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    if not isinstance(raw, dict):
+        raise ValueError("ordinary_turn_inferred_readiness_not_json_object")
+    quality_gate = raw.get("quality_gate") if isinstance(raw.get("quality_gate"), dict) else {}
+    inferred = raw.get("inferred_approval_readiness") if isinstance(raw.get("inferred_approval_readiness"), dict) else {}
+    window = raw.get("window_evidence") if isinstance(raw.get("window_evidence"), dict) else {}
+    privacy = raw.get("privacy") if isinstance(raw.get("privacy"), dict) else {}
+    blocked_reasons: list[str] = []
+    if raw.get("kind") != "dogfood_ordinary_turn_inferred_approval_readiness":
+        blocked_reasons.append("readiness_report_kind_mismatch")
+    if raw.get("read_only") is not True or raw.get("mutated") is not False:
+        blocked_reasons.append("readiness_report_not_read_only")
+    if raw.get("default_retrieval_unchanged") is not True:
+        blocked_reasons.append("readiness_report_default_retrieval_changed")
+    if raw.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("readiness_report_auto_approval_not_blocked")
+    if raw.get("readiness_policy") != "ordinary-turn-inferred-approval-readiness-v1":
+        blocked_reasons.append("readiness_report_policy_mismatch")
+    if quality_gate.get("pass") is not True:
+        blocked_reasons.append("readiness_report_quality_gate_not_green")
+    if inferred.get("ready_for_design") is not True:
+        blocked_reasons.append("readiness_report_not_ready_for_design")
+    if inferred.get("apply_supported") is not False or inferred.get("apply_executed") is not False:
+        blocked_reasons.append("readiness_report_already_grants_apply_authority")
+    if inferred.get("requires_separate_exact_approval_corridor") is not True:
+        blocked_reasons.append("readiness_report_missing_exact_corridor_requirement")
+    if window.get("usable_for_readiness") is not True:
+        blocked_reasons.append("readiness_window_not_usable")
+    if (
+        privacy.get("raw_trace_summary_included")
+        or privacy.get("raw_transcript_included")
+        or privacy.get("raw_query_text_included")
+        or privacy.get("raw_content_included")
+        or privacy.get("sample_values_included")
+    ):
+        blocked_reasons.append("readiness_report_privacy_not_safe")
+    blocked_reasons.extend(str(reason) for reason in quality_gate.get("blocked_reasons", []))
+    return {
+        "path": str(report_path),
+        "sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "quality_gate_pass": quality_gate.get("pass") is True,
+        "blocked_reasons": sorted(set(blocked_reasons)),
+        "window_evidence": {
+            "report_count": int(window.get("report_count", 0) or 0),
+            "usable_for_readiness": window.get("usable_for_readiness") is True,
+        },
+    }
+
+
+def _dogfood_ordinary_turn_inferred_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "ordinary-turn-inferred-preference-apply-v1"
+    approval_phrase = "apply-exact-ordinary-turn-inferred-preference-v1"
+    if args.policy != policy:
+        raise ValueError("ordinary_turn_inferred_apply_policy_mismatch")
+    if args.approval_phrase != approval_phrase:
+        raise ValueError("ordinary_turn_inferred_apply_approval_phrase_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-inferred-apply --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-inferred-apply --reason is required")
+    readiness = _load_ordinary_turn_inferred_readiness_for_apply(args.readiness_report)
+    if readiness["blocked_reasons"]:
+        raise ValueError("ordinary_turn_inferred_readiness_not_green: " + ",".join(readiness["blocked_reasons"]))
+
+    trace_id = _parse_experience_trace_ref(args.trace_ref)
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    backup_path = (args.backup_path or db_path.with_suffix(db_path.suffix + ".ordinary-turn-inferred-apply.bak")).expanduser().resolve(strict=False)
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with connect(db_path) as connection:
+        row = connection.execute("SELECT * FROM experience_traces WHERE id = ?", (trace_id,)).fetchone()
+        if row is None:
+            raise ValueError("experience_trace_not_found")
+        if row["event_kind"] != "turn":
+            raise ValueError("experience_trace_is_not_turn")
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("experience_trace_metadata_json_invalid") from exc
+        if not isinstance(metadata, dict):
+            raise ValueError("experience_trace_metadata_json_not_object")
+        if _contains_secret_like_report_text(row["summary"]):
+            raise ValueError("secret_like_trace_blocked")
+        predicted, classification_reason = _ordinary_turn_memory_worthiness_classification(row["summary"])
+        if not predicted:
+            raise ValueError("ordinary_turn_not_predicted_memory_worthy")
+        proposed_object = _remember_preference_object_from_summary(row["summary"])
+        if proposed_object is None or classification_reason != "ordinary_preference":
+            raise ValueError("ordinary_turn_inferred_apply_supports_preference_shape_only")
+        conflict_preflight = _remember_preference_conflict_preflight(
+            db_path,
+            object_ref_or_value=proposed_object,
+            scope=row["scope"],
+            allow_conflict=False,
+        )
+        if conflict_preflight["result"] == "blocked":
+            raise ValueError("ordinary_turn_inferred_preference_conflict_blocked")
+        trace_ref = f"experience_trace:{trace_id}"
+        for relation in list_relations_for_node(db_path, node_ref=trace_ref):
+            if relation.from_ref == trace_ref and relation.relation_type == "ordinary_turn_inferred_approved_as":
+                raise ValueError("ordinary_turn_inferred_trace_already_applied")
+
+    shutil.copy2(db_path, backup_path)
+    backup_sha256 = _sha256_file(backup_path)
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    candidate_id = f"ordinary-turn-inferred-{trace_id}"
+    source = ingest_source_text(
+        db_path,
+        source_type="ordinary_turn_inferred_trace",
+        content=row["summary"] or "ordinary turn inferred preference",
+        adapter="agent-memory-ordinary-turn-inferred-apply",
+        external_ref=f"experience_trace:{trace_id}",
+        metadata={
+            "trace_id": trace_id,
+            "policy": policy,
+            "readiness_report_sha256": readiness["sha256"],
+            "sanitized": True,
+        },
+    )
+    fact = create_candidate_fact(
+        db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value=proposed_object,
+        evidence_ids=[source.id],
+        scope=row["scope"],
+        confidence=0.8,
+    )
+    approved_fact = approve_memory(
+        db_path,
+        memory_type="fact",
+        memory_id=fact.id,
+        reason=args.reason,
+        actor=args.actor,
+        evidence_ids=[source.id],
+    )
+    relation = insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{trace_id}",
+        relation_type="ordinary_turn_inferred_approved_as",
+        to_ref=f"fact:{approved_fact.id}",
+        evidence_ids=[source.id],
+        confidence=0.8,
+        review_actor=args.actor,
+        review_reason=args.reason,
+    )
+    with sqlite3.connect(db_path) as connection:
+        _ensure_trace_candidate_review_tables(connection)
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor,
+                reason_sha256, backup_path, backup_sha256, rollback_hint_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                candidate_id,
+                "ordinary_turn_inferred_preference",
+                f"fact:{approved_fact.id}",
+                policy,
+                "apply_ordinary_turn_inferred_preference",
+                args.actor.strip(),
+                reason_sha256,
+                str(backup_path),
+                backup_sha256,
+                json.dumps(
+                    {
+                        "restore_backup_path": str(backup_path),
+                        "backup_sha256": backup_sha256,
+                        "trace_ref": f"experience_trace:{trace_id}",
+                        "memory_ref": f"fact:{approved_fact.id}",
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        )
+    payload = {
+        "kind": "dogfood_ordinary_turn_inferred_apply",
+        "read_only": False,
+        "mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy": policy,
+        "readiness_evidence": readiness,
+        "backup": {"path": str(backup_path), "sha256": backup_sha256},
+        "apply": {
+            "applied_count": 1,
+            "trace_ref": f"experience_trace:{trace_id}",
+            "memory_ref": f"fact:{approved_fact.id}",
+            "source_id": source.id,
+            "relation_id": relation.id,
+            "classification_reason": classification_reason,
+            "actor": args.actor,
+            "reason_sha256": reason_sha256,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_inferred_exact_preference_applied_stop_after_one",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "backup_content_included": False,
+            "reason_hash_only": True,
+            "trace_ref_only": True,
+        },
+        "recommended_next_step": "run_rollback_replay_and_add_post_apply_verification_before_any_second_ordinary_turn_apply",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -17308,6 +17534,19 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_inferred_approval_readiness_parser.add_argument("--min-labeled-total", type=int, default=10)
     dogfood_ordinary_turn_inferred_approval_readiness_parser.add_argument("--min-precision-percent", type=int, default=100)
     dogfood_ordinary_turn_inferred_approval_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_inferred_apply_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-inferred-apply",
+        help="Apply one exact ordinary-turn inferred preference through backup/audit guardrails; ordinary auto-approval stays blocked.",
+    )
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--trace-ref", required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--readiness-report", type=Path, required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--policy", required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_ordinary_turn_inferred_apply_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -18705,6 +18944,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-inferred-approval-readiness":
             print(json.dumps(_dogfood_ordinary_turn_inferred_approval_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-inferred-apply":
+            print(json.dumps(_dogfood_ordinary_turn_inferred_apply_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

@@ -1,7 +1,47 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:54 KST
+Last updated: 2026-05-17 03:28 KST
+
+## Checkpoint: ordinary-turn inferred exact apply corridor
+
+The source checkout now has the first mutating ordinary-turn inferred lane: `dogfood ordinary-turn-inferred-apply`.
+
+What changed:
+
+- The command applies exactly one ordinary-turn trace at a time.
+- It requires a saved green `dogfood_ordinary_turn_inferred_approval_readiness` report, exact policy `ordinary-turn-inferred-preference-apply-v1`, exact approval phrase `apply-exact-ordinary-turn-inferred-preference-v1`, actor, reason, and pre-apply backup.
+- It supports only the lowest-risk ordinary preference shape parsed from `User prefers ...`.
+- It blocks red readiness, non-turn traces, secret-like summaries, unsupported shapes, preference conflicts, duplicate trace application, broad/background authority, default-ranking mutation, collapse/delete, telemetry reset, unreviewed promotion, and repeated apply without new exact approval.
+- It creates an approved fact, source evidence, `ordinary_turn_inferred_approved_as` relation, and `g5_trace_candidate_applications` audit row.
+
+Copy-DB smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-inferred-apply-smoke-20260516T182955Z/`.
+- Live DB was copied; the live DB was not mutated.
+- A synthetic preference-shaped ordinary turn was inserted into the copy only and applied through the exact corridor.
+- Apply gate passed with `decision=ordinary_turn_inferred_exact_preference_applied_stop_after_one`.
+- Rollback replay passed with `decision=rollback_restore_replay_sufficient_for_bounded_partial_automation`.
+- Generic trace-candidate application audit is currently red for this new lane because it expects reviewed trace-candidate status and retrieval-ranking evidence. That is the next verifier/audit compatibility gap.
+
+Validation so far:
+
+- RED observed: invalid `ordinary-turn-inferred-apply` subcommand.
+- Focused GREEN: `2 passed, 184 deselected`.
+- Broader ordinary-turn GREEN: `7 passed, 179 deselected`.
+- Full suite GREEN: `368 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.75-99.85%.
+- Remaining gap: dedicated ordinary-turn inferred post-apply verification/audit compatibility, repeated one-at-a-time evidence, and only then a decision about any broader ordinary-turn automation.
+
+Recommended next work now:
+
+1. Add `ordinary-turn-inferred-post-apply-verification` as the dedicated stop gate for this lane.
+2. Keep exact ordinary-turn inferred apply preference-shape-only and one-at-a-time.
+3. Keep default/background ordinary conversation auto-approval blocked.
 
 ## Checkpoint: ordinary-turn inferred approval readiness gate
 

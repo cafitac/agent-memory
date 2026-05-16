@@ -1,7 +1,34 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:54 KST
+Last updated: 2026-05-17 03:28 KST
+
+## Just completed: ordinary-turn inferred exact apply corridor
+
+- Added `dogfood ordinary-turn-inferred-apply`, the first mutating ordinary-turn inferred corridor.
+- The lane is exact-approval only: one `experience_trace:<id>`, saved green `dogfood_ordinary_turn_inferred_approval_readiness` report, policy `ordinary-turn-inferred-preference-apply-v1`, approval phrase `apply-exact-ordinary-turn-inferred-preference-v1`, non-empty actor/reason, and pre-apply backup.
+- It fails closed on red readiness, non-turn traces, secret-like summaries, unsupported shapes, preference conflicts, duplicate trace application, wrong policy/phrase, or missing audit inputs.
+- It only supports the safest ordinary preference shape (`User prefers ...`) and creates an approved fact plus `ordinary_turn_inferred_approved_as` relation and `g5_trace_candidate_applications` audit row.
+- It still reports `ordinary_conversation_auto_approval=false` and blocks broad/background apply, unattended batch apply, default-ranking mutation, collapse/delete, telemetry reset, unreviewed promotion, and repeated apply without fresh exact approval.
+- Copy-DB smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-inferred-apply-smoke-20260516T182955Z/`.
+  - The smoke copied `/Users/reddit/.agent-memory/memory.db`; it did not mutate the live DB.
+  - One synthetic ordinary preference trace was inserted into the copy only and applied through the exact corridor.
+  - Apply report passed with `decision=ordinary_turn_inferred_exact_preference_applied_stop_after_one`, `memory_ref=fact:10`, and backup SHA-256 `4b532122ea6f065d5524f147354fb3fae8598e0b29236702a6764f4415107e75`.
+  - Rollback replay on the copy DB passed with `decision=rollback_restore_replay_sufficient_for_bounded_partial_automation`.
+  - Generic `trace-candidate-application-audit` is red for this lane because it expects reviewed trace-candidate status and retrieval-ranking evidence; treat that as the next audit compatibility/post-apply-verifier gap.
+- Validation: RED focused tests failed on invalid subcommand; focused GREEN `2 passed, 184 deselected`; broader ordinary-turn focus GREEN `7 passed, 179 deselected`; full suite GREEN `368 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.75-99.85%.
+- Remaining gap: a dedicated ordinary-turn inferred post-apply verifier/audit compatibility layer, repeated copy/live-safe exact one-at-a-time evidence, then any broader ordinary-turn automation discussion. Ordinary-turn auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+
+Recommended next work now:
+
+1. Add `ordinary-turn-inferred-post-apply-verification` as a dedicated green stop gate over apply report + rollback replay + audit row.
+2. Keep the current exact apply lane one-at-a-time and preference-shape-only.
+3. Do not broaden to default/background ordinary conversation auto-approval.
 
 ## Just completed: ordinary-turn inferred approval readiness gate
 

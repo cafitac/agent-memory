@@ -16648,6 +16648,211 @@ def test_dogfood_ordinary_turn_inferred_approval_readiness_blocks_red_window(
     assert payload["ordinary_conversation_auto_approval"] is False
 
 
+def test_dogfood_ordinary_turn_inferred_apply_promotes_one_exact_preference_with_backup_and_audit(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-inferred-apply.db"
+    backup_path = tmp_path / "ordinary-turn-inferred-apply.backup.db"
+    readiness_report = tmp_path / "ordinary-readiness-green.json"
+    output_path = tmp_path / "ordinary-turn-inferred-apply.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="User prefers terse Korean terminal handoffs.",
+        scope="project:agent-memory",
+        session_ref="session:ordinary-apply",
+        salience=0.9,
+        user_emphasis=0.8,
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    readiness_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_inferred_approval_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "readiness_policy": "ordinary-turn-inferred-approval-readiness-v1",
+                "window_evidence": {"usable_for_readiness": True, "report_count": 3},
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "inferred_approval_readiness": {
+                    "ready_for_design": True,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "requires_separate_exact_approval_corridor": True,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-apply",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--readiness-report",
+            str(readiness_report),
+            "--policy",
+            "ordinary-turn-inferred-preference-apply-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-inferred-preference-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "exact operator approval for one inferred ordinary preference",
+            "--backup-path",
+            str(backup_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_inferred_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["apply"]["applied_count"] == 1
+    assert payload["apply"]["trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["apply"]["memory_ref"].startswith("fact:")
+    assert payload["backup"]["path"] == str(backup_path)
+    assert len(payload["backup"]["sha256"]) == 64
+    assert backup_path.exists()
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_inferred_exact_preference_applied_stop_after_one",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "backup_content_included": False,
+        "reason_hash_only": True,
+        "trace_ref_only": True,
+    }
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM relations WHERE relation_type = 'ordinary_turn_inferred_approved_as'").fetchone()[0] == 1
+        audit_row = connection.execute("SELECT policy, action, backup_path, backup_sha256 FROM g5_trace_candidate_applications").fetchone()
+        assert audit_row == (
+            "ordinary-turn-inferred-preference-apply-v1",
+            "apply_ordinary_turn_inferred_preference",
+            str(backup_path),
+            payload["backup"]["sha256"],
+        )
+
+
+def test_dogfood_ordinary_turn_inferred_apply_blocks_red_readiness_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-inferred-apply-red.db"
+    readiness_report = tmp_path / "ordinary-readiness-red.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="User prefers terse Korean terminal handoffs.",
+        scope="project:agent-memory",
+        session_ref="session:ordinary-apply-red",
+        salience=0.9,
+        user_emphasis=0.8,
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    readiness_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_inferred_approval_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "readiness_policy": "ordinary-turn-inferred-approval-readiness-v1",
+                "window_evidence": {"usable_for_readiness": False, "report_count": 1},
+                "quality_gate": {"pass": False, "blocked_reasons": ["window_summary_quality_gate_not_green"]},
+                "inferred_approval_readiness": {"ready_for_design": False},
+                "privacy": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-apply",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--readiness-report",
+            str(readiness_report),
+            "--policy",
+            "ordinary-turn-inferred-preference-apply-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-inferred-preference-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "red readiness should block mutation",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "ordinary_turn_inferred_readiness_not_green" in result.stderr
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 0
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:
