@@ -1,7 +1,42 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 14:40 KST
+Last updated: 2026-05-16 15:01 KST
+
+## Checkpoint: preference topic-slot semantics + second bounded G2 auto-approval
+
+The prior G2 smoke proved that explicit remember-intent preference approval could write one safe fact, but the generic `subject=user,predicate=prefers,scope=project` conflict slot was too conservative and blocked all remaining independent preferences. This checkpoint narrows only the G2 remember-preferences conflict preflight by deriving a conservative preference topic key from the proposed preference value. Same-topic contradictions still block; different topics can coexist and continue through the existing stop-after-one apply corridor.
+
+Source hardening added in this checkpoint:
+
+- Added preference topic-slot derivation for the `remember-preferences-v1` policy.
+- Kept same-topic conflict braking for examples like `verbose handoffs` vs `concise handoffs`.
+- Allowed independent topics to proceed without `claim_slot_conflict`.
+- Preserved duplicate `auto_approved_as` skip and `--max-apply 1` bounded mutation.
+- Added regression coverage for two independent explicit preference topics being approved across two separate apply runs.
+
+Live evidence artifacts:
+
+- Before apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-dry-run-before-apply.json`.
+  - `eligible_count=4`, `blocked_count=0`, `skipped_count=1`, `mutated=false`.
+- Bounded apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-apply.json`.
+  - `approved_count=1`, `deferred_count=3`, `skipped_count=1`, `mutated=true`.
+  - Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/pre-topic-slot-auto-approval-memory-backup.db`.
+- Post-apply dry-run: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-post-dry-run.json`.
+  - `eligible_count=3`, `blocked_count=0`, `skipped_count=2`, `mutated=false`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%.
+- Literal fully autonomous human-brain-like memory is approximately 96-97% after proving a second explicit low-risk preference can be approved through topic-aware conflict semantics.
+- The remaining gap is mostly verification/scale: post-apply verifier for remember-preferences, repeated one-at-a-time applies, then a separately RED-tested bounded batch corridor. Ordinary conversation inference and broad unattended mutation are still intentionally blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Apply the remaining explicit safe preferences one at a time only if the dry-run stays `blocked_count=0`, with a fresh backup each time.
+3. Add a read-only remember-preferences post-apply verifier before increasing `--max-apply`.
+4. Keep broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn inferred approval blocked behind separate gates.
 
 ## Checkpoint: explicit remember-intent evidence + bounded G2 auto-approval smoke
 

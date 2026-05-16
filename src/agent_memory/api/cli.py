@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import html
 import json
+import re
 import shutil
 import sqlite3
 import sys
@@ -211,6 +212,134 @@ def _remember_preference_object_from_summary(summary: str | None) -> str | None:
     return None
 
 
+_REMEMBER_PREFERENCE_TOPIC_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "api",
+    "based",
+    "before",
+    "concise",
+    "default",
+    "defaults",
+    "detailed",
+    "durable",
+    "exact",
+    "explicit",
+    "for",
+    "from",
+    "in",
+    "korean",
+    "less",
+    "long",
+    "manual",
+    "more",
+    "not",
+    "of",
+    "on",
+    "rather",
+    "real",
+    "short",
+    "step",
+    "than",
+    "the",
+    "to",
+    "verified",
+    "verbose",
+    "with",
+}
+
+
+def _remember_preference_topic_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    lowered = value.lower()
+    if "handoff" in lowered:
+        return "handoffs"
+    if "release" in lowered and "qa" in lowered:
+        return "release_qa"
+    if "oauth" in lowered or "api key" in lowered or "api keys" in lowered:
+        return "ai_provider_auth"
+    if "pydantic" in lowered:
+        return "python_pydantic_style"
+    if "autonomous" in lowered:
+        return "autonomous_agent_runs"
+    tokens = [token for token in re.findall(r"[a-z0-9]+", lowered) if token not in _REMEMBER_PREFERENCE_TOPIC_STOPWORDS]
+    if not tokens:
+        return None
+    return "_".join(tokens[-2:])
+
+
+def _remember_preference_conflict_preflight(
+    db_path: Path,
+    *,
+    object_ref_or_value: str,
+    scope: str,
+    allow_conflict: bool,
+) -> dict[str, Any]:
+    requested_topic_key = _remember_preference_topic_key(object_ref_or_value)
+    claim_facts = list_facts_by_claim_slot(
+        db_path,
+        subject_ref="user",
+        predicate="prefers",
+        scope=scope,
+    )
+    comparable_facts = [
+        fact
+        for fact in claim_facts
+        if fact.status in {"approved", "candidate", "disputed", "deprecated"}
+        and _remember_preference_topic_key(fact.object_ref_or_value) == requested_topic_key
+    ]
+    conflicts = [
+        _promotion_conflict_fact_payload(db_path, fact)
+        for fact in comparable_facts
+        if fact.object_ref_or_value != object_ref_or_value
+    ]
+    matching_facts = [
+        _promotion_conflict_fact_payload(db_path, fact)
+        for fact in comparable_facts
+        if fact.object_ref_or_value == object_ref_or_value
+    ]
+    if conflicts and allow_conflict:
+        result = "allowed_by_explicit_action"
+    elif conflicts:
+        result = "blocked"
+    else:
+        result = "clear"
+    suggested_next_steps = [
+        "Run the suggested review and graph commands before changing lifecycle status.",
+        "Use review supersede after promotion only if a human explicitly chooses a replacement chain.",
+    ]
+    if conflicts and not allow_conflict:
+        suggested_next_steps.append(
+            "Use --allow-conflict only after reviewing the conflicting preference topic and explicitly accepting coexisting claims."
+        )
+    return {
+        "read_only": True,
+        "result": result,
+        "requires_explicit_action": bool(conflicts),
+        "claim_slot": {
+            "subject_ref": "user",
+            "predicate": "prefers",
+            "scope": scope,
+            "preference_topic_key": requested_topic_key,
+        },
+        "requested_fact": {
+            "subject_ref": "user",
+            "predicate": "prefers",
+            "object_ref_or_value": object_ref_or_value,
+            "scope": scope,
+        },
+        "status_counts": _status_counts_for_facts(comparable_facts),
+        "same_topic_fact_count": len(comparable_facts),
+        "broader_claim_slot_fact_count": len(claim_facts),
+        "conflict_count": len(conflicts),
+        "conflicts": conflicts,
+        "matching_facts": matching_facts,
+        "suggested_next_steps": suggested_next_steps,
+    }
+
+
 def _remember_preference_auto_approval_candidate(db_path: Path, trace: Any, *, scope: str) -> dict[str, Any]:
     trace_ref = f"experience_trace:{trace.id}" if trace.id is not None else None
     if trace_ref is not None:
@@ -245,10 +374,8 @@ def _remember_preference_auto_approval_candidate(db_path: Path, trace: Any, *, s
             "object_ref_or_value": proposed_object,
             "scope": scope,
         }
-        conflict_preflight = _promotion_conflict_preflight(
+        conflict_preflight = _remember_preference_conflict_preflight(
             db_path,
-            subject_ref="user",
-            predicate="prefers",
             object_ref_or_value=proposed_object,
             scope=scope,
             allow_conflict=False,

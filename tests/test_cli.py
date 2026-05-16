@@ -10842,7 +10842,110 @@ def test_consolidation_auto_approve_remember_preferences_apply_is_guarded_and_au
         assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 1
 
 
-def test_consolidation_auto_approve_remember_preferences_blocks_conflicts_without_mutation(tmp_path: Path) -> None:
+def test_consolidation_auto_approve_remember_preferences_allows_different_preference_topics_after_one_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-auto-approve-independent-topics.db"
+    initialize_database(db_path)
+    for index, summary in enumerate(
+        [
+            "User prefers concise Korean handoffs.",
+            "User prefers verified release QA.",
+        ]
+    ):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=f"topic-{index}".encode().hex().ljust(64, "0")[:64],
+            summary=summary,
+            scope="project:g2",
+            retention_policy="review",
+            metadata={
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+            },
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    first_apply = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 first independent preference topic",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert first_apply.returncode == 0, first_apply.stderr
+    first_payload = json.loads(first_apply.stdout)
+    assert first_payload["approved_count"] == 1
+    assert first_payload["deferred_count"] == 1
+
+    second_apply = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 second independent preference topic",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert second_apply.returncode == 0, second_apply.stdout + second_apply.stderr
+    second_payload = json.loads(second_apply.stdout)
+    assert second_payload["approved_count"] == 1
+    assert second_payload["skipped_count"] == 1
+    assert second_payload["blocked_count"] == 0
+    assert second_payload["approved"][0]["proposed_fact"]["object_ref_or_value"] in {
+        "concise Korean handoffs.",
+        "verified release QA.",
+    }
+    with sqlite3.connect(db_path) as connection:
+        facts = connection.execute(
+            "SELECT object_ref_or_value, status FROM facts ORDER BY id ASC"
+        ).fetchall()
+        assert sorted(facts) == [("concise Korean handoffs.", "approved"), ("verified release QA.", "approved")]
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 2
+
+
+def test_consolidation_auto_approve_remember_preferences_blocks_same_topic_conflicts_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-conflict.db"
     initialize_database(db_path)
     source = ingest_source_text(

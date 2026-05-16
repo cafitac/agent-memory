@@ -1,7 +1,28 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 14:40 KST
+Last updated: 2026-05-16 15:01 KST
+
+## Just completed: preference topic-slot semantics + second bounded auto-approval
+
+- Hardened `consolidation auto-approve remember-preferences` so same `user/prefers/project` facts no longer treat every different preference as one contradiction.
+- Added a narrow preference-topic claim slot for the G2 policy:
+  - same-topic preferences such as `verbose handoffs` vs `concise handoffs` still block as `claim_slot_conflict`;
+  - different topics such as handoff style vs release QA can coexist and be approved one-at-a-time.
+- Preserved the previous safety rails: default dry-run, explicit `--apply --actor --reason`, `--max-apply 1`, secret-like summary block, duplicate `auto_approved_as` skip, no ordinary-turn inferred approval.
+- Live dry-run before apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-dry-run-before-apply.json`.
+  - `eligible_count=4`, `blocked_count=0`, `skipped_count=1`, `mutated=false`.
+- Live bounded apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-apply.json`.
+  - `approved_count=1`, `deferred_count=3`, `skipped_count=1`, `max_apply=1`, backup at `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/pre-topic-slot-auto-approval-memory-backup.db`.
+- Post-apply dry-run: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-topic-slots-20260516T055757Z/remember-preferences-topic-post-dry-run.json`.
+  - `eligible_count=3`, `blocked_count=0`, `skipped_count=2`; remaining safe explicit preferences are ready for future bounded one-at-a-time applies.
+
+Recommended next work now:
+
+1. Commit/push this topic-slot checkpoint and watch CI.
+2. Continue exact-bounded `remember-preferences` applies one at a time until the explicit safe queue is drained, with a backup and post-dry-run after each apply.
+3. Add a post-apply verifier/report for remember-preferences, analogous to lifecycle post-apply verification, before allowing batch size >1.
+4. Keep broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Just completed: explicit remember-intent live evidence + first bounded auto-approval
 
