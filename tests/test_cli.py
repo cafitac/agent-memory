@@ -16454,6 +16454,200 @@ def test_dogfood_ordinary_turn_eval_window_summary_blocks_unsafe_or_insufficient
 
 
 
+def test_dogfood_ordinary_turn_inferred_approval_readiness_consumes_green_window_without_apply(
+    tmp_path: Path,
+) -> None:
+    window_report = tmp_path / "ordinary-window-green.json"
+    output_path = tmp_path / "ordinary-inferred-approval-readiness.json"
+    window_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_eval_window_summary",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "window_policy": "ordinary-turn-repeated-eval-window-v1",
+                "report_counts": {
+                    "report_count": 3,
+                    "quality_gate_pass_count": 3,
+                    "read_only_report_count": 3,
+                    "auto_approval_blocked_report_count": 3,
+                },
+                "labeled_window": {
+                    "labeled_ordinary_turn_min": 4,
+                    "labeled_ordinary_turn_max": 5,
+                    "labeled_ordinary_turn_total": 13,
+                    "precision_percent_min": 100,
+                    "false_positive_total": 0,
+                    "false_negative_total": 0,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_repeated_eval_windows_green_keep_auto_approval_blocked",
+                    "blocked_reasons": [],
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "sample_values_included": False,
+                    "aggregate_only": True,
+                    "report_hashes_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-approval-readiness",
+            "--window-summary",
+            str(window_report),
+            "--min-report-count",
+            "3",
+            "--min-labeled-total",
+            "10",
+            "--min-precision-percent",
+            "100",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_inferred_approval_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["readiness_policy"] == "ordinary-turn-inferred-approval-readiness-v1"
+    assert payload["window_evidence"]["usable_for_readiness"] is True
+    assert payload["window_evidence"]["report_count"] == 3
+    assert payload["window_evidence"]["labeled_ordinary_turn_total"] == 13
+    assert payload["window_evidence"]["precision_percent_min"] == 100
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_inferred_approval_ready_for_separate_exact_apply_design",
+        "blocked_reasons": [],
+    }
+    assert payload["inferred_approval_readiness"] == {
+        "ready_for_design": True,
+        "apply_supported": False,
+        "apply_executed": False,
+        "requires_separate_exact_approval_corridor": True,
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_apply": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "aggregate_only": True,
+        "report_hashes_only": True,
+    }
+    assert payload["recommended_next_step"] == "design_separate_exact_approval_apply_corridor_keep_ordinary_auto_approval_blocked"
+
+
+def test_dogfood_ordinary_turn_inferred_approval_readiness_blocks_red_window(
+    tmp_path: Path,
+) -> None:
+    window_report = tmp_path / "ordinary-window-red.json"
+    window_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_eval_window_summary",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "window_policy": "ordinary-turn-repeated-eval-window-v1",
+                "report_counts": {"report_count": 1, "quality_gate_pass_count": 0},
+                "labeled_window": {
+                    "labeled_ordinary_turn_total": 2,
+                    "precision_percent_min": 50,
+                    "false_positive_total": 1,
+                    "false_negative_total": 0,
+                },
+                "quality_gate": {"pass": False, "blocked_reasons": ["precision_below_minimum"]},
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "sample_values_included": False,
+                    "aggregate_only": True,
+                    "report_hashes_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-approval-readiness",
+            "--window-summary",
+            str(window_report),
+            "--min-report-count",
+            "2",
+            "--min-labeled-total",
+            "10",
+            "--min-precision-percent",
+            "100",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_inferred_approval_not_ready_keep_auto_approval_blocked",
+        "blocked_reasons": [
+            "false_positive_predictions_present",
+            "labeled_ordinary_turn_total_below_minimum",
+            "precision_below_minimum",
+            "window_report_count_below_minimum",
+            "window_report_quality_gate_pass_count_mismatch",
+            "window_summary_quality_gate_not_green",
+        ],
+    }
+    assert payload["inferred_approval_readiness"]["ready_for_design"] is False
+    assert payload["inferred_approval_readiness"]["apply_supported"] is False
+    assert payload["ordinary_conversation_auto_approval"] is False
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:
