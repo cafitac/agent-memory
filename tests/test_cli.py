@@ -11366,6 +11366,271 @@ def test_consolidation_auto_approve_remember_preferences_bounded_batch_operator_
     assert "User prefers" not in result.stdout
 
 
+def test_consolidation_auto_approve_remember_preferences_batch_post_apply_verification_is_stop_gate(
+    tmp_path: Path,
+) -> None:
+    packet_path = tmp_path / "packet.json"
+    apply_report_path = tmp_path / "batch-apply.json"
+    post_dry_run_path = tmp_path / "post-dry-run.json"
+    output_path = tmp_path / "batch-post-verify.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_bounded_batch_operator_packet",
+                "read_only": True,
+                "mutated": False,
+                "apply_executed": False,
+                "apply_supported": False,
+                "default_retrieval_unchanged": True,
+                "expected_policy": "remember-preferences-v1",
+                "scope": "project:g2",
+                "actor": "agent-memory:g2-test",
+                "candidate_inventory": {
+                    "eligible_count": 2,
+                    "selected_preview_count": 2,
+                    "max_apply": 2,
+                    "candidate_json_included": False,
+                    "trace_ids_included": False,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "remember_preference_bounded_batch_packet_ready_for_exact_manual_apply",
+                    "blocked_reasons": [],
+                },
+                "runbook_contract": {
+                    "requires_exact_operator_review": True,
+                    "requires_private_reason": True,
+                    "requires_immediate_post_apply_verification": True,
+                    "packet_is_not_authorization": True,
+                    "readiness_is_not_authorization": True,
+                },
+                "forbidden_authority": {"unattended_batch_apply": False},
+                "privacy": {"aggregate_or_ref_only": True, "candidate_json_included": False, "trace_ids_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    apply_report_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": True,
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": False,
+                "scope": "project:g2",
+                "max_apply": 2,
+                "eligible_count": 2,
+                "approved_count": 2,
+                "blocked_count": 0,
+                "deferred_count": 0,
+                "skipped_count": 3,
+                "approved": [
+                    {
+                        "trace_id": 11,
+                        "memory_ref": "fact:11",
+                        "source_id": 101,
+                        "relation_id": 201,
+                        "proposed_fact": {
+                            "subject_ref": "user",
+                            "predicate": "prefers",
+                            "object_ref_or_value": "concise handoffs",
+                            "scope": "project:g2",
+                        },
+                        "audit": {
+                            "policy": "remember-preferences-v1",
+                            "actor": "agent-memory:g2-test",
+                            "reason": "operator-approved bounded batch",
+                        },
+                    },
+                    {
+                        "trace_id": 12,
+                        "memory_ref": "fact:12",
+                        "source_id": 102,
+                        "relation_id": 202,
+                        "proposed_fact": {
+                            "subject_ref": "user",
+                            "predicate": "prefers",
+                            "object_ref_or_value": "real downloaded install QA",
+                            "scope": "project:g2",
+                        },
+                        "audit": {
+                            "policy": "remember-preferences-v1",
+                            "actor": "agent-memory:g2-test",
+                            "reason": "operator-approved bounded batch",
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    post_dry_run_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": False,
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "scope": "project:g2",
+                "eligible_count": 0,
+                "approved_count": 0,
+                "blocked_count": 0,
+                "deferred_count": 0,
+                "skipped_count": 5,
+                "candidates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences-batch-post-apply-verification",
+            "--operator-packet-report",
+            str(packet_path),
+            "--apply-report",
+            str(apply_report_path),
+            "--post-dry-run-report",
+            str(post_dry_run_path),
+            "--expected-policy",
+            "remember-preferences-v1",
+            "--max-approved",
+            "2",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_preference_batch_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["batch_apply_report_summary"]["approved_count"] == 2
+    assert payload["operator_packet_summary"]["selected_preview_count"] == 2
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "remember_preference_batch_post_apply_verification_green_stop_before_next_batch",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["unattended_batch_apply"] is False
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert payload["privacy"]["candidate_json_included"] is False
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert "concise handoffs" not in result.stdout
+
+
+def test_consolidation_auto_approve_remember_preferences_batch_post_apply_verification_blocks_bad_batch(
+    tmp_path: Path,
+) -> None:
+    packet_path = tmp_path / "packet.json"
+    apply_report_path = tmp_path / "batch-apply.json"
+    post_dry_run_path = tmp_path / "post-dry-run.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_bounded_batch_operator_packet",
+                "read_only": True,
+                "mutated": False,
+                "apply_executed": False,
+                "apply_supported": False,
+                "default_retrieval_unchanged": True,
+                "expected_policy": "remember-preferences-v1",
+                "scope": "project:g2",
+                "actor": "agent-memory:g2-test",
+                "candidate_inventory": {"selected_preview_count": 2, "max_apply": 2},
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "runbook_contract": {"requires_immediate_post_apply_verification": True},
+                "forbidden_authority": {"unattended_batch_apply": False},
+                "privacy": {"aggregate_or_ref_only": True, "candidate_json_included": False, "trace_ids_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    apply_report_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": True,
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": False,
+                "scope": "project:g2",
+                "max_apply": 4,
+                "approved_count": 3,
+                "approved": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    post_dry_run_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": False,
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "scope": "project:g2",
+                "eligible_count": 1,
+                "blocked_count": 1,
+                "skipped_count": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences-batch-post-apply-verification",
+            "--operator-packet-report",
+            str(packet_path),
+            "--apply-report",
+            str(apply_report_path),
+            "--post-dry-run-report",
+            str(post_dry_run_path),
+            "--expected-policy",
+            "remember-preferences-v1",
+            "--max-approved",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is False
+    assert "batch_apply_approved_count_out_of_bounds" in payload["quality_gate"]["blocked_reasons"]
+    assert "batch_apply_max_apply_out_of_bounds" in payload["quality_gate"]["blocked_reasons"]
+    assert "batch_apply_approved_list_count_mismatch" in payload["quality_gate"]["blocked_reasons"]
+    assert "post_dry_run_has_blocked_candidates" in payload["quality_gate"]["blocked_reasons"]
+    assert "post_dry_run_skipped_count_below_batch_approved_count" in payload["quality_gate"]["blocked_reasons"]
+
+
 def test_consolidation_auto_approve_remember_preferences_blocks_same_topic_conflicts_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-conflict.db"
     initialize_database(db_path)

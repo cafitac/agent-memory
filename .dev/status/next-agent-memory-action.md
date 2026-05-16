@@ -1,34 +1,33 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 00:31 KST
+Last updated: 2026-05-17 00:51 KST
 
-## Just completed: remember-preferences bounded-batch graduation/operator packet
+## Just completed: remember-preferences bounded-batch post-apply verifier
 
-- Added `consolidation auto-approve remember-preferences-batch-graduation-readiness`, a read-only gate that consumes prior green one-at-a-time post-apply verifier artifacts plus a current dry-run artifact.
-- Added `consolidation auto-approve remember-preferences-bounded-batch-operator-packet`, a read-only/manual-only packet that emits aggregate inventory, an exact `remember-preferences --max-apply 2` command template, and the required post-apply verifier template.
-- No batch apply was executed. The new packet reports `apply_executed=false`, `apply_supported=false`, and keeps unattended/broad/background/default-ranking/collapse-delete/telemetry-reset/unreviewed-promotion authority false.
-- Live read-only smoke artifacts: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-packet-20260516T152736Z/`.
-  - `graduation-readiness.json`: gate passed, `green_verified_apply_count=4`, historical current dry-run fixture had `eligible_count=2`, `blocked_count=0`, `mutated=false`.
-  - `operator-packet.json`: gate passed, `eligible_count=2`, `selected_preview_count=2`, `max_apply=2`, `apply_executed=false`, `mutated=false`.
+- Added `consolidation auto-approve remember-preferences-batch-post-apply-verification`, a read-only stop gate for future bounded `remember-preferences --max-apply 2` batches.
+- The verifier checks a green/manual-only operator packet, the actual batch apply report, and the post-apply dry-run report.
+- It enforces policy/scope/actor alignment, bounded approved count, fact-only `user prefers` writes, auto-approval relation ids, audit actor/reason, zero blocked candidates, post-dry-run skipped-count coverage, privacy-safe artifacts, and forbidden-authority flags.
+- It does not authorize unattended batch apply. It reports `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true` and keeps broad/background/default-ranking/collapse-delete/telemetry-reset/unreviewed-promotion authority false.
+- Live DB smoke found no remaining eligible explicit preference candidates for `project:agent-memory`, so the live graduation gate correctly stayed red with `current_dry_run_has_no_eligible_candidates` and no live mutation occurred.
 - Validation from source checkout:
-  - New focused tests: `2 passed` after observed RED parser failures.
-  - Remember-preferences focused coverage: `9 passed, 164 deselected`.
-  - Full suite: `355 passed, 1 xfailed`.
+  - New focused tests: `2 passed, 173 deselected` after RED parser failures.
+  - Remember-preferences focused coverage: `11 passed, 164 deselected`.
+  - Full suite: `357 passed, 1 xfailed`.
   - Release metadata + release-readiness smoke, `npm pack --dry-run`, and `git diff --check` passed.
 
 Current estimate:
 
-- Safety-gated operational north-star: approximately 99%.
-- Literal fully autonomous human-brain-like memory within this repo's local-memory scope: approximately 98%.
-- The explicit-memory lane is now nearly complete, including read-only batch preparation. Remaining progress to 100% is mostly about safely proving unattended generalization, not basic plumbing.
+- Safety-gated operational north-star: approximately 99%+.
+- Literal fully autonomous human-brain-like memory within this repo's scoped local-memory lifecycle: approximately 98.5%.
+- Explicit remember-intent/preference memory is effectively late-stage; the remaining progress to 100% is ordinary-turn inferred classification/approval and broader unattended lifecycle automation, not basic storage/retrieval/review plumbing.
 
 Recommended next work now:
 
-1. Commit/push this batch-packet checkpoint and watch CI.
-2. Next PR-sized safety gate: add a batch-specific remember-preferences post-apply verifier before any real live batch, or build the ordinary-turn classifier/evaluation harness that can prove high precision while still read-only.
-3. Keep live `remember-preferences --max-apply 2` as a manual-only future command template until the batch verifier exists and exact operator approval is given.
-4. Still blocked: broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Commit/push this batch-verifier checkpoint and watch CI.
+2. Next PR-sized safety gate: ordinary-turn classifier/evaluation harness, read-only first. Prove precision/recall over safe aggregate fixtures before enabling inferred approval.
+3. Keep any real future `remember-preferences --max-apply 2` batch behind fresh packet + exact operator approval + backup + post-dry-run + this verifier.
+4. Still blocked: broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: preference topic-slot semantics + second bounded auto-approval
 

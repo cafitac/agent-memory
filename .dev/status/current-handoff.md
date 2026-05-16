@@ -1,57 +1,52 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 00:31 KST
+Last updated: 2026-05-17 00:51 KST
 
-## Checkpoint: remember-preferences bounded-batch graduation/operator packet
+## Checkpoint: remember-preferences bounded-batch post-apply verifier
 
-The source checkout now adds the missing report-first batch gate for the explicit remember-preferences lane. This does not run a batch apply and does not authorize unattended operation. It converts the prior one-at-a-time verifier proof into a manual-only operator packet so a future exact-reviewed batch can be prepared without raw trace/reason exposure.
+The source checkout now closes the missing stop gate after a future bounded `remember-preferences --max-apply 2` batch. The new verifier is read-only and validates a saved bounded-batch operator packet, the bounded apply report, and the post-apply dry-run report before any next batch can be considered.
 
 What changed in source:
 
-- Added `consolidation auto-approve remember-preferences-batch-graduation-readiness`.
-  - It consumes prior `remember-preferences-post-apply-verification` artifacts plus a current dry-run artifact.
-  - It requires repeated green one-at-a-time proof, current dry-run eligibility, zero blocked candidates, matching policy/scope, read-only/no-mutation/default-unchanged reports, privacy-safe artifacts, and forbidden-authority flags.
-  - It reports `bounded_batch_apply_supported=false` and `requires_separate_exact_operator_approval=true` even when green.
-- Added `consolidation auto-approve remember-preferences-bounded-batch-operator-packet`.
-  - It consumes the graduation report and current dry-run report.
-  - It emits aggregate candidate inventory only, a manual apply command template with `--max-apply 2`, and the required post-apply verification command template.
-  - It keeps `apply_executed=false`, `apply_supported=false`, no raw candidate JSON, no trace ids, no raw reason, and no backup contents.
-- Added focused RED/GREEN CLI tests for both new read-only surfaces.
+- Added `consolidation auto-approve remember-preferences-batch-post-apply-verification`.
+  - Inputs: `--operator-packet-report`, `--apply-report`, `--post-dry-run-report`, `--expected-policy`, `--max-approved`, optional `--output`.
+  - Requires a green/manual-only operator packet, exact policy/scope/actor match, batch size within `2..max_approved`, approved facts only for `user prefers`, auto-approval relation ids, audit actor/reason, zero blocked candidates, and post-dry-run skipped count covering the applied batch.
+  - Emits only artifact hashes and aggregate/ref-safe approved refs; it does not include raw preference text, candidate JSON, trace ids, raw reason text, or backup contents.
+  - Keeps `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, and all forbidden-authority flags false.
+- Added focused RED/GREEN tests for the green stop gate and a bad-batch failure shape.
+- The previous batch graduation/operator packet remains manual-only. The new verifier is a stop gate, not unattended batch permission.
 
-Live read-only smoke:
+Live/source smoke:
 
-- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-packet-20260516T152736Z/`.
-- Graduation report: `graduation-readiness.json`.
-  - `green_verified_apply_count=4`.
-  - current dry-run used the historical pre-step artifact with `eligible_count=2`, `blocked_count=0`, `skipped_count=3`.
-  - Gate passed with `remember_preference_bounded_batch_operator_packet_ready`.
-  - `read_only=true`, `mutated=false`.
-- Operator packet: `operator-packet.json`.
-  - `eligible_count=2`, `selected_preview_count=2`, `max_apply=2`.
-  - Gate passed with `remember_preference_bounded_batch_packet_ready_for_exact_manual_apply`.
-  - `apply_executed=false`, `apply_supported=false`, `mutated=false`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-apply-verifier-20260516T154738Z-agent-memory-scope/`.
+- Current live DB has no remaining eligible explicit `remember-preferences-v1` candidates for `project:agent-memory`:
+  - `pre-batch-dry-run.json`: `eligible_count=0`, `blocked_count=0`, `skipped_count=5`, `mutated=false`.
+  - `graduation-readiness.json`: correctly red with `current_dry_run_has_no_eligible_candidates`.
+- A generic-scope exploratory run at `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-batch-apply-verifier-20260516T154702Z/` also produced no mutation: `approved_count=0`, `mutated=false`; its verifier correctly stayed red because there was no real batch apply to verify.
+- This means the new verifier is source-verified and fail-closed on live artifacts; there was no live memory mutation in this checkpoint.
 
 Validation:
 
-- Focused new tests: `2 passed` after observing the RED parser failures first.
-- Focused remember-preferences tests: `9 passed, 164 deselected`.
-- Full suite: `355 passed, 1 xfailed`.
+- New focused tests: `2 passed, 173 deselected` after observed RED parser failures.
+- Focused remember-preferences coverage: `11 passed, 164 deselected`.
+- Full suite: `357 passed, 1 xfailed`.
 - Release metadata smoke + release-readiness smoke passed on version `0.1.162`.
 - `npm pack --dry-run` passed.
 - `git diff --check` passed.
 
 Current interpretation:
 
-- Safety-gated operational north-star remains approximately 99%.
-- Literal fully autonomous human-brain-like memory is approximately 98% for the scoped local-memory lifecycle. The explicit remember-intent preference lane now has: evidence creation, topic-aware conflict semantics, one-at-a-time auto-approval, duplicate relation guards, post-apply verifier stops, queue-drain proof, and a read-only bounded-batch operator packet. The last gap is still intentionally gated autonomy: ordinary-turn inferred approval, unattended/background apply, default-ranking rollout, collapse/delete, telemetry reset, and unreviewed promotion.
+- Safety-gated operational north-star remains approximately 99%+.
+- Literal fully autonomous human-brain-like memory for the scoped local lifecycle is now about 98.5%: the explicit remember-intent/preference lane has evidence, topic-aware conflict handling, one-at-a-time apply, duplicate guards, post-apply verifier, queue drain proof, bounded-batch packet, and now a batch-specific post-apply stop gate.
+- The remaining gap to 100% is no longer basic explicit-memory plumbing. It is the intentionally riskier generalization layer: ordinary-turn inferred approval/classification, unattended/background apply, default-ranking rollout, autonomous collapse/delete, live telemetry reset, and unreviewed promotion.
 
 Next after this slice:
 
 1. Commit/push this source checkpoint and watch CI.
-2. Add the next safety gate toward 100%: a remember-preferences bounded-batch post-apply verifier before any live batch apply, or an ordinary-turn classifier/evaluation harness that proves precision before inferred memory approval.
-3. Do not run live batch apply merely because the operator packet is green; a real live batch still needs exact operator approval, backup/output paths, post-apply dry-run, and a batch-specific verifier.
-4. Continue to block broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
+2. Next PR-sized slice toward 100%: build an ordinary-turn classifier/evaluation harness that remains read-only but proves high precision for inferred memory-worthy turns before any inferred approval is allowed.
+3. If new explicit remember-preferences candidates appear later, a real `--max-apply 2` batch can only proceed with a fresh green packet, exact operator approval, backup/output paths, post-dry-run, and this batch verifier green afterward.
+4. Continue blocking broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion until each has its own evidence gate and rollback path.
 
 ## Checkpoint: repeated recurrent reinforcement applies + ordinary-turn readiness gate
 
