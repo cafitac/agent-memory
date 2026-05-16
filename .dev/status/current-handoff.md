@@ -1,13 +1,42 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:34 KST
+Last updated: 2026-05-16 10:41 KST
 
 
+
+## Checkpoint: fourth live exact-approved reinforcement lifecycle apply + batch graduation readiness source gate
+
+The fourth and final initial live reinforcement lifecycle candidate has been applied through the exact reviewed-candidate corridor. This completes the one-at-a-time proof loop for the four initial reinforcement candidates while preserving backup, readiness, rollback replay, application audit, live evidence bundle, and lifecycle post-apply verification gates. A new read-only source gate, `dogfood lifecycle-batch-graduation-readiness`, now reports whether those repeated one-at-a-time proofs are enough to design a separate bounded-batch corridor; it does not execute or authorize batch apply.
+
+What happened:
+
+- Approved candidate `g5-reinforcement-84541df977996b35164b682a`, target `fact:1`, with phrase `approve-g5-lifecycle-candidate-v1`.
+- Applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/`.
+- Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `774765d9b1fec9df76f7582232c14967e92b8e50afbfd5b550b700ec79e56690`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=4`, `pending=0`, `approved=0`.
+- Rollback replay passed with application count `7`, including four `g5-lifecycle-reinforcement-apply-v1` applications.
+- Post-apply live evidence bundle passed with `fixture_task_count=4`, baseline regressions `0`, rollback checked applications `7`, and audit application count `4`.
+- `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- New source command `dogfood lifecycle-batch-graduation-readiness` passed on the live DB for `g5-lifecycle-reinforcement-apply-v1` with `prior_one_at_a_time_apply_count=4`, but reports `bounded_batch_apply_supported=false` and `requires_separate_exact_approval_corridor=true`.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 97-98%.
+- Literal fully autonomous human-brain-like memory is approximately 78-80%: the system has repeated live reviewed lifecycle mutation proof and a batch-graduation readiness classifier, but risky mutation still requires explicit reviewed gates and no batch apply implementation exists yet.
+
+Immediate next recommended slice:
+
+1. Commit/push the fourth live apply plus `lifecycle-batch-graduation-readiness` source/test/docs checkpoint and watch CI.
+2. Next code slice should implement a separate bounded lifecycle batch apply corridor for already-approved lifecycle candidates only, with exact policy/approval phrase, actor/reason, backup, `--max-apply` ceiling, post-apply verification, and repeated-apply prevention.
+3. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+4. Do not infer broad automation from the green graduation-readiness gate; it only authorizes designing/testing the next exact-approval corridor.
 
 ## Checkpoint: third live exact-approved reinforcement lifecycle apply
 
-The third live reinforcement lifecycle candidate has been applied through the exact reviewed-candidate corridor. This proves the repeated one-at-a-time loop across three different target refs while preserving backup, readiness, rollback replay, audit, and lifecycle post-apply verification gates.
+The third live reinforcement lifecycle candidate was applied through the exact reviewed-candidate corridor. This proved the repeated one-at-a-time loop across three different target refs while preserving backup, readiness, rollback replay, audit, and lifecycle post-apply verification gates.
 
 What happened:
 
@@ -22,16 +51,8 @@ What happened:
 
 Current interpretation:
 
-- Safety-gated operational north-star is now approximately 96-97%.
-- Literal fully autonomous human-brain-like memory is approximately 76-78%: the real DB has now completed three live reviewed lifecycle reinforcement mutations, but autonomy is still exact-approval gated and one-at-a-time.
-
-Immediate next recommended slice:
-
-1. Commit/push this third live apply checkpoint and watch CI.
-2. Apply at most the last remaining pending reinforcement candidate only after the checkpoint is green.
-3. Rerun `lifecycle-post-apply-verification` after the apply and stop.
-4. After all four initial reinforcement candidates are green one-at-a-time, design a separate bounded-batch graduation gate before any batched/repeated apply.
-5. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and repeated/batched apply without a tested graduation gate blocked.
+- Safety-gated operational north-star was approximately 96-97%.
+- Literal fully autonomous human-brain-like memory was approximately 76-78% at this checkpoint.
 
 ## Checkpoint: second live exact-approved reinforcement lifecycle apply
 

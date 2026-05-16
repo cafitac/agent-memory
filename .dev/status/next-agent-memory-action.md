@@ -1,9 +1,30 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:34 KST
+Last updated: 2026-05-16 10:41 KST
 
 
+
+## Just completed: fourth live exact-approved reinforcement lifecycle apply + batch graduation readiness gate
+
+- Applied exactly the last remaining pending reinforcement candidate only; no batch apply was enabled.
+- Approved candidate `g5-reinforcement-84541df977996b35164b682a`, target `fact:1`, with phrase `approve-g5-lifecycle-candidate-v1`.
+- Applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/`.
+- Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `774765d9b1fec9df76f7582232c14967e92b8e50afbfd5b550b700ec79e56690`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=4`, `pending=0`, `approved=0`.
+- Rollback replay passed with decision `rollback_restore_replay_sufficient_for_bounded_partial_automation` and application count `7`.
+- Post-apply live evidence bundle passed: fixture task count `4`, baseline regressions `0`, rollback checked applications `7`, audit application count `4`.
+- `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Added `dogfood lifecycle-batch-graduation-readiness`, a read-only source gate. Live run passed for the reinforcement policy with four prior one-at-a-time applies, while keeping `bounded_batch_apply_supported=false`.
+
+Recommended next work now:
+
+1. Commit/push this fourth live apply and batch-graduation-readiness checkpoint; watch CI.
+2. Next PR-sized code slice: implement a separate bounded lifecycle batch apply corridor for already-approved lifecycle candidates only. Required guardrails: exact policy/approval phrase, actor/reason, backup, `--max-apply` ceiling, post-apply verification, no ordinary conversation auto-approval, no broad/background apply.
+3. Do not live-batch-apply anything until the separate RED-tested corridor exists and there are reviewed approved candidates for it.
+4. Keep default-ranking auto-rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Just completed: third live exact-approved reinforcement lifecycle apply
 

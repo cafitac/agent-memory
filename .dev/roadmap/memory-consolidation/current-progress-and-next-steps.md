@@ -1,13 +1,47 @@
-# Memory Consolidation Current Progress and Next Steps
+# agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:34 KST
+Last updated: 2026-05-16 10:41 KST
 
 
+
+## Checkpoint: fourth live exact-approved reinforcement lifecycle apply and batch graduation readiness
+
+The fourth and final initial live G5 lifecycle reinforcement apply has completed through the same explicit reviewed-candidate corridor. The live one-at-a-time loop is now proven across four targets (`fact:4`, `episode:1`, `procedure:1`, and `fact:1`) with backup, rollback replay, audit, live evidence bundle, and post-apply verification green. A new read-only source gate, `dogfood lifecycle-batch-graduation-readiness`, summarizes those prior proofs and says the next step is designing a separate exact-approval bounded-batch corridor; it does not support or execute batch apply.
+
+Live artifacts:
+
+- Apply directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/`.
+- Backup path: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `774765d9b1fec9df76f7582232c14967e92b8e50afbfd5b550b700ec79e56690`.
+- New batch-graduation report: `/Users/reddit/.agent-memory/reports/post-v0.1.162-fourth-live-reinforcement-apply-20260516T014150Z/lifecycle-batch-graduation-readiness.json`.
+
+Safety facts:
+
+- Candidate `g5-reinforcement-84541df977996b35164b682a` targeting `fact:1` was approved with `approve-g5-lifecycle-candidate-v1`.
+- The candidate was applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=4`, `pending=0`, `approved=0`.
+- Rollback replay passed with `checked_application_count=7`, `passed_replay_count=7`, and `failed_replay_count=0`.
+- The post-apply live evidence bundle passed for the bounded artifact set with fixture task count `4`, baseline regressions `0`, rollback checked applications `7`, and audit application count `4`.
+- `lifecycle-post-apply-verification` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- `lifecycle-batch-graduation-readiness` passed for the reinforcement policy with `prior_one_at_a_time_apply_count=4`, but still reports `bounded_batch_apply_supported=false` and `requires_separate_exact_approval_corridor=true`.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 97-98%.
+- Literal fully autonomous human-brain-like progress is approximately 78-80%. The system has repeated real reviewed lifecycle reinforcement mutation four times on the live source DB and now has a read-only batch-graduation classifier, but it still relies on exact approvals and has not implemented batch apply or ordinary conversation auto-approval.
+- The next proof is not another one-at-a-time reinforcement apply; the initial queue is exhausted. The next safe engineering slice is a RED-tested bounded-batch corridor for already-approved lifecycle candidates only.
+
+Next after this slice:
+
+1. Commit/push this fourth live apply plus batch-graduation-readiness checkpoint and watch CI.
+2. Implement a separate bounded lifecycle batch apply corridor with exact policy/approval phrase, actor/reason, backup, `--max-apply`, post-apply verification, and repeated-apply prevention.
+3. Do not live-batch-apply anything until that corridor exists and there are reviewed approved candidates for it.
+4. Still forbidden until their own gates exist: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, and unreviewed promotion.
 
 ## Checkpoint: third live exact-approved reinforcement lifecycle apply
 
-A third live G5 lifecycle reinforcement apply has completed through the same explicit reviewed-candidate corridor. The live one-at-a-time loop is now proven across three targets (`fact:4`, `episode:1`, and `procedure:1`) with backup, rollback replay, audit, and post-apply verification green.
+A third live G5 lifecycle reinforcement apply completed through the same explicit reviewed-candidate corridor. The live one-at-a-time loop was proven across three targets (`fact:4`, `episode:1`, and `procedure:1`) with backup, rollback replay, audit, and post-apply verification green.
 
 Live artifacts:
 
@@ -15,7 +49,7 @@ Live artifacts:
 - Backup path: `/Users/reddit/.agent-memory/reports/post-v0.1.162-third-live-reinforcement-apply-20260516T013407Z/pre-apply-memory-backup.db`.
 - Backup SHA-256: `5a18d345734798790ffa5bdd678901975792534a906d4e8df343dd75f174201c`.
 
-Live result:
+Safety facts:
 
 - Candidate `g5-reinforcement-da820f3c712f508c084d3137` targeting `procedure:1` was approved with `approve-g5-lifecycle-candidate-v1`.
 - The candidate was applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
@@ -24,18 +58,10 @@ Live result:
 - The post-apply live evidence bundle passed for the bounded artifact set with fixture task count `4`, baseline regressions `0`, rollback checked applications `6`, and audit application count `3`.
 - `lifecycle-post-apply-verification` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
 
-Current interpretation:
+Current interpretation at that checkpoint:
 
-- Overall safety-gated north-star progress is approximately 96-97%.
-- Literal fully autonomous human-brain-like progress is approximately 76-78%. The system has now repeated real reviewed lifecycle reinforcement mutation three times on the live source DB, but it still relies on exact approvals and stop-after-one verification.
-- The next proof is the final remaining one-candidate apply. Only after that should a separate bounded-batch graduation gate be designed.
-
-Next after this slice:
-
-1. Commit/push this third live apply checkpoint and watch CI.
-2. Then approve/apply at most the final pending reinforcement candidate through the same exact phrase corridor.
-3. Immediately rerun `lifecycle-post-apply-verification` and stop again.
-4. Still forbidden until their own gates exist: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated/batched apply without a new graduation gate.
+- Overall safety-gated north-star progress was approximately 96-97%.
+- Literal fully autonomous human-brain-like progress was approximately 76-78%.
 
 ## Checkpoint: second live exact-approved reinforcement lifecycle apply
 

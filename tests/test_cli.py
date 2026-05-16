@@ -12207,6 +12207,114 @@ def test_dogfood_lifecycle_post_apply_verification_accepts_green_lifecycle_artif
     }
 
 
+def test_dogfood_lifecycle_batch_graduation_readiness_reports_prior_one_at_a_time_proof(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-batch-graduation.db"
+    output_path = tmp_path / "lifecycle-batch-graduation.json"
+    initialize_database(db_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-apply-readiness",
+            str(db_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    with sqlite3.connect(db_path) as connection:
+        for index in range(4):
+            connection.execute(
+                """
+                INSERT INTO g5_trace_candidate_applications (
+                    candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                    backup_path, backup_sha256, rollback_hint_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"g5-reinforcement-proof-{index}",
+                    "reinforcement_review",
+                    f"fact:{index + 1}",
+                    "g5-lifecycle-reinforcement-apply-v1",
+                    "apply_reviewed_reinforcement_marker",
+                    "tester",
+                    "a" * 64,
+                    str(tmp_path / f"backup-{index}.db"),
+                    "b" * 64,
+                    json.dumps({"default_retrieval_mutated": False, "raw_content_included": False}),
+                ),
+            )
+    before_counts = _table_counts(db_path, ["g5_trace_candidate_applications", "facts", "relations"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-batch-graduation-readiness",
+            str(db_path),
+            "--policy",
+            "g5-lifecycle-reinforcement-apply-v1",
+            "--min-prior-applies",
+            "4",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_batch_graduation_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["policy"] == "g5-lifecycle-reinforcement-apply-v1"
+    assert payload["prior_one_at_a_time_apply_count"] == 4
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "bounded_batch_design_ready_after_repeated_one_at_a_time_proof",
+        "blocked_reasons": [],
+    }
+    assert payload["next_operator_boundary"] == {
+        "bounded_batch_apply_supported": False,
+        "requires_separate_exact_approval_corridor": True,
+        "suggested_max_apply_ceiling": 2,
+        "keeps_broad_background_apply_blocked": True,
+    }
+    assert payload["forbidden_authority"] == {
+        "executes_apply": False,
+        "bounded_batch_apply_supported": False,
+        "broad_background_apply_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "rollback_hint_included": False,
+        "aggregate_only": True,
+    }
+    assert _table_counts(db_path, ["g5_trace_candidate_applications", "facts", "relations"]) == before_counts
+
+
 def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:

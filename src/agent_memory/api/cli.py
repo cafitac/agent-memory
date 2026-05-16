@@ -3998,6 +3998,95 @@ def _dogfood_lifecycle_apply_readiness_payload(args: argparse.Namespace) -> dict
     return payload
 
 
+def _dogfood_lifecycle_batch_graduation_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy_contracts = {contract["policy"]: kind for kind, contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.items()}
+    if args.policy not in policy_contracts:
+        expected = ", ".join(sorted(policy_contracts))
+        raise ValueError(f"dogfood lifecycle-batch-graduation-readiness requires --policy one of: {expected}")
+    if args.min_prior_applies < 1:
+        raise ValueError("dogfood lifecycle-batch-graduation-readiness requires --min-prior-applies >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT id, candidate_id, proposal_type, promoted_ref, policy, action, actor,
+                   reason_sha256, backup_path, backup_sha256, created_at
+            FROM g5_trace_candidate_applications
+            WHERE policy = ?
+            ORDER BY created_at, id
+            """,
+            (args.policy,),
+        ).fetchall()
+    expected_actions = {
+        "reinforcement": {"apply_reviewed_reinforcement_marker"},
+        "decay": {"apply_reviewed_decay_deprecation"},
+        "supersession": {"apply_reviewed_supersession_relation"},
+    }[policy_contracts[args.policy]]
+    invalid_rows = [
+        str(row["candidate_id"])
+        for row in rows
+        if row["action"] not in expected_actions
+        or len(str(row["reason_sha256"] or "")) != 64
+        or len(str(row["backup_sha256"] or "")) != 64
+    ]
+    blocked_reasons: list[str] = []
+    if len(rows) < args.min_prior_applies:
+        blocked_reasons.append("insufficient_prior_one_at_a_time_lifecycle_applies")
+    if invalid_rows:
+        blocked_reasons.append("prior_lifecycle_apply_rows_fail_safe_shape_checks")
+    gate_pass = not blocked_reasons
+    payload = {
+        "kind": "dogfood_lifecycle_batch_graduation_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "db_path": str(db_path),
+        "policy": args.policy,
+        "candidate_kind": policy_contracts[args.policy],
+        "min_prior_applies": args.min_prior_applies,
+        "prior_one_at_a_time_apply_count": len(rows),
+        "safe_shape_checked_count": len(rows) - len(invalid_rows),
+        "unsafe_shape_count": len(invalid_rows),
+        "quality_gate": {
+            "pass": gate_pass,
+            "decision": "bounded_batch_design_ready_after_repeated_one_at_a_time_proof"
+            if gate_pass
+            else "continue_one_at_a_time_lifecycle_apply_proof",
+            "blocked_reasons": blocked_reasons,
+        },
+        "next_operator_boundary": {
+            "bounded_batch_apply_supported": False,
+            "requires_separate_exact_approval_corridor": True,
+            "suggested_max_apply_ceiling": min(2, max(1, args.min_prior_applies // 2)),
+            "keeps_broad_background_apply_blocked": True,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "bounded_batch_apply_supported": False,
+            "broad_background_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "rollback_hint_included": False,
+            "aggregate_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     policy_contracts = {
         contract["policy"]: {
@@ -14112,6 +14201,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_lifecycle_apply_readiness_parser.add_argument("db_path", type=Path)
     dogfood_lifecycle_apply_readiness_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_batch_graduation_readiness_parser = dogfood_subparsers.add_parser(
+        "lifecycle-batch-graduation-readiness",
+        help="Report whether prior one-at-a-time lifecycle apply proof is enough to design a bounded batch corridor without mutation.",
+    )
+    dogfood_lifecycle_batch_graduation_readiness_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_batch_graduation_readiness_parser.add_argument("--policy", required=True)
+    dogfood_lifecycle_batch_graduation_readiness_parser.add_argument("--min-prior-applies", type=int, default=4)
+    dogfood_lifecycle_batch_graduation_readiness_parser.add_argument("--output", type=Path)
     dogfood_lifecycle_post_apply_verification_parser = dogfood_subparsers.add_parser(
         "lifecycle-post-apply-verification",
         help="Validate lifecycle apply/readiness/rollback/audit artifacts as a read-only stop gate after one exact apply.",
@@ -15470,6 +15567,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-apply-readiness":
             print(json.dumps(_dogfood_lifecycle_apply_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-batch-graduation-readiness":
+            print(json.dumps(_dogfood_lifecycle_batch_graduation_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-post-apply-verification":
             print(json.dumps(_dogfood_lifecycle_post_apply_verification_payload(args), indent=2))
