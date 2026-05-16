@@ -1,8 +1,42 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:29 KST
+Last updated: 2026-05-16 09:00 KST
 
+
+## Checkpoint: first live exact-approved reinforcement lifecycle apply
+
+The first live G5 lifecycle reinforcement apply has completed through the explicit reviewed-candidate corridor. This is a real memory DB mutation, but it remained bounded to one candidate, with backup, rollback, and post-apply audit evidence.
+
+Live artifacts:
+
+- Apply directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/`.
+- Backup path: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `5c44d39611e613b04bd0bb984b0bdd11fd8acd26b5bee6b3fb2f8b3ab26bec0d`.
+
+Live result:
+
+- Candidate `g5-reinforcement-255f68c152b76d844c6720cc` targeting `fact:4` was approved with `approve-g5-lifecycle-candidate-v1`.
+- Before apply, readiness was green for exactly one reinforcement candidate: `eligible_approved_count=1`.
+- The candidate was applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=1`, `pending=3`, `approved=0`.
+- Rollback confidence and rollback replay validation passed after apply.
+- Application audit passed after providing rollback replay plus retrieval-ranking evidence.
+- Added and ran `dogfood lifecycle-post-apply-verification`; it passed on the live artifact directory with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- A broader post-apply `live-evidence-bundle` stayed red on `live_fixture_reliability_gate_not_green`; this is a live fixture/evidence-quality blocker for broader ranking/automation, not a rollback/apply failure.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 94-95%.
+- Literal fully autonomous human-brain-like progress is approximately 72-74%. The system has now performed its first real reviewed lifecycle reinforcement apply on the live source DB, but it is still not autonomous: the approval/apply corridor used exact phrases and stopped after one candidate.
+- The next proof should be a second one-candidate reinforcement apply after this source/test/docs checkpoint is committed and CI is green. Do not jump directly to ordinary auto-approval or broad/background apply.
+
+Next after this slice:
+
+1. Commit/push the `dogfood lifecycle-post-apply-verification` source/test/docs checkpoint and watch CI.
+2. Then approve/apply at most one additional pending reinforcement candidate through the same exact phrase corridor.
+3. Immediately rerun `lifecycle-post-apply-verification` and stop again.
+4. Still forbidden until their own gates exist: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without fresh approval.
 
 ## Checkpoint: live lifecycle readiness smoke and pending reinforcement review queue
 

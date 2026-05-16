@@ -6479,6 +6479,171 @@ def _dogfood_trace_candidate_application_audit_payload(args: argparse.Namespace)
     return payload
 
 
+def _dogfood_lifecycle_post_apply_verification_payload(args: argparse.Namespace) -> dict[str, Any]:
+    apply_payload, apply_base = _read_json_artifact_summary(args.apply_report)
+    readiness_payload, readiness_base = _read_json_artifact_summary(args.readiness_report)
+    rollback_payload, rollback_base = _read_json_artifact_summary(args.rollback_replay_report)
+    audit_payload, audit_base = _read_json_artifact_summary(args.application_audit_report)
+    apply_payload = apply_payload or {}
+    readiness_payload = readiness_payload or {}
+    rollback_payload = rollback_payload or {}
+    audit_payload = audit_payload or {}
+
+    blocked_reasons: list[str] = []
+
+    def require_artifact(base: dict[str, Any], *, name: str, kind: str, read_only: bool, mutated: bool) -> None:
+        if not base["provided"]:
+            blocked_reasons.append(f"{name}_not_provided")
+            return
+        if base["error"] is not None:
+            blocked_reasons.append(f"{name}_unreadable")
+            return
+        if base["kind"] != kind:
+            blocked_reasons.append(f"{name}_kind_invalid")
+        if base["read_only"] is not read_only:
+            blocked_reasons.append(f"{name}_read_only_contract_invalid")
+        if base["mutated"] is not mutated:
+            blocked_reasons.append(f"{name}_mutation_contract_invalid")
+        if base["default_retrieval_unchanged"] is not True:
+            blocked_reasons.append(f"{name}_default_retrieval_changed")
+
+    require_artifact(
+        apply_base,
+        name="apply_report",
+        kind="dogfood_lifecycle_candidate_apply",
+        read_only=False,
+        mutated=True,
+    )
+    require_artifact(
+        readiness_base,
+        name="readiness_report",
+        kind="dogfood_lifecycle_apply_readiness",
+        read_only=True,
+        mutated=False,
+    )
+    require_artifact(
+        rollback_base,
+        name="rollback_replay_report",
+        kind="dogfood_rollback_replay_validate",
+        read_only=True,
+        mutated=False,
+    )
+    require_artifact(
+        audit_base,
+        name="application_audit_report",
+        kind="dogfood_trace_candidate_application_audit",
+        read_only=True,
+        mutated=False,
+    )
+
+    applied = apply_payload.get("applied") if isinstance(apply_payload.get("applied"), list) else []
+    applied_count = len(applied)
+    if applied_count < 1:
+        blocked_reasons.append("apply_report_has_no_applied_candidates")
+    if applied_count > args.max_applied:
+        blocked_reasons.append("apply_report_exceeds_max_applied")
+    if apply_payload.get("policy") != args.expected_policy:
+        blocked_reasons.append("apply_report_policy_mismatch")
+    if apply_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("apply_report_ordinary_auto_approval_enabled")
+    apply_privacy = apply_payload.get("privacy", {}) if isinstance(apply_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(apply_privacy):
+        blocked_reasons.append("apply_report_privacy_not_ref_safe")
+
+    readiness_quality = readiness_payload.get("quality_gate", {}) if isinstance(readiness_payload.get("quality_gate"), dict) else {}
+    readiness_counts = readiness_payload.get("candidate_counts", {}) if isinstance(readiness_payload.get("candidate_counts"), dict) else {}
+    approved_remaining = sum(_safe_int(counts.get("approved", 0)) for counts in readiness_counts.values() if isinstance(counts, dict))
+    no_ready_apply_after_stop = readiness_quality.get("decision") == "no_exact_lifecycle_apply_candidates_ready" and approved_remaining == 0
+    if not no_ready_apply_after_stop:
+        blocked_reasons.append("readiness_report_has_remaining_ready_apply_candidates")
+    readiness_privacy = readiness_payload.get("privacy", {}) if isinstance(readiness_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(readiness_privacy):
+        blocked_reasons.append("readiness_report_privacy_not_ref_safe")
+
+    rollback_quality = rollback_payload.get("quality_gate", {}) if isinstance(rollback_payload.get("quality_gate"), dict) else {}
+    rollback_rollup = rollback_payload.get("rollup", {}) if isinstance(rollback_payload.get("rollup"), dict) else {}
+    rollback_pass = rollback_quality.get("pass") is True
+    checked_application_count = _safe_int(rollback_rollup.get("checked_application_count", rollback_payload.get("application_count", 0)))
+    failed_replay_count = _safe_int(rollback_rollup.get("failed_replay_count", 0))
+    if not rollback_pass:
+        blocked_reasons.append("rollback_replay_report_not_green")
+    if checked_application_count < applied_count:
+        blocked_reasons.append("rollback_replay_application_count_below_apply_count")
+    if failed_replay_count > 0:
+        blocked_reasons.append("rollback_replay_failed_applications_present")
+    rollback_privacy = rollback_payload.get("privacy", {}) if isinstance(rollback_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(rollback_privacy):
+        blocked_reasons.append("rollback_replay_report_privacy_not_ref_safe")
+
+    audit_quality = audit_payload.get("quality_gate", {}) if isinstance(audit_payload.get("quality_gate"), dict) else {}
+    audit_evidence = audit_payload.get("required_evidence_gate", {}) if isinstance(audit_payload.get("required_evidence_gate"), dict) else {}
+    audit_pass = audit_quality.get("pass") is True and audit_evidence.get("pass") is True
+    audit_application_count = _safe_int(audit_payload.get("application_count", 0))
+    if not audit_pass:
+        blocked_reasons.append("application_audit_report_not_green")
+    if audit_application_count < applied_count:
+        blocked_reasons.append("application_audit_count_below_apply_count")
+    audit_privacy = audit_payload.get("privacy", {}) if isinstance(audit_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(audit_privacy):
+        blocked_reasons.append("application_audit_report_privacy_not_ref_safe")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_lifecycle_post_apply_verification",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "expected_policy": args.expected_policy,
+        "max_applied": args.max_applied,
+        "apply_report": {
+            **apply_base,
+            "applied_count": applied_count,
+            "policy": apply_payload.get("policy"),
+        },
+        "readiness_report": {
+            **readiness_base,
+            "no_ready_apply_after_stop": no_ready_apply_after_stop,
+            "approved_remaining_count": approved_remaining,
+        },
+        "rollback_replay_report": {
+            **rollback_base,
+            "pass": rollback_pass,
+            "checked_application_count": checked_application_count,
+            "failed_replay_count": failed_replay_count,
+        },
+        "application_audit_report": {
+            **audit_base,
+            "pass": audit_pass,
+            "application_count": audit_application_count,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "blocked_reasons": blocked_unique,
+            "decision": "lifecycle_post_apply_verification_green_for_one_candidate_stop" if not blocked_unique else "fix_lifecycle_post_apply_verification_before_next_apply",
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "broad_background_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "candidate_json_included": False,
+            "reviewed_payload_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _write_json_report(path: Path | None, payload: dict[str, Any]) -> None:
     if path is None:
         return
@@ -13947,6 +14112,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_lifecycle_apply_readiness_parser.add_argument("db_path", type=Path)
     dogfood_lifecycle_apply_readiness_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_post_apply_verification_parser = dogfood_subparsers.add_parser(
+        "lifecycle-post-apply-verification",
+        help="Validate lifecycle apply/readiness/rollback/audit artifacts as a read-only stop gate after one exact apply.",
+    )
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--apply-report", type=Path, required=True)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--readiness-report", type=Path, required=True)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--rollback-replay-report", type=Path, required=True)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--application-audit-report", type=Path, required=True)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--expected-policy", required=True)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--max-applied", type=int, default=1)
+    dogfood_lifecycle_post_apply_verification_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_gate_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-gate",
         help="Run retrieval eval as a read-only gate before any opt-in ranking policy change.",
@@ -15294,6 +15470,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-apply-readiness":
             print(json.dumps(_dogfood_lifecycle_apply_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-post-apply-verification":
+            print(json.dumps(_dogfood_lifecycle_post_apply_verification_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-gate":
             print(json.dumps(_dogfood_retrieval_ranking_gate_payload(args), indent=2))

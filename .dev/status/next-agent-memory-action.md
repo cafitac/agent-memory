@@ -1,8 +1,41 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:29 KST
+Last updated: 2026-05-16 09:00 KST
 
+
+## Just completed: first live exact-approved reinforcement lifecycle apply
+
+- Operator gave blanket approval to continue toward the fully automated brain-like memory north-star; the session still preserved the exact policy/phrase safety corridor instead of broad auto-apply.
+- Approved one pending reinforcement candidate only:
+  - candidate id: `g5-reinforcement-255f68c152b76d844c6720cc`;
+  - target ref: `fact:4`;
+  - update phrase: `approve-g5-lifecycle-candidate-v1`.
+- Before apply, `lifecycle-apply-readiness` went green with reinforcement `approved=1`, `eligible_approved_count=1`, and decision `eligible_for_exact_reviewed_apply`.
+- Applied that one candidate only with:
+  - policy: `g5-lifecycle-reinforcement-apply-v1`;
+  - apply phrase: `apply-approved-g5-lifecycle-reinforcement-v1`;
+  - backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/pre-apply-memory-backup.db`;
+  - backup SHA-256: `5c44d39611e613b04bd0bb984b0bdd11fd8acd26b5bee6b3fb2f8b3ab26bec0d`.
+- Post-apply readiness returned to red/no-ready-apply with reinforcement `promoted=1`, `pending=3`, `approved=0`; this is the intended stop-after-one behavior.
+- Added source-level `dogfood lifecycle-post-apply-verification` to validate the apply report, post-apply readiness, rollback replay, and application audit as one read-only stop gate, without depending on unrelated live fixture reliability.
+- Verification artifacts are under `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/`:
+  - `lifecycle-candidate-update-approved.json`;
+  - `lifecycle-apply-readiness-before-apply.json`;
+  - `lifecycle-candidate-apply-reinforcement.json`;
+  - `lifecycle-apply-readiness-after-apply.json`;
+  - `rollback-confidence-after-reinforcement-apply.json` gate green;
+  - `rollback-replay-after-reinforcement-apply.json` gate green;
+  - `application-audit-after-reinforcement-apply-with-ranking.json` gate green;
+  - `lifecycle-post-apply-verification.json` gate green with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- A post-apply `live-evidence-bundle` also ran, but its top-level gate stayed red due to `live_fixture_reliability_gate_not_green`; this is now separated from lifecycle apply safety and should be treated as an evidence-quality/ranking blocker, not as failed rollback/apply.
+
+Recommended next work now:
+
+1. Commit/push source/test/docs for the post-apply verifier and watch CI.
+2. Then approve/apply at most one more pending reinforcement candidate with the same exact policy/phrase corridor and immediately rerun `lifecycle-post-apply-verification`.
+3. Do not batch-apply the remaining three pending reinforcement candidates yet; graduate from one-at-a-time only after repeated green post-apply verifications.
+4. Ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and repeated apply without fresh approval remain blocked until their own code/tested gates exist.
 
 ## Just completed: live lifecycle readiness smoke and pending reinforcement review queue
 

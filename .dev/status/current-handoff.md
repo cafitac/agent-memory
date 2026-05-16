@@ -1,8 +1,37 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-15 18:29 KST
+Last updated: 2026-05-16 09:00 KST
 
+
+## Checkpoint: first live exact-approved reinforcement lifecycle apply
+
+The first live lifecycle reinforcement candidate has been approved and applied on the real source DB through the exact reviewed-candidate corridor. This was intentionally bounded to one candidate and stopped after post-apply verification.
+
+What happened:
+
+- Approved candidate `g5-reinforcement-255f68c152b76d844c6720cc`, target `fact:4`, with phrase `approve-g5-lifecycle-candidate-v1`.
+- Readiness before apply was green for exactly one reinforcement candidate.
+- Applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/`.
+- Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-reinforcement-apply-20260515T235921Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `5c44d39611e613b04bd0bb984b0bdd11fd8acd26b5bee6b3fb2f8b3ab26bec0d`.
+- Post-apply readiness returned to no-ready-apply: `promoted=1`, `pending=3`, `approved=0` for reinforcement.
+- Rollback confidence, rollback replay, and application audit with ranking evidence passed.
+- Added and ran `dogfood lifecycle-post-apply-verification`; it passed on the live artifact directory with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Broader post-apply `live-evidence-bundle` remained red on `live_fixture_reliability_gate_not_green`; this is a broader evidence-quality/ranking blocker, not a failure of the bounded reinforcement apply.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 94-95%.
+- Literal fully autonomous human-brain-like memory is approximately 72-74%: the live system can execute a real reviewed lifecycle mutation with backup/audit/rollback, but it still depends on exact approval and one-at-a-time stop gates.
+
+Immediate next recommended slice:
+
+1. Commit/push the source/test/docs checkpoint for `dogfood lifecycle-post-apply-verification` and watch CI.
+2. After CI is green, approve/apply only one more pending reinforcement candidate with the same exact phrase corridor and stop again.
+3. Rerun `lifecycle-post-apply-verification` immediately after that second one-candidate apply.
+4. Do not enable ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, or repeated apply without fresh approval until separate gates exist.
 
 ## Checkpoint: live lifecycle readiness smoke and pending reinforcement review queue
 
