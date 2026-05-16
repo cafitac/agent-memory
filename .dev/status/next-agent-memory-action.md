@@ -1,7 +1,26 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 03:28 KST
+Last updated: 2026-05-17 03:48 KST
+
+## Just completed: ordinary-turn inferred post-apply verification
+
+- Added `dogfood ordinary-turn-inferred-post-apply-verification`, a read-only stop gate for the exact ordinary-turn inferred preference apply corridor.
+- It validates the saved apply report, rollback replay report, backup SHA-256, DB audit row, and `ordinary_turn_inferred_approved_as` relation without executing any further apply.
+- Copy-DB smoke over the prior ordinary-turn inferred apply artifact is green: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-inferred-apply-smoke-20260516T182955Z/ordinary-turn-inferred-post-apply-verification.json`.
+- Validation: RED invalid subcommand; focused GREEN `2 passed, 186 deselected`; broader ordinary-turn GREEN `9 passed, 179 deselected`; full suite GREEN `370 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.85-99.9%.
+- Remaining gap: repeated one-at-a-time exact ordinary-turn inferred evidence and a separate design decision before any broader ordinary-turn automation. Ordinary-turn auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+
+Recommended next work now:
+
+1. Collect another copy/live-safe one-at-a-time ordinary-turn inferred apply + post-apply verification evidence only if there is a clearly eligible non-secret preference-shaped ordinary turn and fresh exact approval.
+2. Add a read-only `ordinary-turn-inferred-evidence-rollup` over repeated post-apply verifier artifacts before considering broader automation.
+3. Do not broaden to default/background ordinary conversation auto-approval.
 
 ## Just completed: ordinary-turn inferred exact apply corridor
 

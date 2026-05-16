@@ -123,3 +123,5 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 - `references/post-v0.1.162-ordinary-turn-eval-window-summary.md` - read-only repeated eval-window summary gate over saved ordinary-turn classifier reports.
 - `references/post-v0.1.162-ordinary-turn-label-update.md` - exact-ref label update corridor for locally reviewed ordinary-turn refs.
 - `references/post-v0.1.162-ordinary-turn-classifier-eval.md` - read-only ordinary-turn memory-worthiness classifier/eval gate; live smoke is correctly red until labels exist.
+
+- `references/post-v0.1.162-ordinary-turn-inferred-post-apply-verification.md` - ordinary-turn inferred post-apply verifier stop gate.

@@ -1,7 +1,43 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 03:28 KST
+Last updated: 2026-05-17 03:48 KST
+
+## Checkpoint: ordinary-turn inferred post-apply verification
+
+The source checkout now has `dogfood ordinary-turn-inferred-post-apply-verification`, a dedicated read-only stop gate after a separately approved ordinary-turn inferred exact apply.
+
+What changed:
+
+- The command consumes a saved apply report, saved rollback replay report, and the target DB.
+- It verifies expected policy, bounded apply count, green apply gate, ref-safe privacy, backup file existence and SHA-256, green rollback replay, matching `g5_trace_candidate_applications` audit row, and matching `ordinary_turn_inferred_approved_as` relation.
+- It does not execute apply and reports `read_only=true`, `mutated=false`, `ordinary_conversation_auto_approval=false`, and all broad/default/destructive authority flags false.
+
+Copy-DB smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-inferred-apply-smoke-20260516T182955Z/`.
+- Verification output: `ordinary-turn-inferred-post-apply-verification.json`.
+- Live DB was not mutated.
+- Result: `quality_gate.pass=true`, `decision=ordinary_turn_inferred_post_apply_verification_green_stop`, backup SHA matched, rollback replay passed, audit row found, relation found.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-inferred-post-apply-verification` subcommand.
+- Focused GREEN: `2 passed, 186 deselected`.
+- Broader ordinary-turn GREEN: `9 passed, 179 deselected`.
+- Full suite GREEN: `370 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.85-99.9%.
+- Remaining gap: repeated one-at-a-time evidence and a separate broader-automation design decision; default/background ordinary conversation auto-approval remains blocked.
+
+Recommended next work now:
+
+1. Build a read-only repeated-evidence rollup for ordinary-turn inferred apply/post-apply verifier artifacts.
+2. Only after repeated green evidence, design any next automation widening as a separate explicit gate.
+3. Keep broad/background ordinary conversation auto-approval blocked.
 
 ## Checkpoint: ordinary-turn inferred exact apply corridor
 

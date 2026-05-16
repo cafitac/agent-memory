@@ -7953,6 +7953,237 @@ def _dogfood_ordinary_turn_inferred_apply_payload(args: argparse.Namespace) -> d
     return payload
 
 
+def _dogfood_ordinary_turn_inferred_post_apply_verification_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.max_applied < 1:
+        raise ValueError("dogfood ordinary-turn-inferred-post-apply-verification --max-applied must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    apply_payload, apply_base = _read_json_artifact_summary(args.apply_report)
+    rollback_payload, rollback_base = _read_json_artifact_summary(args.rollback_replay_report)
+    apply_payload = apply_payload or {}
+    rollback_payload = rollback_payload or {}
+    blocked_reasons: list[str] = []
+
+    def require_artifact(base: dict[str, Any], *, name: str, kind: str, read_only: bool, mutated: bool) -> None:
+        if not base["provided"]:
+            blocked_reasons.append(f"{name}_not_provided")
+            return
+        if base["error"] is not None:
+            blocked_reasons.append(f"{name}_unreadable")
+            return
+        if base["kind"] != kind:
+            blocked_reasons.append(f"{name}_kind_invalid")
+        if base["read_only"] is not read_only:
+            blocked_reasons.append(f"{name}_read_only_contract_invalid")
+        if base["mutated"] is not mutated:
+            blocked_reasons.append(f"{name}_mutation_contract_invalid")
+        if base["default_retrieval_unchanged"] is not True:
+            blocked_reasons.append(f"{name}_default_retrieval_changed")
+
+    require_artifact(
+        apply_base,
+        name="apply_report",
+        kind="dogfood_ordinary_turn_inferred_apply",
+        read_only=False,
+        mutated=True,
+    )
+    require_artifact(
+        rollback_base,
+        name="rollback_replay_report",
+        kind="dogfood_rollback_replay_validate",
+        read_only=True,
+        mutated=False,
+    )
+
+    apply_section = apply_payload.get("apply", {}) if isinstance(apply_payload.get("apply"), dict) else {}
+    applied_count = _safe_int(apply_section.get("applied_count"))
+    trace_ref = str(apply_section.get("trace_ref") or "")
+    memory_ref = str(apply_section.get("memory_ref") or "")
+    backup = apply_payload.get("backup", {}) if isinstance(apply_payload.get("backup"), dict) else {}
+    backup_path = Path(str(backup.get("path") or "")).expanduser() if backup.get("path") else None
+    backup_file_exists = backup_path.exists() if backup_path else False
+    backup_sha256 = str(backup.get("sha256") or "")
+    backup_file_sha256 = None
+    sha256_matches_file = False
+    if backup_path and backup_file_exists:
+        backup_file_sha256 = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+        sha256_matches_file = bool(backup_sha256) and backup_file_sha256 == backup_sha256
+
+    if apply_payload.get("policy") != args.expected_policy:
+        blocked_reasons.append("apply_report_policy_mismatch")
+    if apply_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("apply_report_ordinary_auto_approval_enabled")
+    if applied_count < 1:
+        blocked_reasons.append("apply_report_has_no_applied_memory")
+    if applied_count > args.max_applied:
+        blocked_reasons.append("apply_report_exceeds_max_applied")
+    if not trace_ref.startswith("experience_trace:"):
+        blocked_reasons.append("apply_report_trace_ref_invalid")
+    if not memory_ref.startswith("fact:"):
+        blocked_reasons.append("apply_report_memory_ref_invalid")
+    apply_quality = apply_payload.get("quality_gate", {}) if isinstance(apply_payload.get("quality_gate"), dict) else {}
+    if apply_quality.get("pass") is not True:
+        blocked_reasons.append("apply_report_quality_gate_not_green")
+    apply_privacy = apply_payload.get("privacy", {}) if isinstance(apply_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(apply_privacy) or apply_privacy.get("backup_content_included") is True:
+        blocked_reasons.append("apply_report_privacy_not_ref_safe")
+    apply_forbidden = apply_payload.get("forbidden_authority", {}) if isinstance(apply_payload.get("forbidden_authority"), dict) else {}
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if apply_forbidden.get(key) is not False:
+            blocked_reasons.append(f"apply_report_forbidden_authority_{key}_invalid")
+    if not backup_file_exists:
+        blocked_reasons.append("backup_file_missing")
+    if not sha256_matches_file:
+        blocked_reasons.append("backup_sha256_mismatch")
+
+    rollback_quality = rollback_payload.get("quality_gate", {}) if isinstance(rollback_payload.get("quality_gate"), dict) else {}
+    rollback_rollup = rollback_payload.get("rollup", {}) if isinstance(rollback_payload.get("rollup"), dict) else {}
+    rollback_pass = rollback_quality.get("pass") is True
+    checked_application_count = _safe_int(rollback_rollup.get("checked_application_count", rollback_payload.get("application_count", 0)))
+    failed_replay_count = _safe_int(rollback_rollup.get("failed_replay_count", 0))
+    if not rollback_pass:
+        blocked_reasons.append("rollback_replay_report_not_green")
+    if checked_application_count < applied_count:
+        blocked_reasons.append("rollback_replay_application_count_below_apply_count")
+    if failed_replay_count > 0:
+        blocked_reasons.append("rollback_replay_failed_applications_present")
+    rollback_privacy = rollback_payload.get("privacy", {}) if isinstance(rollback_payload.get("privacy"), dict) else {}
+    if not _privacy_flags_are_ref_safe(rollback_privacy) or rollback_privacy.get("backup_content_included") is True:
+        blocked_reasons.append("rollback_replay_report_privacy_not_ref_safe")
+
+    audit = {
+        "audit_row_found": False,
+        "candidate_id": None,
+        "policy": None,
+        "action": None,
+        "promoted_ref": None,
+        "backup_sha256_matches": False,
+    }
+    relation_evidence = {"ordinary_turn_relation_found": False, "relation_ref_safe": True}
+    try:
+        with sqlite3.connect(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            _ensure_trace_candidate_review_tables(connection)
+            audit_row = connection.execute(
+                """
+                SELECT candidate_id, policy, action, promoted_ref, backup_path, backup_sha256
+                FROM g5_trace_candidate_applications
+                WHERE policy = ? AND promoted_ref = ?
+                ORDER BY rowid DESC
+                LIMIT 1
+                """,
+                (args.expected_policy, memory_ref),
+            ).fetchone()
+            if audit_row is not None:
+                audit = {
+                    "audit_row_found": True,
+                    "candidate_id": str(audit_row["candidate_id"]),
+                    "policy": str(audit_row["policy"]),
+                    "action": str(audit_row["action"]),
+                    "promoted_ref": str(audit_row["promoted_ref"]),
+                    "backup_sha256_matches": str(audit_row["backup_sha256"] or "") == backup_sha256,
+                }
+            relation_row = connection.execute(
+                """
+                SELECT id
+                FROM relations
+                WHERE from_ref = ? AND to_ref = ? AND relation_type = 'ordinary_turn_inferred_approved_as'
+                LIMIT 1
+                """,
+                (trace_ref, memory_ref),
+            ).fetchone()
+            relation_evidence = {
+                "ordinary_turn_relation_found": relation_row is not None,
+                "relation_ref_safe": True,
+            }
+    except sqlite3.Error as exc:
+        blocked_reasons.append("application_audit_db_unreadable")
+        audit["error"] = exc.__class__.__name__
+
+    if not audit["audit_row_found"]:
+        blocked_reasons.append("application_audit_row_missing")
+    else:
+        if audit["policy"] != args.expected_policy:
+            blocked_reasons.append("application_audit_policy_mismatch")
+        if audit["action"] != "apply_ordinary_turn_inferred_preference":
+            blocked_reasons.append("application_audit_action_mismatch")
+        if audit["promoted_ref"] != memory_ref:
+            blocked_reasons.append("application_audit_promoted_ref_mismatch")
+        if audit["backup_sha256_matches"] is not True:
+            blocked_reasons.append("application_audit_backup_sha256_mismatch")
+    if relation_evidence["ordinary_turn_relation_found"] is not True:
+        blocked_reasons.append("ordinary_turn_relation_missing")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_inferred_post_apply_verification",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "expected_policy": args.expected_policy,
+        "max_applied": args.max_applied,
+        "apply_report": {
+            **apply_base,
+            "policy": apply_payload.get("policy"),
+            "applied_count": applied_count,
+            "trace_ref": trace_ref or None,
+            "memory_ref": memory_ref or None,
+        },
+        "backup_evidence": {
+            "path": str(backup_path) if backup_path else None,
+            "provided_sha256": backup_sha256 or None,
+            "file_sha256": backup_file_sha256,
+            "file_exists": backup_file_exists,
+            "sha256_matches_file": sha256_matches_file,
+            "content_included": False,
+        },
+        "rollback_replay_report": {
+            **rollback_base,
+            "pass": rollback_pass,
+            "checked_application_count": checked_application_count,
+            "failed_replay_count": failed_replay_count,
+        },
+        "application_audit": audit,
+        "relation_evidence": relation_evidence,
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "blocked_reasons": blocked_unique,
+            "decision": "ordinary_turn_inferred_post_apply_verification_green_stop"
+            if not blocked_unique
+            else "fix_ordinary_turn_inferred_post_apply_verification_before_next_apply",
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -17547,6 +17778,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_inferred_apply_parser.add_argument("--reason", required=True)
     dogfood_ordinary_turn_inferred_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_ordinary_turn_inferred_apply_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-inferred-post-apply-verification",
+        help="Validate ordinary-turn inferred apply, rollback replay, backup, relation, and audit row as a read-only stop gate.",
+    )
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--apply-report", type=Path, required=True)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--rollback-replay-report", type=Path, required=True)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--expected-policy", required=True)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--max-applied", type=int, default=1)
+    dogfood_ordinary_turn_inferred_post_apply_verification_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -18947,6 +19188,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-inferred-apply":
             print(json.dumps(_dogfood_ordinary_turn_inferred_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-inferred-post-apply-verification":
+            print(json.dumps(_dogfood_ordinary_turn_inferred_post_apply_verification_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

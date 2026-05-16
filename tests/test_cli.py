@@ -16853,6 +16853,264 @@ def test_dogfood_ordinary_turn_inferred_apply_blocks_red_readiness_without_mutat
         assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 0
 
 
+def test_dogfood_ordinary_turn_inferred_post_apply_verification_green_stop(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-inferred-post-apply.db"
+    backup_path = tmp_path / "ordinary-turn-inferred-post-apply.backup.db"
+    readiness_report = tmp_path / "ordinary-readiness-green.json"
+    apply_report = tmp_path / "ordinary-turn-inferred-apply.json"
+    rollback_report = tmp_path / "ordinary-turn-inferred-rollback.json"
+    output_path = tmp_path / "ordinary-turn-inferred-post-apply-verification.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="c" * 64,
+        summary="User prefers compact Korean terminal summaries.",
+        scope="project:agent-memory",
+        session_ref="session:ordinary-post-apply",
+        salience=0.9,
+        user_emphasis=0.8,
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    readiness_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_inferred_approval_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "readiness_policy": "ordinary-turn-inferred-approval-readiness-v1",
+                "window_evidence": {"usable_for_readiness": True, "report_count": 3},
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "inferred_approval_readiness": {
+                    "ready_for_design": True,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "requires_separate_exact_approval_corridor": True,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "sample_values_included": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-apply",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--readiness-report",
+            str(readiness_report),
+            "--policy",
+            "ordinary-turn-inferred-preference-apply-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-inferred-preference-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "exact ordinary post apply verifier setup",
+            "--backup-path",
+            str(backup_path),
+            "--output",
+            str(apply_report),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    apply_payload = json.loads(apply_result.stdout)
+    rollback_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "application_count": 1,
+                "rollup": {"checked_application_count": 1, "passed_replay_count": 1, "failed_replay_count": 0},
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {"raw_content_included": False, "backup_content_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    verify_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-post-apply-verification",
+            str(db_path),
+            "--apply-report",
+            str(apply_report),
+            "--rollback-replay-report",
+            str(rollback_report),
+            "--expected-policy",
+            "ordinary-turn-inferred-preference-apply-v1",
+            "--max-applied",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verify_result.returncode == 0, verify_result.stdout + verify_result.stderr
+    payload = json.loads(verify_result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_inferred_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "decision": "ordinary_turn_inferred_post_apply_verification_green_stop",
+    }
+    assert payload["apply_report"]["applied_count"] == 1
+    assert payload["apply_report"]["trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["apply_report"]["memory_ref"] == apply_payload["apply"]["memory_ref"]
+    assert payload["backup_evidence"]["sha256_matches_file"] is True
+    assert payload["rollback_replay_report"]["pass"] is True
+    assert payload["application_audit"]["audit_row_found"] is True
+    assert payload["application_audit"]["policy"] == "ordinary-turn-inferred-preference-apply-v1"
+    assert payload["application_audit"]["promoted_ref"] == apply_payload["apply"]["memory_ref"]
+    assert payload["relation_evidence"]["ordinary_turn_relation_found"] is True
+    assert payload["forbidden_authority"] == {
+        "executes_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+    }
+    assert "exact ordinary post apply verifier setup" not in verify_result.stdout
+
+
+def test_dogfood_ordinary_turn_inferred_post_apply_verification_blocks_unsafe_artifacts(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-inferred-post-apply-blocked.db"
+    backup_path = tmp_path / "missing.backup.db"
+    apply_report = tmp_path / "bad-apply.json"
+    rollback_report = tmp_path / "bad-rollback.json"
+    initialize_database(db_path)
+    apply_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_inferred_apply",
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": False,
+                "ordinary_conversation_auto_approval": True,
+                "policy": "wrong-policy",
+                "backup": {"path": str(backup_path), "sha256": "0" * 64},
+                "apply": {"applied_count": 2, "trace_ref": "experience_trace:999", "memory_ref": "fact:999"},
+                "quality_gate": {"pass": False, "blocked_reasons": ["bad"]},
+                "forbidden_authority": {"ordinary_conversation_auto_approval": True},
+                "privacy": {"raw_trace_summary_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollback_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "rollup": {"checked_application_count": 0, "failed_replay_count": 1},
+                "quality_gate": {"pass": False, "blocked_reasons": ["rollback_failed"]},
+                "privacy": {"raw_content_included": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-inferred-post-apply-verification",
+            str(db_path),
+            "--apply-report",
+            str(apply_report),
+            "--rollback-replay-report",
+            str(rollback_report),
+            "--expected-policy",
+            "ordinary-turn-inferred-preference-apply-v1",
+            "--max-applied",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "fix_ordinary_turn_inferred_post_apply_verification_before_next_apply"
+    assert set(payload["quality_gate"]["blocked_reasons"]) >= {
+        "apply_report_policy_mismatch",
+        "apply_report_exceeds_max_applied",
+        "apply_report_quality_gate_not_green",
+        "apply_report_default_retrieval_changed",
+        "apply_report_ordinary_auto_approval_enabled",
+        "apply_report_privacy_not_ref_safe",
+        "backup_file_missing",
+        "backup_sha256_mismatch",
+        "rollback_replay_report_not_green",
+        "rollback_replay_application_count_below_apply_count",
+        "rollback_replay_failed_applications_present",
+        "rollback_replay_report_privacy_not_ref_safe",
+        "application_audit_row_missing",
+        "ordinary_turn_relation_missing",
+    }
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:
