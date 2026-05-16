@@ -11916,6 +11916,134 @@ def test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_ba
 
 
 
+def test_dogfood_lifecycle_candidate_persist_skips_already_applied_target_refs(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-persist-skip-applied-targets.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="persist skip source token=SHOULD_NOT_LEAK",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="persist skip applied target",
+        predicate="needs",
+        object_ref_or_value="reinforcement",
+        evidence_ids=[source.id],
+        scope="project:persist-skip",
+        confidence=0.92,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK persist skip query",
+            preferred_scope="project:persist-skip",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fact.id, label="persist skip target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "SHOULD_NOT_LEAK", "session_id": f"persist-skip-{index}"},
+        )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    seed_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "seed applied target row",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert seed_result.returncode == 0, seed_result.stderr
+    seeded_candidate_id = json.loads(seed_result.stdout)["candidate_ids"][0]
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("DELETE FROM g5_trace_candidate_reviews WHERE candidate_id = ?", (seeded_candidate_id,))
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                backup_path, backup_sha256, rollback_hint_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                seeded_candidate_id,
+                "reinforcement_review",
+                f"fact:{fact.id}",
+                "g5-lifecycle-reinforcement-apply-v1",
+                "apply_reviewed_reinforcement_marker",
+                "tester",
+                "a" * 64,
+                str(tmp_path / "pre-existing-backup.db"),
+                "b" * 64,
+                json.dumps({"default_retrieval_mutated": False}),
+            ),
+        )
+    before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "skip applied target refs",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["candidate_count"] == 1
+    assert payload["inserted_count"] == 0
+    assert payload["existing_count"] == 0
+    assert payload["skipped_applied_target_count"] == 1
+    assert payload["skipped_existing_target_count"] == 0
+    assert payload["mutated"] is False
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["blocked_reasons"] == ["no_new_unapplied_lifecycle_candidates_persisted"]
+    assert payload["privacy"]["skipped_target_refs_included"] is False
+    assert _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews", "g5_trace_candidate_applications"]) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+
 def test_dogfood_lifecycle_candidate_refresh_preview_separates_new_from_promoted_targets(
     tmp_path: Path,
 ) -> None:
@@ -13324,6 +13452,7 @@ def test_dogfood_lifecycle_candidate_registry_persists_lists_and_updates_superse
         "raw_content_included": False,
         "sample_values_included": False,
         "reason_stored_as_sha256": True,
+        "skipped_target_refs_included": False,
     }
     candidate_id = persist_payload["candidate_ids"][0]
 

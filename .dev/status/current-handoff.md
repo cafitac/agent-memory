@@ -1,9 +1,17 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 11:30 KST
+Last updated: 2026-05-16 12:10 KST
 
-## Checkpoint: lifecycle bounded-batch operator packet + candidate refresh preview source gates
+## Checkpoint: target-aware lifecycle persistence + bounded-batch source gates
+
+
+Latest target-aware persistence slice:
+
+- `dogfood lifecycle-candidate-persist` now skips candidates whose target refs already appear in `g5_trace_candidate_applications` before inserting review rows.
+- The persisted report includes `skipped_applied_target_count`, `skipped_existing_target_count`, and a red quality gate when no new unapplied lifecycle candidates were persisted.
+- Live no-op artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-target-aware-lifecycle-persist-20260516T030945Z/lifecycle-candidate-persist-target-aware-reinforcement.json`.
+- Live result: all four reinforcement-shaped preview candidates were skipped as already-applied targets; no review rows were inserted and no live batch apply was enabled.
 
 The source checkout now has a read-only operator packet for the lifecycle bounded-batch corridor. This is the missing pre-apply runbook artifact after the bounded-batch apply command and bounded-batch post-apply verifier: it lets an operator see whether graduation proof, apply readiness, candidate inventory, exact command arguments, backup/output placeholders, and post-apply verification are all aligned before any mutation.
 
@@ -29,13 +37,13 @@ Additional refresh preview slice:
 
 Current interpretation:
 
-- Safety-gated operational north-star remains approximately 98%: the batch apply corridor now has pre-apply packet + post-apply verifier, but the live DB has no approved candidates to batch apply.
-- Literal fully autonomous human-brain-like memory is approximately 84-86%: the system has stronger operator runbook automation, but fresh candidate generation/review and ordinary-turn safe auto-approval are not yet autonomous.
+- Safety-gated operational north-star remains approximately 98-99%: the batch apply corridor now has pre-apply packet + post-apply verifier, but the live DB has no approved candidates to batch apply.
+- Literal fully autonomous human-brain-like memory is approximately 86-88%: the system has stronger operator runbook automation, but fresh candidate generation/review and ordinary-turn safe auto-approval are not yet autonomous.
 
 Immediate next recommended slice:
 
 1. Commit/push this operator packet checkpoint and watch CI.
-2. Add a fresh lifecycle candidate refresh/separation slice so already-promoted reinforcement candidates are not requeued, and new dogfood evidence can create new pending candidates for review.
+2. Add evidence novelty scoring/fresh-epoch candidate generation so genuinely new dogfood evidence can create new pending candidates for review.
 3. Keep live batch apply blocked until a fresh operator packet is green with reviewed approved candidates.
 4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 

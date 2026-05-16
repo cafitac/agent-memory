@@ -3461,12 +3461,60 @@ def _dogfood_lifecycle_candidate_persist_payload(args: argparse.Namespace) -> di
     proposal_type = f"{args.candidate_kind}_review"
     inserted = 0
     existing = 0
+    skipped_applied_target_count = 0
+    skipped_existing_target_count = 0
     candidate_ids: list[str] = []
+    target_refs = [_lifecycle_candidate_target_ref(args.candidate_kind, candidate) for candidate in candidates]
+    non_empty_target_refs = [target_ref for target_ref in target_refs if target_ref]
     with sqlite3.connect(args.db_path) as connection:
         _ensure_lifecycle_candidate_review_tables(connection)
+        applied_targets = {
+            str(row[0])
+            for row in connection.execute(
+                f"""
+                SELECT DISTINCT promoted_ref
+                FROM g5_trace_candidate_applications
+                WHERE promoted_ref IN ({','.join(['?'] * len(non_empty_target_refs))})
+                """
+                if non_empty_target_refs
+                else """
+                SELECT DISTINCT promoted_ref
+                FROM g5_trace_candidate_applications
+                WHERE 0
+                """,
+                tuple(non_empty_target_refs),
+            ).fetchall()
+            if row[0]
+        }
+        existing_targets = {
+            str(row[0])
+            for row in connection.execute(
+                f"""
+                SELECT DISTINCT target_ref
+                FROM g5_trace_candidate_reviews
+                WHERE candidate_kind = ? AND proposal_type = ?
+                  AND target_ref IN ({','.join(['?'] * len(non_empty_target_refs))})
+                """
+                if non_empty_target_refs
+                else """
+                SELECT DISTINCT target_ref
+                FROM g5_trace_candidate_reviews
+                WHERE 0
+                """,
+                (args.candidate_kind, proposal_type, *non_empty_target_refs) if non_empty_target_refs else (),
+            ).fetchall()
+            if row[0]
+        }
         for candidate in candidates:
             candidate_id = _lifecycle_candidate_id(args.candidate_kind, candidate)
+            target_ref = _lifecycle_candidate_target_ref(args.candidate_kind, candidate)
             candidate_ids.append(candidate_id)
+            if target_ref in applied_targets:
+                skipped_applied_target_count += 1
+                continue
+            if target_ref in existing_targets:
+                skipped_existing_target_count += 1
+                continue
             before = connection.total_changes
             connection.execute(
                 """
@@ -3498,6 +3546,19 @@ def _dogfood_lifecycle_candidate_persist_payload(args: argparse.Namespace) -> di
                 inserted += 1
             else:
                 existing += 1
+    blocked_reasons: list[str] = []
+    if preview.get("quality_gate", {}).get("pass") is not True:
+        blocked_reasons.extend(preview.get("quality_gate", {}).get("blocked_reasons", []) or ["source_preview_quality_gate_not_green"])
+    if inserted == 0:
+        blocked_reasons.append("no_new_unapplied_lifecycle_candidates_persisted")
+    quality_gate = {
+        "pass": not blocked_reasons,
+        "decision": "new_lifecycle_candidates_persisted_for_review"
+        if not blocked_reasons
+        else "no_new_lifecycle_candidates_persisted_for_review",
+        "blocked_reasons": sorted(set(blocked_reasons)),
+        "source_quality_gate": preview.get("quality_gate", {}),
+    }
     payload = {
         "kind": "dogfood_lifecycle_candidate_persist",
         "read_only": False,
@@ -3512,12 +3573,15 @@ def _dogfood_lifecycle_candidate_persist_payload(args: argparse.Namespace) -> di
         "candidate_ids": candidate_ids,
         "inserted_count": inserted,
         "existing_count": existing,
-        "quality_gate": preview.get("quality_gate", {}),
+        "skipped_applied_target_count": skipped_applied_target_count,
+        "skipped_existing_target_count": skipped_existing_target_count,
+        "quality_gate": quality_gate,
         "privacy": {
             "candidate_json_included": False,
             "raw_content_included": False,
             "sample_values_included": False,
             "reason_stored_as_sha256": True,
+            "skipped_target_refs_included": False,
         },
     }
     _write_json_report(args.output, payload)

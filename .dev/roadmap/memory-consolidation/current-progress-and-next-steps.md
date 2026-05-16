@@ -1,12 +1,19 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 11:30 KST
+Last updated: 2026-05-16 12:10 KST
 
-## Checkpoint: lifecycle bounded-batch operator packet + candidate refresh preview
+## Checkpoint: target-aware lifecycle persistence + bounded-batch source gates
 
 A read-only pre-apply operator packet now exists for the exact-approved lifecycle bounded-batch corridor. It bridges the gap between the source-level bounded-batch apply command and the bounded-batch post-apply verifier by producing one machine-readable packet with graduation status, apply readiness, candidate inventory, command preview, and verification template.
 
+
+
+Target-aware persistence is now enforced in the mutating review-queue insertion command itself. `lifecycle-candidate-persist` skips already-applied target refs before inserting review rows, reports the skip counts, and returns a red quality gate when no new unapplied lifecycle candidates were persisted. Live reinforcement smoke skipped all four already-applied targets with no mutation.
+
+Target-aware persistence artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-target-aware-lifecycle-persist-20260516T030945Z/lifecycle-candidate-persist-target-aware-reinforcement.json`.
 
 A second read-only refresh preview source gate now exists for candidate generation hygiene. It reports preview candidates, existing review rows by status, target refs already applied, and the count of new candidates whose targets have not already been applied. Live reinforcement refresh is correctly blocked because all four current preview targets have already been applied (`new_unapplied_target_candidate_count=0`).
 
@@ -28,13 +35,13 @@ Safety facts:
 
 Current interpretation:
 
-- Overall safety-gated north-star progress is approximately 98%.
-- Literal fully autonomous human-brain-like progress is approximately 84-86%. The batch corridor now has pre-apply and post-apply automation scaffolding, but cannot run live until fresh reviewed candidates exist; ordinary conversation auto-approval also remains intentionally blocked.
+- Overall safety-gated north-star progress is approximately 98-99%.
+- Literal fully autonomous human-brain-like progress is approximately 86-88%. The batch corridor now has pre-apply and post-apply automation scaffolding, but cannot run live until fresh reviewed candidates exist; ordinary conversation auto-approval also remains intentionally blocked.
 
 Next after this slice:
 
 1. Commit/push and watch CI.
-2. Implement target-aware persistence/evidence novelty scoring so already-applied targets are not requeued and genuinely fresh dogfood evidence can become reviewable candidates.
+2. Implement evidence novelty scoring/fresh-epoch candidate generation so genuinely fresh dogfood evidence can become reviewable candidates.
 3. Then use the operator packet to prove when a bounded live batch is truly ready.
 4. Still forbidden without separate gates: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 

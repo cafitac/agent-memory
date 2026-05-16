@@ -1,9 +1,16 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 11:30 KST
+Last updated: 2026-05-16 12:10 KST
 
-## Just completed: lifecycle bounded-batch operator packet + candidate refresh preview source gates
+## Just completed: target-aware lifecycle candidate persistence guard
+
+- Added target-aware filtering to `dogfood lifecycle-candidate-persist`: candidates whose target refs already appear in lifecycle application audit rows are skipped before review-queue insertion.
+- New focused source test proves already-applied target refs do not create fresh review rows and preserve row counts.
+- Live no-op persistence smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-target-aware-lifecycle-persist-20260516T030945Z/lifecycle-candidate-persist-target-aware-reinforcement.json`.
+- Live result: `candidate_count=4`, `inserted_count=0`, `skipped_applied_target_count=4`, `mutated=false`; this correctly blocks requeueing the four already-applied reinforcement targets.
+
+Previous source gates still stand:
 
 - Added `dogfood lifecycle-bounded-batch-operator-packet`, a read-only machine-readable packet for the exact-approved lifecycle bounded-batch corridor.
 - The packet bundles:
@@ -23,8 +30,8 @@ Last updated: 2026-05-16 11:30 KST
 
 Recommended next work now:
 
-1. Commit/push this operator packet source/docs checkpoint and watch CI.
-2. Next PR-sized source slice: add target-aware persistence or evidence novelty scoring so already-applied target refs cannot be requeued and truly fresh dogfood evidence can create reviewable candidates.
+1. Commit/push this target-aware persistence checkpoint and watch CI.
+2. Next PR-sized source slice: add evidence novelty scoring/fresh-epoch candidate generation so truly new dogfood evidence can create reviewable candidates instead of recycling applied targets.
 3. Do not live-batch-apply until the operator packet is green, candidates are reviewed approved, backup/output paths are set, exact approval phrases are supplied, and immediate post-apply verification is run.
 4. Still blocked: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
