@@ -1,8 +1,40 @@
 # Memory Consolidation Current Progress and Next Steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 09:00 KST
+Last updated: 2026-05-16 09:16 KST
 
+
+## Checkpoint: second live exact-approved reinforcement lifecycle apply
+
+A second live G5 lifecycle reinforcement apply has completed through the same explicit reviewed-candidate corridor. The repeated one-at-a-time loop is now proven on the real source DB, while broad autonomy remains intentionally blocked.
+
+Live artifacts:
+
+- Apply directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-reinforcement-apply-20260516T001544Z/`.
+- Backup path: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-reinforcement-apply-20260516T001544Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `c1f7dab326276a91b4b9b89818a96280dd050525987b3bf26ce2733b3c121387`.
+
+Live result:
+
+- Candidate `g5-reinforcement-3c9f30f85f8bdb80c9f3474f` targeting `episode:1` was approved with `approve-g5-lifecycle-candidate-v1`.
+- The candidate was applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=2`, `pending=2`, `approved=0`.
+- Rollback replay passed.
+- `lifecycle-post-apply-verification` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- A broader post-apply `live-evidence-bundle` still stayed red on `live_fixture_reliability_gate_not_green`; this is a live fixture/evidence-quality blocker for broader ranking/automation, not a rollback/apply failure.
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 95-96%.
+- Literal fully autonomous human-brain-like progress is approximately 74-76%. The system has now repeated real reviewed lifecycle reinforcement mutation on the live source DB, but it still relies on exact approvals and stop-after-one verification.
+- The next proof is one more one-candidate apply after this checkpoint is committed and CI is green. Do not jump directly to ordinary auto-approval or broad/background apply.
+
+Next after this slice:
+
+1. Commit/push this second live apply checkpoint and watch CI.
+2. Then approve/apply at most one additional pending reinforcement candidate through the same exact phrase corridor.
+3. Immediately rerun `lifecycle-post-apply-verification` and stop again.
+4. Still forbidden until their own gates exist: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, unreviewed promotion, and repeated apply without fresh approval.
 
 ## Checkpoint: first live exact-approved reinforcement lifecycle apply
 

@@ -1,8 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 09:00 KST
+Last updated: 2026-05-16 09:16 KST
 
+
+## Just completed: second live exact-approved reinforcement lifecycle apply
+
+- After the first post-apply verifier and CI were green, applied one more reinforcement candidate only; no batching was enabled.
+- Approved candidate `g5-reinforcement-3c9f30f85f8bdb80c9f3474f`, target `episode:1`, with phrase `approve-g5-lifecycle-candidate-v1`.
+- Applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-reinforcement-apply-20260516T001544Z/`.
+- Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-reinforcement-apply-20260516T001544Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `c1f7dab326276a91b4b9b89818a96280dd050525987b3bf26ce2733b3c121387`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=2`, `pending=2`, `approved=0`.
+- Rollback replay passed with decision `rollback_restore_replay_sufficient_for_bounded_partial_automation`.
+- `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- The broader `live-evidence-bundle` still stayed red on `live_fixture_reliability_gate_not_green`; this remains a broader fixture/reliability blocker, not a lifecycle apply rollback/audit failure.
+
+Recommended next work now:
+
+1. Commit/push this second live apply checkpoint and watch CI.
+2. Continue one-at-a-time only: approve/apply at most one of the two remaining pending reinforcement candidates, then rerun `lifecycle-post-apply-verification` and stop again.
+3. Do not batch-apply, broad/background apply, ordinary conversation auto-approve, default-ranking auto-rollout, collapse/delete, telemetry reset, or unreviewed promotion until their separate gates exist.
 
 ## Just completed: first live exact-approved reinforcement lifecycle apply
 
