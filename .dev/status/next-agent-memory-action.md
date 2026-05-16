@@ -1,9 +1,15 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:10 KST
+Last updated: 2026-05-16 12:32 KST
 
-## Just completed: target-aware lifecycle candidate persistence guard
+## Just completed: lifecycle fresh-evidence preview + target-aware persistence guard
+
+
+- Added read-only `dogfood lifecycle-fresh-evidence-preview`, which checks aggregate retrieval observations after the latest lifecycle application for a policy before refreshing candidates.
+- New focused source test proves post-apply observations are counted without raw query text, query previews, candidate ids, target refs, or backup contents.
+- Live artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-fresh-evidence-preview-20260516T033110Z/lifecycle-fresh-evidence-preview-reinforcement.json`.
+- Live result: `post_apply_observation_count=53`, quality gate green, so there is enough fresh post-apply dogfood activity to run the next refresh cycle; target-aware persistence still blocks already-applied refs.
 
 - Added target-aware filtering to `dogfood lifecycle-candidate-persist`: candidates whose target refs already appear in lifecycle application audit rows are skipped before review-queue insertion.
 - New focused source test proves already-applied target refs do not create fresh review rows and preserve row counts.
@@ -31,7 +37,7 @@ Previous source gates still stand:
 Recommended next work now:
 
 1. Commit/push this target-aware persistence checkpoint and watch CI.
-2. Next PR-sized source slice: add evidence novelty scoring/fresh-epoch candidate generation so truly new dogfood evidence can create reviewable candidates instead of recycling applied targets.
+2. Next PR-sized source slice: use the fresh-evidence preview with candidate refresh/persist to isolate genuinely new targets; if refresh still recycles applied targets, add source-level novelty scoring that requires new target refs or new evidence windows before review persistence.
 3. Do not live-batch-apply until the operator packet is green, candidates are reviewed approved, backup/output paths are set, exact approval phrases are supplied, and immediate post-apply verification is run.
 4. Still blocked: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 

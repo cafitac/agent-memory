@@ -3727,6 +3727,104 @@ def _dogfood_lifecycle_candidate_refresh_preview_payload(args: argparse.Namespac
     return payload
 
 
+def _dogfood_lifecycle_fresh_evidence_preview_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_observations < 1:
+        raise ValueError("dogfood lifecycle-fresh-evidence-preview min observations must be >= 1")
+    with sqlite3.connect(args.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        latest_application = connection.execute(
+            """
+            SELECT id, policy, created_at
+            FROM g5_trace_candidate_applications
+            WHERE policy = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (args.policy,),
+        ).fetchone()
+        if latest_application is None:
+            observations: list[sqlite3.Row] = []
+            latest_application_created_at = None
+        else:
+            latest_application_created_at = str(latest_application["created_at"])
+            observations = connection.execute(
+                """
+                SELECT id, created_at, surface, preferred_scope, top_memory_ref, response_mode
+                FROM retrieval_observations
+                WHERE created_at > ?
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """,
+                (latest_application_created_at, args.limit),
+            ).fetchall()
+    surface_counts = Counter(str(row["surface"]) for row in observations)
+    preferred_scope_counts = Counter(str(row["preferred_scope"] or "") for row in observations if row["preferred_scope"])
+    top_memory_ref_counts = Counter(str(row["top_memory_ref"] or "") for row in observations if row["top_memory_ref"])
+    response_mode_counts = Counter(str(row["response_mode"] or "unknown") for row in observations)
+    blocked_reasons: list[str] = []
+    if latest_application is None:
+        blocked_reasons.append("no_lifecycle_application_for_policy")
+    if len(observations) < args.min_observations:
+        blocked_reasons.append("insufficient_post_apply_observations")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_lifecycle_fresh_evidence_preview",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "apply_executed": False,
+        "policy": args.policy,
+        "db_path": str(args.db_path.expanduser().resolve(strict=False)),
+        "latest_application": {
+            "present": latest_application is not None,
+            "created_at": latest_application_created_at,
+            "candidate_id_included": False,
+            "target_ref_included": False,
+            "backup_path_included": False,
+            "backup_sha256_included": False,
+        },
+        "scan": {
+            "limit": args.limit,
+            "min_observations": args.min_observations,
+        },
+        "post_apply_observation_count": len(observations),
+        "post_apply_surface_counts": dict(sorted(surface_counts.items())),
+        "post_apply_preferred_scope_counts": dict(sorted(preferred_scope_counts.items())),
+        "post_apply_top_memory_ref_counts": dict(sorted(top_memory_ref_counts.items())),
+        "post_apply_response_mode_counts": dict(sorted(response_mode_counts.items())),
+        "quality_gate": {
+            "pass": passed,
+            "decision": "fresh_post_apply_evidence_ready_for_candidate_refresh"
+            if passed
+            else "continue_post_apply_dogfooding_before_candidate_refresh",
+            "blocked_reasons": blocked_reasons,
+        },
+        "recommended_next_action": "run_lifecycle_candidate_refresh_preview_then_persist_if_green"
+        if passed
+        else "collect_more_post_apply_dogfood_evidence",
+        "safety_exclusions": {
+            "candidate_approval": False,
+            "candidate_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply": False,
+            "default_retrieval_migration": False,
+            "unreviewed_promotion": False,
+        },
+        "privacy": {
+            "raw_query_text_included": False,
+            "query_preview_included": False,
+            "candidate_ids_included": False,
+            "target_refs_included": False,
+            "backup_contents_included": False,
+            "aggregate_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_lifecycle_candidate_list_payload(args: argparse.Namespace) -> dict[str, Any]:
     with sqlite3.connect(args.db_path) as connection:
         connection.row_factory = sqlite3.Row
@@ -14942,6 +15040,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--top", type=int, default=20)
     dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--frequent-threshold", type=int, default=3)
     dogfood_lifecycle_candidate_refresh_preview_parser.add_argument("--min-decay-score", type=float, default=0.5)
+    dogfood_lifecycle_fresh_evidence_preview_parser = dogfood_subparsers.add_parser(
+        "lifecycle-fresh-evidence-preview",
+        help="Preview aggregate post-apply retrieval evidence before refreshing lifecycle candidates.",
+    )
+    dogfood_lifecycle_fresh_evidence_preview_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_fresh_evidence_preview_parser.add_argument("--policy", required=True)
+    dogfood_lifecycle_fresh_evidence_preview_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_fresh_evidence_preview_parser.add_argument("--limit", type=int, default=200)
+    dogfood_lifecycle_fresh_evidence_preview_parser.add_argument("--min-observations", type=int, default=5)
     dogfood_lifecycle_candidate_list_parser = dogfood_subparsers.add_parser(
         "lifecycle-candidate-list",
         help="List persisted lifecycle candidates without raw candidate/review payloads.",
@@ -16372,6 +16479,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-refresh-preview":
             print(json.dumps(_dogfood_lifecycle_candidate_refresh_preview_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-fresh-evidence-preview":
+            print(json.dumps(_dogfood_lifecycle_fresh_evidence_preview_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-candidate-list":
             if args.limit < 1:

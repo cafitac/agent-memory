@@ -11916,6 +11916,152 @@ def test_dogfood_lifecycle_candidate_apply_reinforces_approved_candidate_with_ba
 
 
 
+def test_dogfood_lifecycle_fresh_evidence_preview_reports_post_apply_observations(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "lifecycle-fresh-evidence.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="fresh evidence source token=SHOULD_NOT_LEAK",
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="fresh evidence target",
+        predicate="needs",
+        object_ref_or_value="novel retrieval evidence",
+        evidence_ids=[source.id],
+        scope="project:fresh-evidence",
+        confidence=0.92,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK fresh pre apply query",
+            preferred_scope="project:fresh-evidence",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fact.id, label="fresh evidence target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "SHOULD_NOT_LEAK", "session_id": f"fresh-evidence-pre-{index}"},
+        )
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("UPDATE retrieval_observations SET created_at = '1999-01-01 00:00:00'")
+    env = {**os.environ, "PYTHONPATH": "src"}
+    seed_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-candidate-persist",
+            str(db_path),
+            "--candidate-kind",
+            "reinforcement",
+            "--actor",
+            "tester",
+            "--reason",
+            "seed lifecycle apply marker",
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert seed_result.returncode == 0, seed_result.stderr
+    seeded_candidate_id = json.loads(seed_result.stdout)["candidate_ids"][0]
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("UPDATE g5_trace_candidate_reviews SET status = 'promoted' WHERE candidate_id = ?", (seeded_candidate_id,))
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                backup_path, backup_sha256, rollback_hint_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                seeded_candidate_id,
+                "reinforcement_review",
+                f"fact:{fact.id}",
+                "g5-lifecycle-reinforcement-apply-v1",
+                "apply_reviewed_reinforcement_marker",
+                "tester",
+                "a" * 64,
+                str(tmp_path / "fresh-evidence-backup.db"),
+                "b" * 64,
+                json.dumps({"default_retrieval_mutated": False}),
+            ),
+        )
+        connection.execute(
+            "UPDATE g5_trace_candidate_applications SET created_at = '2000-01-01 00:00:00' WHERE candidate_id = ?",
+            (seeded_candidate_id,),
+        )
+    for index in range(3):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK fresh post apply query",
+            preferred_scope="project:fresh-evidence",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fact.id, label="fresh evidence target")],
+            response_mode="verify_first",
+            metadata={"query_preview": "SHOULD_NOT_LEAK", "session_id": f"fresh-evidence-{index}"},
+        )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-fresh-evidence-preview",
+            str(db_path),
+            "--policy",
+            "g5-lifecycle-reinforcement-apply-v1",
+            "--min-observations",
+            "3",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_lifecycle_fresh_evidence_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["policy"] == "g5-lifecycle-reinforcement-apply-v1"
+    assert payload["latest_application"]["candidate_id_included"] is False
+    assert payload["latest_application"]["target_ref_included"] is False
+    assert payload["post_apply_observation_count"] == 3
+    assert payload["post_apply_top_memory_ref_counts"] == {f"fact:{fact.id}": 3}
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["quality_gate"]["decision"] == "fresh_post_apply_evidence_ready_for_candidate_refresh"
+    assert payload["recommended_next_action"] == "run_lifecycle_candidate_refresh_preview_then_persist_if_green"
+    assert payload["privacy"] == {
+        "raw_query_text_included": False,
+        "query_preview_included": False,
+        "candidate_ids_included": False,
+        "target_refs_included": False,
+        "backup_contents_included": False,
+        "aggregate_only": True,
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+
 def test_dogfood_lifecycle_candidate_persist_skips_already_applied_target_refs(
     tmp_path: Path,
 ) -> None:

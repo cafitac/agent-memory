@@ -1,10 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:10 KST
+Last updated: 2026-05-16 12:32 KST
 
 ## Checkpoint: target-aware lifecycle persistence + bounded-batch source gates
 
+
+
+Latest fresh-evidence preview slice:
+
+- Added read-only `dogfood lifecycle-fresh-evidence-preview` for policy-scoped post-apply retrieval evidence.
+- It reports aggregate counts only: observation count, surface counts, preferred-scope counts, top-memory-ref counts, response-mode counts, and no raw query/query-preview/candidate/target/backup values.
+- Live artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-fresh-evidence-preview-20260516T033110Z/lifecycle-fresh-evidence-preview-reinforcement.json`.
+- Live result is green with `post_apply_observation_count=53`, so enough fresh dogfood evidence exists to attempt the next refresh/persist cycle; the target-aware persist guard must still prevent already-applied target requeueing.
 
 Latest target-aware persistence slice:
 
@@ -37,13 +45,13 @@ Additional refresh preview slice:
 
 Current interpretation:
 
-- Safety-gated operational north-star remains approximately 98-99%: the batch apply corridor now has pre-apply packet + post-apply verifier, but the live DB has no approved candidates to batch apply.
-- Literal fully autonomous human-brain-like memory is approximately 86-88%: the system has stronger operator runbook automation, but fresh candidate generation/review and ordinary-turn safe auto-approval are not yet autonomous.
+- Safety-gated operational north-star remains approximately 99%: the batch apply corridor now has pre-apply packet + post-apply verifier, but the live DB has no approved candidates to batch apply.
+- Literal fully autonomous human-brain-like memory is approximately 88-89%: the system has stronger operator runbook automation, but fresh candidate generation/review and ordinary-turn safe auto-approval are not yet autonomous.
 
 Immediate next recommended slice:
 
 1. Commit/push this operator packet checkpoint and watch CI.
-2. Add evidence novelty scoring/fresh-epoch candidate generation so genuinely new dogfood evidence can create new pending candidates for review.
+2. Run refresh/persist after the fresh-evidence preview; if it still recycles applied targets, add novelty scoring that requires new target refs or post-apply evidence windows before review persistence.
 3. Keep live batch apply blocked until a fresh operator packet is green with reviewed approved candidates.
 4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
