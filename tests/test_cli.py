@@ -16199,6 +16199,191 @@ def test_dogfood_ordinary_turn_label_update_blocks_wrong_phrase_and_secret_like_
 
 
 
+def test_dogfood_ordinary_turn_eval_window_summary_requires_repeated_green_windows_without_apply(
+    tmp_path: Path,
+) -> None:
+    report_a = tmp_path / "ordinary-eval-a.json"
+    report_b = tmp_path / "ordinary-eval-b.json"
+    output_path = tmp_path / "ordinary-eval-window-summary.json"
+    for path, labeled in ((report_a, 3), (report_b, 4)):
+        path.write_text(
+            json.dumps(
+                {
+                    "kind": "dogfood_ordinary_turn_classifier_eval",
+                    "read_only": True,
+                    "mutated": False,
+                    "default_retrieval_unchanged": True,
+                    "ordinary_conversation_auto_approval": False,
+                    "trace_counts": {
+                        "ordinary_turn": 10,
+                        "labeled_ordinary_turn": labeled,
+                        "unlabeled_ordinary_turn": 10 - labeled,
+                    },
+                    "evaluation": {
+                        "true_positive": 1,
+                        "false_positive": 0,
+                        "true_negative": labeled - 1,
+                        "false_negative": 0,
+                        "blocked_secret_like": 0,
+                        "precision_percent": 100,
+                        "recall_percent": 100,
+                    },
+                    "quality_gate": {
+                        "pass": True,
+                        "decision": "ordinary_turn_classifier_eval_green_keep_auto_approval_blocked",
+                        "blocked_reasons": [],
+                    },
+                    "privacy": {
+                        "raw_trace_summary_included": False,
+                        "raw_transcript_included": False,
+                        "raw_query_text_included": False,
+                        "raw_content_included": False,
+                        "sample_values_included": False,
+                        "aggregate_only": True,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-eval-window-summary",
+            "--eval-report",
+            str(report_a),
+            "--eval-report",
+            str(report_b),
+            "--min-report-count",
+            "2",
+            "--min-labeled-per-report",
+            "3",
+            "--min-precision-percent",
+            "100",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_eval_window_summary"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["window_policy"] == "ordinary-turn-repeated-eval-window-v1"
+    assert payload["report_counts"] == {
+        "report_count": 2,
+        "quality_gate_pass_count": 2,
+        "read_only_report_count": 2,
+        "auto_approval_blocked_report_count": 2,
+    }
+    assert payload["labeled_window"] == {
+        "labeled_ordinary_turn_min": 3,
+        "labeled_ordinary_turn_max": 4,
+        "labeled_ordinary_turn_total": 7,
+        "precision_percent_min": 100,
+        "false_positive_total": 0,
+        "false_negative_total": 0,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_repeated_eval_windows_green_keep_auto_approval_blocked",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_apply": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "aggregate_only": True,
+        "report_hashes_only": True,
+    }
+    assert all(set(item) == {"report_path", "report_sha256", "quality_gate_pass", "labeled_ordinary_turn", "precision_percent"} for item in payload["report_summaries"])
+
+
+
+def test_dogfood_ordinary_turn_eval_window_summary_blocks_unsafe_or_insufficient_windows(
+    tmp_path: Path,
+) -> None:
+    report = tmp_path / "ordinary-eval-red.json"
+    report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_classifier_eval",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "trace_counts": {"labeled_ordinary_turn": 1},
+                "evaluation": {"false_positive": 1, "false_negative": 0, "precision_percent": 50},
+                "quality_gate": {"pass": False, "blocked_reasons": ["false_positive_predictions_present"]},
+                "privacy": {"raw_trace_summary_included": False, "raw_transcript_included": False, "raw_query_text_included": False, "raw_content_included": False, "sample_values_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-eval-window-summary",
+            "--eval-report",
+            str(report),
+            "--min-report-count",
+            "2",
+            "--min-labeled-per-report",
+            "3",
+            "--min-precision-percent",
+            "100",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_repeated_eval_windows_not_ready_keep_auto_approval_blocked",
+        "blocked_reasons": [
+            "eval_report_count_below_minimum",
+            "eval_report_quality_gate_not_green",
+            "false_positive_predictions_present",
+            "labeled_ordinary_turn_below_minimum",
+            "precision_below_minimum",
+        ],
+    }
+    assert payload["ordinary_conversation_auto_approval"] is False
+
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:

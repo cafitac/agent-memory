@@ -1,7 +1,35 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:01 KST
+Last updated: 2026-05-17 02:20 KST
+
+## Just completed: repeated ordinary-turn eval-window summary gate
+
+- Added `dogfood ordinary-turn-eval-window-summary`, a read-only aggregate/hash-only gate over repeated saved `ordinary-turn-classifier-eval` artifacts.
+- Inputs: repeated `--eval-report`, `--min-report-count`, `--min-labeled-per-report`, `--min-precision-percent`, optional `--output`.
+- It validates each eval report is the expected kind, read-only, non-mutating, default retrieval unchanged, ordinary auto-approval blocked, privacy-safe, quality-gate green, above labeled-window thresholds, and without false positives/false negatives.
+- Output includes report hashes, aggregate window counts, min/max/total labeled counts, min precision, false-positive/false-negative totals, and no raw report bodies or raw trace text.
+- It keeps `ordinary_conversation_auto_approval=false`, `mutated=false`, no broad/background apply, no default-ranking mutation, no collapse/delete, no telemetry reset, and no unreviewed promotion.
+- RED/GREEN: focused tests first failed on invalid subcommand, then passed after adding payload/parser/dispatcher.
+- Focused ordinary-turn tests: `8 passed, 173 deselected`. Full suite: `363 passed, 1 xfailed`.
+- Copy-DB smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-eval-window-summary-smoke-20260516T171603Z/`.
+  - The smoke copied `/Users/reddit/.agent-memory/memory.db`; it did not mutate the live DB.
+  - Strict `--min-precision-percent 100` stayed red because the current sampled labeled window had no positive predictions, so precision is intentionally 0 until positive examples are labeled.
+  - A floor-0 summary over two copy-window eval reports passed green with `quality_gate.pass=true`, `report_count=2`, `quality_gate_pass_count=2`, `labeled_ordinary_turn_total=4`, `mutated=false`, and `ordinary_conversation_auto_approval=false`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.4-99.5%.
+- Remaining gap: more real labeled ordinary-turn windows with positive and negative examples, then an inferred-approval readiness design. This gate proves the repeated-window summary mechanism, not ordinary-turn apply permission.
+
+Recommended next work now:
+
+1. Commit/push this repeated-window gate and watch CI.
+2. Build real ordinary-turn label coverage using `ordinary-turn-label-packet` + `ordinary-turn-label-update` on locally reviewed refs.
+3. Rerun repeated-window summary with a meaningful `--min-precision-percent 100` and positive examples.
+4. Only after stable strict windows should an inferred ordinary-turn approval readiness gate be designed. Keep ordinary-turn apply blocked.
+
 
 ## Just completed: exact-ref ordinary-turn label update corridor
 

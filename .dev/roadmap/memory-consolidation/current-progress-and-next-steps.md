@@ -1,7 +1,49 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:01 KST
+Last updated: 2026-05-17 02:20 KST
+
+## Checkpoint: repeated ordinary-turn eval-window summary gate
+
+The source checkout now has the read-only repeated-window summary gate needed between local ordinary-turn labeling and any future inferred-approval design. `dogfood ordinary-turn-eval-window-summary` consumes saved `dogfood ordinary-turn-classifier-eval` JSON artifacts and emits only aggregate counts plus report hashes.
+
+What changed in source:
+
+- Added `dogfood ordinary-turn-eval-window-summary`.
+  - Inputs: repeated `--eval-report`, `--min-report-count`, `--min-labeled-per-report`, `--min-precision-percent`, optional `--output`.
+  - Report validation: expected eval kind, read-only, non-mutating, default retrieval unchanged, ordinary auto-approval blocked, safe privacy flags, green eval gate, labeled-window threshold, precision threshold, and zero false positives/false negatives.
+  - Output: report hashes/paths, pass counts, auto-approval-blocked counts, labeled min/max/total, min precision, false-positive/false-negative totals, quality decision, and forbidden-authority flags.
+  - Privacy: no raw eval report body, no raw trace summary, no raw transcript/query/content, and no sample values.
+- Added focused RED/GREEN CLI coverage for green repeated windows and red unsafe/insufficient windows.
+
+Copy-DB smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-eval-window-summary-smoke-20260516T171603Z/`.
+- The smoke copied `/Users/reddit/.agent-memory/memory.db`; live DB was not mutated.
+- Two packet refs were labeled on the copy through `ordinary-turn-label-update`; classifier eval artifacts were generated from that copy.
+- Strict `--min-precision-percent 100` stayed red because the current sampled labels were negative-only, producing precision 0 without false positives.
+- A floor-0 summary passed green at `ordinary-turn-eval-window-summary-green-min0.json` with `report_count=2`, `quality_gate_pass_count=2`, `labeled_ordinary_turn_total=4`, `read_only=true`, `mutated=false`, and `ordinary_conversation_auto_approval=false`.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-eval-window-summary` subcommand.
+- Focused eval-window tests: `2 passed`.
+- Focused ordinary-turn coverage: `8 passed, 173 deselected`.
+- Full suite: `363 passed, 1 xfailed`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%+.
+- Scoped local human-brain-like lifecycle is approximately 99.4-99.5%. The remaining gap is evidence quality and strict repeated windows, not summary mechanics.
+- The gate is read-only readiness evidence. It does not authorize ordinary-turn auto-approval or apply.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Add more locally reviewed ordinary-turn labels, including positive examples when present.
+3. Rerun repeated summaries with strict `--min-precision-percent 100`.
+4. Design a separate inferred-approval readiness gate only after strict repeated windows are green.
+
 
 ## Checkpoint: exact-ref ordinary-turn label update corridor
 

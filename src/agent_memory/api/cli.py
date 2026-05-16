@@ -7443,6 +7443,142 @@ def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> 
     return payload
 
 
+
+def _load_ordinary_turn_eval_report_summary(report_path: Path) -> dict[str, Any]:
+    raw_text = report_path.read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    if not isinstance(raw, dict):
+        raise ValueError("ordinary_turn_eval_report_not_json_object")
+    trace_counts = raw.get("trace_counts") if isinstance(raw.get("trace_counts"), dict) else {}
+    evaluation = raw.get("evaluation") if isinstance(raw.get("evaluation"), dict) else {}
+    quality_gate = raw.get("quality_gate") if isinstance(raw.get("quality_gate"), dict) else {}
+    privacy = raw.get("privacy") if isinstance(raw.get("privacy"), dict) else {}
+    return {
+        "report_path": str(report_path),
+        "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "kind": raw.get("kind"),
+        "read_only": raw.get("read_only"),
+        "mutated": raw.get("mutated"),
+        "default_retrieval_unchanged": raw.get("default_retrieval_unchanged"),
+        "ordinary_conversation_auto_approval": raw.get("ordinary_conversation_auto_approval"),
+        "quality_gate_pass": bool(quality_gate.get("pass")),
+        "quality_gate_blocked_reasons": [str(reason) for reason in quality_gate.get("blocked_reasons", [])],
+        "labeled_ordinary_turn": int(trace_counts.get("labeled_ordinary_turn", 0) or 0),
+        "precision_percent": int(evaluation.get("precision_percent", 0) or 0),
+        "false_positive": int(evaluation.get("false_positive", 0) or 0),
+        "false_negative": int(evaluation.get("false_negative", 0) or 0),
+        "privacy": privacy,
+    }
+
+
+def _dogfood_ordinary_turn_eval_window_summary_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_report_count < 1:
+        raise ValueError("dogfood ordinary-turn-eval-window-summary --min-report-count must be >= 1")
+    if args.min_labeled_per_report < 1:
+        raise ValueError("dogfood ordinary-turn-eval-window-summary --min-labeled-per-report must be >= 1")
+    if not 0 <= args.min_precision_percent <= 100:
+        raise ValueError("dogfood ordinary-turn-eval-window-summary --min-precision-percent must be between 0 and 100")
+    summaries = [_load_ordinary_turn_eval_report_summary(path.expanduser().resolve(strict=False)) for path in args.eval_report]
+    blocked_reasons: list[str] = []
+    if len(summaries) < args.min_report_count:
+        blocked_reasons.append("eval_report_count_below_minimum")
+    for summary in summaries:
+        if summary["kind"] != "dogfood_ordinary_turn_classifier_eval":
+            blocked_reasons.append("eval_report_kind_mismatch")
+        if summary["read_only"] is not True or summary["mutated"] is not False:
+            blocked_reasons.append("eval_report_not_read_only")
+        if summary["default_retrieval_unchanged"] is not True:
+            blocked_reasons.append("eval_report_default_retrieval_changed")
+        if summary["ordinary_conversation_auto_approval"] is not False:
+            blocked_reasons.append("eval_report_auto_approval_not_blocked")
+        if not summary["quality_gate_pass"]:
+            blocked_reasons.append("eval_report_quality_gate_not_green")
+        if summary["labeled_ordinary_turn"] < args.min_labeled_per_report:
+            blocked_reasons.append("labeled_ordinary_turn_below_minimum")
+        if summary["precision_percent"] < args.min_precision_percent:
+            blocked_reasons.append("precision_below_minimum")
+        if summary["false_positive"]:
+            blocked_reasons.append("false_positive_predictions_present")
+        if summary["false_negative"]:
+            blocked_reasons.append("false_negative_predictions_present")
+        privacy = summary["privacy"]
+        if (
+            privacy.get("raw_trace_summary_included")
+            or privacy.get("raw_transcript_included")
+            or privacy.get("raw_query_text_included")
+            or privacy.get("raw_content_included")
+            or privacy.get("sample_values_included")
+        ):
+            blocked_reasons.append("eval_report_privacy_not_safe")
+        blocked_reasons.extend(summary["quality_gate_blocked_reasons"])
+    blocked_unique = sorted(set(blocked_reasons))
+    labeled_values = [summary["labeled_ordinary_turn"] for summary in summaries]
+    precision_values = [summary["precision_percent"] for summary in summaries]
+    false_positive_total = sum(summary["false_positive"] for summary in summaries)
+    false_negative_total = sum(summary["false_negative"] for summary in summaries)
+    payload = {
+        "kind": "dogfood_ordinary_turn_eval_window_summary",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "window_policy": "ordinary-turn-repeated-eval-window-v1",
+        "report_counts": {
+            "report_count": len(summaries),
+            "quality_gate_pass_count": sum(1 for summary in summaries if summary["quality_gate_pass"]),
+            "read_only_report_count": sum(1 for summary in summaries if summary["read_only"] is True and summary["mutated"] is False),
+            "auto_approval_blocked_report_count": sum(
+                1 for summary in summaries if summary["ordinary_conversation_auto_approval"] is False
+            ),
+        },
+        "labeled_window": {
+            "labeled_ordinary_turn_min": min(labeled_values) if labeled_values else 0,
+            "labeled_ordinary_turn_max": max(labeled_values) if labeled_values else 0,
+            "labeled_ordinary_turn_total": sum(labeled_values),
+            "precision_percent_min": min(precision_values) if precision_values else 0,
+            "false_positive_total": false_positive_total,
+            "false_negative_total": false_negative_total,
+        },
+        "report_summaries": [
+            {
+                "report_path": summary["report_path"],
+                "report_sha256": summary["report_sha256"],
+                "quality_gate_pass": summary["quality_gate_pass"],
+                "labeled_ordinary_turn": summary["labeled_ordinary_turn"],
+                "precision_percent": summary["precision_percent"],
+            }
+            for summary in summaries
+        ],
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_repeated_eval_windows_green_keep_auto_approval_blocked"
+            if not blocked_unique
+            else "ordinary_turn_repeated_eval_windows_not_ready_keep_auto_approval_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "executes_apply": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+            "report_hashes_only": True,
+        },
+        "recommended_next_step": "collect_more_repeated_labeled_ordinary_turn_windows_before_any_inferred_approval_apply",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -17006,6 +17142,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_classifier_eval_parser.add_argument("--min-labeled", type=int, default=10)
     dogfood_ordinary_turn_classifier_eval_parser.add_argument("--min-precision-percent", type=int, default=100)
     dogfood_ordinary_turn_classifier_eval_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_eval_window_summary_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-eval-window-summary",
+        help="Summarize repeated ordinary-turn classifier eval artifacts as a read-only gate while keeping auto-approval blocked.",
+    )
+    dogfood_ordinary_turn_eval_window_summary_parser.add_argument("--eval-report", type=Path, action="append", required=True)
+    dogfood_ordinary_turn_eval_window_summary_parser.add_argument("--min-report-count", type=int, default=2)
+    dogfood_ordinary_turn_eval_window_summary_parser.add_argument("--min-labeled-per-report", type=int, default=10)
+    dogfood_ordinary_turn_eval_window_summary_parser.add_argument("--min-precision-percent", type=int, default=100)
+    dogfood_ordinary_turn_eval_window_summary_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -18397,6 +18542,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-classifier-eval":
             print(json.dumps(_dogfood_ordinary_turn_classifier_eval_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-eval-window-summary":
+            print(json.dumps(_dogfood_ordinary_turn_eval_window_summary_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))
