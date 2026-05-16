@@ -4780,6 +4780,296 @@ def _dogfood_lifecycle_bounded_batch_operator_packet_payload(args: argparse.Name
     return payload
 
 
+def _dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_payload(args: argparse.Namespace) -> dict[str, Any]:
+    apply_payload, apply_base = _read_json_artifact_summary(args.apply_report)
+    apply_payload = apply_payload or {}
+    rollback_payload, rollback_base = _read_json_artifact_summary(args.rollback_replay_report)
+    rollback_payload = rollback_payload or {}
+    audit_payload, audit_base = _read_json_artifact_summary(args.application_audit_report)
+    audit_payload = audit_payload or {}
+    blocked_reasons: list[str] = []
+    if apply_base["kind"] != "dogfood_lifecycle_recurrent_reinforcement_apply":
+        blocked_reasons.append("apply_report_kind_invalid")
+    if apply_base["read_only"] is not False:
+        blocked_reasons.append("apply_report_not_mutating_apply")
+    if apply_base["mutated"] is not True:
+        blocked_reasons.append("apply_report_not_mutated")
+    if apply_payload.get("default_retrieval_unchanged") is not True:
+        blocked_reasons.append("apply_report_default_retrieval_changed")
+    if apply_payload.get("policy") != args.expected_policy:
+        blocked_reasons.append("apply_report_policy_mismatch")
+    if apply_payload.get("approval_phrase_matched") is not True:
+        blocked_reasons.append("apply_report_approval_phrase_not_matched")
+    applied_count = _safe_int(apply_payload.get("applied_count", len(apply_payload.get("applied", []) or [])))
+    if applied_count < 1:
+        blocked_reasons.append("apply_report_no_applied_items")
+    if applied_count > args.max_applied:
+        blocked_reasons.append("apply_report_applied_count_exceeds_max")
+    if apply_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("ordinary_conversation_auto_approval_enabled")
+    if apply_payload.get("broad_background_apply_allowed") is not False:
+        blocked_reasons.append("broad_background_apply_enabled")
+    backup_payload = apply_payload.get("backup", {}) if isinstance(apply_payload.get("backup"), dict) else {}
+    backup_integrity = _rollback_confidence_for_backup(backup_payload.get("path"), backup_payload.get("sha256"))
+    if not backup_integrity.get("backup_exists"):
+        blocked_reasons.append("backup_missing")
+    if not backup_integrity.get("backup_sha256_matches"):
+        blocked_reasons.append("backup_sha256_mismatch")
+    rollback_quality = rollback_payload.get("quality_gate", {}) if isinstance(rollback_payload.get("quality_gate"), dict) else {}
+    rollback_rollup = rollback_payload.get("rollup", {}) if isinstance(rollback_payload.get("rollup"), dict) else {}
+    if rollback_base["kind"] != "dogfood_rollback_replay_validate":
+        blocked_reasons.append("rollback_replay_report_kind_invalid")
+    if rollback_base["read_only"] is not True or rollback_base["mutated"] is not False:
+        blocked_reasons.append("rollback_replay_report_not_read_only")
+    if rollback_payload.get("default_retrieval_unchanged") is not True:
+        blocked_reasons.append("rollback_replay_default_retrieval_changed")
+    if rollback_quality.get("pass") is not True:
+        blocked_reasons.append("rollback_replay_report_not_green")
+    if _safe_int(rollback_rollup.get("failed_replay_count", 0)) > 0:
+        blocked_reasons.append("rollback_replay_failed_applications_present")
+    audit_quality = audit_payload.get("quality_gate", {}) if isinstance(audit_payload.get("quality_gate"), dict) else {}
+    audit_rollup = audit_payload.get("rollup", {}) if isinstance(audit_payload.get("rollup"), dict) else {}
+    audit_policy_counts = audit_rollup.get("policy_counts", {}) if isinstance(audit_rollup.get("policy_counts"), dict) else {}
+    if audit_base["kind"] != "dogfood_trace_candidate_application_audit":
+        blocked_reasons.append("application_audit_report_kind_invalid")
+    if audit_base["read_only"] is not True or audit_base["mutated"] is not False:
+        blocked_reasons.append("application_audit_report_not_read_only")
+    if audit_payload.get("default_retrieval_unchanged") is not True:
+        blocked_reasons.append("application_audit_default_retrieval_changed")
+    if audit_quality.get("pass") is not True:
+        blocked_reasons.append("application_audit_report_not_green")
+    if _safe_int(audit_policy_counts.get(args.expected_policy, 0)) < applied_count:
+        blocked_reasons.append("application_audit_policy_count_below_apply_count")
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_lifecycle_recurrent_reinforcement_post_apply_verification",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "expected_policy": args.expected_policy,
+        "apply_summary": {
+            "provided": bool(apply_base["provided"]),
+            "kind": apply_base["kind"],
+            "mutated": apply_base["mutated"],
+            "policy": apply_payload.get("policy"),
+            "applied_count": applied_count,
+            "max_applied": args.max_applied,
+            "target_refs_included": False,
+        },
+        "backup_integrity": backup_integrity,
+        "rollback_replay_gate": {
+            "provided": bool(rollback_base["provided"]),
+            "kind": rollback_base["kind"],
+            "quality_pass": rollback_quality.get("pass"),
+            "failed_replay_count": _safe_int(rollback_rollup.get("failed_replay_count", 0)),
+        },
+        "application_audit_gate": {
+            "provided": bool(audit_base["provided"]),
+            "kind": audit_base["kind"],
+            "quality_pass": audit_quality.get("pass"),
+            "application_count": _safe_int(audit_payload.get("application_count", 0)),
+            "policy_count": _safe_int(audit_policy_counts.get(args.expected_policy, 0)),
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "recurrent_reinforcement_post_apply_verification_green_stop"
+            if not blocked_unique
+            else "recurrent_reinforcement_post_apply_verification_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeat_apply_authorized": False,
+        },
+        "privacy": {
+            "target_refs_included": False,
+            "raw_reason_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "backup_content_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+def _dogfood_lifecycle_recurrent_reinforcement_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "g5-lifecycle-recurrent-reinforcement-apply-v1"
+    approval_phrase = "apply-approved-g5-lifecycle-recurrent-reinforcement-v1"
+    base_policy = _LIFECYCLE_APPLY_POLICY_CONTRACTS["reinforcement"]["policy"]
+    if args.approval_phrase != approval_phrase:
+        raise ValueError(f"dogfood lifecycle-recurrent-reinforcement-apply requires --approval-phrase {approval_phrase}")
+    if not args.actor.strip() or not args.reason.strip():
+        raise ValueError("dogfood lifecycle-recurrent-reinforcement-apply requires non-empty --actor and --reason")
+    if args.min_observations < 1:
+        raise ValueError("dogfood lifecycle-recurrent-reinforcement-apply requires --min-observations >= 1")
+    if args.max_apply < 1 or args.max_apply > 2:
+        raise ValueError("dogfood lifecycle-recurrent-reinforcement-apply requires 1 <= --max-apply <= 2")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+    reason_sha256 = hashlib.sha256(args.reason.strip().encode("utf-8")).hexdigest()
+    backup_path = args.backup_path.expanduser().resolve(strict=False) if args.backup_path else _default_backup_path(db_path, label="g5-lifecycle-recurrent-reinforcement-apply")
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        target_rows = connection.execute(
+            """
+            SELECT promoted_ref, MAX(created_at) AS latest_application_at
+            FROM g5_trace_candidate_applications
+            WHERE policy IN (?, ?) AND promoted_ref IS NOT NULL AND promoted_ref != ''
+            GROUP BY promoted_ref
+            ORDER BY promoted_ref
+            """,
+            (base_policy, policy),
+        ).fetchall()
+        eligible: list[dict[str, Any]] = []
+        for row in target_rows:
+            target_ref = str(row["promoted_ref"] or "")
+            latest_at = str(row["latest_application_at"] or "")
+            if not target_ref or not latest_at:
+                continue
+            obs = connection.execute(
+                """
+                SELECT COUNT(*) AS observation_count, MAX(id) AS latest_observation_id
+                FROM retrieval_observations
+                WHERE created_at > ? AND top_memory_ref = ?
+                """,
+                (latest_at, target_ref),
+            ).fetchone()
+            observation_count = int(obs["observation_count"] or 0)
+            latest_observation_id = int(obs["latest_observation_id"] or 0)
+            if observation_count < args.min_observations or latest_observation_id <= 0:
+                continue
+            candidate_fingerprint = hashlib.sha256(f"{target_ref}|{latest_at}|{latest_observation_id}".encode("utf-8")).hexdigest()
+            candidate_id = f"g5-recurrent-reinforcement-{candidate_fingerprint[:24]}"
+            duplicate = connection.execute(
+                "SELECT 1 FROM g5_trace_candidate_applications WHERE candidate_id = ? AND policy = ?",
+                (candidate_id, policy),
+            ).fetchone()
+            if duplicate is not None:
+                continue
+            eligible.append(
+                {
+                    "candidate_id": candidate_id,
+                    "target_ref": target_ref,
+                    "latest_application_at": latest_at,
+                    "observation_count": observation_count,
+                    "latest_observation_id": latest_observation_id,
+                }
+            )
+    selected = sorted(eligible, key=lambda item: (-int(item["observation_count"]), str(item["candidate_id"])))[: args.max_apply]
+    blocked_reasons: list[str] = []
+    if not selected:
+        blocked_reasons.append("no_recurrent_reinforcement_targets_with_fresh_window")
+    backup = _create_sqlite_backup(db_path, backup_path)
+    applied: list[dict[str, Any]] = []
+    if selected:
+        with sqlite3.connect(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            _ensure_lifecycle_candidate_review_tables(connection)
+            for item in selected:
+                memory_type, memory_id = _memory_ref_parts(str(item["target_ref"]))
+                table_name = {"fact": "facts", "procedure": "procedures", "episode": "episodes"}[memory_type]
+                before = connection.total_changes
+                connection.execute(
+                    f"""
+                    UPDATE {table_name}
+                    SET reinforcement_count = COALESCE(reinforcement_count, 0.0) + 1.0,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (memory_id,),
+                )
+                reinforcement_mutated = connection.total_changes > before
+                rollback_hint = {
+                    "restore_backup_path": str(backup_path),
+                    "candidate_id": item["candidate_id"],
+                    "policy": policy,
+                    "memory_ref_sha256": hashlib.sha256(str(item["target_ref"]).encode("utf-8")).hexdigest(),
+                    "memory_status_mutated": False,
+                    "memory_reinforcement_mutated": reinforcement_mutated,
+                    "default_retrieval_mutated": False,
+                    "fresh_observation_count": item["observation_count"],
+                }
+                connection.execute(
+                    """
+                    INSERT INTO g5_trace_candidate_applications (
+                        candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                        backup_path, backup_sha256, rollback_hint_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item["candidate_id"],
+                        "recurrent_reinforcement_review",
+                        item["target_ref"],
+                        policy,
+                        "apply_recurrent_reinforcement_marker",
+                        args.actor.strip(),
+                        reason_sha256,
+                        str(backup_path),
+                        backup["sha256"],
+                        json.dumps(rollback_hint, sort_keys=True),
+                    ),
+                )
+                applied.append(
+                    {
+                        "candidate_id": item["candidate_id"],
+                        "action": "apply_recurrent_reinforcement_marker",
+                        "fresh_observation_count": item["observation_count"],
+                        "memory_reinforcement_mutated": reinforcement_mutated,
+                        "inserted": True,
+                    }
+                )
+    payload = {
+        "kind": "dogfood_lifecycle_recurrent_reinforcement_apply",
+        "read_only": False,
+        "mutated": bool(applied),
+        "default_retrieval_unchanged": True,
+        "db_path": str(db_path),
+        "policy": policy,
+        "base_policy": base_policy,
+        "approval_phrase_matched": True,
+        "actor": args.actor.strip(),
+        "reason_sha256": reason_sha256,
+        "backup": backup,
+        "fresh_window": {
+            "min_observations": args.min_observations,
+            "eligible_target_count": len(eligible),
+            "selected_target_count": len(selected),
+            "target_refs_included": False,
+            "raw_observation_values_included": False,
+        },
+        "applied_count": len(applied),
+        "applied": applied,
+        "quality_gate": {
+            "pass": bool(applied),
+            "decision": "recurrent_reinforcement_applied_for_fresh_windows" if applied else "no_recurrent_reinforcement_apply_ready",
+            "blocked_reasons": blocked_reasons,
+        },
+        "rollback_hint": {"restore_backup_to_revert": True, "backup_path": str(backup_path), "default_retrieval_mutated": False},
+        "memory_reinforcement_mutated": any(item.get("memory_reinforcement_mutated") for item in applied),
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "privacy": {
+            "target_refs_included": False,
+            "raw_reason_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "backup_content_included": False,
+            "aggregate_or_ref_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     policy_contracts = {
         contract["policy"]: {
@@ -7117,7 +7407,15 @@ def _dogfood_trace_candidate_application_audit_payload(args: argparse.Namespace)
     for row in rows:
         rollback = _rollback_confidence_for_backup(row["backup_path"], row["backup_sha256"])
         current_status = _current_status_for_memory_ref(db_path, str(row["promoted_ref"] or "")) if row["promoted_ref"] else None
-        review_status = str(row["review_status"] or "missing")
+        review_status = str(
+            row["review_status"]
+            or (
+                "promoted"
+                if row["policy"] == "g5-lifecycle-recurrent-reinforcement-apply-v1"
+                and row["proposal_type"] == "recurrent_reinforcement_review"
+                else "missing"
+            )
+        )
         status_counts[review_status] += 1
         policy_counts[str(row["policy"])] += 1
         if not rollback["backup_exists"]:
@@ -15130,6 +15428,28 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_candidate_apply_parser.add_argument("--reason", required=True)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_lifecycle_candidate_apply_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser = dogfood_subparsers.add_parser(
+        "lifecycle-recurrent-reinforcement-apply",
+        help="Apply a bounded exact-approved recurrent reinforcement marker for already-applied targets with fresh evidence windows.",
+    )
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--approval-phrase", required=True)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--actor", required=True)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--reason", required=True)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--min-observations", type=int, default=5)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--max-apply", type=int, default=1)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--backup-path", type=Path)
+    dogfood_lifecycle_recurrent_reinforcement_apply_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser = dogfood_subparsers.add_parser(
+        "lifecycle-recurrent-reinforcement-post-apply-verification",
+        help="Validate recurrent reinforcement apply, rollback replay, and application audit artifacts as a read-only stop gate.",
+    )
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--apply-report", type=Path, required=True)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--rollback-replay-report", type=Path, required=True)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--application-audit-report", type=Path, required=True)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--expected-policy", required=True)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--max-applied", type=int, default=1)
+    dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_parser.add_argument("--output", type=Path)
     dogfood_lifecycle_bounded_batch_apply_parser = dogfood_subparsers.add_parser(
         "lifecycle-bounded-batch-apply",
         help="Apply a small bounded batch of already-approved lifecycle candidates after graduation proof and exact approval.",
@@ -16540,6 +16860,12 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-candidate-apply":
             print(json.dumps(_dogfood_lifecycle_candidate_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-recurrent-reinforcement-apply":
+            print(json.dumps(_dogfood_lifecycle_recurrent_reinforcement_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-recurrent-reinforcement-post-apply-verification":
+            print(json.dumps(_dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-bounded-batch-apply":
             print(json.dumps(_dogfood_lifecycle_bounded_batch_apply_payload(args), indent=2))

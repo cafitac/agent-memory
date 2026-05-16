@@ -12353,6 +12353,155 @@ def test_dogfood_lifecycle_candidate_refresh_preview_separates_new_from_promoted
     assert "SHOULD_NOT_LEAK" not in result.stdout
 
 
+def test_dogfood_lifecycle_recurrent_reinforcement_apply_requires_fresh_window_and_exact_approval(tmp_path: Path) -> None:
+    db_path = tmp_path / "lifecycle-recurrent-reinforcement.db"
+    output_path = tmp_path / "lifecycle-recurrent-reinforcement.json"
+    backup_path = tmp_path / "lifecycle-recurrent-reinforcement-backup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="Recurrent reinforcement source token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5-recurrent"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5 recurrent reinforcement",
+        predicate="needs",
+        object_ref_or_value="fresh repeated reinforcement",
+        evidence_ids=[source.id],
+        scope="project:g5-recurrent",
+        confidence=0.94,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS g5_trace_candidate_applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                candidate_id TEXT NOT NULL,
+                proposal_type TEXT NOT NULL,
+                promoted_ref TEXT,
+                policy TEXT NOT NULL,
+                action TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                reason_sha256 TEXT NOT NULL,
+                backup_path TEXT NOT NULL,
+                backup_sha256 TEXT NOT NULL,
+                rollback_hint_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(candidate_id, policy)
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO g5_trace_candidate_applications (
+                candidate_id, proposal_type, promoted_ref, policy, action, actor, reason_sha256,
+                backup_path, backup_sha256, rollback_hint_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "g5-reinforcement-original",
+                "reinforcement_review",
+                f"fact:{fact.id}",
+                "g5-lifecycle-reinforcement-apply-v1",
+                "apply_reviewed_reinforcement_marker",
+                "tester",
+                "a" * 64,
+                str(tmp_path / "original-backup.db"),
+                "b" * 64,
+                json.dumps({"default_retrieval_mutated": False}),
+            ),
+        )
+        connection.execute(
+            "UPDATE g5_trace_candidate_applications SET created_at = '2000-01-01 00:00:00' WHERE candidate_id = ?",
+            ("g5-reinforcement-original",),
+        )
+    for index in range(4):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK recurrent reinforcement query",
+            preferred_scope="project:g5-recurrent",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fact.id, label="recurrent reinforcement target")],
+            response_mode="verify_first",
+            metadata={"raw_query": "SHOULD_NOT_LEAK", "session_id": f"g5-recurrent-{index}"},
+        )
+    before_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_applications"])
+    before_reinforcement = sqlite3.connect(db_path).execute(
+        "SELECT reinforcement_count FROM facts WHERE id = ?", (fact.id,)
+    ).fetchone()[0]
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-recurrent-reinforcement-apply",
+            str(db_path),
+            "--approval-phrase",
+            "apply-approved-g5-lifecycle-recurrent-reinforcement-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "private recurrent reason SHOULD_NOT_LEAK",
+            "--min-observations",
+            "3",
+            "--max-apply",
+            "1",
+            "--backup-path",
+            str(backup_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_recurrent_reinforcement_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["policy"] == "g5-lifecycle-recurrent-reinforcement-apply-v1"
+    assert payload["approval_phrase_matched"] is True
+    assert payload["fresh_window"]["eligible_target_count"] == 1
+    assert payload["fresh_window"]["target_refs_included"] is False
+    assert payload["applied_count"] == 1
+    assert payload["applied"][0]["action"] == "apply_recurrent_reinforcement_marker"
+    assert "target_ref" not in payload["applied"][0]
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["broad_background_apply_allowed"] is False
+    assert payload["privacy"] == {
+        "target_refs_included": False,
+        "raw_reason_included": False,
+        "raw_content_included": False,
+        "raw_query_text_included": False,
+        "backup_content_included": False,
+        "aggregate_or_ref_only": True,
+    }
+    after_counts = _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_applications"])
+    assert after_counts["facts"] == before_counts["facts"]
+    assert after_counts["relations"] == before_counts["relations"]
+    assert after_counts["g5_trace_candidate_applications"] == before_counts["g5_trace_candidate_applications"] + 1
+    after_reinforcement = sqlite3.connect(db_path).execute(
+        "SELECT reinforcement_count FROM facts WHERE id = ?", (fact.id,)
+    ).fetchone()[0]
+    assert after_reinforcement == before_reinforcement + 1.0
+    assert backup_path.exists()
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "recurrent reinforcement source" not in result.stdout
+
+
 def test_dogfood_lifecycle_apply_readiness_summarizes_gates_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "lifecycle-apply-readiness.db"
     output_path = tmp_path / "lifecycle-apply-readiness.json"
@@ -12497,6 +12646,124 @@ def test_dogfood_lifecycle_apply_readiness_summarizes_gates_without_mutation(tmp
     assert _table_counts(db_path, ["facts", "relations", "g5_trace_candidate_reviews"]) == before_counts
     assert "SHOULD_NOT_LEAK" not in result.stdout
     assert "source text" not in result.stdout
+
+
+def test_dogfood_lifecycle_recurrent_reinforcement_post_apply_verification_accepts_green_artifacts(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "recurrent-verification.json"
+    backup_path = tmp_path / "backup.db"
+    backup_path.write_bytes(b"sqlite backup placeholder")
+    backup_sha = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+    apply_report = tmp_path / "recurrent-apply.json"
+    apply_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_lifecycle_recurrent_reinforcement_apply",
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": True,
+                "policy": "g5-lifecycle-recurrent-reinforcement-apply-v1",
+                "approval_phrase_matched": True,
+                "applied_count": 1,
+                "applied": [
+                    {
+                        "candidate_id": "g5-recurrent-reinforcement-abc",
+                        "action": "apply_recurrent_reinforcement_marker",
+                        "fresh_observation_count": 5,
+                        "memory_reinforcement_mutated": True,
+                        "inserted": True,
+                    }
+                ],
+                "backup": {"path": str(backup_path), "sha256": backup_sha},
+                "ordinary_conversation_auto_approval": False,
+                "broad_background_apply_allowed": False,
+                "privacy": {"raw_content_included": False, "target_refs_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollback_replay_report = tmp_path / "rollback-replay.json"
+    rollback_replay_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": True},
+                "rollup": {"checked_application_count": 8, "failed_replay_count": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    application_audit_report = tmp_path / "application-audit.json"
+    application_audit_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_trace_candidate_application_audit",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": True},
+                "rollup": {"policy_counts": {"g5-lifecycle-recurrent-reinforcement-apply-v1": 1}},
+                "application_count": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-recurrent-reinforcement-post-apply-verification",
+            "--apply-report",
+            str(apply_report),
+            "--rollback-replay-report",
+            str(rollback_replay_report),
+            "--application-audit-report",
+            str(application_audit_report),
+            "--expected-policy",
+            "g5-lifecycle-recurrent-reinforcement-apply-v1",
+            "--max-applied",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_recurrent_reinforcement_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "recurrent_reinforcement_post_apply_verification_green_stop",
+        "blocked_reasons": [],
+    }
+    assert payload["apply_summary"]["applied_count"] == 1
+    assert payload["backup_integrity"]["backup_exists"] is True
+    assert payload["backup_integrity"]["backup_sha256_matches"] is True
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeat_apply_authorized": False,
+    }
 
 
 def test_dogfood_lifecycle_post_apply_verification_accepts_green_lifecycle_artifacts(

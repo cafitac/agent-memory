@@ -1,7 +1,48 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:55 KST
+Last updated: 2026-05-16 13:32 KST
+
+## Checkpoint: exact-approved recurrent reinforcement apply
+
+The source checkout now has a narrow recurrent-reinforcement apply corridor for the case exposed by source-novelty scoring: fresh evidence exists, but all generated lifecycle candidates point at already-applied targets. Instead of bypassing target-aware persistence or requeueing duplicate target refs, `dogfood lifecycle-recurrent-reinforcement-apply` uses a separate exact policy and fresh-window selector.
+
+What changed:
+
+- Added `dogfood lifecycle-recurrent-reinforcement-apply <db_path>`.
+- Policy: `g5-lifecycle-recurrent-reinforcement-apply-v1`.
+- Required phrase: `apply-approved-g5-lifecycle-recurrent-reinforcement-v1`.
+- Required metadata: `--actor`, private `--reason`, backup path/output when used live.
+- Guardrails: `--max-apply` is capped at 2; target selection requires at least `--min-observations` fresh retrieval observations after the target's latest base/recurrent lifecycle application.
+- Mutation: increment the selected target memory's `reinforcement_count` only and record a lifecycle application row with backup/checksum/rollback hint.
+- Still no status mutation, retrieval default mutation, candidate review requeue, ordinary conversation auto-approval, broad/background apply, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Live artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-recurrent-reinforcement-apply-20260516T041353Z/lifecycle-recurrent-reinforcement-apply.json`.
+
+Live result:
+
+- `eligible_target_count=3`.
+- `selected_target_count=1`.
+- `applied_count=1`.
+- Backup SHA-256: `aafb6a0144ed792428bf34bc618f248c21de3c41711e2fd5bda44c0f766e7187`.
+- Rollback confidence: green.
+- Rollback replay: green, `checked_application_count=8`, `failed_replay_count=0`.
+- Recurrent-policy application audit: green, `application_count=1`.
+- Recurrent post-apply verifier: green, `recurrent_reinforcement_post_apply_verification_green_stop`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99% but is now closer to the last mutation loop: recurrence evidence can be converted into a bounded exact-approved reinforcement update without duplicate target requeueing.
+- Literal fully autonomous human-brain-like memory is approximately 92-93%. The system now has a first explicit recurrent reinforcement write path plus its post-apply verifier, but it still depends on exact operator approval and lacks ordinary-turn auto-approval.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Repeat at most one or two additional exact-approved recurrent applies if fresh windows remain, but run the recurrent post-apply verifier after each apply.
+3. Add ordinary-turn auto-approval readiness scoring as the next read-only gate toward unattended consolidation.
+4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked behind separate gates.
 
 ## Checkpoint: lifecycle refresh source-novelty scoring
 

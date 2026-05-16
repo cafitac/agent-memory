@@ -1,7 +1,24 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 12:55 KST
+Last updated: 2026-05-16 13:32 KST
+
+## Just completed: exact-approved recurrent reinforcement apply
+
+- Added `dogfood lifecycle-recurrent-reinforcement-apply`, a narrow exact-approval policy for already-applied targets that have fresh post-apply evidence windows.
+- Policy: `g5-lifecycle-recurrent-reinforcement-apply-v1`; exact phrase: `apply-approved-g5-lifecycle-recurrent-reinforcement-v1`.
+- It selects only targets with enough fresh retrieval observations after their latest base/recurrent lifecycle application, caps live mutation with `--max-apply <= 2`, creates a SQLite backup, increments only `reinforcement_count`, and records an application/audit row.
+- It does not requeue already-applied target refs, change status, change default retrieval, approve ordinary conversation, broad/background apply, collapse/delete, telemetry reset, or promote unreviewed memories.
+- Live exact-approved smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-live-recurrent-reinforcement-apply-20260516T041353Z/lifecycle-recurrent-reinforcement-apply.json`.
+- Live result: `eligible_target_count=3`, `selected_target_count=1`, `applied_count=1`, backup SHA-256 `aafb6a0144ed792428bf34bc618f248c21de3c41711e2fd5bda44c0f766e7187`.
+- Post-apply evidence: rollback confidence green, rollback replay green (`checked_application_count=8`, `failed_replay_count=0`), recurrent-policy application audit green (`application_count=1`, review status treated as policy-promoted because this recurrent corridor does not create review rows), and recurrent post-apply verifier green (`recurrent_reinforcement_post_apply_verification_green_stop`).
+
+Recommended next work now:
+
+1. Commit/push this recurrent-reinforcement policy checkpoint and watch CI.
+2. Repeat at most one or two more recurrent applies through the same exact policy/phrase corridor only when the recurrent post-apply verifier is green after each apply.
+3. Then add ordinary-turn auto-approval readiness scoring, still read-only first, to measure how close the system is to unattended brain-like consolidation.
+4. Still blocked until separate gates exist: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: lifecycle refresh source-novelty scoring
 
