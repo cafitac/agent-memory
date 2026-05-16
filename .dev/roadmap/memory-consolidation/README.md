@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 02:38 KST, source work is on the post-v0.1.162 ordinary-turn metadata memory-hint checkpoint.
-- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.55-99.65% for the scoped local human-brain-like lifecycle; the next boundary is larger strict hinted/labeled ordinary-turn windows, then a separate inferred-approval readiness design before any apply.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 02:54 KST, source work is on the post-v0.1.162 ordinary-turn inferred approval readiness checkpoint.
+- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.65-99.75% for the scoped local human-brain-like lifecycle; the next boundary is a separate exact-approval ordinary-turn apply corridor with backup/audit/post-apply verification, not default auto-approval.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
@@ -118,6 +118,7 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 
 ## References
 
+- `references/post-v0.1.162-ordinary-turn-inferred-approval-readiness.md` - read-only readiness-for-design gate over strict repeated ordinary-turn eval windows; no apply authority.
 - `references/post-v0.1.162-ordinary-turn-memory-hints.md` - raw-text-free ordinary-turn metadata hints for future positive eval evidence without storing ordinary-turn summaries.
 - `references/post-v0.1.162-ordinary-turn-eval-window-summary.md` - read-only repeated eval-window summary gate over saved ordinary-turn classifier reports.
 - `references/post-v0.1.162-ordinary-turn-label-update.md` - exact-ref label update corridor for locally reviewed ordinary-turn refs.

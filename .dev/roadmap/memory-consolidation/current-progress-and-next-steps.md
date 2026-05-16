@@ -1,7 +1,31 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 02:38 KST
+Last updated: 2026-05-17 02:54 KST
+
+## Checkpoint: ordinary-turn inferred approval readiness gate
+
+- Added `dogfood ordinary-turn-inferred-approval-readiness`, a read-only gate that consumes a saved green `dogfood_ordinary_turn_eval_window_summary` report and decides whether there is enough strict aggregate evidence to design a separate exact-approval ordinary-turn apply corridor.
+- The command validates report kind/policy, read-only/no-mutation/default-unchanged flags, ordinary auto-approval still false, green window quality, report-count and labeled-total floors, strict precision floor, zero false positives/false negatives, and privacy-safe aggregate/report-hash-only output.
+- Green readiness means `ready_for_design=true` only. It still reports `apply_supported=false`, `apply_executed=false`, `requires_separate_exact_approval_corridor=true`, `ordinary_conversation_auto_approval=false`, and preserves all forbidden authority flags.
+- Copy-DB smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-inferred-readiness-smoke-20260516T175111Z/`.
+  - The smoke copied `/Users/reddit/.agent-memory/memory.db`; it did not mutate the live DB.
+  - Two hook-created metadata-only ordinary turns were exact-ref labeled on the copy, strict classifier evals and repeated-window summary passed, and inferred readiness passed with `decision=ordinary_turn_inferred_approval_ready_for_separate_exact_apply_design`.
+  - Final readiness artifact stayed `mutated=false`, `apply_supported=false`, `apply_executed=false`, and `ordinary_conversation_auto_approval=false`.
+- Validation: RED tests failed first on invalid subcommand; focused GREEN `2 passed`; ordinary-turn/hook focus `13 passed, 171 deselected`; full suite `366 passed, 1 xfailed`; release/workflow metadata `7 passed`; release metadata script and `npm pack --dry-run` passed.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.65-99.75%.
+- Remaining gap: a separate exact-approval ordinary-turn apply corridor with backup/audit/post-apply verification. Ordinary-turn auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this readiness gate and watch CI.
+2. Design/implement the separate exact-approval ordinary-turn apply corridor as the next PR-sized TDD slice.
+3. Require exact policy/approval phrase/actor/reason/backup and fail closed on any red readiness artifact.
+4. Keep ordinary conversation auto-approval and broad apply blocked by default.
 
 ## Checkpoint: ordinary-turn metadata memory hints without raw text
 
