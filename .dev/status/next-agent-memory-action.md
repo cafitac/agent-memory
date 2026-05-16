@@ -1,7 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 13:32 KST
+Last updated: 2026-05-16 13:49 KST
+
+## Just completed: repeated recurrent reinforcement applies + ordinary-turn readiness gate
+
+- Repeated the exact-approved recurrent reinforcement corridor two more times, one at a time, after each prior recurrent post-apply verifier was green.
+- Second recurrent apply artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-recurrent-reinforcement-apply-20260516T044243Z/lifecycle-recurrent-reinforcement-apply.json`.
+  - `eligible_target_count=3`, `selected_target_count=1`, `applied_count=1`, backup SHA-256 `af5d903f5040036fc1a2f9e75995a9ff59b65494eaa91c8b609626e60114e588`.
+  - Post-apply verifier green: `recurrent_reinforcement_post_apply_verification_green_stop`; rollback replay checked `9`, failed `0`; recurrent application audit count `2`.
+- Third recurrent apply artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-third-live-recurrent-reinforcement-apply-20260516T044336Z/lifecycle-recurrent-reinforcement-apply.json`.
+  - `eligible_target_count=2`, `selected_target_count=1`, `applied_count=1`, backup SHA-256 `4358b9c876ead3edfce12baecf9ec39f4aa6e231fd831478695025ad6c60f963`.
+  - Post-apply verifier green: `recurrent_reinforcement_post_apply_verification_green_stop`; rollback replay checked `10`, failed `0`; recurrent application audit count `3`.
+- Added read-only `dogfood ordinary-turn-auto-approval-readiness <db_path>` to measure how close ordinary conversation is to safe auto-approval without enabling it.
+- Live ordinary-turn readiness artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-auto-approval-readiness-20260516T044849Z/ordinary-turn-auto-approval-readiness.json`.
+- Live result: `ordinary_turn=1000`, `explicit_remember_intent=0`, `review_ready_remember_intent=0`, `secret_like_ordinary_turns=0`, score `75`, quality gate red with `explicit_remember_intent_ready_count_below_minimum`. This means ordinary-turn auto-approval is still correctly blocked because the live trace stream has ordinary turns but no explicit remember-intent evidence.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI if GitHub rate limits allow.
+2. Add an explicit remember-intent evidence path or hook/classifier that can produce `remember_intent` traces from user-approved memory requests, still read-only/report-first.
+3. Then rerun `ordinary-turn-auto-approval-readiness`; only after explicit-ready evidence exists should an apply path be considered.
+4. Still blocked: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: exact-approved recurrent reinforcement apply
 

@@ -6119,6 +6119,91 @@ def _automation_policy_comparison_evidence_from_report(path: Path | None) -> dic
     }
 
 
+def _dogfood_ordinary_turn_auto_approval_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood ordinary-turn-auto-approval-readiness limit must be >= 1")
+    if args.min_explicit_ready < 1:
+        raise ValueError("dogfood ordinary-turn-auto-approval-readiness --min-explicit-ready must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    traces = list_experience_traces(db_path, limit=args.limit)
+    ordinary_turns = [trace for trace in traces if trace.event_kind == "turn"]
+    explicit_remember = [trace for trace in traces if trace.event_kind == "remember_intent"]
+    review_ready = [trace for trace in explicit_remember if _remember_intent_trace_is_review_ready(trace)]
+    ordinary_preference_like = [trace for trace in ordinary_turns if _remember_preference_object_from_summary(trace.summary) is not None]
+    secret_like_ordinary = [trace for trace in ordinary_turns if _contains_secret_like_report_text(trace.summary)]
+    blocked_reasons: list[str] = []
+    if len(review_ready) < args.min_explicit_ready:
+        blocked_reasons.append("explicit_remember_intent_ready_count_below_minimum")
+    if not ordinary_turns:
+        blocked_reasons.append("no_ordinary_turns_observed")
+    if secret_like_ordinary:
+        blocked_reasons.append("secret_like_ordinary_turns_present")
+    components = {
+        "explicit_ready_evidence": len(review_ready) >= args.min_explicit_ready,
+        "ordinary_turns_observed": bool(ordinary_turns),
+        "secret_like_ordinary_turns_absent": not secret_like_ordinary,
+        "apply_verifier_available": True,
+    }
+    score_percent = 0
+    if components["explicit_ready_evidence"]:
+        score_percent += 25
+    if components["ordinary_turns_observed"]:
+        score_percent += 25
+    if components["secret_like_ordinary_turns_absent"]:
+        score_percent += 50
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_auto_approval_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "trace_counts": {
+            "total": len(traces),
+            "ordinary_turn": len(ordinary_turns),
+            "explicit_remember_intent": len(explicit_remember),
+            "review_ready_remember_intent": len(review_ready),
+            "other": len(traces) - len(ordinary_turns) - len(explicit_remember),
+        },
+        "risk_counts": {
+            "ordinary_preference_like_turns": len(ordinary_preference_like),
+            "secret_like_ordinary_turns": len(secret_like_ordinary),
+            "ordinary_turns_without_explicit_remember_intent": len(ordinary_turns),
+        },
+        "readiness_score": {
+            "score_percent": score_percent,
+            "components": components,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_auto_approval_readiness_measured_keep_blocked"
+            if not blocked_unique
+            else "ordinary_turn_auto_approval_not_ready_keep_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "executes_apply": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "recommended_next_step": "keep_ordinary_turn_auto_approval_blocked_until_secret_free_explicit_intent_evidence_is_stable",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_automation_policy_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
     comparison = _automation_policy_comparison_evidence_from_report(args.comparison_report)
     blocked_reasons: list[str] = []
@@ -15581,6 +15666,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_automation_policy_readiness_parser.add_argument("--comparison-report", type=Path, required=True)
     dogfood_automation_policy_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_auto_approval_readiness_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-auto-approval-readiness",
+        help="Measure ordinary-turn auto-approval readiness as a read-only aggregate gate while keeping auto-approval blocked.",
+    )
+    dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--min-explicit-ready", type=int, default=5)
+    dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -16905,6 +16998,9 @@ def main() -> None:
             return
         if args.dogfood_action == "automation-policy-readiness":
             print(json.dumps(_dogfood_automation_policy_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-auto-approval-readiness":
+            print(json.dumps(_dogfood_ordinary_turn_auto_approval_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

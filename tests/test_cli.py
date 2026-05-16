@@ -14714,6 +14714,126 @@ def test_dogfood_live_evidence_bundle_compare_summarizes_repeated_reports_withou
 
 
 
+def test_dogfood_ordinary_turn_auto_approval_readiness_is_read_only_and_keeps_auto_approval_blocked(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-readiness.db"
+    output_path = tmp_path / "ordinary-turn-readiness.json"
+    initialize_database(db_path)
+    for index in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=f"{index}" * 64,
+            summary=f"User prefers safe explicit preference {index}.",
+            scope="project:g2",
+            retention_policy="review",
+            metadata={
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+            },
+        )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="User prefers this ordinary turn should be measured but not auto-approved.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="User prefers password: SHOULD_NOT_LEAK.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-auto-approval-readiness",
+            str(db_path),
+            "--min-explicit-ready",
+            "2",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "password:" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_auto_approval_readiness"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_auto_approval_not_ready_keep_blocked",
+        "blocked_reasons": ["secret_like_ordinary_turns_present"],
+    }
+    assert payload["trace_counts"] == {
+        "total": 4,
+        "ordinary_turn": 2,
+        "explicit_remember_intent": 2,
+        "review_ready_remember_intent": 2,
+        "other": 0,
+    }
+    assert payload["risk_counts"] == {
+        "ordinary_preference_like_turns": 2,
+        "secret_like_ordinary_turns": 1,
+        "ordinary_turns_without_explicit_remember_intent": 2,
+    }
+    assert payload["readiness_score"] == {
+        "score_percent": 50,
+        "components": {
+            "explicit_ready_evidence": True,
+            "ordinary_turns_observed": True,
+            "secret_like_ordinary_turns_absent": False,
+            "apply_verifier_available": True,
+        },
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_apply": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "aggregate_only": True,
+    }
+    assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:

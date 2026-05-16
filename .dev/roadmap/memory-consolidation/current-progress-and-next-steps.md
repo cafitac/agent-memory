@@ -1,7 +1,46 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 13:32 KST
+Last updated: 2026-05-16 13:49 KST
+
+## Checkpoint: repeated recurrent reinforcement applies + ordinary-turn readiness gate
+
+After the first recurrent reinforcement proof, the live DB was advanced through two more exact-approved recurrent reinforcement applies, each one-at-a-time and each followed by rollback replay, recurrent-policy application audit, and recurrent post-apply verification. A new read-only ordinary-turn auto-approval readiness gate now measures the remaining gap to unattended brain-like consolidation without enabling ordinary-turn auto-approval.
+
+Live recurrent results:
+
+- Second recurrent apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-second-live-recurrent-reinforcement-apply-20260516T044243Z/lifecycle-recurrent-reinforcement-apply.json`.
+  - `eligible_target_count=3`, `selected_target_count=1`, `applied_count=1`.
+  - Backup SHA-256: `af5d903f5040036fc1a2f9e75995a9ff59b65494eaa91c8b609626e60114e588`.
+  - Rollback replay: green, `checked_application_count=9`, `failed_replay_count=0`.
+  - Recurrent-policy application audit: green, `application_count=2`.
+  - Recurrent post-apply verifier: green, `recurrent_reinforcement_post_apply_verification_green_stop`.
+- Third recurrent apply: `/Users/reddit/.agent-memory/reports/post-v0.1.162-third-live-recurrent-reinforcement-apply-20260516T044336Z/lifecycle-recurrent-reinforcement-apply.json`.
+  - `eligible_target_count=2`, `selected_target_count=1`, `applied_count=1`.
+  - Backup SHA-256: `4358b9c876ead3edfce12baecf9ec39f4aa6e231fd831478695025ad6c60f963`.
+  - Rollback replay: green, `checked_application_count=10`, `failed_replay_count=0`.
+  - Recurrent-policy application audit: green, `application_count=3`.
+  - Recurrent post-apply verifier: green, `recurrent_reinforcement_post_apply_verification_green_stop`.
+
+New source gate:
+
+- Added `dogfood ordinary-turn-auto-approval-readiness <db_path>`.
+- The command is read-only/no-mutation/default-unchanged and reports aggregate counts only: ordinary turns, explicit remember-intent traces, review-ready remember-intent traces, ordinary preference-like turns, secret-like ordinary turns, and a bounded readiness score.
+- It always keeps `ordinary_conversation_auto_approval=false` and includes forbidden-authority flags for broad/background apply, default ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+- Live artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-auto-approval-readiness-20260516T044849Z/ordinary-turn-auto-approval-readiness.json`.
+- Live result: `ordinary_turn=1000`, `explicit_remember_intent=0`, `review_ready_remember_intent=0`, `secret_like_ordinary_turns=0`, score `75`, quality gate red with `explicit_remember_intent_ready_count_below_minimum`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%.
+- Literal fully autonomous human-brain-like memory is approximately 93-94%: recurrent reinforcement can now repeat safely with verifier stops, and the next missing substrate is explicit remember-intent evidence for ordinary-turn automation. Ordinary conversation auto-approval remains intentionally blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI if GitHub rate limits allow.
+2. Add an explicit remember-intent evidence path or classifier that can turn user-approved memory requests into review-ready `remember_intent` traces, report-first and read-only.
+3. Rerun ordinary-turn readiness; do not add apply until explicit-ready evidence exists and stays secret-free.
+4. Keep broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and ordinary-turn apply blocked behind separate RED-tested gates.
 
 ## Checkpoint: exact-approved recurrent reinforcement apply
 
