@@ -1,8 +1,37 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 09:16 KST
+Last updated: 2026-05-16 10:34 KST
 
+
+
+## Checkpoint: third live exact-approved reinforcement lifecycle apply
+
+The third live reinforcement lifecycle candidate has been applied through the exact reviewed-candidate corridor. This proves the repeated one-at-a-time loop across three different target refs while preserving backup, readiness, rollback replay, audit, and lifecycle post-apply verification gates.
+
+What happened:
+
+- Approved candidate `g5-reinforcement-da820f3c712f508c084d3137`, target `procedure:1`, with phrase `approve-g5-lifecycle-candidate-v1`.
+- Applied with policy `g5-lifecycle-reinforcement-apply-v1` and phrase `apply-approved-g5-lifecycle-reinforcement-v1`.
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-third-live-reinforcement-apply-20260516T013407Z/`.
+- Backup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-third-live-reinforcement-apply-20260516T013407Z/pre-apply-memory-backup.db`.
+- Backup SHA-256: `5a18d345734798790ffa5bdd678901975792534a906d4e8df343dd75f174201c`.
+- Post-apply readiness returned to no-ready-apply: reinforcement `promoted=3`, `pending=1`, `approved=0`.
+- Rollback replay passed, application audit passed, and `lifecycle-post-apply-verification` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- The post-apply live evidence bundle passed for this bounded artifact set; treat it as post-apply evidence, not broad/background apply permission.
+
+Current interpretation:
+
+- Safety-gated operational north-star is now approximately 96-97%.
+- Literal fully autonomous human-brain-like memory is approximately 76-78%: the real DB has now completed three live reviewed lifecycle reinforcement mutations, but autonomy is still exact-approval gated and one-at-a-time.
+
+Immediate next recommended slice:
+
+1. Commit/push this third live apply checkpoint and watch CI.
+2. Apply at most the last remaining pending reinforcement candidate only after the checkpoint is green.
+3. Rerun `lifecycle-post-apply-verification` after the apply and stop.
+4. After all four initial reinforcement candidates are green one-at-a-time, design a separate bounded-batch graduation gate before any batched/repeated apply.
+5. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, unreviewed promotion, and repeated/batched apply without a tested graduation gate blocked.
 
 ## Checkpoint: second live exact-approved reinforcement lifecycle apply
 
