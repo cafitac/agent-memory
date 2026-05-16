@@ -16016,6 +16016,189 @@ def test_dogfood_ordinary_turn_label_packet_emits_safe_review_refs_without_apply
 
 
 
+def test_dogfood_ordinary_turn_label_update_marks_exact_ref_without_raw_output(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-label-update.db"
+    output_path = tmp_path / "ordinary-turn-label-update.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary="User prefers concise step-by-step ops guidance.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"existing": "keep"},
+    )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-label-update",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--expected-memory-worthy",
+            "true",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "local raw trace reviewed",
+            "--approval-phrase",
+            "label-approved-ordinary-turn-v1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "concise step-by-step" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_label_update"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["label_policy"] == "ordinary-turn-label-update-v1"
+    assert payload["trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["updated_count"] == 1
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_label_updated_keep_auto_approval_blocked",
+        "blocked_reasons": [],
+    }
+    assert payload["apply"] == {
+        "actor": "cli-test",
+        "policy": "ordinary-turn-label-update-v1",
+        "approval_phrase": "label-approved-ordinary-turn-v1",
+        "reason_sha256": hashlib.sha256(b"local raw trace reviewed").hexdigest(),
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_memory_promotion": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "reason_hash_only": True,
+        "trace_ref_only": True,
+    }
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT metadata_json, summary FROM experience_traces WHERE id = ?", (trace.id,)).fetchone()
+    metadata = json.loads(row[0])
+    assert metadata["ordinary_turn"] is True
+    assert metadata["existing"] == "keep"
+    assert metadata["expected_memory_worthy"] is True
+    assert metadata["ordinary_turn_label"] == {
+        "policy": "ordinary-turn-label-update-v1",
+        "actor": "cli-test",
+        "reason_sha256": hashlib.sha256(b"local raw trace reviewed").hexdigest(),
+    }
+    assert row[1] == "User prefers concise step-by-step ops guidance."
+    after_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    assert after_counts == before_counts
+
+
+
+def test_dogfood_ordinary_turn_label_update_blocks_wrong_phrase_and_secret_like_trace(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-label-update-blocked.db"
+    initialize_database(db_path)
+    secret_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="e" * 64,
+        summary="User prefers password: SHOULD_NOT_LEAK.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    wrong_phrase = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-label-update",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{secret_trace.id}",
+            "--expected-memory-worthy",
+            "false",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "blocked check",
+            "--approval-phrase",
+            "wrong-phrase",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert wrong_phrase.returncode != 0
+    assert "SHOULD_NOT_LEAK" not in wrong_phrase.stdout
+    assert "SHOULD_NOT_LEAK" not in wrong_phrase.stderr
+
+    secret_block = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-label-update",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{secret_trace.id}",
+            "--expected-memory-worthy",
+            "false",
+            "--actor",
+            "cli-test",
+            "--reason",
+            "secret-like should not be labeled by this corridor",
+            "--approval-phrase",
+            "label-approved-ordinary-turn-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert secret_block.returncode != 0
+    assert "secret_like_trace_blocked" in secret_block.stderr
+    assert "SHOULD_NOT_LEAK" not in secret_block.stdout
+    assert "SHOULD_NOT_LEAK" not in secret_block.stderr
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT metadata_json FROM experience_traces WHERE id = ?", (secret_trace.id,)).fetchone()
+    assert "expected_memory_worthy" not in json.loads(row[0])
+
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:

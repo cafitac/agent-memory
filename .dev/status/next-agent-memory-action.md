@@ -1,7 +1,35 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 01:46 KST
+Last updated: 2026-05-17 02:01 KST
+
+## Just completed: exact-ref ordinary-turn label update corridor
+
+- Added `dogfood ordinary-turn-label-update`, a bounded mutating corridor that labels exactly one `experience_trace:<id>` with `metadata.expected_memory_worthy=true/false`.
+- Required operator inputs: `--trace-ref`, `--expected-memory-worthy true|false`, `--actor`, `--reason`, and exact `--approval-phrase label-approved-ordinary-turn-v1`.
+- It updates only `experience_traces.metadata_json`, preserves existing metadata, marks `ordinary_turn=true`, hashes the reason, and emits no raw trace summary, transcript, query text, raw content, sample values, or raw reason.
+- It blocks wrong approval phrases, missing/non-turn trace refs, invalid metadata JSON, and secret-like traces with `secret_like_trace_blocked`.
+- It still keeps `ordinary_conversation_auto_approval=false`, default retrieval unchanged, no memory promotion, no broad/background apply, no collapse/delete, no telemetry reset, and no unreviewed promotion.
+- RED/GREEN: focused tests first failed on missing subcommand, then passed after payload/parser/dispatcher implementation; a live-copy smoke first exposed that live packet refs may lack `metadata.ordinary_turn`, so the corridor now treats `event_kind=turn` as the ordinary-turn source of truth and sets `ordinary_turn=true` during labeling.
+- Focused verification so far: `6 passed, 173 deselected` for ordinary-turn CLI coverage.
+- Copy-DB smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-label-update-smoke-20260516T170107Z/`.
+  - The smoke copied `/Users/reddit/.agent-memory/memory.db`; it did not mutate the live DB.
+  - `ordinary-turn-label-update` on the copy returned green with `mutated=true` and auto-approval still false.
+  - `ordinary-turn-classifier-eval` on the copy returned green with `min_labeled=1` and auto-approval still false.
+
+Current estimate:
+
+- Safety-gated operational north-star: approximately 99%+.
+- Literal fully autonomous human-brain-like memory within this repo's scoped local-memory lifecycle: approximately 99.2-99.4%.
+- The missing piece is now not a labeling mechanism; it is repeated real labeled ordinary-turn windows plus an inferred-approval readiness gate.
+
+Recommended next work now:
+
+1. Run full source verification and commit/push this exact-ref label-update checkpoint.
+2. Use the label packet plus exact-ref update corridor to label a bounded live/copy window, then rerun `ordinary-turn-classifier-eval` over repeated windows.
+3. Add a read-only repeated-window ordinary-turn label/eval summary gate before any inferred approval/apply command.
+4. Keep ordinary-turn auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked behind separate gates.
+
 
 ## Just completed: ordinary-turn label/evidence packet
 

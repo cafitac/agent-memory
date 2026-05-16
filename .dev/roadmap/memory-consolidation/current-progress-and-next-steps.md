@@ -1,7 +1,45 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 01:46 KST
+Last updated: 2026-05-17 02:01 KST
+
+## Checkpoint: exact-ref ordinary-turn label update corridor
+
+The source checkout now has the missing bounded label-write mechanism before repeated ordinary-turn classifier evaluation. `dogfood ordinary-turn-label-update <db_path>` applies exactly one local `experience_trace:<id>` label to `metadata.expected_memory_worthy` after an exact approval phrase and local raw review.
+
+What changed in source:
+
+- Added `dogfood ordinary-turn-label-update`.
+  - Inputs: `db_path`, `--trace-ref experience_trace:<id>`, `--expected-memory-worthy true|false`, `--actor`, `--reason`, exact `--approval-phrase label-approved-ordinary-turn-v1`, optional `--output`.
+  - Mutation scope: only the selected row's `experience_traces.metadata_json`. It preserves existing metadata, sets `ordinary_turn=true`, sets `expected_memory_worthy`, and stores a label audit object with policy, actor, and reason SHA-256.
+  - Output excludes raw trace summaries, raw transcript, raw query text, raw content, sample values, and raw reason.
+  - It blocks wrong phrases and secret-like traces, and it performs no candidate creation, fact/procedure/episode promotion, retrieval-default mutation, broad/background apply, collapse/delete, telemetry reset, or ordinary conversation auto-approval.
+- Added RED/GREEN CLI coverage for the green exact-ref update path, wrong approval phrase, secret-like trace blocking, raw-output safety, and live-compatible event-kind-only ordinary-turn traces.
+
+Copy-DB smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-label-update-smoke-20260516T170107Z/`.
+- The smoke copied `/Users/reddit/.agent-memory/memory.db` and mutated only the copy.
+- Label update artifact: `ordinary-turn-label-update.json`, green with `mutated=true`, `ordinary_conversation_auto_approval=false`, and `default_retrieval_unchanged=true`.
+- Classifier eval artifact: `ordinary-turn-classifier-eval.json`, green at `--min-labeled 1 --min-precision-percent 0` on the copy, still read-only and auto-approval false.
+
+Validation so far:
+
+- RED observed: invalid `ordinary-turn-label-update` subcommand; later live-copy RED exposed overstrict `metadata.ordinary_turn` requirement.
+- Focused ordinary-turn tests: `6 passed, 173 deselected`.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%+.
+- Literal fully autonomous human-brain-like memory for the scoped local lifecycle is approximately 99.2-99.4%. The remaining gap is no longer packet generation or exact-ref label update; it is repeated real labeled ordinary-turn windows and a separate read-only inferred-approval readiness summary.
+
+Next after this slice:
+
+1. Run full source verification, commit/push, and watch CI.
+2. Use the label packet plus exact-ref update corridor to build repeated labeled ordinary-turn windows. Prefer copy-DB windows first; only mutate the live DB when the selected refs have been locally raw-reviewed.
+3. Add a repeated-window ordinary-turn label/eval summary gate.
+4. Only after stable green windows should inferred ordinary-turn approval readiness be designed; ordinary-turn apply remains blocked.
+
 
 ## Checkpoint: ordinary-turn label/evidence packet
 

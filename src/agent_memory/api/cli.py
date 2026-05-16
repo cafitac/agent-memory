@@ -7235,6 +7235,101 @@ def _dogfood_ordinary_turn_label_packet_payload(args: argparse.Namespace) -> dic
     return payload
 
 
+def _parse_experience_trace_ref(trace_ref: str) -> int:
+    prefix = "experience_trace:"
+    if not trace_ref.startswith(prefix):
+        raise ValueError("trace_ref must use experience_trace:<id>")
+    raw_id = trace_ref[len(prefix) :]
+    if not raw_id.isdigit() or int(raw_id) < 1:
+        raise ValueError("trace_ref must use experience_trace:<positive-id>")
+    return int(raw_id)
+
+
+def _dogfood_ordinary_turn_label_update_payload(args: argparse.Namespace) -> dict[str, Any]:
+    policy = "ordinary-turn-label-update-v1"
+    approval_phrase = "label-approved-ordinary-turn-v1"
+    if args.approval_phrase != approval_phrase:
+        raise ValueError("approval_phrase_mismatch_for_ordinary_turn_label_update")
+    expected = _metadata_bool(args.expected_memory_worthy)
+    if expected is None:
+        raise ValueError("expected_memory_worthy must be true or false")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-label-update --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-label-update --reason is required")
+    trace_id = _parse_experience_trace_ref(args.trace_ref)
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    with connect(db_path) as connection:
+        row = connection.execute("SELECT * FROM experience_traces WHERE id = ?", (trace_id,)).fetchone()
+        if row is None:
+            raise ValueError("experience_trace_not_found")
+        if row["event_kind"] != "turn":
+            raise ValueError("experience_trace_is_not_turn")
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("experience_trace_metadata_json_invalid") from exc
+        if not isinstance(metadata, dict):
+            raise ValueError("experience_trace_metadata_json_not_object")
+        if _contains_secret_like_report_text(row["summary"]):
+            raise ValueError("secret_like_trace_blocked")
+        reason_sha256 = hashlib.sha256(args.reason.encode("utf-8")).hexdigest()
+        updated_metadata = dict(metadata)
+        updated_metadata["ordinary_turn"] = True
+        updated_metadata["expected_memory_worthy"] = expected
+        updated_metadata["ordinary_turn_label"] = {
+            "policy": policy,
+            "actor": args.actor,
+            "reason_sha256": reason_sha256,
+        }
+        connection.execute(
+            "UPDATE experience_traces SET metadata_json = ? WHERE id = ?",
+            (json.dumps(updated_metadata, sort_keys=True), trace_id),
+        )
+    payload = {
+        "kind": "dogfood_ordinary_turn_label_update",
+        "read_only": False,
+        "mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "label_policy": policy,
+        "trace_ref": f"experience_trace:{trace_id}",
+        "updated_count": 1,
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_label_updated_keep_auto_approval_blocked",
+            "blocked_reasons": [],
+        },
+        "apply": {
+            "actor": args.actor,
+            "policy": policy,
+            "approval_phrase": approval_phrase,
+            "reason_sha256": hashlib.sha256(args.reason.encode("utf-8")).hexdigest(),
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "executes_memory_promotion": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+            "reason_hash_only": True,
+            "trace_ref_only": True,
+        },
+        "recommended_next_step": "rerun_ordinary_turn_classifier_eval_keep_auto_approval_blocked",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.limit < 1:
         raise ValueError("dogfood ordinary-turn-classifier-eval limit must be >= 1")
@@ -16891,6 +16986,17 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_label_packet_parser.add_argument("--max-items", type=int, default=20)
     dogfood_ordinary_turn_label_packet_parser.add_argument("--min-items", type=int, default=1)
     dogfood_ordinary_turn_label_packet_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_label_update_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-label-update",
+        help="Apply one exact-ref ordinary-turn memory-worthiness label after local raw review while keeping auto-approval blocked.",
+    )
+    dogfood_ordinary_turn_label_update_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_label_update_parser.add_argument("--trace-ref", required=True)
+    dogfood_ordinary_turn_label_update_parser.add_argument("--expected-memory-worthy", required=True, choices=["true", "false"])
+    dogfood_ordinary_turn_label_update_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_label_update_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_label_update_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_label_update_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_classifier_eval_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-classifier-eval",
         help="Evaluate ordinary-turn memory-worthiness classification as a read-only aggregate gate while keeping auto-approval blocked.",
@@ -18285,6 +18391,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-label-packet":
             print(json.dumps(_dogfood_ordinary_turn_label_packet_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-label-update":
+            print(json.dumps(_dogfood_ordinary_turn_label_update_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-classifier-eval":
             print(json.dumps(_dogfood_ordinary_turn_classifier_eval_payload(args), indent=2))
