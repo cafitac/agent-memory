@@ -1,7 +1,50 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 13:49 KST
+Last updated: 2026-05-16 23:38 KST
+
+## Checkpoint: remember-preferences post-apply verifier + explicit queue drain
+
+The current source checkout adds the missing G2 verifier stop for the explicit remember-preferences mutation lane and the live DB has drained the safe explicit preference queue through that verifier. This advances the bounded human-memory-like loop for explicitly requested memories: sanitized trace evidence -> topic-aware low-risk preference fact -> audit/relation duplicate guard -> post-apply dry-run -> verifier green stop.
+
+What changed in source:
+
+- Added `consolidation auto-approve remember-preferences-post-apply-verification`.
+- It is read-only/no-mutation/default-unchanged and validates an apply artifact plus post-dry-run artifact before any next apply.
+- It checks policy, apply/dry-run mode, one-at-a-time approval bounds, fact-only memory refs, audit policy/actor/reason presence, relation ids, topic keys, post-run duplicate skip counts, and forbidden-authority flags.
+- It does not print raw trace summaries, raw reason text, raw query text, source content, or backup contents.
+- Added focused regression tests for both green and bad-artifact failure paths.
+
+Live G2 verifier results:
+
+- Previous topic-slot apply verification: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/previous-remember-preferences-post-apply-verification.json`.
+  - Gate passed.
+- Third bounded apply verification: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-verifier-20260516T143411Z/post-apply-verification.json`.
+  - Applied exactly one preference (`fact:7`), post dry-run had `eligible_count=2`, `blocked_count=0`, `skipped_count=3`, gate passed.
+- Final queue drain: `/Users/reddit/.agent-memory/reports/post-v0.1.162-remember-preference-drain-20260516T143804Z/`.
+  - Step 1 applied exactly one preference (`fact:8`), verifier passed.
+  - Step 2 applied exactly one preference (`fact:9`), verifier passed.
+  - Final dry-run is clean: `eligible_count=0`, `blocked_count=0`, `skipped_count=5`, `mutated=false`.
+
+Validation:
+
+- Focused remember-preferences / ordinary-turn tests: `13 passed, 158 deselected`.
+- Full suite: `353 passed, 1 xfailed`.
+- Release metadata smoke: version `0.1.162` consistent across Python/npm/module.
+- Isolated Python and npm bootstrap/doctor smoke: `status=ok`.
+- `npm pack --dry-run` and `git diff --check` passed.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%.
+- Literal fully autonomous human-brain-like memory is approximately 97-98% for the scoped local agent-memory lifecycle. Explicitly requested, low-risk preferences now flow end-to-end with audit and verifier stops, but broad human-like autonomy is still not enabled because ordinary-turn inference, background broad apply, decay/delete, default retrieval rollout, and unreviewed promotion are intentionally blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Add the next report-first automation gate: remember-preferences bounded-batch graduation/operator packet, or an ordinary-turn classifier/evaluation harness that proves high precision before inferred memory approval.
+3. Keep `--max-apply` at 1 until a separate batch-specific verifier exists and live artifact evidence is green.
+4. Continue to block broad/background apply, ordinary-turn inferred approval, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Checkpoint: repeated recurrent reinforcement applies + ordinary-turn readiness gate
 

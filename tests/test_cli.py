@@ -10945,6 +10945,211 @@ def test_consolidation_auto_approve_remember_preferences_allows_different_prefer
         assert connection.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 2
 
 
+def test_consolidation_auto_approve_remember_preferences_post_apply_verification_green_stop(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-auto-approve-verify.db"
+    apply_report_path = tmp_path / "apply.json"
+    post_dry_run_path = tmp_path / "post-dry-run.json"
+    verify_report_path = tmp_path / "verify.json"
+    initialize_database(db_path)
+    for index, summary in enumerate(
+        [
+            "User prefers concise Korean handoffs.",
+            "User prefers verified release QA.",
+        ]
+    ):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="remember_intent",
+            content_sha256=f"verify-{index}".encode().hex().ljust(64, "0")[:64],
+            summary=summary,
+            scope="project:g2",
+            retention_policy="review",
+            metadata={
+                "remember_intent": "explicit",
+                "candidate_policy": "review_required",
+                "auto_approved": False,
+                "secret_scan": "passed",
+            },
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    apply_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--apply",
+            "--actor",
+            "agent-memory:g2-test",
+            "--reason",
+            "G2 verifier fixture apply",
+            "--limit",
+            "50",
+            "--max-apply",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert apply_result.returncode == 0, apply_result.stderr
+    apply_report_path.write_text(apply_result.stdout, encoding="utf-8")
+    post_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g2",
+            "--limit",
+            "50",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert post_result.returncode == 0, post_result.stderr
+    post_dry_run_path.write_text(post_result.stdout, encoding="utf-8")
+
+    verify_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences-post-apply-verification",
+            "--apply-report",
+            str(apply_report_path),
+            "--post-dry-run-report",
+            str(post_dry_run_path),
+            "--expected-policy",
+            "remember-preferences-v1",
+            "--max-approved",
+            "1",
+            "--output",
+            str(verify_report_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verify_result.returncode == 0, verify_result.stdout + verify_result.stderr
+    payload = json.loads(verify_result.stdout)
+    assert payload["kind"] == "remember_preference_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "remember_preference_post_apply_verification_green_stop_before_next_apply",
+        "blocked_reasons": [],
+    }
+    assert payload["apply_report_summary"]["approved_count"] == 1
+    assert payload["post_dry_run_summary"]["skipped_count"] == 1
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply": False,
+        "batch_apply_without_separate_verifier": False,
+        "default_retrieval_ranking_mutation": False,
+        "collapse_delete_apply": False,
+        "telemetry_reset": False,
+        "unreviewed_promotion": False,
+    }
+    assert json.loads(verify_report_path.read_text(encoding="utf-8")) == payload
+    assert "G2 verifier fixture apply" not in verify_result.stdout
+
+
+def test_consolidation_auto_approve_remember_preferences_post_apply_verification_blocks_bad_artifact(
+    tmp_path: Path,
+) -> None:
+    apply_report_path = tmp_path / "apply.json"
+    post_dry_run_path = tmp_path / "post-dry-run.json"
+    apply_report_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": True,
+                "read_only": False,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "approved_count": 2,
+                "approved": [],
+                "blocked_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    post_dry_run_path.write_text(
+        json.dumps(
+            {
+                "kind": "remember_preference_auto_approval_report",
+                "policy": "remember-preferences-v1",
+                "apply": False,
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "skipped_count": 0,
+                "blocked_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "auto-approve",
+            "remember-preferences-post-apply-verification",
+            "--apply-report",
+            str(apply_report_path),
+            "--post-dry-run-report",
+            str(post_dry_run_path),
+            "--expected-policy",
+            "remember-preferences-v1",
+            "--max-approved",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is False
+    assert "apply_report_claims_no_mutation" in payload["quality_gate"]["blocked_reasons"]
+    assert "apply_report_approved_count_out_of_bounds" in payload["quality_gate"]["blocked_reasons"]
+    assert "post_dry_run_skipped_count_below_apply_approved_count" in payload["quality_gate"]["blocked_reasons"]
+    assert payload["privacy"]["raw_reason_included"] is False
+
+
 def test_consolidation_auto_approve_remember_preferences_blocks_same_topic_conflicts_without_mutation(tmp_path: Path) -> None:
     db_path = tmp_path / "remember-auto-approve-conflict.db"
     initialize_database(db_path)

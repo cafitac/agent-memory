@@ -559,6 +559,159 @@ def _remember_preference_auto_approval_report(
     }
 
 
+def _remember_preference_post_apply_verification_payload(
+    *,
+    apply_report_path: Path,
+    post_dry_run_report_path: Path,
+    expected_policy: str,
+    max_approved: int,
+    output: Path | None,
+) -> dict[str, Any]:
+    apply_report, apply_artifact = _read_json_artifact_summary(apply_report_path)
+    post_report, post_artifact = _read_json_artifact_summary(post_dry_run_report_path)
+    blocked_reasons: list[str] = []
+    if max_approved < 1:
+        blocked_reasons.append("max_approved_must_be_positive")
+
+    approved_count = 0
+    apply_max_apply = 0
+    apply_scope = None
+    approved_refs: list[dict[str, Any]] = []
+    if apply_report is None:
+        blocked_reasons.append("apply_report_unreadable")
+    else:
+        approved_count = _safe_int(apply_report.get("approved_count"))
+        apply_max_apply = _safe_int(apply_report.get("max_apply"))
+        apply_scope = apply_report.get("scope")
+        if apply_report.get("kind") != "remember_preference_auto_approval_report":
+            blocked_reasons.append("apply_report_kind_mismatch")
+        if apply_report.get("policy") != expected_policy:
+            blocked_reasons.append("apply_report_policy_mismatch")
+        if apply_report.get("apply") is not True:
+            blocked_reasons.append("apply_report_not_apply_mode")
+        if apply_report.get("read_only") is not False:
+            blocked_reasons.append("apply_report_not_mutating_artifact")
+        if apply_report.get("mutated") is not True:
+            blocked_reasons.append("apply_report_claims_no_mutation")
+        if apply_report.get("default_retrieval_unchanged") is not False:
+            blocked_reasons.append("apply_report_default_retrieval_flag_unexpected")
+        if approved_count < 1 or approved_count > max_approved:
+            blocked_reasons.append("apply_report_approved_count_out_of_bounds")
+        if apply_max_apply < 1 or apply_max_apply > max_approved:
+            blocked_reasons.append("apply_report_max_apply_out_of_bounds")
+        approved_items = apply_report.get("approved", [])
+        if not isinstance(approved_items, list):
+            blocked_reasons.append("apply_report_approved_not_list")
+            approved_items = []
+        if len(approved_items) != approved_count:
+            blocked_reasons.append("apply_report_approved_list_count_mismatch")
+        for item in approved_items:
+            if not isinstance(item, dict):
+                blocked_reasons.append("apply_report_approved_item_not_object")
+                continue
+            proposed = item.get("proposed_fact", {}) if isinstance(item.get("proposed_fact"), dict) else {}
+            audit = item.get("audit", {}) if isinstance(item.get("audit"), dict) else {}
+            memory_ref = str(item.get("memory_ref", ""))
+            if not memory_ref.startswith("fact:"):
+                blocked_reasons.append("apply_report_memory_ref_not_fact")
+            if _safe_int(item.get("relation_id")) < 1:
+                blocked_reasons.append("apply_report_missing_auto_approval_relation_id")
+            if proposed.get("subject_ref") != "user" or proposed.get("predicate") != "prefers":
+                blocked_reasons.append("apply_report_proposed_fact_outside_policy")
+            if proposed.get("scope") != apply_scope:
+                blocked_reasons.append("apply_report_proposed_fact_scope_mismatch")
+            if audit.get("policy") != expected_policy:
+                blocked_reasons.append("apply_report_audit_policy_mismatch")
+            if not audit.get("actor"):
+                blocked_reasons.append("apply_report_missing_audit_actor")
+            if not audit.get("reason"):
+                blocked_reasons.append("apply_report_missing_audit_reason")
+            approved_refs.append(
+                {
+                    "trace_id": item.get("trace_id"),
+                    "memory_ref": memory_ref,
+                    "source_id": item.get("source_id"),
+                    "relation_id": item.get("relation_id"),
+                    "preference_topic_key": _remember_preference_topic_key(proposed.get("object_ref_or_value")),
+                }
+            )
+
+    skipped_count = 0
+    if post_report is None:
+        blocked_reasons.append("post_dry_run_report_unreadable")
+    else:
+        skipped_count = _safe_int(post_report.get("skipped_count"))
+        if post_report.get("kind") != "remember_preference_auto_approval_report":
+            blocked_reasons.append("post_dry_run_kind_mismatch")
+        if post_report.get("policy") != expected_policy:
+            blocked_reasons.append("post_dry_run_policy_mismatch")
+        if post_report.get("apply") is not False:
+            blocked_reasons.append("post_dry_run_not_dry_run")
+        if post_report.get("read_only") is not True:
+            blocked_reasons.append("post_dry_run_not_read_only")
+        if post_report.get("mutated") is not False:
+            blocked_reasons.append("post_dry_run_claims_mutation")
+        if post_report.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("post_dry_run_default_retrieval_changed")
+        if apply_scope is not None and post_report.get("scope") != apply_scope:
+            blocked_reasons.append("post_dry_run_scope_mismatch")
+        if _safe_int(post_report.get("blocked_count")) != 0:
+            blocked_reasons.append("post_dry_run_has_blocked_candidates")
+        if skipped_count < approved_count:
+            blocked_reasons.append("post_dry_run_skipped_count_below_apply_approved_count")
+
+    green = not blocked_reasons
+    payload = {
+        "kind": "remember_preference_post_apply_verification",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "expected_policy": expected_policy,
+        "max_approved": max_approved,
+        "apply_report_artifact": apply_artifact,
+        "post_dry_run_artifact": post_artifact,
+        "apply_report_summary": {
+            "approved_count": approved_count,
+            "max_apply": apply_max_apply,
+            "scope": apply_scope,
+            "approved_refs": approved_refs,
+        },
+        "post_dry_run_summary": {
+            "skipped_count": skipped_count,
+            "blocked_count": _safe_int(post_report.get("blocked_count")) if post_report else 0,
+            "eligible_count": _safe_int(post_report.get("eligible_count")) if post_report else 0,
+            "deferred_count": _safe_int(post_report.get("deferred_count")) if post_report else 0,
+        },
+        "quality_gate": {
+            "pass": green,
+            "decision": "remember_preference_post_apply_verification_green_stop_before_next_apply"
+            if green
+            else "fix_remember_preference_post_apply_verification_before_next_apply",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply": False,
+            "batch_apply_without_separate_verifier": False,
+            "default_retrieval_ranking_mutation": False,
+            "collapse_delete_apply": False,
+            "telemetry_reset": False,
+            "unreviewed_promotion": False,
+        },
+        "privacy": {
+            "raw_reason_included": False,
+            "raw_trace_summary_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "backup_contents_included": False,
+            "aggregate_or_ref_only": True,
+        },
+        "next_step": "Stop after this verification; any next remember-preferences apply still needs a fresh dry-run, exact apply, and this verifier.",
+    }
+    _write_json_report(output, payload)
+    return payload
+
+
 def _fact_replacement_relation_payload(relation) -> dict[str, Any]:
     def parse_fact_ref(value: str) -> int | None:
         prefix = "fact:"
@@ -15448,6 +15601,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Maximum remember-preference traces to approve in one apply run. Defaults to 1 for stop-after-one safety.",
     )
+    consolidation_auto_verify_parser = consolidation_auto_subparsers.add_parser(
+        "remember-preferences-post-apply-verification",
+        help="Validate remember-preferences apply and post-dry-run artifacts as a read-only stop gate.",
+    )
+    consolidation_auto_verify_parser.add_argument("--apply-report", type=Path, required=True)
+    consolidation_auto_verify_parser.add_argument("--post-dry-run-report", type=Path, required=True)
+    consolidation_auto_verify_parser.add_argument("--expected-policy", required=True, choices=sorted(_REMEMBER_PREFERENCE_POLICIES))
+    consolidation_auto_verify_parser.add_argument("--max-approved", type=int, default=1)
+    consolidation_auto_verify_parser.add_argument("--output", type=Path)
 
     traces_parser = subparsers.add_parser(
         "traces",
@@ -16955,6 +17117,18 @@ def main() -> None:
                 sys.exit(1)
             return
         if args.consolidation_action == "auto-approve":
+            if args.auto_approval_policy_kind == "remember-preferences-post-apply-verification":
+                payload = _remember_preference_post_apply_verification_payload(
+                    apply_report_path=args.apply_report,
+                    post_dry_run_report_path=args.post_dry_run_report,
+                    expected_policy=args.expected_policy,
+                    max_approved=args.max_approved,
+                    output=args.output,
+                )
+                print(json.dumps(payload, indent=2))
+                if payload["quality_gate"]["pass"] is not True:
+                    sys.exit(1)
+                return
             if args.auto_approval_policy_kind != "remember-preferences":
                 raise ValueError(f"Unsupported consolidation auto-approval policy kind: {args.auto_approval_policy_kind}")
             payload = _remember_preference_auto_approval_report(

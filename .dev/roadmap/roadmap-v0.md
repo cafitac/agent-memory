@@ -272,10 +272,11 @@ If a later session changes direction, update both this checklist and the relevan
   - Scope: `dogfood g4-review-queue-apply` with `g4-review-queue-apply-v1`, explicit approval phrase, actor, reason hash, backup, audit application row, rollback hint, expected queue ids, and aggregate/ref-only output.
   - Acceptance: approved `reinforcement_review` items may only run `apply_reinforcement_marker`; memory status, default retrieval, raw content, decay/delete, promotion, supersession, and ordinary conversation auto-approval remain unchanged/blocked.
 
-- [ ] PR G5-brainlike-consolidation-runway: Turn healthy traces into reviewed human-memory-like consolidation flow
+- [>] PR G5-brainlike-consolidation-runway: Turn healthy traces into reviewed human-memory-like consolidation flow
   - Goal: advance the north-star after the safe mutation runway by turning repeated traces into reviewable durable-memory candidates.
   - Scope: `trace cluster -> consolidation candidate`, `candidate -> reviewed fact/procedure/preference promotion`, repeated activation -> reinforcement, stale weak evidence -> decay/summary candidate, and conflict -> supersession review.
   - Acceptance: candidates remain reviewable/explainable; no ordinary conversation auto-approval by default; retrieval-ranking changes stay opt-in/evaluated before any default change.
+  - Current status as of 2026-05-16 23:38 KST: approximately 97-98% toward the scoped human-brain-like local-memory lifecycle. Completed and live-verified pieces include repeated one-at-a-time lifecycle reinforcement, recurrent reinforcement, explicit remember-intent evidence, topic-aware low-risk preference auto-approval, duplicate guards, and a remember-preferences post-apply verifier. The safe explicit preference queue is drained (`eligible_count=0`, `blocked_count=0`, `skipped_count=5`). Still blocked until separate RED-tested gates: ordinary-turn inferred approval, broad/background apply, `--max-apply > 1`, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 - [ ] PR G4: Add broader background consolidation apply mode behind explicit policy
   - Goal: allow controlled promotion/snooze/decay actions only after the narrow restore/audit corridor is trusted.
