@@ -5,7 +5,7 @@ Last updated: 2026-05-16 10:41 KST
 
 
 
-## Checkpoint: fourth live exact-approved reinforcement lifecycle apply + batch graduation readiness source gate
+## Checkpoint: fourth live exact-approved reinforcement lifecycle apply + bounded batch post-apply verifier source gate
 
 The fourth and final initial live reinforcement lifecycle candidate has been applied through the exact reviewed-candidate corridor. This completes the one-at-a-time proof loop for the four initial reinforcement candidates while preserving backup, readiness, rollback replay, application audit, live evidence bundle, and lifecycle post-apply verification gates. A new read-only source gate, `dogfood lifecycle-batch-graduation-readiness`, now reports whether those repeated one-at-a-time proofs are enough to design a separate bounded-batch corridor; it does not execute or authorize batch apply.
 
@@ -22,18 +22,19 @@ What happened:
 - `lifecycle-post-apply-verification.json` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
 - New source command `dogfood lifecycle-batch-graduation-readiness` passed on the live DB for `g5-lifecycle-reinforcement-apply-v1` with `prior_one_at_a_time_apply_count=4`, but reports `bounded_batch_apply_supported=false` and `requires_separate_exact_approval_corridor=true`.
 - New source command `dogfood lifecycle-bounded-batch-apply` provides the separate exact-approval corridor with `--max-apply <= 2`; source tests cover a two-candidate batch after graduation proof. Live smoke returned `no_eligible_approved_lifecycle_candidates` without mutation because the current initial queue is exhausted.
+- New source command `dogfood lifecycle-bounded-batch-post-apply-verification` validates bounded-batch apply artifacts as a read-only stop gate: applied count <= verifier max, backup file/SHA, rollback replay, application audit, default retrieval unchanged, privacy, and forbidden-authority flags.
 
 Current interpretation:
 
 - Safety-gated operational north-star is now approximately 97-98%.
-- Literal fully autonomous human-brain-like memory is approximately 80-82%: the system has repeated live reviewed lifecycle mutation proof, a batch-graduation readiness classifier, and a bounded batch corridor in source, but risky mutation still requires exact reviewed approval and a batch-specific post-apply verifier is the next gap.
+- Literal fully autonomous human-brain-like memory is approximately 82-84%: the system has repeated live reviewed lifecycle mutation proof, a batch-graduation readiness classifier, a bounded batch corridor, and a batch-specific post-apply verifier in source, but risky mutation still requires exact reviewed approval and live batch proof is not yet available because there are no approved candidates.
 
 Immediate next recommended slice:
 
-1. Commit/push the fourth live apply plus `lifecycle-batch-graduation-readiness` and `lifecycle-bounded-batch-apply` source/test/docs checkpoint and watch CI.
-2. Next code slice should implement a bounded-batch post-apply verifier/report with backup/rollback evidence, `applied_count <= max_apply`, default retrieval unchanged, and repeated-apply prevention checks.
+1. Commit/push the `lifecycle-bounded-batch-post-apply-verification` source/test/docs checkpoint and watch CI.
+2. Next code slice should generate new lifecycle candidates from fresh dogfood traces or add a read-only batch-operator packet that bundles graduation, candidate inventory, bounded apply command preview, and post-apply verifier command preview.
 3. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
-4. Do not live-batch-apply from the green no-op smoke; live batch apply requires reviewed approved candidates and the batch post-apply verifier.
+4. Do not live-batch-apply from the green source verifier alone; live batch apply requires reviewed approved candidates, exact operator approval, a backup path, and an immediate green bounded-batch post-apply verifier.
 
 ## Checkpoint: third live exact-approved reinforcement lifecycle apply
 

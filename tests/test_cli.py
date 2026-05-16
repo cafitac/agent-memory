@@ -12455,6 +12455,160 @@ def test_dogfood_lifecycle_bounded_batch_apply_requires_graduation_and_max_apply
     assert "SHOULD_NOT_LEAK" not in result.stdout
 
 
+def test_dogfood_lifecycle_bounded_batch_post_apply_verification_accepts_green_artifacts(
+    tmp_path: Path,
+) -> None:
+    backup_path = tmp_path / "bounded-batch-backup.db"
+    backup_path.write_text("backup", encoding="utf-8")
+    backup_sha256 = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+    apply_report = tmp_path / "bounded-batch-apply.json"
+    readiness_report = tmp_path / "readiness.json"
+    rollback_report = tmp_path / "rollback.json"
+    audit_report = tmp_path / "audit.json"
+    output_path = tmp_path / "verification.json"
+    apply_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_lifecycle_bounded_batch_apply",
+                "read_only": False,
+                "mutated": True,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "policy": "g5-lifecycle-reinforcement-apply-v1",
+                "batch_approval_phrase_matched": True,
+                "bounded_batch_apply": {
+                    "policy": "g5-lifecycle-reinforcement-apply-v1",
+                    "max_apply": 2,
+                    "applied_count": 2,
+                    "graduation_gate_pass": True,
+                    "broad_background_apply_allowed": False,
+                },
+                "apply_payload": {
+                    "kind": "dogfood_lifecycle_candidate_apply",
+                    "read_only": False,
+                    "mutated": True,
+                    "default_retrieval_unchanged": True,
+                    "policy": "g5-lifecycle-reinforcement-apply-v1",
+                    "backup": {"path": str(backup_path), "sha256": backup_sha256, "row_count": 12},
+                    "applied": [
+                        {"candidate_id": "candidate-one", "inserted": True, "action": "apply_reviewed_reinforcement_marker"},
+                        {"candidate_id": "candidate-two", "inserted": True, "action": "apply_reviewed_reinforcement_marker"},
+                    ],
+                    "privacy": {"candidate_json_included": False, "raw_reason_included": False, "raw_content_included": False},
+                },
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                },
+                "privacy": {
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "candidate_json_included": False,
+                    "backup_content_included": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    readiness_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_lifecycle_batch_graduation_readiness",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "policy": "g5-lifecycle-reinforcement-apply-v1",
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {"raw_content_included": False, "raw_reason_included": False, "backup_content_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollback_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_rollback_replay_validate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "rollup": {"checked_application_count": 2, "failed_replay_count": 0},
+                "privacy": {"raw_content_included": False, "raw_reason_included": False, "backup_content_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    audit_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_trace_candidate_application_audit",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "required_evidence_gate": {"pass": True, "blocked_reasons": []},
+                "application_count": 2,
+                "privacy": {"raw_content_included": False, "raw_reason_included": False, "backup_content_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "lifecycle-bounded-batch-post-apply-verification",
+            "--apply-report",
+            str(apply_report),
+            "--batch-graduation-readiness-report",
+            str(readiness_report),
+            "--rollback-replay-report",
+            str(rollback_report),
+            "--application-audit-report",
+            str(audit_report),
+            "--expected-policy",
+            "g5-lifecycle-reinforcement-apply-v1",
+            "--max-applied",
+            "2",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_lifecycle_bounded_batch_post_apply_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["bounded_batch_apply_report"]["applied_count"] == 2
+    assert payload["bounded_batch_apply_report"]["max_apply"] == 2
+    assert payload["backup_evidence"]["sha256_matches_file"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "decision": "lifecycle_bounded_batch_post_apply_verification_green_stop",
+    }
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert payload["forbidden_authority"]["broad_background_apply_allowed"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
 def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_mutation(
     tmp_path: Path,
 ) -> None:

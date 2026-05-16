@@ -26,18 +26,19 @@ Safety facts:
 - `lifecycle-post-apply-verification` passed with decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
 - `lifecycle-batch-graduation-readiness` passed for the reinforcement policy with `prior_one_at_a_time_apply_count=4`, but still reports `bounded_batch_apply_supported=false` and `requires_separate_exact_approval_corridor=true`.
 - `lifecycle-bounded-batch-apply` now exists as that separate exact-approval source corridor with `--max-apply <= 2`; source tests cover two approved candidates after graduation proof. The live no-op smoke returned `no_eligible_approved_lifecycle_candidates` without mutation.
+- `lifecycle-bounded-batch-post-apply-verification` now exists as a read-only source stop gate for bounded-batch artifacts: it validates applied count, backup file/SHA, rollback replay, application audit, default retrieval unchanged, privacy, and forbidden-authority flags before any further apply.
 
 Current interpretation:
 
 - Overall safety-gated north-star progress is approximately 97-98%.
-- Literal fully autonomous human-brain-like progress is approximately 80-82%. The system has repeated real reviewed lifecycle reinforcement mutation four times on the live source DB, has a read-only batch-graduation classifier, and now has a bounded batch source corridor, but it still relies on exact approvals and needs a batch-specific post-apply verifier before live batch use.
-- The next safe engineering slice is a bounded-batch post-apply verifier/report, not live batch apply.
+- Literal fully autonomous human-brain-like progress is approximately 82-84%. The system has repeated real reviewed lifecycle reinforcement mutation four times on the live source DB, has a read-only batch-graduation classifier, a bounded batch source corridor, and a bounded-batch post-apply verifier, but it still relies on exact approvals and lacks fresh approved candidates for a live batch proof.
+- The next safe engineering slice is either fresh candidate generation/review for the next lifecycle batch or a read-only batch operator packet; not broad/background apply.
 
 Next after this slice:
 
-1. Commit/push this fourth live apply plus batch-graduation-readiness/bounded-batch-apply checkpoint and watch CI.
-2. Implement `dogfood lifecycle-bounded-batch-post-apply-verification` or equivalent with backup/rollback evidence, `applied_count <= max_apply`, default retrieval unchanged, and repeated-apply prevention checks.
-3. Do not live-batch-apply anything until that verifier exists and there are reviewed approved candidates for it.
+1. Commit/push this bounded-batch post-apply verifier checkpoint and watch CI.
+2. Generate/review new lifecycle candidates from fresh dogfood evidence, or add a read-only lifecycle batch operator packet that bundles graduation readiness, candidate inventory, exact apply command preview, and post-apply verifier command preview.
+3. Do not live-batch-apply anything until there are reviewed approved candidates and exact operator approval for the batch.
 4. Still forbidden until their own gates exist: ordinary conversation auto-approval, broad/background apply, live G4 apply, telemetry reset, default ranking automatic rollout, collapse/delete, and unreviewed promotion.
 
 ## Checkpoint: third live exact-approved reinforcement lifecycle apply
