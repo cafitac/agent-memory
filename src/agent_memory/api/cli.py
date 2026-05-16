@@ -7088,6 +7088,153 @@ def _percent(numerator: int, denominator: int) -> int:
     return int(round((numerator / denominator) * 100))
 
 
+def _ordinary_turn_label_summary_length_bucket(summary: str | None) -> str:
+    length = len(summary or "")
+    if length == 0:
+        return "empty"
+    if length < 80:
+        return "short"
+    if length < 240:
+        return "medium"
+    return "long"
+
+
+def _ordinary_turn_label_score_band(value: float) -> str:
+    if value <= 0:
+        return "zero"
+    if value < 0.5:
+        return "low"
+    if value < 0.8:
+        return "medium"
+    return "high"
+
+
+def _ordinary_turn_label_features(trace: Any) -> dict[str, Any]:
+    summary = trace.summary or ""
+    lowered = summary.strip().lower()
+    durable_marker_like = any(
+        marker in lowered
+        for marker in (
+            "next time",
+            "from now on",
+            "remember that",
+            "my setup",
+            "my workflow",
+            "우리 ",
+            "앞으로 ",
+        )
+    )
+    procedure_marker_like = lowered.startswith(("use ", "run ", "when ", "always ", "never ", "prefer ", "default "))
+    return {
+        "summary_length_bucket": _ordinary_turn_label_summary_length_bucket(summary),
+        "salience_band": _ordinary_turn_label_score_band(float(trace.salience or 0.0)),
+        "user_emphasis_band": _ordinary_turn_label_score_band(float(trace.user_emphasis or 0.0)),
+        "preference_like": _remember_preference_object_from_summary(summary) is not None,
+        "durable_marker_like": durable_marker_like,
+        "procedure_marker_like": procedure_marker_like,
+        "secret_like": _contains_secret_like_report_text(summary),
+        "ordinary_turn_metadata": _metadata_bool(trace.metadata.get("ordinary_turn")) is True,
+    }
+
+
+def _dogfood_ordinary_turn_label_packet_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.limit < 1:
+        raise ValueError("dogfood ordinary-turn-label-packet limit must be >= 1")
+    if args.max_items < 1:
+        raise ValueError("dogfood ordinary-turn-label-packet --max-items must be >= 1")
+    if args.min_items < 1:
+        raise ValueError("dogfood ordinary-turn-label-packet --min-items must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    traces = list_experience_traces(db_path, limit=args.limit)
+    ordinary_turns = [trace for trace in traces if trace.event_kind == "turn"]
+    labeled = [trace for trace in ordinary_turns if _metadata_bool(trace.metadata.get("expected_memory_worthy")) is not None]
+    unlabeled = [trace for trace in ordinary_turns if _metadata_bool(trace.metadata.get("expected_memory_worthy")) is None]
+    blocked_secret_like = [trace for trace in unlabeled if _contains_secret_like_report_text(trace.summary)]
+    eligible_unlabeled_nonsecret = [trace for trace in unlabeled if not _contains_secret_like_report_text(trace.summary)]
+    selected = eligible_unlabeled_nonsecret[: args.max_items]
+    review_items: list[dict[str, Any]] = []
+    for trace in selected:
+        predicted, reason = _ordinary_turn_memory_worthiness_classification(trace.summary)
+        summary_sha256 = hashlib.sha256((trace.summary or "").encode("utf-8")).hexdigest()
+        item_ref = hashlib.sha256(f"ordinary-turn-label:{trace.id}:{trace.content_sha256}".encode("utf-8")).hexdigest()[:24]
+        review_items.append(
+            {
+                "trace_ref": f"experience_trace:{trace.id}",
+                "item_ref": item_ref,
+                "content_sha256": trace.content_sha256,
+                "summary_sha256": summary_sha256,
+                "created_at": trace.created_at,
+                "surface": trace.surface,
+                "scope": trace.scope,
+                "retention_policy": trace.retention_policy,
+                "predicted_memory_worthy": predicted,
+                "classified_reason": reason,
+                "label_instruction": "set metadata.expected_memory_worthy true/false after local raw-trace review",
+                "evidence_features": _ordinary_turn_label_features(trace),
+            }
+        )
+    blocked_reasons: list[str] = []
+    if len(review_items) < args.min_items:
+        blocked_reasons.append("review_item_count_below_minimum")
+    if not ordinary_turns:
+        blocked_reasons.append("no_ordinary_turns_observed")
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_label_packet",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "label_policy": "ordinary-turn-label-packet-v1",
+        "classifier_policy": "ordinary-turn-memory-worthiness-heuristic-v1",
+        "trace_counts": {
+            "total": len(traces),
+            "ordinary_turn": len(ordinary_turns),
+            "unlabeled_ordinary_turn": len(unlabeled),
+            "labeled_ordinary_turn": len(labeled),
+        },
+        "packet_counts": {
+            "review_item_count": len(review_items),
+            "eligible_unlabeled_nonsecret_count": len(eligible_unlabeled_nonsecret),
+            "blocked_secret_like_count": len(blocked_secret_like),
+            "already_labeled_count": len(labeled),
+            "deferred_unlabeled_nonsecret_count": max(len(eligible_unlabeled_nonsecret) - len(review_items), 0),
+        },
+        "review_items": review_items,
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_label_packet_ready_for_manual_labeling_keep_apply_blocked"
+            if not blocked_unique
+            else "ordinary_turn_label_packet_not_ready_keep_apply_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "executes_apply": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "sample_values_included": False,
+            "summary_hash_included": True,
+            "content_hash_included": True,
+            "actionable_trace_ref_included": True,
+            "aggregate_only": False,
+            "review_packet_without_raw_text": True,
+        },
+        "recommended_next_step": "label_packet_items_locally_then_rerun_ordinary_turn_classifier_eval_keep_apply_blocked",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.limit < 1:
         raise ValueError("dogfood ordinary-turn-classifier-eval limit must be >= 1")
@@ -16735,6 +16882,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--limit", type=int, default=500)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--min-explicit-ready", type=int, default=5)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_label_packet_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-label-packet",
+        help="Build a read-only raw-text-free packet of ordinary turns for local human labeling while keeping auto-approval blocked.",
+    )
+    dogfood_ordinary_turn_label_packet_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_label_packet_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_label_packet_parser.add_argument("--max-items", type=int, default=20)
+    dogfood_ordinary_turn_label_packet_parser.add_argument("--min-items", type=int, default=1)
+    dogfood_ordinary_turn_label_packet_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_classifier_eval_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-classifier-eval",
         help="Evaluate ordinary-turn memory-worthiness classification as a read-only aggregate gate while keeping auto-approval blocked.",
@@ -18126,6 +18282,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-auto-approval-readiness":
             print(json.dumps(_dogfood_ordinary_turn_auto_approval_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-label-packet":
+            print(json.dumps(_dogfood_ordinary_turn_label_packet_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-classifier-eval":
             print(json.dumps(_dogfood_ordinary_turn_classifier_eval_payload(args), indent=2))

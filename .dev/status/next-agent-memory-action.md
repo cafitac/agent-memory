@@ -1,7 +1,34 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 01:05 KST
+Last updated: 2026-05-17 01:46 KST
+
+## Just completed: ordinary-turn label/evidence packet
+
+- Added `dogfood ordinary-turn-label-packet`, a read-only raw-text-free packet for local human labeling of ordinary-turn memory-worthiness.
+- The packet emits actionable local trace refs plus content/summary hashes and coarse evidence features only; it does not include raw trace summaries, transcripts, query text, sample values, or raw content.
+- It keeps `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`, and all forbidden authority flags false.
+- Focused RED/GREEN: the test first failed because the subcommand was not registered, then passed after parser/dispatcher/payload implementation.
+- Focused ordinary-turn verification: `4 passed, 173 deselected`.
+- Full suite: `359 passed, 1 xfailed`.
+- Release metadata tests: `2 passed`; release-readiness smoke, release metadata script, `npm pack --dry-run`, and `git diff --check` passed.
+- Live source smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-label-packet-20260516T164535Z/ordinary-turn-label-packet.json`.
+  - `ordinary_turn=995`, `labeled_ordinary_turn=0`, `unlabeled_ordinary_turn=995`.
+  - `review_item_count=25`, `eligible_unlabeled_nonsecret_count=995`, `blocked_secret_like_count=0`, `deferred_unlabeled_nonsecret_count=970`.
+  - Quality gate green for manual labeling only; no live memory mutation occurred.
+
+Current estimate:
+
+- Safety-gated operational north-star: approximately 99%+.
+- Literal fully autonomous human-brain-like memory within this repo's scoped local-memory lifecycle: approximately 99.0-99.2%.
+- The missing piece is now repeated labeled ordinary-turn windows and an inferred-approval readiness gate; the label packet supplies the evidence queue but does not label or apply.
+
+Recommended next work now:
+
+1. Commit/push this label-packet checkpoint and watch CI.
+2. Add a bounded labeling/update corridor for `metadata.expected_memory_worthy` using exact local trace refs, or manually label packet items in a source-safe way, then rerun `ordinary-turn-classifier-eval`.
+3. Require repeated green labeled windows before designing inferred ordinary-turn approval readiness.
+4. Keep ordinary-turn apply, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked behind separate gates.
 
 ## Just completed: ordinary-turn classifier evaluation gate
 

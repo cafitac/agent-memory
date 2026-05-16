@@ -1,7 +1,49 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 01:05 KST
+Last updated: 2026-05-17 01:46 KST
+
+## Checkpoint: ordinary-turn label/evidence packet
+
+The source checkout now has the missing review substrate before repeated ordinary-turn classifier evaluation. `dogfood ordinary-turn-label-packet <db_path>` produces a local, raw-text-free packet of ordinary turns that can be labeled with `metadata.expected_memory_worthy` after local raw-trace review.
+
+What changed in source:
+
+- Added `dogfood ordinary-turn-label-packet`.
+  - Inputs: `db_path`, `--limit`, `--max-items`, `--min-items`, optional `--output`.
+  - Output includes local `experience_trace:<id>` refs, content SHA-256, summary SHA-256, timestamp/surface/scope/retention metadata, classifier prediction, reason bucket, and coarse evidence features.
+  - Output excludes raw trace summaries, raw transcript, raw query text, raw content, sample values, and secret-like unlabeled turns.
+  - The packet is for manual/local labeling only; it does not set labels and does not create candidates or memories.
+- Added RED/GREEN CLI coverage proving the packet is read-only, secret-safe, and does not leak raw ordinary-turn text.
+- Preserved all forbidden authority flags: no ordinary conversation auto-approval, no apply execution, no broad/background apply, no default-ranking mutation, no collapse/delete, no telemetry reset, and no unreviewed promotion.
+
+Live/source smoke:
+
+- Artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-ordinary-turn-label-packet-20260516T164535Z/ordinary-turn-label-packet.json`.
+- Result: gate green for manual labeling only.
+  - `ordinary_turn=995`; `labeled_ordinary_turn=0`; `unlabeled_ordinary_turn=995`.
+  - `review_item_count=25`; `eligible_unlabeled_nonsecret_count=995`; `blocked_secret_like_count=0`; `deferred_unlabeled_nonsecret_count=970`.
+  - No live memory mutation occurred.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-label-packet` subcommand.
+- Focused ordinary-turn tests: `4 passed, 173 deselected`.
+- Full suite: `359 passed, 1 xfailed`.
+- Release metadata tests: `2 passed`.
+- Release-readiness smoke, release metadata script, `npm pack --dry-run`, and `git diff --check` passed.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 99%+.
+- Literal fully autonomous human-brain-like memory for the scoped local lifecycle is approximately 99.0-99.2%. The remaining gap is no longer packet generation; it is repeated labeled ordinary-turn windows plus an exact-gated inferred-approval readiness/apply design.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Label packet items locally with `metadata.expected_memory_worthy`, or add a bounded exact-ref label-update corridor first.
+3. Rerun `ordinary-turn-classifier-eval` over repeated labeled windows and keep apply blocked.
+4. Only after stable green windows should inferred ordinary-turn approval readiness be designed; do not jump directly to ordinary-turn apply.
 
 ## Checkpoint: ordinary-turn classifier evaluation gate
 

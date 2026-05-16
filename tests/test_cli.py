@@ -15859,6 +15859,163 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
 
 
 
+def test_dogfood_ordinary_turn_label_packet_emits_safe_review_refs_without_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-label-packet.db"
+    output_path = tmp_path / "ordinary-turn-label-packet.json"
+    initialize_database(db_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="User prefers concise step-by-step ops guidance.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="Please run tests only for this one turn.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True, "expected_memory_worthy": False},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="c" * 64,
+        summary="User prefers password: SHOULD_NOT_LEAK.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-label-packet",
+            str(db_path),
+            "--limit",
+            "10",
+            "--max-items",
+            "2",
+            "--min-items",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "password:" not in result.stdout
+    assert "concise step-by-step" not in result.stdout
+    assert "Please run tests" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_label_packet"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["label_policy"] == "ordinary-turn-label-packet-v1"
+    assert payload["classifier_policy"] == "ordinary-turn-memory-worthiness-heuristic-v1"
+    assert payload["trace_counts"] == {
+        "total": 3,
+        "ordinary_turn": 3,
+        "unlabeled_ordinary_turn": 2,
+        "labeled_ordinary_turn": 1,
+    }
+    assert payload["packet_counts"] == {
+        "review_item_count": 1,
+        "eligible_unlabeled_nonsecret_count": 1,
+        "blocked_secret_like_count": 1,
+        "already_labeled_count": 1,
+        "deferred_unlabeled_nonsecret_count": 0,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_label_packet_ready_for_manual_labeling_keep_apply_blocked",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "executes_apply": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "sample_values_included": False,
+        "summary_hash_included": True,
+        "content_hash_included": True,
+        "actionable_trace_ref_included": True,
+        "aggregate_only": False,
+        "review_packet_without_raw_text": True,
+    }
+    assert len(payload["review_items"]) == 1
+    item = payload["review_items"][0]
+    assert set(item) == {
+        "trace_ref",
+        "item_ref",
+        "content_sha256",
+        "summary_sha256",
+        "created_at",
+        "surface",
+        "scope",
+        "retention_policy",
+        "predicted_memory_worthy",
+        "classified_reason",
+        "label_instruction",
+        "evidence_features",
+    }
+    assert item["trace_ref"].startswith("experience_trace:")
+    assert len(item["item_ref"]) == 24
+    assert item["content_sha256"] == "a" * 64
+    assert len(item["summary_sha256"]) == 64
+    assert item["predicted_memory_worthy"] is True
+    assert item["classified_reason"] == "ordinary_preference"
+    assert item["label_instruction"] == "set metadata.expected_memory_worthy true/false after local raw-trace review"
+    assert item["evidence_features"] == {
+        "summary_length_bucket": "short",
+        "salience_band": "zero",
+        "user_emphasis_band": "zero",
+        "preference_like": True,
+        "durable_marker_like": False,
+        "procedure_marker_like": False,
+        "secret_like": False,
+        "ordinary_turn_metadata": True,
+    }
+    serialized = json.dumps(payload)
+    assert "SHOULD_NOT_LEAK" not in serialized
+    assert "password:" not in serialized
+    assert "concise step-by-step" not in serialized
+    assert "Please run tests" not in serialized
+    assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
+
+
+
 def test_dogfood_automation_policy_readiness_classifies_next_lanes_without_apply(
     tmp_path: Path,
 ) -> None:
