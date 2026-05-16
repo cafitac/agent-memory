@@ -1,9 +1,35 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:41 KST
+Last updated: 2026-05-16 11:30 KST
 
+## Checkpoint: lifecycle bounded-batch operator packet
 
+A read-only pre-apply operator packet now exists for the exact-approved lifecycle bounded-batch corridor. It bridges the gap between the source-level bounded-batch apply command and the bounded-batch post-apply verifier by producing one machine-readable packet with graduation status, apply readiness, candidate inventory, command preview, and verification template.
+
+Live artifact:
+
+- `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-batch-operator-packet-20260516T022916Z/lifecycle-bounded-batch-operator-packet.json`.
+
+Safety facts:
+
+- The source command is `dogfood lifecycle-bounded-batch-operator-packet`.
+- It is read-only/no-mutation and keeps `default_retrieval_unchanged=true`.
+- It does not approve candidates, apply candidates, emit raw candidate JSON, emit raw source/query/trace content, emit raw reason text, or emit backup contents.
+- It requires the normal lifecycle apply policy and exposes the exact bounded batch approval phrase `apply-approved-g5-lifecycle-bounded-batch-v1` only as an operator checklist/command preview.
+- Live packet against the source DB is correctly blocked: graduation proof is green, but there are no eligible approved lifecycle candidates (`approved_eligible_count=0`).
+
+Current interpretation:
+
+- Overall safety-gated north-star progress is approximately 98%.
+- Literal fully autonomous human-brain-like progress is approximately 84-86%. The batch corridor now has pre-apply and post-apply automation scaffolding, but cannot run live until fresh reviewed candidates exist; ordinary conversation auto-approval also remains intentionally blocked.
+
+Next after this slice:
+
+1. Commit/push and watch CI.
+2. Implement fresh lifecycle candidate refresh/separation from new dogfood evidence so promoted candidates are not recycled and new reviewable candidates can enter the queue.
+3. Then use the operator packet to prove when a bounded live batch is truly ready.
+4. Still forbidden without separate gates: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Checkpoint: fourth live exact-approved reinforcement lifecycle apply and batch graduation readiness
 

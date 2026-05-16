@@ -1,9 +1,37 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:41 KST
+Last updated: 2026-05-16 11:30 KST
 
+## Checkpoint: lifecycle bounded-batch operator packet source gate
 
+The source checkout now has a read-only operator packet for the lifecycle bounded-batch corridor. This is the missing pre-apply runbook artifact after the bounded-batch apply command and bounded-batch post-apply verifier: it lets an operator see whether graduation proof, apply readiness, candidate inventory, exact command arguments, backup/output placeholders, and post-apply verification are all aligned before any mutation.
+
+What changed:
+
+- Added `dogfood lifecycle-bounded-batch-operator-packet <db_path> --policy <policy> --actor <actor> --max-apply 2 --output <packet.json>`.
+- The command is read-only and does not apply candidates, approve candidates, change retrieval defaults, expose candidate JSON, expose raw reason text, or expose backup contents.
+- The packet includes:
+  - `artifact_gates.batch_graduation_readiness` from `lifecycle-batch-graduation-readiness`;
+  - `artifact_gates.apply_readiness` from `lifecycle-apply-readiness`;
+  - aggregate candidate inventory for approved/not-yet-applied candidates;
+  - exact `lifecycle-bounded-batch-apply` command preview with required policy, approval phrase, batch approval phrase, actor, private reason placeholder, max apply, backup path, and output path;
+  - exact `lifecycle-bounded-batch-post-apply-verification` command template;
+  - safety exclusions for ordinary auto-approval, broad/background apply, default retrieval migration, collapse/delete, telemetry reset, unreviewed promotion, and apply without exact operator approval.
+- Live smoke artifact: `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-batch-operator-packet-20260516T022916Z/lifecycle-bounded-batch-operator-packet.json`.
+- Live result: graduation readiness passed (`prior_one_at_a_time_apply_count=4`), but apply readiness and candidate inventory blocked the packet because `approved_eligible_count=0`. No live batch apply was executed.
+
+Current interpretation:
+
+- Safety-gated operational north-star remains approximately 98%: the batch apply corridor now has pre-apply packet + post-apply verifier, but the live DB has no approved candidates to batch apply.
+- Literal fully autonomous human-brain-like memory is approximately 84-86%: the system has stronger operator runbook automation, but fresh candidate generation/review and ordinary-turn safe auto-approval are not yet autonomous.
+
+Immediate next recommended slice:
+
+1. Commit/push this operator packet checkpoint and watch CI.
+2. Add a fresh lifecycle candidate refresh/separation slice so already-promoted reinforcement candidates are not requeued, and new dogfood evidence can create new pending candidates for review.
+3. Keep live batch apply blocked until a fresh operator packet is green with reviewed approved candidates.
+4. Keep ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Checkpoint: fourth live exact-approved reinforcement lifecycle apply + bounded batch post-apply verifier source gate
 

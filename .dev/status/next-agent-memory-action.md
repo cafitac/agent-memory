@@ -1,9 +1,28 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-16 10:41 KST
+Last updated: 2026-05-16 11:30 KST
 
+## Just completed: lifecycle bounded-batch operator packet source gate
 
+- Added `dogfood lifecycle-bounded-batch-operator-packet`, a read-only machine-readable packet for the exact-approved lifecycle bounded-batch corridor.
+- The packet bundles:
+  - live batch graduation readiness;
+  - lifecycle apply readiness;
+  - approved eligible candidate inventory;
+  - exact `lifecycle-bounded-batch-apply` command preview;
+  - required backup/output placeholders;
+  - exact `lifecycle-bounded-batch-post-apply-verification` command template.
+- Source RED/GREEN focused test proves the packet is read-only/no-mutation, hides candidate JSON/raw content/raw reason/backup content, and preserves forbidden-authority flags.
+- Live smoke against `/Users/reddit/.agent-memory/memory.db` wrote `/Users/reddit/.agent-memory/reports/post-v0.1.162-lifecycle-batch-operator-packet-20260516T022916Z/lifecycle-bounded-batch-operator-packet.json`.
+- Live packet result: batch graduation is green with four prior one-at-a-time reinforcement applies, but apply readiness is red because there are no eligible approved lifecycle candidates. Therefore bounded live batch apply remains blocked.
+
+Recommended next work now:
+
+1. Commit/push this operator packet source/docs checkpoint and watch CI.
+2. Next PR-sized source slice: generate/persist fresh lifecycle candidates from fresh dogfood evidence with duplicate/promoted-candidate separation, so the batch packet can eventually become green with new reviewed approved candidates.
+3. Do not live-batch-apply until the operator packet is green, candidates are reviewed approved, backup/output paths are set, exact approval phrases are supplied, and immediate post-apply verification is run.
+4. Still blocked: ordinary conversation auto-approval, broad/background apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Just completed: fourth live exact-approved reinforcement lifecycle apply + batch graduation readiness gate
 

@@ -4229,6 +4229,209 @@ def _dogfood_lifecycle_bounded_batch_apply_payload(args: argparse.Namespace) -> 
     return payload
 
 
+def _dogfood_lifecycle_bounded_batch_operator_packet_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.max_apply < 1 or args.max_apply > 2:
+        raise ValueError("dogfood lifecycle-bounded-batch-operator-packet requires 1 <= --max-apply <= 2")
+    if not args.actor.strip():
+        raise ValueError("dogfood lifecycle-bounded-batch-operator-packet requires non-empty --actor")
+    policy_contracts = {
+        contract["policy"]: {"candidate_kind": kind, "proposal_type": contract["proposal_type"], "approval_phrase": contract["approval_phrase"]}
+        for kind, contract in _LIFECYCLE_APPLY_POLICY_CONTRACTS.items()
+    }
+    contract = policy_contracts.get(args.policy)
+    if contract is None:
+        expected = ", ".join(sorted(policy_contracts))
+        raise ValueError(f"dogfood lifecycle-bounded-batch-operator-packet requires --policy one of: {expected}")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    if not db_path.exists():
+        raise ValueError(f"database missing: {db_path}")
+
+    graduation = _dogfood_lifecycle_batch_graduation_readiness_payload(
+        argparse.Namespace(db_path=args.db_path, policy=args.policy, min_prior_applies=args.min_prior_applies, output=None)
+    )
+    readiness = _dogfood_lifecycle_apply_readiness_payload(argparse.Namespace(db_path=args.db_path, output=None))
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_lifecycle_candidate_review_tables(connection)
+        rows = connection.execute(
+            """
+            SELECT candidate_id
+            FROM g5_trace_candidate_reviews
+            WHERE status = 'approved' AND candidate_kind = ? AND proposal_type = ?
+            ORDER BY updated_at, candidate_id
+            """,
+            (contract["candidate_kind"], contract["proposal_type"]),
+        ).fetchall()
+        existing_rows = connection.execute(
+            "SELECT candidate_id FROM g5_trace_candidate_applications WHERE policy = ?",
+            (args.policy,),
+        ).fetchall()
+    already_applied = {str(row["candidate_id"]) for row in existing_rows}
+    eligible_ids = [str(row["candidate_id"]) for row in rows if str(row["candidate_id"]) not in already_applied]
+    selected_count = min(len(eligible_ids), args.max_apply)
+
+    blocked_reasons: list[str] = []
+    if graduation.get("quality_gate", {}).get("pass") is not True:
+        blocked_reasons.append("batch_graduation_readiness_not_green")
+    if readiness.get("quality_gate", {}).get("pass") is not True:
+        blocked_reasons.append("lifecycle_apply_readiness_not_green")
+    if selected_count < 1:
+        blocked_reasons.append("no_eligible_approved_lifecycle_candidates")
+    green = not blocked_reasons
+
+    manual_apply_command_preview = [
+        "agent-memory",
+        "dogfood",
+        "lifecycle-bounded-batch-apply",
+        str(db_path),
+        "--policy",
+        args.policy,
+        "--approval-phrase",
+        contract["approval_phrase"],
+        "--batch-approval-phrase",
+        "apply-approved-g5-lifecycle-bounded-batch-v1",
+        "--actor",
+        args.actor.strip(),
+        "--reason",
+        "<operator-private-reason>",
+        "--max-apply",
+        str(args.max_apply),
+        "--backup-path",
+        "<required-backup-path>",
+        "--output",
+        "<bounded-batch-apply-output.json>",
+    ]
+    post_apply_verification_command_template = [
+        "agent-memory",
+        "dogfood",
+        "lifecycle-bounded-batch-post-apply-verification",
+        "--apply-report",
+        "<bounded-batch-apply-output.json>",
+        "--batch-graduation-readiness-report",
+        "<batch-graduation-readiness.json>",
+        "--rollback-replay-report",
+        "<post-apply-rollback-replay.json>",
+        "--application-audit-report",
+        "<post-apply-application-audit.json>",
+        "--expected-policy",
+        args.policy,
+        "--max-applied",
+        str(args.max_apply),
+        "--output",
+        "<bounded-batch-post-apply-verification.json>",
+    ]
+    manual_apply_required_flags = {
+        "--policy",
+        "--approval-phrase",
+        "--batch-approval-phrase",
+        "--actor",
+        "--reason",
+        "--max-apply",
+        "--backup-path",
+        "--output",
+    }
+    post_apply_verification_required_flags = {
+        "--apply-report",
+        "--batch-graduation-readiness-report",
+        "--rollback-replay-report",
+        "--application-audit-report",
+        "--expected-policy",
+        "--max-applied",
+        "--output",
+    }
+    payload = {
+        "kind": "dogfood_lifecycle_bounded_batch_operator_packet",
+        "read_only": True,
+        "mutated": False,
+        "apply_executed": False,
+        "apply_supported": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "db_path": str(db_path),
+        "policy": args.policy,
+        "artifact_gates": {
+            "batch_graduation_readiness": {
+                "kind": graduation.get("kind"),
+                "pass": graduation.get("quality_gate", {}).get("pass") is True,
+                "decision": graduation.get("quality_gate", {}).get("decision"),
+                "blocked_reasons": graduation.get("quality_gate", {}).get("blocked_reasons", []),
+                "prior_one_at_a_time_apply_count": graduation.get("prior_one_at_a_time_apply_count"),
+                "read_only": graduation.get("read_only") is True,
+                "mutated": graduation.get("mutated") is True,
+            },
+            "apply_readiness": {
+                "kind": readiness.get("kind"),
+                "pass": readiness.get("quality_gate", {}).get("pass") is True,
+                "decision": readiness.get("quality_gate", {}).get("decision"),
+                "blocked_reasons": readiness.get("quality_gate", {}).get("blocked_reasons", []),
+                "read_only": readiness.get("read_only") is True,
+                "mutated": readiness.get("mutated") is True,
+            },
+        },
+        "candidate_inventory": {
+            "candidate_kind": contract["candidate_kind"],
+            "approved_eligible_count": len(eligible_ids),
+            "already_applied_count": len(already_applied.intersection({str(row["candidate_id"]) for row in rows})),
+            "max_apply": args.max_apply,
+            "selected_count_for_preview": selected_count,
+            "candidate_json_included": False,
+        },
+        "quality_gate": {
+            "pass": green,
+            "decision": "lifecycle_bounded_batch_operator_packet_ready_for_manual_review_only"
+            if green
+            else "lifecycle_bounded_batch_operator_packet_blocked_before_manual_apply",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "operator_checklist": {
+            "pre_authorization_required": True,
+            "required_policy": args.policy,
+            "required_approval_phrase": contract["approval_phrase"],
+            "required_batch_approval_phrase": "apply-approved-g5-lifecycle-bounded-batch-v1",
+            "actor_required": True,
+            "private_reason_required": True,
+            "backup_path_required": True,
+            "audit_output_path_required": True,
+            "max_apply": args.max_apply,
+            "post_apply_verification_required": True,
+            "repeated_apply_requires_new_packet": True,
+        },
+        "manual_apply_command_preview": manual_apply_command_preview,
+        "post_apply_verification_command_template": post_apply_verification_command_template,
+        "runbook_contract": {
+            "matches_lifecycle_bounded_batch_operator_runbook": True,
+            "manual_apply_command_contains_all_required_flags": manual_apply_required_flags.issubset(manual_apply_command_preview),
+            "post_apply_verification_template_contains_all_required_flags": post_apply_verification_required_flags.issubset(
+                post_apply_verification_command_template
+            ),
+            "readiness_is_not_authorization": True,
+            "fresh_packet_required_after_any_apply": True,
+        },
+        "safety_exclusions": {
+            "broad_background_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_migration": False,
+            "collapse_delete_apply": False,
+            "live_telemetry_reset": False,
+            "unreviewed_promotion": False,
+            "apply_without_exact_operator_approval": False,
+        },
+        "privacy": {
+            "candidate_json_included": False,
+            "raw_content_included": False,
+            "raw_query_text_included": False,
+            "raw_trace_summary_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "sample_values_included": False,
+            "aggregate_or_ref_only": True,
+        },
+        "next_step": "manual_review_only_until_exact_operator_bounded_batch_apply_approval_is_provided",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_lifecycle_candidate_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     policy_contracts = {
         contract["policy"]: {
@@ -14571,6 +14774,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--min-prior-applies", type=int, default=4)
     dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_lifecycle_bounded_batch_apply_parser.add_argument("--output", type=Path)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser = dogfood_subparsers.add_parser(
+        "lifecycle-bounded-batch-operator-packet",
+        help="Bundle lifecycle batch graduation, candidate inventory, and exact command previews without mutation.",
+    )
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("db_path", type=Path)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("--policy", required=True)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("--actor", required=True)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("--max-apply", type=int, default=2)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("--min-prior-applies", type=int, default=4)
+    dogfood_lifecycle_bounded_batch_operator_packet_parser.add_argument("--output", type=Path)
     dogfood_lifecycle_apply_readiness_parser = dogfood_subparsers.add_parser(
         "lifecycle-apply-readiness",
         help="Summarize reviewed lifecycle apply eligibility across reinforcement/decay/supersession without mutation.",
@@ -15954,6 +16167,9 @@ def main() -> None:
             return
         if args.dogfood_action == "lifecycle-bounded-batch-apply":
             print(json.dumps(_dogfood_lifecycle_bounded_batch_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "lifecycle-bounded-batch-operator-packet":
+            print(json.dumps(_dogfood_lifecycle_bounded_batch_operator_packet_payload(args), indent=2))
             return
         if args.dogfood_action == "lifecycle-apply-readiness":
             print(json.dumps(_dogfood_lifecycle_apply_readiness_payload(args), indent=2))
