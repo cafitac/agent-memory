@@ -1,7 +1,29 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 11:09 KST
+Last updated: 2026-05-17 16:11 KST
+
+## Just completed: default automation copy-live verifier smoke + repeated evidence rollup
+
+- Ran a copy-live smoke under `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/`. The live DB was copied; `/Users/reddit/.agent-memory/memory.db` was not mutated.
+- The smoke proved the current corridor end-to-end: default policy gate -> dry-run -> exact one-candidate apply -> rollback replay -> `ordinary-turn-default-automation-post-apply-verification`.
+- Added `dogfood ordinary-turn-default-automation-evidence-rollup`, a read-only aggregate gate over repeated default-automation post-apply verifier artifacts. It checks green verifier reports, expected policy, one-at-a-time apply evidence, backup SHA evidence, rollback replay, audit row, relation evidence, privacy/ref safety, no forbidden authority, and no trace/memory ref reuse.
+- Copy-live rollup is green with two independent verifier artifacts: `decision=ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only`, `green_report_count=2`, `unique_trace_ref_count=2`, `unique_memory_ref_count=2`.
+- This is still design evidence only: `read_only=true`, `mutated=false`, `apply_supported=false`, `apply_executed=false`, `default_auto_approval_enabled=false`, `ordinary_conversation_auto_approval=false`.
+- Focused validation so far: default automation verifier/rollup tests `5 passed`. Full suite and CI still need to run for this checkpoint.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.99%+.
+- Remaining gap: a separate opt-in default enablement policy/runbook and hard fail-closed default-on switch tests before any unattended/default/background automation.
+
+Recommended next work now:
+
+1. Run the broader focused ordinary-turn tests and full suite.
+2. Commit/push this evidence-rollup checkpoint and watch CI.
+3. Next code slice should be a read-only opt-in enablement preflight/default-on design gate; do not flip any default/background auto-approval flag yet.
+4. Keep ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Just completed: ordinary-turn default automation post-apply verification
 

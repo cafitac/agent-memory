@@ -17030,6 +17030,234 @@ def test_dogfood_ordinary_turn_default_automation_dry_run_blocks_red_policy_gate
     assert payload["ordinary_conversation_auto_approval"] is False
 
 
+
+def _write_ordinary_turn_default_automation_post_apply_verification_report(
+    path: Path,
+    *,
+    trace_ref: str,
+    memory_ref: str,
+    pass_gate: bool = True,
+    policy: str = "ordinary-turn-default-automation-policy-v1",
+    blocked_reasons: list[str] | None = None,
+) -> None:
+    blocked = blocked_reasons or ([] if pass_gate else ["ordinary_turn_relation_missing"])
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_post_apply_verification",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "expected_policy": policy,
+                "apply_report": {
+                    "kind": "dogfood_ordinary_turn_default_automation_apply",
+                    "read_only": False,
+                    "mutated": True,
+                    "default_retrieval_unchanged": True,
+                    "policy": policy,
+                    "applied_count": 1,
+                    "trace_ref": trace_ref,
+                    "memory_ref": memory_ref,
+                },
+                "backup_evidence": {
+                    "sha256_matches_file": True,
+                    "content_included": False,
+                },
+                "rollback_replay_report": {
+                    "pass": True,
+                    "checked_application_count": 1,
+                    "failed_replay_count": 0,
+                },
+                "application_audit": {
+                    "audit_row_found": True,
+                    "policy": policy,
+                    "action": "apply_ordinary_turn_default_automation_preference",
+                    "promoted_ref": memory_ref,
+                    "backup_sha256_matches": True,
+                },
+                "relation_evidence": {
+                    "ordinary_turn_relation_found": True,
+                    "relation_ref_safe": True,
+                },
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "blocked_reasons": blocked,
+                    "decision": "ordinary_turn_default_automation_post_apply_verification_green_stop"
+                    if pass_gate
+                    else "fix_ordinary_turn_default_automation_post_apply_verification_before_next_apply",
+                },
+                "forbidden_authority": {
+                    "executes_apply": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                },
+                "private_raw_body": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_dogfood_ordinary_turn_default_automation_evidence_rollup_summarizes_repeated_green_verifiers(
+    tmp_path: Path,
+) -> None:
+    report_one = tmp_path / "default-post-apply-one.json"
+    report_two = tmp_path / "default-post-apply-two.json"
+    output_path = tmp_path / "default-automation-evidence-rollup.json"
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        report_one, trace_ref="experience_trace:101", memory_ref="fact:201"
+    )
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        report_two, trace_ref="experience_trace:102", memory_ref="fact:202"
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-evidence-rollup",
+            "--post-apply-verification-report",
+            str(report_one),
+            "--post-apply-verification-report",
+            str(report_two),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--min-green-reports",
+            "2",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_evidence_rollup"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["evidence_summary"] == {
+        "report_count": 2,
+        "green_report_count": 2,
+        "applied_memory_count": 2,
+        "unique_trace_ref_count": 2,
+        "unique_memory_ref_count": 2,
+        "min_green_reports": 2,
+        "ready_for_default_enablement_design": True,
+        "apply_supported": False,
+        "apply_executed": False,
+        "default_auto_approval_enabled": False,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "blocked_reasons": [],
+        "decision": "ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only",
+    }
+    assert payload["forbidden_authority"] == {
+        "executes_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+        "aggregate_only": True,
+        "report_hashes_only": True,
+    }
+
+
+def test_dogfood_ordinary_turn_default_automation_evidence_rollup_blocks_reused_or_red_verifiers(
+    tmp_path: Path,
+) -> None:
+    report_one = tmp_path / "default-post-apply-one.json"
+    report_two = tmp_path / "default-post-apply-two.json"
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        report_one, trace_ref="experience_trace:101", memory_ref="fact:201"
+    )
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        report_two,
+        trace_ref="experience_trace:101",
+        memory_ref="fact:201",
+        pass_gate=False,
+        blocked_reasons=["ordinary_turn_relation_missing"],
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-evidence-rollup",
+            "--post-apply-verification-report",
+            str(report_one),
+            "--post-apply-verification-report",
+            str(report_two),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--min-green-reports",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["quality_gate"]["decision"] == "collect_more_ordinary_turn_default_automation_evidence_before_enablement_design"
+    assert payload["quality_gate"]["blocked_reasons"] == [
+        "green_report_count_below_minimum",
+        "memory_ref_reuse_detected",
+        "post_apply_verification_gate_not_green",
+        "post_apply_verification_quality_reason_ordinary_turn_relation_missing",
+        "trace_ref_reuse_detected",
+    ]
+    assert payload["evidence_summary"]["ready_for_default_enablement_design"] is False
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+
+
 def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_apply(
     tmp_path: Path,
 ) -> None:

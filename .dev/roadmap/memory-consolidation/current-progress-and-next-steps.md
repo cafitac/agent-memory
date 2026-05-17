@@ -1,7 +1,47 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 11:09 KST
+Last updated: 2026-05-17 16:11 KST
+
+## Checkpoint: default automation verifier smoke and repeated evidence rollup
+
+The source checkout now has `dogfood ordinary-turn-default-automation-evidence-rollup`, and a copy-live smoke has proven the existing default automation policy/dry-run/apply/post-apply chain against live-shaped data without mutating the live DB.
+
+What changed:
+
+- The smoke copied `/Users/reddit/.agent-memory/memory.db` to local report directories, inserted synthetic non-secret preference-shaped ordinary turns into the copies only, and ran the default automation chain end-to-end.
+- The first copy proved policy gate -> dry-run -> exact one-candidate apply -> rollback replay -> `ordinary-turn-default-automation-post-apply-verification`.
+- A second independent copy generated a distinct trace/memory verifier artifact, then `ordinary-turn-default-automation-evidence-rollup` aggregated both verifier artifacts.
+- The new rollup command consumes repeated `--post-apply-verification-report` artifacts plus `--expected-policy` and `--min-green-reports`.
+- It validates artifact kind/read-only/mutation contracts, default retrieval unchanged, ordinary-auto-approval false, exact policy, green verifier quality, one-at-a-time apply count, trace/memory refs, backup SHA, rollback replay, application audit, relation evidence, privacy safety, no forbidden authority, and no trace/memory ref reuse.
+- Green means only `ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only`; it is not an apply trigger and not default/background auto-approval enablement.
+
+Copy-live smoke:
+
+- Artifact directory: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/`.
+- Live DB was not mutated.
+- Final rollup: `default-automation-evidence-rollup.json`.
+- Result: `quality_gate.pass=true`, `green_report_count=2`, `applied_memory_count=2`, `unique_trace_ref_count=2`, `unique_memory_ref_count=2`, `default_auto_approval_enabled=false`, `apply_supported=false`, `apply_executed=false`, `ordinary_conversation_auto_approval=false`.
+
+Validation so far:
+
+- RED observed: invalid `ordinary-turn-default-automation-evidence-rollup` subcommand.
+- Focused GREEN: `5 passed` for default automation verifier/rollup tests.
+- Broader/full validation still pending for this checkpoint.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.99%+.
+- Remaining gap: a separate opt-in enablement/default-on design gate with hard fail-closed tests, plus CI, before any default/background automation discussion. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
+
+Recommended next work now:
+
+1. Run broader focused ordinary-turn tests and full suite.
+2. Commit/push this checkpoint and watch CI.
+3. Add a read-only opt-in default enablement preflight/default-on design gate next; do not mutate live defaults or enable unattended default/background apply.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-evidence-rollup.md`
 
 ## Checkpoint: ordinary-turn default automation post-apply verification
 

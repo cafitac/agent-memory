@@ -1,7 +1,29 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 11:09 KST
+Last updated: 2026-05-17 16:11 KST
+
+## Just completed: default automation copy-live verifier smoke + repeated evidence rollup
+
+- Ran a copy-live default automation smoke at `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/`; it copied the live DB and did not mutate `/Users/reddit/.agent-memory/memory.db`.
+- The smoke proved policy gate -> dry-run -> exact one-candidate apply -> rollback replay -> post-apply verifier.
+- Added `dogfood ordinary-turn-default-automation-evidence-rollup`, a read-only aggregate gate over repeated `dogfood_ordinary_turn_default_automation_post_apply_verification` artifacts.
+- The rollup validates repeated green verifier reports, exact policy, one-at-a-time apply evidence, backup SHA evidence, rollback replay, audit row, `ordinary_turn_default_automation_approved_as` relation evidence, privacy/ref safety, no forbidden authority, and no trace/memory ref reuse.
+- Copy-live rollup is green with `green_report_count=2`, `unique_trace_ref_count=2`, `unique_memory_ref_count=2`, and decision `ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only`.
+- It is still design evidence only: no apply execution, no default auto-approval enablement, no unattended/default/background apply permission, and no ordinary conversation auto-approval.
+- Focused validation so far: verifier/rollup tests `5 passed`; broader/full validation still pending in this checkpoint.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.99%+.
+- Remaining gap: explicit opt-in default enablement gate/runbook plus hard fail-closed tests before any default/background automation can be considered.
+
+Recommended next work now:
+
+1. Run broader focused ordinary-turn tests and the full suite.
+2. Commit/push and watch CI.
+3. If continuing toward 100%, build a read-only opt-in enablement preflight/default-on design gate; do not flip `default_auto_approval_enabled` or ordinary conversation auto-approval.
 
 ## Just completed: ordinary-turn default automation post-apply verification
 
