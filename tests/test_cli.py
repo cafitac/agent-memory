@@ -17891,6 +17891,218 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_integration_records_
 
 
 
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_package_blocks_red_integration(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-scheduler-package-red.db"
+    integration_report = tmp_path / "red-scheduler-integration.json"
+    report_dir = tmp_path / "scheduler-package-red-reports"
+    initialize_database(db_path)
+    integration_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_scheduler_integration",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "scheduler_runner": {"invoked": False, "applied": False, "path": None, "quality_gate_pass": False},
+                "post_apply_verification_queue": {"next_cycle_requires_new_verification": False},
+                "quality_gate": {"pass": False, "blocked_reasons": ["scheduler_config_disabled"]},
+                "forbidden_authority": {"unattended_default_apply_allowed": False},
+                "privacy": {"raw_report_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-package",
+            str(db_path),
+            "--scheduler-integration-report",
+            str(integration_report),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--report-dir",
+            str(report_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_package"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["collector"]["post_apply_verification_executed"] is False
+    assert payload["collector"]["evidence_rollup_executed"] is False
+    assert "scheduler_integration_not_green" in payload["quality_gate"]["blocked_reasons"]
+    assert "scheduler_integration_not_mutated" in payload["quality_gate"]["blocked_reasons"]
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_package_collects_verifier_and_rollup(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-scheduler-package.db"
+    config_path = tmp_path / "scheduler-config.json"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "previous-evidence-rollup.json"
+    previous_scheduler_report = tmp_path / "previous-scheduler-runner.json"
+    post_apply_verification_report = tmp_path / "previous-post-apply-verification.json"
+    integration_report_dir = tmp_path / "scheduler-integration-reports"
+    integration_output = tmp_path / "scheduler-integration.json"
+    package_report_dir = tmp_path / "scheduler-package-reports"
+    package_output = tmp_path / "scheduler-package.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_scheduler_config(config_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    _write_ordinary_turn_default_automation_scheduler_report(previous_scheduler_report, applied=True)
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        post_apply_verification_report, trace_ref="experience_trace:901", memory_ref="fact:901"
+    )
+    prior_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="3" * 64,
+        summary="User prefers previous scheduler package summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{prior_trace.id}",
+        relation_type="ordinary_turn_default_automation_approved_as",
+        to_ref="fact:901",
+        evidence_ids=[],
+        confidence=0.8,
+        review_actor="prior-scheduler",
+        review_reason="prior scheduler package approval",
+    )
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="4" * 64,
+        summary="User prefers scheduler package one cycle summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+    integration_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-integration",
+            str(db_path),
+            "--scheduler-config",
+            str(config_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--previous-evidence-rollup",
+            str(previous_rollup_path),
+            "--previous-scheduler-report",
+            str(previous_scheduler_report),
+            "--post-apply-verification-report",
+            str(post_apply_verification_report),
+            "--report-dir",
+            str(integration_report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--scheduler-approval-phrase",
+            "run-one-default-automation-scheduler-cycle-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "scheduler package exact one-cycle approval",
+            "--output",
+            str(integration_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert integration_result.returncode == 0, integration_result.stderr
+    after_integration_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-package",
+            str(db_path),
+            "--scheduler-integration-report",
+            str(integration_output),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--report-dir",
+            str(package_report_dir),
+            "--output",
+            str(package_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "scheduler package one cycle summaries" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(package_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_package"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["scheduler_integration"]["quality_gate_pass"] is True
+    assert payload["scheduler_integration"]["selected_trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["collector"]["rollback_replay_executed"] is True
+    assert payload["collector"]["post_apply_verification_executed"] is True
+    assert payload["collector"]["evidence_rollup_executed"] is True
+    assert payload["post_apply_verification"]["quality_gate_pass"] is True
+    assert payload["evidence_rollup"]["quality_gate_pass"] is True
+    assert payload["evidence_rollup"]["green_report_count"] == 1
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_scheduler_package_collected_post_apply_evidence_for_next_cycle",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert (package_report_dir / "rollback-replay-validate.json").exists()
+    assert (package_report_dir / "ordinary-turn-default-automation-post-apply-verification.json").exists()
+    assert (package_report_dir / "ordinary-turn-default-automation-evidence-rollup.json").exists()
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == after_integration_counts
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:

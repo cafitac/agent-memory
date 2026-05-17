@@ -1,9 +1,23 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 19:02 KST
+Last updated: 2026-05-18 00:37 KST
 
-## Current checkpoint: scheduler integration/config around default automation one-cycle runner
+## Current checkpoint: scheduler package/collector for post-apply evidence before next cycle
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-package`.
+- It consumes a green `ordinary-turn-default-automation-scheduler-integration` report from a prior explicit one-cycle run, validates the nested scheduler runner/apply report, then automatically collects rollback replay, post-apply verification, and default-automation evidence rollup for the next cycle.
+- It is read-only/non-mutating and reports `collector.executes_scheduler_cycle=false` / `collector.executes_apply=false`; it never runs another scheduler cycle or apply.
+- It blocks red/non-mutating integration reports before verifier collection and preserves the fail-closed boundary around enabled policy, exact scheduler approval, fresh evidence, and one-candidate maximum.
+- Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-package-copy-smoke-20260517T153723Z/scheduler-package.json`.
+- Smoke result: `quality_gate.pass=true`, rollback replay/post-apply verifier/evidence rollup all executed, `evidence_rollup.green_report_count=1`, `source_db_unchanged=true`, unchanged source DB SHA `f20a8a8c7746e4dc257e0165df8e506827e2cb4761b45272774f94dd6fe94dda`.
+- Validation: focused scheduler package `2 passed`; default-automation corridor `14 passed, 208 deselected`; full suite `404 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99975%+.
+- Next safe slice: run repeated live-shaped scheduler windows using generated package evidence as the next previous rollup, then harden operator runbook/status output and CI observation; still no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-package.md`
+
+## Just completed: scheduler integration/config around default automation one-cycle runner
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-integration`.
 - It validates explicit scheduler config, enabled policy state, green policy gate, fresh previous evidence rollup, previous scheduler-report state, and queued green post-apply verifier reports before it invokes the scheduler runner.
@@ -12,8 +26,6 @@ Last updated: 2026-05-17 19:02 KST
 - Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-integration-copy-smoke-20260517T095816Z/scheduler-integration.json`.
 - Smoke result: `quality_gate.pass=true`, `mutated_copy=true`, `scheduler_runner.invoked=true`, `post_apply_verification_queue.queued_report_count=1`, `selected_trace_ref=experience_trace:4130`, `source_db_unchanged=true`, unchanged source DB SHA `1413ffe379ceed84763ab52cb4a6ff7d17e54f4f7733f6b204518f2c1b67d85b`.
 - Validation: focused scheduler integration `3 passed`; default-automation corridor `12 passed, 208 deselected`; full suite `402 passed, 1 xfailed`.
-- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9997%+.
-- Next safe slice: durable scheduler packaging/runbook plus automatic post-apply verifier/evidence-rollup collection and CI watch; still no unattended/default/background authority.
 
 Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-integration.md`
 
