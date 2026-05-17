@@ -9237,6 +9237,215 @@ def _dogfood_ordinary_turn_default_automation_scheduler_status_payload(args: arg
 
 
 
+def _dogfood_ordinary_turn_default_automation_scheduler_one_shot_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.schedule_approval_phrase != "run-one-local-default-automation-schedule-v1":
+        raise ValueError("ordinary_turn_default_automation_scheduler_one_shot_approval_phrase_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-scheduler-one-shot --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-scheduler-one-shot --reason is required")
+
+    source_db = args.db_path.expanduser().resolve(strict=False)
+    if not source_db.exists():
+        raise ValueError(f"database missing: {source_db}")
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    status_payload, status_artifact = _read_json_artifact_summary(args.scheduler_status)
+    status_payload = status_payload or {}
+    status_quality = status_payload.get("quality_gate", {}) if isinstance(status_payload.get("quality_gate"), dict) else {}
+    scheduler_status = (
+        status_payload.get("scheduler_status", {}) if isinstance(status_payload.get("scheduler_status"), dict) else {}
+    )
+    next_inputs = status_payload.get("next_cycle_inputs", {}) if isinstance(status_payload.get("next_cycle_inputs"), dict) else {}
+    blocked_reasons: list[str] = []
+    if not status_artifact["provided"]:
+        blocked_reasons.append("scheduler_status_not_provided")
+    elif status_artifact["error"] is not None:
+        blocked_reasons.append("scheduler_status_unreadable")
+    else:
+        if status_payload.get("kind") != "dogfood_ordinary_turn_default_automation_scheduler_status":
+            blocked_reasons.append("scheduler_status_kind_invalid")
+        if status_payload.get("read_only") is not True or status_payload.get("mutated") is not False:
+            blocked_reasons.append("scheduler_status_not_read_only")
+        if status_payload.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("scheduler_status_ordinary_auto_approval_enabled")
+        if status_quality.get("pass") is not True:
+            blocked_reasons.append("scheduler_status_not_green")
+        if scheduler_status.get("ready_for_next_explicit_scheduler_cycle") is not True:
+            blocked_reasons.append("scheduler_status_not_ready_for_next_cycle")
+        if not _privacy_flags_are_ref_safe(
+            status_payload.get("privacy", {}) if isinstance(status_payload.get("privacy"), dict) else {}
+        ):
+            blocked_reasons.append("scheduler_status_privacy_not_ref_safe")
+        forbidden = (
+            status_payload.get("forbidden_authority", {})
+            if isinstance(status_payload.get("forbidden_authority"), dict)
+            else {}
+        )
+        for key in (
+            "ordinary_conversation_auto_approval",
+            "broad_background_apply_allowed",
+            "default_background_auto_approval_allowed",
+            "unattended_default_apply_allowed",
+            "default_ranking_mutated",
+            "collapse_delete_apply_allowed",
+            "telemetry_reset_apply_allowed",
+            "unreviewed_promotion_allowed",
+            "repeated_apply_without_new_approval_allowed",
+        ):
+            if forbidden.get(key) is not False:
+                blocked_reasons.append(f"scheduler_status_forbidden_authority_{key}_invalid")
+
+    required_inputs = (
+        "scheduler_config",
+        "policy_state_config",
+        "policy_gate",
+        "previous_evidence_rollup",
+        "previous_scheduler_report",
+        "post_apply_verification_report",
+        "policy",
+        "scheduler_approval_phrase",
+        "approval_phrase",
+    )
+    for key in required_inputs:
+        if not next_inputs.get(key):
+            blocked_reasons.append(f"scheduler_status_missing_next_cycle_input_{key}")
+    if next_inputs.get("policy") != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        blocked_reasons.append("scheduler_status_policy_mismatch")
+
+    table_names = ["facts", "relations", "source_records", "experience_traces"]
+    source_sha_before = _sha256_file(source_db)
+    source_counts_before = _safe_sqlite_table_counts(source_db, table_names)
+    db_approval_mode = str(args.db_approval_mode)
+    target_db = source_db
+    if db_approval_mode == "copy":
+        copy_db = (args.copy_db_path or (report_dir / "scheduler-one-shot-copy.db")).expanduser().resolve(strict=False)
+        copy_db.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_db, copy_db)
+        initialize_database(copy_db)
+        target_db = copy_db
+    elif db_approval_mode == "explicit-approved-db":
+        target_db = source_db
+    else:
+        blocked_reasons.append("db_approval_mode_invalid")
+
+    integration_path = report_dir / "scheduler-integration.json"
+    package_path = report_dir / "scheduler-package.json"
+    integration_payload: dict[str, Any] | None = None
+    package_payload: dict[str, Any] | None = None
+    if not blocked_reasons:
+        integration_payload = _dogfood_ordinary_turn_default_automation_scheduler_integration_payload(
+            argparse.Namespace(
+                db_path=target_db,
+                scheduler_config=Path(str(next_inputs["scheduler_config"])),
+                policy_gate=Path(str(next_inputs["policy_gate"])),
+                policy_state_config=Path(str(next_inputs["policy_state_config"])),
+                previous_evidence_rollup=Path(str(next_inputs["previous_evidence_rollup"])),
+                previous_scheduler_report=Path(str(next_inputs["previous_scheduler_report"])),
+                post_apply_verification_report=[Path(str(next_inputs["post_apply_verification_report"]))],
+                report_dir=report_dir / "scheduler-integration-reports",
+                policy=str(next_inputs["policy"]),
+                scheduler_approval_phrase=str(next_inputs["scheduler_approval_phrase"]),
+                approval_phrase=str(next_inputs["approval_phrase"]),
+                actor=args.actor,
+                reason=args.reason,
+                limit=args.limit,
+                backup_path=None,
+                output=integration_path,
+            )
+        )
+        if integration_payload.get("quality_gate", {}).get("pass") is not True:
+            blocked_reasons.append("scheduler_integration_not_green")
+
+    if not blocked_reasons:
+        package_payload = _dogfood_ordinary_turn_default_automation_scheduler_package_payload(
+            argparse.Namespace(
+                db_path=target_db,
+                scheduler_integration_report=integration_path,
+                expected_policy=str(next_inputs["policy"]),
+                report_dir=report_dir / "scheduler-package-reports",
+                limit=args.limit,
+                output=package_path,
+            )
+        )
+        if package_payload.get("quality_gate", {}).get("pass") is not True:
+            blocked_reasons.append("scheduler_package_not_green")
+
+    source_sha_after = _sha256_file(source_db)
+    source_counts_after = _safe_sqlite_table_counts(source_db, table_names)
+    source_mutated = source_sha_after != source_sha_before or source_counts_after != source_counts_before
+    if db_approval_mode == "copy" and source_mutated:
+        blocked_reasons.append("source_db_mutated_in_copy_mode")
+    integration_quality = integration_payload.get("quality_gate", {}) if isinstance(integration_payload, dict) else {}
+    package_quality = package_payload.get("quality_gate", {}) if isinstance(package_payload, dict) else {}
+    package_evidence = package_payload.get("evidence_rollup", {}) if isinstance(package_payload, dict) and isinstance(package_payload.get("evidence_rollup"), dict) else {}
+    blocked_unique = sorted(set(blocked_reasons))
+    decision_green = (
+        "ordinary_turn_default_automation_scheduler_one_shot_ran_copy_cycle_packaged_and_stopped"
+        if db_approval_mode == "copy"
+        else "ordinary_turn_default_automation_scheduler_one_shot_ran_explicit_db_cycle_packaged_and_stopped"
+    )
+    cycle_mutated = integration_payload is not None and integration_quality.get("pass") is True
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_scheduler_one_shot",
+        "read_only": not cycle_mutated,
+        "mutated": cycle_mutated,
+        "db_approval_mode": db_approval_mode,
+        "source_db_mutated": source_mutated,
+        "copy_db_mutated": db_approval_mode == "copy" and cycle_mutated,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "scheduler_status": {
+            **status_artifact,
+            "quality_gate_pass": status_quality.get("pass") is True,
+            "ready_for_next_explicit_scheduler_cycle": scheduler_status.get("ready_for_next_explicit_scheduler_cycle") is True,
+        },
+        "target_db": {"path": str(target_db), "mode": db_approval_mode},
+        "source_db": {
+            "path": str(source_db),
+            "sha256_before": source_sha_before,
+            "sha256_after": source_sha_after,
+            "table_counts_before": source_counts_before,
+            "table_counts_after": source_counts_after,
+        },
+        "scheduler_integration": {
+            "path": str(integration_path) if integration_payload is not None else None,
+            "sha256": _sha256_file(integration_path) if integration_path.exists() else None,
+            "quality_gate_pass": integration_quality.get("pass") is True,
+            "selected_trace_ref": integration_payload.get("scheduler_runner", {}).get("selected_trace_ref")
+            if isinstance(integration_payload, dict)
+            else None,
+        },
+        "scheduler_package": {
+            "path": str(package_path) if package_payload is not None else None,
+            "sha256": _sha256_file(package_path) if package_path.exists() else None,
+            "quality_gate_pass": package_quality.get("pass") is True,
+            "evidence_rollup_path": package_evidence.get("path"),
+            "evidence_rollup_quality_gate_pass": package_evidence.get("quality_gate_pass") is True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": integration_payload is not None,
+            "executes_apply": integration_payload is not None and integration_quality.get("pass") is True,
+            "max_scheduler_cycles": 1,
+            "requires_status_green": True,
+            "requires_exact_local_schedule_approval": True,
+            "enables_unattended_default_authority": False,
+            "background_or_recurring_schedule_enabled": False,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": decision_green if not blocked_unique else "ordinary_turn_default_automation_scheduler_one_shot_blocked_before_or_during_cycle",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "stop_after_package; use_new_evidence_rollup_only_as_input_to_a_later_explicit_one_shot",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -21104,6 +21313,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_ordinary_turn_default_automation_scheduler_status_parser.add_argument("--expected-policy", required=True)
     dogfood_ordinary_turn_default_automation_scheduler_status_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-scheduler-one-shot",
+        help="Consume a green scheduler status artifact, run exactly one local opt-in scheduler cycle, package evidence, then stop.",
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--scheduler-status", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument(
+        "--db-approval-mode", choices=["copy", "explicit-approved-db"], required=True
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--copy-db-path", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--report-dir", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--schedule-approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--limit", type=int, default=20)
+    dogfood_ordinary_turn_default_automation_scheduler_one_shot_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -22660,6 +22885,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-scheduler-status":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_status_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-scheduler-one-shot":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_one_shot_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))

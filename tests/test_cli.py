@@ -18272,6 +18272,140 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_status_summarizes_ne
 
 
 
+def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_runs_copy_cycle_then_package(
+    tmp_path: Path,
+) -> None:
+    source_db = tmp_path / "ordinary-turn-default-automation-scheduler-one-shot-source.db"
+    smoke_report_dir = tmp_path / "scheduler-one-shot-source-smoke"
+    smoke_output = tmp_path / "scheduler-repeated-window-smoke.json"
+    status_output = tmp_path / "scheduler-status.json"
+    one_shot_report_dir = tmp_path / "scheduler-one-shot"
+    one_shot_output = tmp_path / "scheduler-one-shot.json"
+    initialize_database(source_db)
+    trace = insert_experience_trace(
+        source_db,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="5" * 64,
+        summary="User prefers local scheduler one shot summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    source_counts_after_seed = _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    smoke_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-repeated-window-smoke",
+            str(source_db),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "scheduler one-shot seed evidence",
+            "--report-dir",
+            str(smoke_report_dir),
+            "--output",
+            str(smoke_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert smoke_result.returncode == 0, smoke_result.stderr
+    status_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-status",
+            "--repeated-window-smoke-report",
+            str(smoke_output),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--output",
+            str(status_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert status_result.returncode == 0, status_result.stderr
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-one-shot",
+            str(source_db),
+            "--scheduler-status",
+            str(status_output),
+            "--db-approval-mode",
+            "copy",
+            "--report-dir",
+            str(one_shot_report_dir),
+            "--schedule-approval-phrase",
+            "run-one-local-default-automation-schedule-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "local one-shot schedule approval SHOULD_NOT_LEAK",
+            "--output",
+            str(one_shot_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "local scheduler one shot summaries" not in result.stdout
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(one_shot_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_one_shot"
+    assert payload["db_approval_mode"] == "copy"
+    assert payload["source_db_mutated"] is False
+    assert payload["copy_db_mutated"] is True
+    assert payload["scheduler_status"]["quality_gate_pass"] is True
+    assert payload["scheduler_integration"]["quality_gate_pass"] is True
+    assert payload["scheduler_integration"]["selected_trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["scheduler_package"]["quality_gate_pass"] is True
+    assert payload["scheduler_package"]["evidence_rollup_quality_gate_pass"] is True
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": True,
+        "executes_apply": True,
+        "max_scheduler_cycles": 1,
+        "requires_status_green": True,
+        "requires_exact_local_schedule_approval": True,
+        "enables_unattended_default_authority": False,
+        "background_or_recurring_schedule_enabled": False,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_scheduler_one_shot_ran_copy_cycle_packaged_and_stopped",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert (one_shot_report_dir / "scheduler-integration.json").exists()
+    assert (one_shot_report_dir / "scheduler-package.json").exists()
+    assert _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"]) == source_counts_after_seed
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
