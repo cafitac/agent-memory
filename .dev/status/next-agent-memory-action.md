@@ -1,22 +1,21 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 01:47 KST
+Last updated: 2026-05-18 02:03 KST
 
-## Current checkpoint: local opt-in scheduler one-shot wrapper
+## Current checkpoint: read-only scheduler one-shot history rollup
 
-- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-one-shot`.
-- It consumes a green `ordinary-turn-default-automation-scheduler-status` artifact, validates all next-cycle input paths, requires exact phrase `run-one-local-default-automation-schedule-v1`, and requires explicit `--db-approval-mode copy|explicit-approved-db`.
-- In `copy` mode it copies the supplied DB, runs exactly one `ordinary-turn-default-automation-scheduler-integration` cycle on that copy, immediately runs `ordinary-turn-default-automation-scheduler-package`, then stops.
-- It reports explicit authority bounds: `max_scheduler_cycles=1`, `requires_status_green=true`, `requires_exact_local_schedule_approval=true`, `enables_unattended_default_authority=false`, and `background_or_recurring_schedule_enabled=false`.
-- Positive copy smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-one-shot-positive-copy-smoke-20260517T164220Z/scheduler-one-shot.json`.
-- Smoke result: `quality_gate.pass=true`, `db_approval_mode=copy`, `source_db_mutated=false`, `copy_db_mutated=true`, `scheduler_integration.quality_gate_pass=true`, `scheduler_package.quality_gate_pass=true`, `evidence_rollup_quality_gate_pass=true`, `selected_trace_ref=experience_trace:4201`.
-- A live-source copy-mode run against `/Users/reddit/.agent-memory/memory.db` also correctly stayed fail-closed when no eligible candidate existed; source DB SHA/table counts remained unchanged.
-- Validation complete: focused one-shot `1 passed, 224 deselected`; scheduler corridor `10 passed, 215 deselected`; default-automation corridor `33 passed, 192 deselected`; full suite `407 passed, 1 xfailed`.
-- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99995%+.
-- Next safe slice: read-only one-shot history/status rollup over repeated one-shot artifacts, proving each run stopped after packaging and used fresh evidence before any real recurring/background scheduler is considered.
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-one-shot-history`.
+- It consumes two or more `ordinary-turn-default-automation-scheduler-one-shot` artifacts and verifies they form a bounded local opt-in sequence, not a background scheduler.
+- It proves every run was green, stopped after scheduler package collection, preserved source DB in copy mode, used unique trace refs, and each later run consumed the previous run's packaged evidence rollup as fresh previous evidence through the scheduler-status artifact.
+- It is status-only: `read_only=true`, `mutated=false`, `automation_authority.executes_scheduler_cycle=false`, `automation_authority.executes_apply=false`, `enables_unattended_default_authority=false`, and `background_or_recurring_schedule_enabled=false`.
+- Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-one-shot-history-smoke-20260517T170330Z/one-shot-history.json`.
+- Smoke result: `quality_gate.pass=true`, `one_shot_count=2`, `green_one_shot_count=2`, `copy_mode_count=2`, `source_db_unchanged_count=2`, `unique_trace_ref_count=2`, `all_runs_stopped_after_package=true`, `all_copy_runs_preserved_source_db=true`, `all_runs_used_fresh_previous_evidence=true`.
+- Validation complete: focused history `1 passed, 225 deselected`; scheduler corridor `11 passed, 215 deselected`; default-automation corridor `34 passed, 192 deselected`; full suite `408 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99997%+.
+- Next safe slice: docs/read-only recurring-scheduler readiness packet with exact future approval boundary, cadence/kill-switch/fresh-evidence requirements, and no recurring/background code enablement yet.
 
-Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-one-shot.md`
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-one-shot-history.md`
 
 ## Previous checkpoint: repeated scheduler-window copy smoke using package evidence as next previous rollup
 

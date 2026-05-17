@@ -18406,6 +18406,137 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_runs_copy_c
 
 
 
+def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
+    tmp_path: Path,
+) -> None:
+    first_status = tmp_path / "status-1.json"
+    second_status = tmp_path / "status-2.json"
+    first_one_shot = tmp_path / "one-shot-1.json"
+    second_one_shot = tmp_path / "one-shot-2.json"
+    output_path = tmp_path / "one-shot-history.json"
+    first_rollup = tmp_path / "one-shot-1" / "scheduler-package-reports" / "ordinary-turn-default-automation-evidence-rollup.json"
+    second_rollup = tmp_path / "one-shot-2" / "scheduler-package-reports" / "ordinary-turn-default-automation-evidence-rollup.json"
+    first_rollup.parent.mkdir(parents=True)
+    second_rollup.parent.mkdir(parents=True)
+    first_rollup.write_text("{}", encoding="utf-8")
+    second_rollup.write_text("{}", encoding="utf-8")
+
+    def _status_payload(previous_rollup: Path) -> dict[str, object]:
+        return {
+            "kind": "dogfood_ordinary_turn_default_automation_scheduler_status",
+            "read_only": True,
+            "mutated": False,
+            "ordinary_conversation_auto_approval": False,
+            "scheduler_status": {"ready_for_next_explicit_scheduler_cycle": True},
+            "next_cycle_inputs": {
+                "previous_evidence_rollup": str(previous_rollup),
+                "policy": "ordinary-turn-default-automation-policy-v1",
+            },
+            "quality_gate": {"pass": True, "blocked_reasons": []},
+            "forbidden_authority": {"unattended_default_apply_allowed": False},
+            "privacy": {"raw_report_included": False},
+        }
+
+    first_status.write_text(json.dumps(_status_payload(tmp_path / "seed-evidence-rollup.json")), encoding="utf-8")
+    second_status.write_text(json.dumps(_status_payload(first_rollup)), encoding="utf-8")
+
+    def _one_shot_payload(path: Path, status_path: Path, rollup_path: Path, trace_ref: str) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "kind": "dogfood_ordinary_turn_default_automation_scheduler_one_shot",
+                    "read_only": False,
+                    "mutated": True,
+                    "db_approval_mode": "copy",
+                    "source_db_mutated": False,
+                    "copy_db_mutated": True,
+                    "ordinary_conversation_auto_approval": False,
+                    "scheduler_status": {
+                        "path": str(status_path),
+                        "quality_gate_pass": True,
+                        "ready_for_next_explicit_scheduler_cycle": True,
+                    },
+                    "scheduler_integration": {"quality_gate_pass": True, "selected_trace_ref": trace_ref},
+                    "scheduler_package": {
+                        "quality_gate_pass": True,
+                        "evidence_rollup_path": str(rollup_path),
+                        "evidence_rollup_quality_gate_pass": True,
+                    },
+                    "automation_authority": {
+                        "executes_scheduler_cycle": True,
+                        "executes_apply": True,
+                        "max_scheduler_cycles": 1,
+                        "requires_status_green": True,
+                        "requires_exact_local_schedule_approval": True,
+                        "enables_unattended_default_authority": False,
+                        "background_or_recurring_schedule_enabled": False,
+                    },
+                    "quality_gate": {"pass": True, "blocked_reasons": []},
+                    "forbidden_authority": {"unattended_default_apply_allowed": False},
+                    "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    _one_shot_payload(first_one_shot, first_status, first_rollup, "experience_trace:1")
+    _one_shot_payload(second_one_shot, second_status, second_rollup, "experience_trace:2")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-one-shot-history",
+            "--one-shot-report",
+            str(first_one_shot),
+            "--one-shot-report",
+            str(second_one_shot),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_one_shot_history"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["history_status"] == {
+        "one_shot_count": 2,
+        "green_one_shot_count": 2,
+        "copy_mode_count": 2,
+        "source_db_unchanged_count": 2,
+        "unique_trace_ref_count": 2,
+        "all_runs_stopped_after_package": True,
+        "all_copy_runs_preserved_source_db": True,
+        "all_runs_used_fresh_previous_evidence": True,
+        "ready_for_recurring_scheduler_design_review": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_scheduler_one_shot_history_green_for_design_review_only",
+        "blocked_reasons": [],
+    }
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "enables_unattended_default_authority": False,
+        "background_or_recurring_schedule_enabled": False,
+        "status_only": True,
+    }
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
