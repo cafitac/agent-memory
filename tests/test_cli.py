@@ -16456,6 +16456,265 @@ def test_dogfood_ordinary_turn_default_automation_dry_run_lists_ref_safe_candida
     assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
 
 
+
+def _write_ordinary_turn_default_automation_dry_run_report(
+    path: Path,
+    *,
+    trace_ref: str = "experience_trace:1",
+    pass_gate: bool = True,
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "policy_contract": {
+                    "policy": "ordinary-turn-default-automation-policy-v1",
+                    "ready_for_opt_in_dry_run": pass_gate,
+                    "default_auto_approval_enabled": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "max_candidates_per_run": 1,
+                    "allowed_memory_shapes": ["preference"],
+                    "requires_exact_apply_review": True,
+                    "requires_backup_before_apply": True,
+                    "requires_post_apply_verification": True,
+                    "requires_rollback_replay": True,
+                },
+                "candidate_counts": {
+                    "ordinary_turn_count": 1,
+                    "eligible_preference_candidate_count": 1 if pass_gate else 0,
+                    "selected_candidate_count": 1 if pass_gate else 0,
+                    "blocked_secret_like_count": 0,
+                    "non_preference_memory_worthy_count": 0,
+                    "deferred_candidate_count": 0,
+                },
+                "candidate_refs": [trace_ref] if pass_gate else [],
+                "candidate_preview": [
+                    {
+                        "trace_ref": trace_ref,
+                        "content_sha256": "a" * 64,
+                        "summary_sha256": hashlib.sha256(b"User prefers concise terminal summaries.").hexdigest(),
+                        "memory_shape": "preference",
+                        "requires_exact_apply_review": True,
+                    }
+                ]
+                if pass_gate
+                else [],
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "decision": "ordinary_turn_default_automation_dry_run_ready_for_exact_single_candidate_review_keep_default_blocked"
+                    if pass_gate
+                    else "ordinary_turn_default_automation_dry_run_not_ready_keep_default_blocked",
+                    "blocked_reasons": [] if pass_gate else ["policy_gate_not_green"],
+                },
+                "forbidden_authority": {
+                    "executes_apply": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "unattended_batch_apply_allowed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                    "sample_values_included": False,
+                    "summary_hash_included": True,
+                    "content_hash_included": True,
+                    "actionable_trace_ref_included": True,
+                    "aggregate_only": False,
+                    "review_packet_without_raw_text": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_dogfood_ordinary_turn_default_automation_apply_promotes_one_exact_candidate_with_backup_and_audit(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-apply.db"
+    backup_path = tmp_path / "ordinary-turn-default-automation-apply.backup.db"
+    dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    output_path = tmp_path / "ordinary-turn-default-automation-apply.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="User prefers concise terminal summaries.",
+        scope="project:agent-memory",
+        session_ref="session:default-automation-apply",
+        salience=0.9,
+        user_emphasis=0.8,
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    _write_ordinary_turn_default_automation_dry_run_report(dry_run_report, trace_ref=f"experience_trace:{trace.id}")
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-apply",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--dry-run-report",
+            str(dry_run_report),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "exact operator approval for one default automation candidate",
+            "--backup-path",
+            str(backup_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "concise terminal summaries" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_apply"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["policy"] == "ordinary-turn-default-automation-policy-v1"
+    assert payload["dry_run_evidence"]["kind"] == "dogfood_ordinary_turn_default_automation_dry_run"
+    assert payload["apply"]["applied_count"] == 1
+    assert payload["apply"]["trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["apply"]["memory_ref"].startswith("fact:")
+    assert payload["backup"]["path"] == str(backup_path)
+    assert len(payload["backup"]["sha256"]) == 64
+    assert backup_path.exists()
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_exact_candidate_applied_stop_after_one",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"] == {
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "reason_hash_only": True,
+        "trace_ref_only": True,
+    }
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM source_records").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM relations WHERE relation_type = 'ordinary_turn_default_automation_approved_as'"
+        ).fetchone()[0] == 1
+        audit_row = connection.execute("SELECT policy, action, backup_path, backup_sha256 FROM g5_trace_candidate_applications").fetchone()
+        assert audit_row == (
+            "ordinary-turn-default-automation-policy-v1",
+            "apply_ordinary_turn_default_automation_preference",
+            str(backup_path),
+            payload["backup"]["sha256"],
+        )
+
+
+def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-apply-red.db"
+    dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run-red.json"
+    initialize_database(db_path)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="User prefers compact output.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    _write_ordinary_turn_default_automation_dry_run_report(
+        dry_run_report,
+        trace_ref=f"experience_trace:{trace.id}",
+        pass_gate=False,
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations"])
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-apply",
+            str(db_path),
+            "--trace-ref",
+            f"experience_trace:{trace.id}",
+            "--dry-run-report",
+            str(dry_run_report),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "should fail because dry-run is red",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "ordinary_turn_default_automation_dry_run_not_green" in result.stderr
+    assert _table_counts(db_path, ["facts", "relations"]) == before_counts
+
+
 def test_dogfood_ordinary_turn_default_automation_dry_run_blocks_red_policy_gate(
     tmp_path: Path,
 ) -> None:

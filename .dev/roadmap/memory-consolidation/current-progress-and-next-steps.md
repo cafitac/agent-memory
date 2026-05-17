@@ -1,7 +1,40 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:36 KST
+Last updated: 2026-05-17 10:55 KST
+
+## Checkpoint: ordinary-turn default automation one-candidate apply corridor
+
+The source checkout now has `dogfood ordinary-turn-default-automation-apply`, a separate exact-reviewed one-candidate apply corridor that consumes a saved default automation dry-run artifact.
+
+What changed:
+
+- The command consumes `dogfood_ordinary_turn_default_automation_dry_run` evidence and validates artifact kind, read-only/no-mutation/default-unchanged flags, green quality gate, exact selected trace ref, policy contract, candidate shape, privacy safety, and forbidden-authority flags.
+- It requires exact policy `ordinary-turn-default-automation-policy-v1` and exact approval phrase `apply-exact-ordinary-turn-default-automation-candidate-v1`, plus actor/reason.
+- It supports only one non-secret preference-shaped ordinary turn, runs conflict preflight, creates a backup before mutation, creates one approved fact, links the source trace with `ordinary_turn_default_automation_approved_as`, and writes a `g5_trace_candidate_applications` audit row.
+- Green means `ordinary_turn_default_automation_exact_candidate_applied_stop_after_one` only. It still keeps ordinary conversation auto-approval, broad/background apply, default/background auto-approval, unattended default apply, unattended batch apply, unreviewed promotion, default-ranking mutation, collapse/delete, telemetry reset, and repeated apply without fresh exact approval blocked.
+
+Validation:
+
+- RED observed: missing `ordinary-turn-default-automation-apply` subcommand.
+- Focused GREEN: `2 passed` for the default automation apply corridor tests.
+- Default automation GREEN: `6 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `25 passed, 173 deselected`.
+- Full suite GREEN: `380 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.98-99.985%.
+- Remaining gap: add default-automation post-apply verification + rollback replay evidence, then repeated independent green windows before any opt-in default/background enablement. This checkpoint is a guarded one-candidate mutation corridor, not default auto-approval.
+
+Recommended next work now:
+
+1. Commit/push this default-automation apply corridor checkpoint and watch CI.
+2. Add `dogfood ordinary-turn-default-automation-post-apply-verification` that validates apply report, backup SHA/file, rollback replay, audit row, relation, one-at-a-time apply, and ref/privacy safety.
+3. Do not enable ordinary conversation auto-approval, unattended default/background apply, or repeated apply without fresh exact approval.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-ordinary-turn-default-automation-apply.md`
 
 ## Checkpoint: ordinary-turn default automation dry-run
 

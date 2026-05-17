@@ -1,7 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:36 KST
+Last updated: 2026-05-17 10:55 KST
+
+## Just completed: ordinary-turn default automation one-candidate apply corridor
+
+- Added `dogfood ordinary-turn-default-automation-apply`, a separate exact-reviewed stop-after-one apply corridor over a saved default automation dry-run artifact.
+- It validates exact policy, exact approval phrase, dry-run green evidence, exact trace ref, preference shape, privacy/ref safety, conflict preflight, no prior apply relation, and blocked forbidden authority.
+- It creates a DB backup before mutation, then creates one approved fact, one `ordinary_turn_default_automation_approved_as` relation, and one `g5_trace_candidate_applications` audit row.
+- It does not enable ordinary conversation auto-approval, broad/background apply, default/background auto-approval, unattended default apply, unattended batch apply, unreviewed promotion, default-ranking mutation, collapse/delete, telemetry reset, or repeated apply without fresh exact approval.
+- Validation: RED missing subcommand; focused GREEN `2 passed`; default-automation GREEN `6 passed, 192 deselected`; broader ordinary-turn GREEN `25 passed, 173 deselected`; full suite GREEN `380 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.98-99.985%.
+- Remaining gap: default-automation post-apply verifier + rollback replay evidence, repeated independent green windows, and a separate opt-in enablement gate before any default/background automation.
+
+Recommended next work now:
+
+1. Commit/push this apply corridor checkpoint and watch CI.
+2. Add `dogfood ordinary-turn-default-automation-post-apply-verification` as a read-only gate over apply report + rollback replay + backup/audit/relation evidence.
+3. Keep ordinary conversation auto-approval and unattended default/background apply blocked.
 
 ## Just completed: ordinary-turn default automation dry-run
 
