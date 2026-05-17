@@ -7653,6 +7653,77 @@ def _load_ordinary_turn_default_automation_dry_run_for_apply(report_path: Path, 
     }
 
 
+def _load_default_automation_previous_evidence_rollup_for_apply(
+    report_path: Path | None,
+    *,
+    expected_policy: str,
+    prior_apply_count: int,
+) -> dict[str, Any]:
+    if prior_apply_count <= 0:
+        return {
+            "provided": report_path is not None,
+            "required": False,
+            "path": str(report_path.expanduser().resolve(strict=False)) if report_path is not None else None,
+            "quality_gate_pass": None,
+            "blocked_reasons": [],
+        }
+    if report_path is None:
+        return {
+            "provided": False,
+            "required": True,
+            "path": None,
+            "quality_gate_pass": False,
+            "blocked_reasons": ["previous_evidence_rollup_required_after_prior_default_automation_apply"],
+        }
+    payload, base = _read_json_artifact_summary(report_path)
+    raw = payload or {}
+    quality_gate = raw.get("quality_gate") if isinstance(raw.get("quality_gate"), dict) else {}
+    evidence_summary = raw.get("evidence_summary") if isinstance(raw.get("evidence_summary"), dict) else {}
+    forbidden = raw.get("forbidden_authority") if isinstance(raw.get("forbidden_authority"), dict) else {}
+    privacy = raw.get("privacy") if isinstance(raw.get("privacy"), dict) else {}
+    blocked_reasons: list[str] = []
+    if not base["provided"] or base["error"] is not None or payload is None:
+        blocked_reasons.append("previous_evidence_rollup_unreadable")
+    if base["kind"] != "dogfood_ordinary_turn_default_automation_evidence_rollup":
+        blocked_reasons.append("previous_evidence_rollup_kind_mismatch")
+    if base["read_only"] is not True or base["mutated"] is not False:
+        blocked_reasons.append("previous_evidence_rollup_not_read_only")
+    if base["default_retrieval_unchanged"] is not True:
+        blocked_reasons.append("previous_evidence_rollup_default_retrieval_changed")
+    if raw.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("previous_evidence_rollup_ordinary_auto_approval_enabled")
+    if raw.get("expected_policy") != expected_policy:
+        blocked_reasons.append("previous_evidence_rollup_policy_mismatch")
+    if quality_gate.get("pass") is not True:
+        blocked_reasons.append("previous_evidence_rollup_not_green")
+    if _safe_int(evidence_summary.get("green_report_count")) < prior_apply_count:
+        blocked_reasons.append("previous_evidence_rollup_green_report_count_below_prior_apply_count")
+    if _safe_int(evidence_summary.get("applied_memory_count")) < prior_apply_count:
+        blocked_reasons.append("previous_evidence_rollup_applied_memory_count_below_prior_apply_count")
+    if _safe_int(evidence_summary.get("unique_trace_ref_count")) < prior_apply_count:
+        blocked_reasons.append("previous_evidence_rollup_unique_trace_ref_count_below_prior_apply_count")
+    if evidence_summary.get("apply_supported") is not False or evidence_summary.get("apply_executed") is not False:
+        blocked_reasons.append("previous_evidence_rollup_grants_apply_authority")
+    if evidence_summary.get("default_auto_approval_enabled") is not False:
+        blocked_reasons.append("previous_evidence_rollup_default_auto_approval_enabled")
+    if any(value is True for value in forbidden.values()):
+        blocked_reasons.append("previous_evidence_rollup_forbidden_authority_granted")
+    if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+        blocked_reasons.append("previous_evidence_rollup_privacy_not_ref_safe")
+    blocked_unique = sorted(set(blocked_reasons))
+    return {
+        "provided": True,
+        "required": True,
+        "path": base["path"],
+        "sha256": base["report_sha256"],
+        "quality_gate_pass": quality_gate.get("pass") is True,
+        "green_report_count": _safe_int(evidence_summary.get("green_report_count")),
+        "applied_memory_count": _safe_int(evidence_summary.get("applied_memory_count")),
+        "unique_trace_ref_count": _safe_int(evidence_summary.get("unique_trace_ref_count")),
+        "blocked_reasons": blocked_unique,
+    }
+
+
 def _dogfood_ordinary_turn_default_automation_apply_payload(args: argparse.Namespace) -> dict[str, Any]:
     approval_phrase = "apply-exact-ordinary-turn-default-automation-candidate-v1"
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
@@ -7669,6 +7740,15 @@ def _dogfood_ordinary_turn_default_automation_apply_payload(args: argparse.Names
     dry_run = _load_ordinary_turn_default_automation_dry_run_for_apply(args.dry_run_report, trace_ref=trace_ref)
     if dry_run["blocked_reasons"]:
         raise ValueError("ordinary_turn_default_automation_dry_run_not_green: " + ",".join(dry_run["blocked_reasons"]))
+    policy_state, policy_state_blocked_reasons = _load_default_automation_policy_state_for_dry_run(
+        args.policy_state_config,
+        expected_policy=args.policy,
+        max_candidates=1,
+    )
+    if not policy_state.get("provided"):
+        policy_state_blocked_reasons.append("policy_state_required_for_default_automation_apply")
+    if policy_state_blocked_reasons:
+        raise ValueError("ordinary_turn_default_automation_policy_state_not_enabled: " + ",".join(sorted(set(policy_state_blocked_reasons))))
 
     db_path = args.db_path.expanduser().resolve(strict=False)
     backup_path = (args.backup_path or db_path.with_suffix(db_path.suffix + ".ordinary-turn-default-automation-apply.bak")).expanduser().resolve(strict=False)
@@ -7710,6 +7790,22 @@ def _dogfood_ordinary_turn_default_automation_apply_payload(args: argparse.Names
                 "ordinary_turn_inferred_approved_as",
             }:
                 raise ValueError("ordinary_turn_default_automation_trace_already_applied")
+        prior_default_automation_apply_count = _safe_int(
+            connection.execute(
+                "SELECT COUNT(*) FROM relations WHERE relation_type = 'ordinary_turn_default_automation_approved_as'"
+            ).fetchone()[0]
+        )
+
+    previous_evidence_rollup = _load_default_automation_previous_evidence_rollup_for_apply(
+        args.previous_evidence_rollup,
+        expected_policy=args.policy,
+        prior_apply_count=prior_default_automation_apply_count,
+    )
+    if previous_evidence_rollup["blocked_reasons"]:
+        raise ValueError(
+            "ordinary_turn_default_automation_previous_evidence_rollup_not_fresh: "
+            + ",".join(previous_evidence_rollup["blocked_reasons"])
+        )
 
     shutil.copy2(db_path, backup_path)
     backup_sha256 = _sha256_file(backup_path)
@@ -7793,6 +7889,12 @@ def _dogfood_ordinary_turn_default_automation_apply_payload(args: argparse.Names
         "ordinary_conversation_auto_approval": False,
         "policy": args.policy,
         "dry_run_evidence": dry_run,
+        "policy_state": policy_state,
+        "freshness_evidence": {
+            "prior_default_automation_apply_count": prior_default_automation_apply_count,
+            "previous_evidence_rollup_required": prior_default_automation_apply_count > 0,
+            "previous_evidence_rollup": previous_evidence_rollup,
+        },
         "backup": {"path": str(backup_path), "sha256": backup_sha256},
         "apply": {
             "applied_count": 1,
@@ -19417,6 +19519,8 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("db_path", type=Path)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--trace-ref", required=True)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--dry-run-report", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--policy-state-config", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--previous-evidence-rollup", type=Path)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--policy", required=True)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--approval-phrase", required=True)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--actor", required=True)

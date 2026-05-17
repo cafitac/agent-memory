@@ -1,7 +1,26 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:03 KST
+Last updated: 2026-05-17 17:16 KST
+
+## Just completed: default automation apply-boundary policy-state/freshness enforcement
+
+- `dogfood ordinary-turn-default-automation-apply` now requires `--policy-state-config` and fail-closes unless the opt-in policy state is present, enabled, same-policy, exact-review/fresh-verifier guarded, disable-switch available, and still denies ordinary/background/unattended/default authority.
+- Added `--previous-evidence-rollup`; after any prior `ordinary_turn_default_automation_approved_as` relation exists, the next apply is blocked unless a green default-automation evidence-rollup proves prior post-apply verification coverage.
+- Apply output now carries redacted `policy_state` plus `freshness_evidence` so the boundary is auditable without raw turn/reason/report content.
+- Validation passed: new apply-boundary tests plus existing apply/post-apply cases `5 passed`, default-automation focused `19 passed`, broader ordinary-turn `38 passed`, full suite rerun `393 passed, 1 xfailed` after one unrelated retrieval-eval regression test passed on immediate isolated rerun.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.999%.
+- Remaining gap: finalize full-suite/CI validation, then add source/copy-live smoke for the new freshness boundary and decide whether any broader scheduler wiring is still allowed under explicit opt-in only.
+
+Recommended next work now:
+
+1. Finish full suite, commit/push this apply-boundary checkpoint, and watch CI.
+2. Run a copy-live/source smoke that exercises apply with enabled policy state and, for repeated apply, a fresh previous evidence rollup.
+3. Keep broad ordinary conversation auto-approval, default/background unattended apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Just completed: default automation policy-state read-path enforcement
 

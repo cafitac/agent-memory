@@ -16699,8 +16699,10 @@ def test_dogfood_ordinary_turn_default_automation_apply_promotes_one_exact_candi
     db_path = tmp_path / "ordinary-turn-default-automation-apply.db"
     backup_path = tmp_path / "ordinary-turn-default-automation-apply.backup.db"
     dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
     output_path = tmp_path / "ordinary-turn-default-automation-apply.json"
     initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
     trace = insert_experience_trace(
         db_path,
         surface="hermes-pre-llm-hook",
@@ -16729,6 +16731,8 @@ def test_dogfood_ordinary_turn_default_automation_apply_promotes_one_exact_candi
             f"experience_trace:{trace.id}",
             "--dry-run-report",
             str(dry_run_report),
+            "--policy-state-config",
+            str(policy_state_path),
             "--policy",
             "ordinary-turn-default-automation-policy-v1",
             "--approval-phrase",
@@ -16806,12 +16810,238 @@ def test_dogfood_ordinary_turn_default_automation_apply_promotes_one_exact_candi
         )
 
 
+
+def _write_ordinary_turn_default_automation_evidence_rollup_report(
+    path: Path,
+    *,
+    green_report_count: int = 1,
+    applied_memory_count: int = 1,
+    unique_trace_ref_count: int = 1,
+    pass_gate: bool = True,
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_evidence_rollup",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "expected_policy": "ordinary-turn-default-automation-policy-v1",
+                "evidence_summary": {
+                    "report_count": green_report_count,
+                    "green_report_count": green_report_count,
+                    "applied_memory_count": applied_memory_count,
+                    "unique_trace_ref_count": unique_trace_ref_count,
+                    "unique_memory_ref_count": applied_memory_count,
+                    "min_green_reports": 1,
+                    "ready_for_default_enablement_design": pass_gate,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "default_auto_approval_enabled": False,
+                },
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "blocked_reasons": [] if pass_gate else ["not_green"],
+                    "decision": "ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only"
+                    if pass_gate
+                    else "collect_more_ordinary_turn_default_automation_evidence_before_enablement_design",
+                },
+                "forbidden_authority": {
+                    "executes_apply": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                    "aggregate_only": True,
+                    "report_hashes_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_dogfood_ordinary_turn_default_automation_apply_blocks_missing_or_disabled_policy_state(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-apply-policy-state.db"
+    dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    missing_policy_state = tmp_path / "missing-policy-state.json"
+    disabled_policy_state = tmp_path / "disabled-policy-state.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_state(disabled_policy_state, enabled=False)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="c" * 64,
+        summary="User prefers concise terminal summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    _write_ordinary_turn_default_automation_dry_run_report(dry_run_report, trace_ref=f"experience_trace:{trace.id}")
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    for policy_state_path, expected_reason in [
+        (missing_policy_state, "policy_state_missing"),
+        (disabled_policy_state, "policy_state_manual_opt_in_disabled"),
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "dogfood",
+                "ordinary-turn-default-automation-apply",
+                str(db_path),
+                "--trace-ref",
+                f"experience_trace:{trace.id}",
+                "--dry-run-report",
+                str(dry_run_report),
+                "--policy-state-config",
+                str(policy_state_path),
+                "--policy",
+                "ordinary-turn-default-automation-policy-v1",
+                "--approval-phrase",
+                "apply-exact-ordinary-turn-default-automation-candidate-v1",
+                "--actor",
+                "test-operator",
+                "--reason",
+                "should fail because policy state is not enabled",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode != 0
+        assert expected_reason in result.stderr
+        assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+def test_dogfood_ordinary_turn_default_automation_apply_requires_previous_rollup_after_prior_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-apply-freshness.db"
+    dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "default-automation-evidence-rollup.json"
+    output_path = tmp_path / "ordinary-turn-default-automation-apply.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    first_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary="User prefers short answers.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    second_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="e" * 64,
+        summary="User prefers concise terminal summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    # Simulate one previous exact-approved default automation application.
+    insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{first_trace.id}",
+        relation_type="ordinary_turn_default_automation_approved_as",
+        to_ref="fact:999",
+        evidence_ids=[],
+        confidence=0.8,
+        review_actor="prior-operator",
+        review_reason="prior exact approval",
+    )
+    _write_ordinary_turn_default_automation_dry_run_report(dry_run_report, trace_ref=f"experience_trace:{second_trace.id}")
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+    base_cmd = [
+        sys.executable,
+        "-m",
+        "agent_memory.api.cli",
+        "dogfood",
+        "ordinary-turn-default-automation-apply",
+        str(db_path),
+        "--trace-ref",
+        f"experience_trace:{second_trace.id}",
+        "--dry-run-report",
+        str(dry_run_report),
+        "--policy-state-config",
+        str(policy_state_path),
+        "--policy",
+        "ordinary-turn-default-automation-policy-v1",
+        "--approval-phrase",
+        "apply-exact-ordinary-turn-default-automation-candidate-v1",
+        "--actor",
+        "test-operator",
+        "--reason",
+        "exact operator approval after fresh rollup",
+        "--output",
+        str(output_path),
+    ]
+
+    missing_rollup = subprocess.run(
+        base_cmd,
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_rollup.returncode != 0
+    assert "previous_evidence_rollup_required_after_prior_default_automation_apply" in missing_rollup.stderr
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+    with_rollup = subprocess.run(
+        [*base_cmd, "--previous-evidence-rollup", str(previous_rollup_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert with_rollup.returncode == 0, with_rollup.stderr
+    payload = json.loads(with_rollup.stdout)
+    assert payload["freshness_evidence"]["prior_default_automation_apply_count"] == 1
+    assert payload["freshness_evidence"]["previous_evidence_rollup_required"] is True
+    assert payload["freshness_evidence"]["previous_evidence_rollup"]["quality_gate_pass"] is True
+    assert payload["forbidden_authority"]["repeated_apply_without_new_approval_allowed"] is False
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "ordinary-turn-default-automation-apply-red.db"
     dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run-red.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
     initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
     trace = insert_experience_trace(
         db_path,
         surface="hermes-pre-llm-hook",
@@ -16842,6 +17072,8 @@ def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_witho
             f"experience_trace:{trace.id}",
             "--dry-run-report",
             str(dry_run_report),
+            "--policy-state-config",
+            str(policy_state_path),
             "--policy",
             "ordinary-turn-default-automation-policy-v1",
             "--approval-phrase",
@@ -16869,10 +17101,12 @@ def test_dogfood_ordinary_turn_default_automation_post_apply_verification_green_
     db_path = tmp_path / "ordinary-turn-default-automation-post-apply.db"
     backup_path = tmp_path / "ordinary-turn-default-automation-post-apply.backup.db"
     dry_run_report = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
     apply_report = tmp_path / "ordinary-turn-default-automation-apply.json"
     rollback_report = tmp_path / "ordinary-turn-default-automation-rollback.json"
     output_path = tmp_path / "ordinary-turn-default-automation-post-apply-verification.json"
     initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
     trace = insert_experience_trace(
         db_path,
         surface="hermes-pre-llm-hook",
@@ -16900,6 +17134,8 @@ def test_dogfood_ordinary_turn_default_automation_post_apply_verification_green_
             f"experience_trace:{trace.id}",
             "--dry-run-report",
             str(dry_run_report),
+            "--policy-state-config",
+            str(policy_state_path),
             "--policy",
             "ordinary-turn-default-automation-policy-v1",
             "--approval-phrase",
