@@ -16262,6 +16262,260 @@ def test_dogfood_ordinary_turn_default_automation_policy_gate_blocks_red_readine
     assert payload["ordinary_conversation_auto_approval"] is False
 
 
+
+def _write_ordinary_turn_default_automation_policy_gate_report(
+    path: Path,
+    *,
+    pass_gate: bool = True,
+    ready_for_opt_in_dry_run: bool = True,
+    blocked_reasons: list[str] | None = None,
+) -> None:
+    blocked = blocked_reasons or ([] if pass_gate else ["policy_gate_not_ready"])
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_policy_gate",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "evidence_requirements": {
+                    "broader_readiness_green": pass_gate,
+                    "readiness_score_percent": 100 if pass_gate else 80,
+                    "inferred_rollup_green_report_count": 2 if pass_gate else 1,
+                    "secret_like_ordinary_turn_count": 0 if pass_gate else 1,
+                    "min_independent_green_windows": 2,
+                },
+                "policy_contract": {
+                    "policy": "ordinary-turn-default-automation-policy-v1",
+                    "required_enablement_approval_phrase": "enable-opt-in-ordinary-turn-default-automation-v1",
+                    "ready_for_opt_in_dry_run": ready_for_opt_in_dry_run,
+                    "default_auto_approval_enabled": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "max_candidates_per_run": 1,
+                    "min_independent_green_windows": 2,
+                    "allowed_memory_shapes": ["preference"],
+                    "requires_non_secret_trace": True,
+                    "requires_conflict_preflight": True,
+                    "requires_backup_before_apply": True,
+                    "requires_post_apply_verification": True,
+                    "requires_rollback_replay": True,
+                    "requires_operator_review_before_default_enablement": True,
+                },
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "decision": "ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked"
+                    if pass_gate
+                    else "ordinary_turn_default_automation_policy_not_ready_keep_default_blocked",
+                    "blocked_reasons": blocked,
+                },
+                "forbidden_authority": {
+                    "executes_apply": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "unattended_batch_apply_allowed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                    "sample_values_included": False,
+                    "aggregate_only": True,
+                },
+                "private_raw_body": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_dogfood_ordinary_turn_default_automation_dry_run_lists_ref_safe_candidates(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-dry-run.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    output_path = tmp_path / "ordinary-turn-default-automation-dry-run.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="User prefers concise terminal summaries.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="User password=SHOULD_NOT_LEAK.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="c" * 64,
+        summary="Please run the tests.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-dry-run",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--limit",
+            "20",
+            "--max-candidates",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "concise terminal summaries" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_dry_run"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_dry_run_ready_for_exact_single_candidate_review_keep_default_blocked",
+        "blocked_reasons": [],
+    }
+    assert payload["candidate_counts"] == {
+        "ordinary_turn_count": 3,
+        "eligible_preference_candidate_count": 1,
+        "selected_candidate_count": 1,
+        "blocked_secret_like_count": 1,
+        "non_preference_memory_worthy_count": 0,
+        "deferred_candidate_count": 0,
+    }
+    assert payload["candidate_refs"] == ["experience_trace:1"]
+    assert payload["candidate_preview"][0]["memory_shape"] == "preference"
+    assert payload["candidate_preview"][0]["summary_sha256"] == hashlib.sha256(
+        b"User prefers concise terminal summaries."
+    ).hexdigest()
+    assert payload["policy_contract"]["apply_supported"] is False
+    assert payload["policy_contract"]["default_auto_approval_enabled"] is False
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert payload["privacy"] == {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+        "sample_values_included": False,
+        "summary_hash_included": True,
+        "content_hash_included": True,
+        "actionable_trace_ref_included": True,
+        "aggregate_only": False,
+        "review_packet_without_raw_text": True,
+    }
+    assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
+
+
+def test_dogfood_ordinary_turn_default_automation_dry_run_blocks_red_policy_gate(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-dry-run-red.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate-red.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(
+        gate_path,
+        pass_gate=False,
+        ready_for_opt_in_dry_run=False,
+        blocked_reasons=["secret_like_ordinary_turns_present"],
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary="User prefers compact output.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-dry-run",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--max-candidates",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_default_automation_dry_run_not_ready_keep_default_blocked",
+        "blocked_reasons": [
+            "policy_gate_not_green",
+            "policy_gate_not_ready_for_opt_in_dry_run",
+        ],
+    }
+    assert payload["candidate_counts"]["selected_candidate_count"] == 0
+    assert payload["policy_contract"]["default_auto_approval_enabled"] is False
+    assert payload["ordinary_conversation_auto_approval"] is False
+
+
 def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_apply(
     tmp_path: Path,
 ) -> None:

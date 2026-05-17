@@ -1,38 +1,38 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:24 KST
+Last updated: 2026-05-17 10:36 KST
 
-## Checkpoint: ordinary-turn default automation policy gate
+## Checkpoint: ordinary-turn default automation dry-run
 
-The source checkout now has `dogfood ordinary-turn-default-automation-policy-gate`, a read-only exact policy contract gate for the next step toward default/background ordinary-turn automation.
+The source checkout now has `dogfood ordinary-turn-default-automation-dry-run`, a read-only/ref-safe candidate scanner under the exact default automation policy gate.
 
 What changed:
 
-- The command consumes a saved `dogfood_ordinary_turn_broader_automation_readiness` artifact.
-- It validates the artifact is kind-matched, green, read-only, non-mutating, default-retrieval-safe, privacy-safe, still ordinary-auto-approval false, and free of forbidden authority.
-- It enforces `ordinary-turn-default-automation-policy-v1`, minimum independent green windows, readiness score 100, zero secret-like ordinary turns, and a bounded max-candidates-per-run contract.
-- It records the future opt-in enablement phrase `enable-opt-in-ordinary-turn-default-automation-v1` but does not consume that phrase, mutate DB state, or enable defaults.
-- Green means only `ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked`.
+- The command consumes a saved `dogfood_ordinary_turn_default_automation_policy_gate` artifact.
+- It validates the artifact kind, policy, read-only/no-mutation/default-unchanged flags, ref/privacy safety, ordinary-auto-approval still false, no forbidden authority, and dry-run readiness.
+- It bounds selected candidates by the policy gate's `max_candidates_per_run`.
+- It scans only non-secret preference-shaped ordinary turns (`User prefers ...`) and emits trace refs plus content/summary hashes, not raw summaries or raw content.
+- Green means only `ordinary_turn_default_automation_dry_run_ready_for_exact_single_candidate_review_keep_default_blocked`.
 
 Validation:
 
-- RED observed: invalid `ordinary-turn-default-automation-policy-gate` subcommand.
-- Focused GREEN: `4 passed, 190 deselected`.
-- Broader ordinary-turn GREEN: `21 passed, 173 deselected`.
-- Full suite GREEN: `376 passed, 1 xfailed`.
+- RED observed: invalid `ordinary-turn-default-automation-dry-run` subcommand.
+- Focused GREEN: `4 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `23 passed, 173 deselected`.
+- Full suite GREEN: `378 passed, 1 xfailed`.
 
 Current estimate:
 
 - Safety-gated operational north-star: still approximately 99%+.
-- Literal scoped human-brain-like local memory lifecycle: approximately 99.95-99.97%.
-- Remaining gap: opt-in dry-run/report over live ordinary-turn candidates under this exact policy, then a separately exact-approved one-candidate default-automation smoke only if repeated dry-runs stay green. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.97-99.98%.
+- Remaining gap: a separate exact-reviewed one-candidate default-automation smoke/apply corridor, then repeated post-apply verification/rollback evidence, before any opt-in default enablement. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
 
 Recommended next work now:
 
-1. Commit/push this default-automation policy-gate checkpoint and watch CI.
-2. Add `ordinary-turn-default-automation-dry-run` as read-only/ref-safe candidate scanning under the exact policy gate.
-3. Do not enable ordinary conversation auto-approval or unattended default/background apply from this policy gate alone.
+1. Commit/push this default-automation dry-run checkpoint and watch CI.
+2. Add a separate exact-reviewed one-candidate default-automation smoke/apply corridor that consumes the dry-run artifact, requires actor/reason/backup/conflict checks, and stops after one candidate.
+3. Do not enable ordinary conversation auto-approval or unattended default/background apply from this dry-run.
 
 ## Checkpoint: ordinary-turn broader automation readiness gate
 

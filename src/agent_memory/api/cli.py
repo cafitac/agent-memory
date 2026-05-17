@@ -7317,6 +7317,177 @@ def _dogfood_ordinary_turn_default_automation_policy_gate_payload(args: argparse
     return payload
 
 
+def _dogfood_ordinary_turn_default_automation_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-dry-run --policy must be "
+            f"{_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY}"
+        )
+    if args.limit < 1:
+        raise ValueError("dogfood ordinary-turn-default-automation-dry-run limit must be >= 1")
+    if args.max_candidates < 1:
+        raise ValueError("dogfood ordinary-turn-default-automation-dry-run --max-candidates must be >= 1")
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    gate, gate_artifact = _read_json_artifact_summary(args.policy_gate)
+    blocked_reasons: list[str] = []
+    gate_ready = False
+    gate_contract: dict[str, Any] = {}
+    if gate is None:
+        blocked_reasons.append("policy_gate_unreadable")
+    else:
+        if gate.get("kind") != "dogfood_ordinary_turn_default_automation_policy_gate":
+            blocked_reasons.append("policy_gate_kind_mismatch")
+        if gate.get("read_only") is not True or gate.get("mutated") is not False:
+            blocked_reasons.append("policy_gate_not_read_only")
+        if gate.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("policy_gate_default_retrieval_changed")
+        if gate.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("policy_gate_ordinary_auto_approval_enabled")
+        quality = gate.get("quality_gate", {}) if isinstance(gate.get("quality_gate"), dict) else {}
+        if quality.get("pass") is not True:
+            blocked_reasons.append("policy_gate_not_green")
+        gate_contract = gate.get("policy_contract", {}) if isinstance(gate.get("policy_contract"), dict) else {}
+        gate_ready = gate_contract.get("ready_for_opt_in_dry_run") is True
+        if not gate_ready:
+            blocked_reasons.append("policy_gate_not_ready_for_opt_in_dry_run")
+        if gate_contract.get("policy") != args.policy:
+            blocked_reasons.append("policy_gate_policy_mismatch")
+        for key in (
+            "default_auto_approval_enabled",
+            "default_background_auto_approval_allowed",
+            "unattended_default_apply_allowed",
+            "apply_supported",
+            "apply_executed",
+        ):
+            if gate_contract.get(key) is not False:
+                blocked_reasons.append(f"policy_gate_{key}_not_blocked")
+        if args.max_candidates > _safe_int(gate_contract.get("max_candidates_per_run")):
+            blocked_reasons.append("max_candidates_exceeds_policy_gate")
+        privacy = gate.get("privacy", {}) if isinstance(gate.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+            blocked_reasons.append("policy_gate_privacy_not_ref_safe")
+        forbidden = gate.get("forbidden_authority", {}) if isinstance(gate.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in forbidden.values()):
+            blocked_reasons.append("policy_gate_forbidden_authority_granted")
+
+    traces = list_experience_traces(db_path, limit=args.limit)
+    ordinary_turns = [trace for trace in traces if trace.event_kind == "turn"]
+    blocked_secret_like = [trace for trace in ordinary_turns if _contains_secret_like_report_text(trace.summary)]
+    eligible_preference: list[Any] = []
+    non_preference_memory_worthy = 0
+    for trace in ordinary_turns:
+        if _contains_secret_like_report_text(trace.summary):
+            continue
+        if _metadata_bool(trace.metadata.get("ordinary_turn")) is False:
+            continue
+        predicted, reason = _ordinary_turn_memory_worthiness_classification_for_trace(trace)
+        if not predicted:
+            continue
+        if _remember_preference_object_from_summary(trace.summary) is not None:
+            eligible_preference.append(trace)
+        else:
+            non_preference_memory_worthy += 1
+
+    selected = eligible_preference[: args.max_candidates] if gate_ready and not blocked_reasons else []
+    if not blocked_reasons and not selected:
+        blocked_reasons.append("no_eligible_preference_candidates")
+    blocked_unique = sorted(set(blocked_reasons))
+    ready = not blocked_unique
+    candidate_preview: list[dict[str, Any]] = []
+    for trace in selected:
+        predicted, reason = _ordinary_turn_memory_worthiness_classification_for_trace(trace)
+        candidate_preview.append(
+            {
+                "trace_ref": f"experience_trace:{trace.id}",
+                "content_sha256": trace.content_sha256,
+                "summary_sha256": hashlib.sha256((trace.summary or "").encode("utf-8")).hexdigest(),
+                "created_at": trace.created_at,
+                "surface": trace.surface,
+                "scope": trace.scope,
+                "retention_policy": trace.retention_policy,
+                "predicted_memory_worthy": predicted,
+                "classified_reason": reason,
+                "memory_shape": "preference",
+                "requires_exact_apply_review": True,
+            }
+        )
+
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_dry_run",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "input_artifacts": {
+            "policy_gate": gate_artifact,
+        },
+        "policy_contract": {
+            "policy": args.policy,
+            "ready_for_opt_in_dry_run": gate_ready and not blocked_unique,
+            "default_auto_approval_enabled": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "apply_supported": False,
+            "apply_executed": False,
+            "max_candidates_per_run": args.max_candidates,
+            "allowed_memory_shapes": ["preference"],
+            "requires_exact_apply_review": True,
+            "requires_backup_before_apply": True,
+            "requires_post_apply_verification": True,
+            "requires_rollback_replay": True,
+        },
+        "candidate_counts": {
+            "ordinary_turn_count": len(ordinary_turns),
+            "eligible_preference_candidate_count": len(eligible_preference),
+            "selected_candidate_count": len(selected),
+            "blocked_secret_like_count": len(blocked_secret_like),
+            "non_preference_memory_worthy_count": non_preference_memory_worthy,
+            "deferred_candidate_count": max(len(eligible_preference) - len(selected), 0) if selected else 0,
+        },
+        "candidate_refs": [item["trace_ref"] for item in candidate_preview],
+        "candidate_preview": candidate_preview,
+        "quality_gate": {
+            "pass": ready,
+            "decision": "ordinary_turn_default_automation_dry_run_ready_for_exact_single_candidate_review_keep_default_blocked"
+            if ready
+            else "ordinary_turn_default_automation_dry_run_not_ready_keep_default_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "unattended_batch_apply_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "sample_values_included": False,
+            "summary_hash_included": True,
+            "content_hash_included": True,
+            "actionable_trace_ref_included": True,
+            "aggregate_only": False,
+            "review_packet_without_raw_text": True,
+        },
+        "recommended_next_step": "review_one_candidate_then_use_separate_exact_apply_corridor"
+        if ready
+        else "fix_policy_gate_or_candidate_evidence_before_any_apply",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tuple[bool, str]:
     if _contains_secret_like_report_text(summary):
         return False, "secret_like"
@@ -18147,6 +18318,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--min-independent-green-windows", type=int, default=2)
     dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--max-candidates-per-run", type=int, default=1)
     dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_dry_run_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-dry-run",
+        help="Read-only opt-in dry-run over ordinary-turn candidates under the exact default automation policy gate.",
+    )
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--policy-gate", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--policy", default=_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--max-candidates", type=int, default=1)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_label_packet_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-label-packet",
         help="Build a read-only raw-text-free packet of ordinary turns for local human labeling while keeping auto-approval blocked.",
@@ -19615,6 +19796,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-policy-gate":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_policy_gate_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-dry-run":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_dry_run_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-label-packet":
             print(json.dumps(_dogfood_ordinary_turn_label_packet_payload(args), indent=2))

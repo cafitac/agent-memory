@@ -1,27 +1,28 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:24 KST
+Last updated: 2026-05-17 10:36 KST
 
-## Just completed: ordinary-turn default automation policy gate
+## Just completed: ordinary-turn default automation dry-run
 
-- Added `dogfood ordinary-turn-default-automation-policy-gate`, a read-only exact policy contract gate over saved `dogfood_ordinary_turn_broader_automation_readiness` artifacts.
-- It validates kind, green quality gate, read-only/no-mutation/default-unchanged flags, privacy safety, ordinary-auto-approval still false, no forbidden authority, readiness score 100, minimum independent green windows, and zero secret-like ordinary turns.
-- It records policy `ordinary-turn-default-automation-policy-v1` and future enablement phrase `enable-opt-in-ordinary-turn-default-automation-v1`, but green means only opt-in dry-run readiness: `ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked`.
-- It keeps `default_auto_approval_enabled=false`, `default_background_auto_approval_allowed=false`, `unattended_default_apply_allowed=false`, `apply_supported=false`, and `apply_executed=false`.
-- Validation: RED invalid subcommand; focused GREEN `4 passed, 190 deselected`; broader ordinary-turn GREEN `21 passed, 173 deselected`; full suite GREEN `376 passed, 1 xfailed`.
+- Added `dogfood ordinary-turn-default-automation-dry-run`, a read-only/ref-safe candidate scanner under the exact default automation policy gate.
+- It validates a saved green `dogfood_ordinary_turn_default_automation_policy_gate` artifact and scans only non-secret preference-shaped ordinary turns.
+- Output is local review material only: trace refs, content/summary hashes, coarse metadata, and aggregate counts. It excludes raw summaries, transcripts, queries, content, reasons, report bodies, and sample values.
+- Green means only `ordinary_turn_default_automation_dry_run_ready_for_exact_single_candidate_review_keep_default_blocked`.
+- It keeps `default_auto_approval_enabled=false`, `default_background_auto_approval_allowed=false`, `unattended_default_apply_allowed=false`, `apply_supported=false`, `apply_executed=false`, and `ordinary_conversation_auto_approval=false`.
+- Validation: RED invalid subcommand; focused GREEN `4 passed, 192 deselected`; broader ordinary-turn GREEN `23 passed, 173 deselected`; full suite GREEN `378 passed, 1 xfailed`.
 
 Current estimate:
 
 - Safety-gated operational north-star: still approximately 99%+.
-- Literal scoped human-brain-like local memory lifecycle: approximately 99.95-99.97%.
-- Remaining gap: opt-in dry-run/report over live ordinary-turn candidates under this exact policy, then a separately exact-approved one-candidate default-automation smoke only if repeated dry-runs stay green.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.97-99.98%.
+- Remaining gap: a separate exact-reviewed one-candidate default-automation smoke/apply corridor, then repeated post-apply verification/rollback evidence, before any opt-in default enablement.
 
 Recommended next work now:
 
-1. Commit/push this policy-gate checkpoint and watch CI.
-2. Continue toward 100% by adding read-only `ordinary-turn-default-automation-dry-run` under the exact policy gate.
-3. Do not enable ordinary conversation auto-approval or unattended default/background apply from this gate alone.
+1. Commit/push this dry-run checkpoint and watch CI.
+2. Continue toward 100% by adding a separate exact-reviewed one-candidate default-automation smoke/apply corridor that consumes the dry-run artifact and stops after one candidate.
+3. Do not enable ordinary conversation auto-approval or unattended default/background apply from the dry-run.
 
 ## Just completed: ordinary-turn broader automation readiness gate
 
