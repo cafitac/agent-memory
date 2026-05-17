@@ -1,7 +1,7 @@
 # post-v0.1.162 default automation disabled recurring scheduler config materialization
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 02:55 KST
+Last updated: 2026-05-18 03:02 KST
 
 ## Summary
 
@@ -47,7 +47,7 @@ The written config has:
 - `later_enablement_requires_separate_approval=true`
 - `later_background_or_cron_requires_separate_approval=true`
 
-This is compatible with the existing scheduler integration fail-closed behavior: a config with `enabled=false` blocks before runner invocation.
+This is compatible with the existing scheduler integration fail-closed behavior: a config with `enabled=false` blocks before runner invocation. The checkpoint now proves this using the actual materialized config as scheduler-integration input.
 
 ## Positive local smoke
 
@@ -80,6 +80,7 @@ RED observed:
 GREEN validation:
 
 - `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"`: `3 passed, 227 deselected`
+- `tests/test_cli.py -q -k "disabled_recurring_scheduler_config_materialize"`: `1 passed, 229 deselected`
 - `tests/test_cli.py -q -k "ordinary_turn_default_automation"`: `38 passed, 192 deselected`
 
 Full-suite validation still needs to run for this checkpoint before push.
@@ -93,4 +94,4 @@ Remaining gap is now the separately approved path from disabled config to enable
 
 ## Recommended next safe slice
 
-Add a disabled-config integration smoke that feeds the materialized disabled config to the scheduler integration and proves runner invocation remains false with `scheduler_config_disabled`. Then design the separately approved enabled-config preflight; still do not enable background/cron.
+Design the separately approved enabled-config preflight; still do not enable background/cron. The next safe implementation should remain preflight/status-only until CI, kill-switch, rollback, and cadence watchdog contracts are present.

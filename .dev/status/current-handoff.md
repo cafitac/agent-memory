@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 02:55 KST
+Last updated: 2026-05-18 03:02 KST
 
 ## Current checkpoint: disabled recurring scheduler config materialization
 
@@ -11,9 +11,9 @@ Last updated: 2026-05-18 02:55 KST
 - The materialized config records validation hash and keeps policy-state/fresh-evidence/package-stop/CI/rollback requirements present as data.
 - Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-materialize-20260517T175433Z/disabled-recurring-scheduler-config-materialize.json`.
 - Materialized config: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-materialize-20260517T175433Z/ordinary-turn-default-automation-recurring-scheduler.disabled.json`.
-- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `3 passed, 227 deselected`; `tests/test_cli.py -q -k "ordinary_turn_default_automation"` -> `38 passed, 192 deselected`; full suite still pending for this checkpoint.
+- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `3 passed, 227 deselected`; `tests/test_cli.py -q -k "disabled_recurring_scheduler_config_materialize"` -> `1 passed, 229 deselected`; `tests/test_cli.py -q -k "ordinary_turn_default_automation"` -> `38 passed, 192 deselected`; full suite still pending for this checkpoint.
 - Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999992%+.
-- Next safe slice: feed the materialized disabled config through scheduler integration and prove runner invocation remains false with `scheduler_config_disabled`; no enabled recurrence/background/cron yet.
+- Latest test update feeds the materialized disabled config through scheduler integration and proves runner invocation remains false with `scheduler_config_disabled`; next safe slice is enabled-config preflight design only, still no enabled recurrence/background/cron.
 
 Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-disabled-recurring-scheduler-config-materialization.md`
 

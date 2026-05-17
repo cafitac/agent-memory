@@ -19066,6 +19066,69 @@ def test_dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_c
         "writes_disabled_config_only": True,
     }
 
+    db_path = tmp_path / "materialized-disabled-scheduler-integration.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "previous-evidence-rollup.json"
+    integration_report_dir = tmp_path / "materialized-disabled-scheduler-integration-reports"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="e" * 64,
+        summary="User prefers materialized disabled scheduler configs to block execution.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    integration_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-integration",
+            str(db_path),
+            "--scheduler-config",
+            str(config_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--previous-evidence-rollup",
+            str(previous_rollup_path),
+            "--report-dir",
+            str(integration_report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--scheduler-approval-phrase",
+            "run-one-default-automation-scheduler-cycle-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "materialized disabled scheduler config must still block",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+    assert integration_result.returncode == 0, integration_result.stderr
+    integration_payload = json.loads(integration_result.stdout)
+    assert integration_payload["read_only"] is True
+    assert integration_payload["mutated"] is False
+    assert integration_payload["scheduler_config"]["enabled"] is False
+    assert integration_payload["scheduler_runner"]["invoked"] is False
+    assert "scheduler_config_disabled" in integration_payload["quality_gate"]["blocked_reasons"]
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
 
 
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
