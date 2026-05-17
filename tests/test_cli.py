@@ -18173,6 +18173,105 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smok
     assert _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"]) == source_counts_before
 
 
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_status_summarizes_next_cycle_inputs(
+    tmp_path: Path,
+) -> None:
+    source_db = tmp_path / "ordinary-turn-default-automation-scheduler-status-source.db"
+    report_dir = tmp_path / "scheduler-status-repeated-window-smoke"
+    smoke_output = tmp_path / "scheduler-repeated-window-smoke.json"
+    status_output = tmp_path / "scheduler-status.json"
+    initialize_database(source_db)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    smoke_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-repeated-window-smoke",
+            str(source_db),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "scheduler status source evidence",
+            "--report-dir",
+            str(report_dir),
+            "--output",
+            str(smoke_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert smoke_result.returncode == 0, smoke_result.stderr
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-status",
+            "--repeated-window-smoke-report",
+            str(smoke_output),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--output",
+            str(status_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(status_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_status"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_scheduler_status_green_next_cycle_ready",
+        "blocked_reasons": [],
+    }
+    assert payload["scheduler_status"]["ready_for_next_explicit_scheduler_cycle"] is True
+    assert payload["scheduler_status"]["latest_window_index"] == 2
+    assert payload["scheduler_status"]["green_window_count"] == 2
+    assert payload["scheduler_status"]["all_rollups_reused_as_next_previous_evidence"] is True
+    assert payload["next_cycle_inputs"]["previous_evidence_rollup"].endswith(
+        "ordinary-turn-default-automation-evidence-rollup.json"
+    )
+    assert payload["next_cycle_inputs"]["previous_scheduler_report"].endswith(
+        "default-automation-scheduler-runner.json"
+    )
+    assert payload["next_cycle_inputs"]["post_apply_verification_report"].endswith(
+        "ordinary-turn-default-automation-post-apply-verification.json"
+    )
+    assert payload["next_cycle_inputs"]["scheduler_config"].endswith("default-automation-scheduler-config.json")
+    assert payload["next_cycle_inputs"]["policy_state_config"].endswith(
+        "default-automation-policy-state-enabled.json"
+    )
+    assert payload["next_cycle_inputs"]["policy_gate"].endswith("default-automation-policy-gate.json")
+    assert payload["automation_authority"]["executes_scheduler_cycle"] is False
+    assert payload["automation_authority"]["executes_apply"] is False
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["runbook"]["next_cycle_command"][0:5] == [
+        "agent-memory",
+        "dogfood",
+        "ordinary-turn-default-automation-scheduler-integration",
+        "<copy-or-approved-db>",
+        "--scheduler-config",
+    ]
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:

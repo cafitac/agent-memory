@@ -9060,6 +9060,183 @@ def _dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_pa
 
 
 
+def _dogfood_ordinary_turn_default_automation_scheduler_status_payload(args: argparse.Namespace) -> dict[str, Any]:
+    report_path = args.repeated_window_smoke_report.expanduser().resolve(strict=False)
+    raw_text = report_path.read_text(encoding="utf-8")
+    smoke = json.loads(raw_text)
+    if not isinstance(smoke, dict):
+        smoke = {}
+    quality_gate = smoke.get("quality_gate", {}) if isinstance(smoke.get("quality_gate"), dict) else {}
+    scheduler_windows = smoke.get("scheduler_windows", {}) if isinstance(smoke.get("scheduler_windows"), dict) else {}
+    boundary_checks = smoke.get("boundary_checks", {}) if isinstance(smoke.get("boundary_checks"), dict) else {}
+    artifacts = smoke.get("artifacts", {}) if isinstance(smoke.get("artifacts"), dict) else {}
+    forbidden = smoke.get("forbidden_authority", {}) if isinstance(smoke.get("forbidden_authority"), dict) else {}
+    privacy = smoke.get("privacy", {}) if isinstance(smoke.get("privacy"), dict) else {}
+    windows_raw = scheduler_windows.get("windows", []) if isinstance(scheduler_windows.get("windows"), list) else []
+    windows = [window for window in windows_raw if isinstance(window, dict)]
+    latest_window = windows[-1] if windows else {}
+    latest_index = _safe_int(latest_window.get("index")) if latest_window else 0
+    expected_policy = str(args.expected_policy)
+
+    next_cycle_inputs = {
+        "scheduler_config": str(artifacts.get("scheduler_config")) if artifacts.get("scheduler_config") else None,
+        "policy_state_config": str(artifacts.get("policy_state")) if artifacts.get("policy_state") else None,
+        "policy_gate": str(artifacts.get("policy_gate")) if artifacts.get("policy_gate") else None,
+        "previous_evidence_rollup": str(latest_window.get("package_evidence_rollup_path"))
+        if latest_window.get("package_evidence_rollup_path")
+        else None,
+        "previous_scheduler_report": str(latest_window.get("scheduler_runner_path"))
+        if latest_window.get("scheduler_runner_path")
+        else None,
+        "post_apply_verification_report": str(latest_window.get("package_post_apply_verification_path"))
+        if latest_window.get("package_post_apply_verification_path")
+        else None,
+        "policy": expected_policy,
+        "scheduler_approval_phrase": "run-one-default-automation-scheduler-cycle-v1",
+        "approval_phrase": "apply-exact-ordinary-turn-default-automation-candidate-v1",
+    }
+    blocked_reasons: list[str] = []
+    if smoke.get("kind") != "dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke":
+        blocked_reasons.append("repeated_window_smoke_kind_mismatch")
+    if smoke.get("policy") != expected_policy:
+        blocked_reasons.append("policy_mismatch")
+    if quality_gate.get("pass") is not True:
+        blocked_reasons.append("repeated_window_smoke_not_green")
+    if smoke.get("source_db_mutated") is not False or boundary_checks.get("source_db_unchanged") is not True:
+        blocked_reasons.append("source_db_not_proven_unchanged")
+    if _safe_int(scheduler_windows.get("window_count")) < 2:
+        blocked_reasons.append("scheduler_window_count_below_minimum")
+    if _safe_int(scheduler_windows.get("green_integration_count")) != _safe_int(scheduler_windows.get("window_count")):
+        blocked_reasons.append("not_all_scheduler_integrations_green")
+    if _safe_int(scheduler_windows.get("green_package_count")) != _safe_int(scheduler_windows.get("window_count")):
+        blocked_reasons.append("not_all_scheduler_packages_green")
+    if scheduler_windows.get("all_rollups_reused_as_next_previous_evidence") is not True:
+        blocked_reasons.append("package_rollups_not_reused_as_next_previous_evidence")
+    for key, value in next_cycle_inputs.items():
+        if key in {"policy", "scheduler_approval_phrase", "approval_phrase"}:
+            continue
+        if not value:
+            blocked_reasons.append(f"missing_next_cycle_input_{key}")
+    if forbidden.get("unattended_default_apply_allowed") is not False:
+        blocked_reasons.append("unattended_default_apply_not_blocked")
+    if forbidden.get("default_background_auto_approval_allowed") is not False:
+        blocked_reasons.append("default_background_auto_approval_not_blocked")
+    if smoke.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("ordinary_conversation_auto_approval_not_blocked")
+    privacy_flags = [
+        privacy.get("raw_report_included"),
+        privacy.get("raw_content_included"),
+        privacy.get("raw_trace_summary_included"),
+        privacy.get("raw_transcript_included"),
+        privacy.get("raw_query_text_included"),
+    ]
+    if any(flag is True for flag in privacy_flags):
+        blocked_reasons.append("raw_or_private_content_included")
+    passed = not blocked_reasons
+    next_cycle_command = [
+        "agent-memory",
+        "dogfood",
+        "ordinary-turn-default-automation-scheduler-integration",
+        "<copy-or-approved-db>",
+        "--scheduler-config",
+        str(next_cycle_inputs["scheduler_config"] or "<scheduler-config>"),
+        "--policy-gate",
+        str(next_cycle_inputs["policy_gate"] or "<policy-gate>"),
+        "--policy-state-config",
+        str(next_cycle_inputs["policy_state_config"] or "<policy-state-config>"),
+        "--previous-evidence-rollup",
+        str(next_cycle_inputs["previous_evidence_rollup"] or "<previous-evidence-rollup>"),
+        "--previous-scheduler-report",
+        str(next_cycle_inputs["previous_scheduler_report"] or "<previous-scheduler-report>"),
+        "--post-apply-verification-report",
+        str(next_cycle_inputs["post_apply_verification_report"] or "<post-apply-verification-report>"),
+        "--report-dir",
+        "<next-window-report-dir>",
+        "--policy",
+        expected_policy,
+        "--scheduler-approval-phrase",
+        "run-one-default-automation-scheduler-cycle-v1",
+        "--approval-phrase",
+        "apply-exact-ordinary-turn-default-automation-candidate-v1",
+        "--actor",
+        "<operator-or-scheduler-actor>",
+        "--reason",
+        "<explicit-reason>",
+        "--output",
+        "<next-window-report-dir>/scheduler-integration.json",
+    ]
+    package_command = [
+        "agent-memory",
+        "dogfood",
+        "ordinary-turn-default-automation-scheduler-package",
+        "<copy-or-approved-db>",
+        "--scheduler-integration-report",
+        "<next-window-report-dir>/scheduler-integration.json",
+        "--expected-policy",
+        expected_policy,
+        "--report-dir",
+        "<next-window-report-dir>/scheduler-package-reports",
+        "--output",
+        "<next-window-report-dir>/scheduler-package.json",
+    ]
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_scheduler_status",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy": expected_policy,
+        "source_report": {
+            "path": str(report_path),
+            "sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "kind": smoke.get("kind"),
+            "quality_gate_pass": quality_gate.get("pass") is True,
+        },
+        "scheduler_status": {
+            "ready_for_next_explicit_scheduler_cycle": passed,
+            "latest_window_index": latest_index,
+            "window_count": _safe_int(scheduler_windows.get("window_count")),
+            "green_window_count": min(
+                _safe_int(scheduler_windows.get("green_integration_count")),
+                _safe_int(scheduler_windows.get("green_package_count")),
+            ),
+            "unique_trace_ref_count": _safe_int(scheduler_windows.get("unique_trace_ref_count")),
+            "all_rollups_reused_as_next_previous_evidence": scheduler_windows.get(
+                "all_rollups_reused_as_next_previous_evidence"
+            )
+            is True,
+            "source_db_unchanged": boundary_checks.get("source_db_unchanged") is True,
+            "requires_package_after_next_cycle": True,
+            "requires_fresh_post_apply_verification_before_later_cycle": True,
+        },
+        "next_cycle_inputs": next_cycle_inputs,
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "enables_unattended_default_authority": False,
+            "status_only": True,
+        },
+        "runbook": {
+            "next_cycle_command": next_cycle_command,
+            "required_followup_package_command": package_command,
+            "stop_condition": "after_one_scheduler_cycle_run_package_collector_before_any_later_cycle",
+        },
+        "quality_gate": {
+            "pass": passed,
+            "decision": "ordinary_turn_default_automation_scheduler_status_green_next_cycle_ready"
+            if passed
+            else "ordinary_turn_default_automation_scheduler_status_red_keep_blocked",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "run_the_exact_next_cycle_command_only_on_a_copy_or_explicitly_approved_db_then_run_required_package_collector",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -20918,6 +21095,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_parser.add_argument("--reason", required=True)
     dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_parser.add_argument("--limit", type=int, default=20)
     dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_status_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-scheduler-status",
+        help="Summarize repeated scheduler-window evidence into next-cycle inputs and an operator runbook without executing a cycle.",
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_status_parser.add_argument(
+        "--repeated-window-smoke-report", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_status_parser.add_argument("--expected-policy", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_status_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -22471,6 +22657,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-scheduler-repeated-window-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-scheduler-status":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_status_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))
