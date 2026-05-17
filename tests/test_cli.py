@@ -18103,6 +18103,76 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_package_collects_ver
     assert _table_counts(db_path, ["facts", "relations", "source_records"]) == after_integration_counts
 
 
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke_uses_package_evidence(
+    tmp_path: Path,
+) -> None:
+    source_db = tmp_path / "ordinary-turn-default-automation-scheduler-repeated-source.db"
+    report_dir = tmp_path / "scheduler-repeated-window-smoke"
+    output_path = tmp_path / "scheduler-repeated-window-smoke.json"
+    initialize_database(source_db)
+    source_counts_before = _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-repeated-window-smoke",
+            str(source_db),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "scheduler repeated window exact approval",
+            "--report-dir",
+            str(report_dir),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "repeated scheduler window" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_repeated_window_smoke"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["source_db_mutated"] is False
+    assert payload["copy_db_mutated"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_scheduler_repeated_window_copy_smoke_green",
+        "blocked_reasons": [],
+    }
+    assert payload["scheduler_windows"]["window_count"] == 2
+    assert payload["scheduler_windows"]["green_integration_count"] == 2
+    assert payload["scheduler_windows"]["green_package_count"] == 2
+    assert payload["scheduler_windows"]["unique_trace_ref_count"] == 2
+    assert payload["scheduler_windows"]["all_rollups_reused_as_next_previous_evidence"] is True
+    assert payload["boundary_checks"]["source_db_unchanged"] is True
+    assert payload["boundary_checks"]["second_window_used_first_package_rollup"] is True
+    assert payload["boundary_checks"]["previous_scheduler_report_was_first_window_runner"] is True
+    assert payload["boundary_checks"]["previous_post_apply_verification_was_first_package_verifier"] is True
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["forbidden_authority"]["default_background_auto_approval_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert payload["privacy"]["raw_content_included"] is False
+    assert (report_dir / "window-1" / "scheduler-integration.json").exists()
+    assert (report_dir / "window-1" / "scheduler-package.json").exists()
+    assert (report_dir / "window-2" / "scheduler-integration.json").exists()
+    assert (report_dir / "window-2" / "scheduler-package.json").exists()
+    assert _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"]) == source_counts_before
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:

@@ -1,9 +1,23 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 00:37 KST
+Last updated: 2026-05-18 00:53 KST
 
-## Current checkpoint: scheduler package/collector for post-apply evidence before next cycle
+## Current checkpoint: repeated scheduler-window copy smoke using package evidence as next previous rollup
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-repeated-window-smoke`.
+- It copies the source DB, runs two explicit scheduler integration windows on the copy, packages post-apply evidence after each window, then proves window 2 used window 1 package outputs as its fresh previous evidence.
+- Window 2 consumes window 1 package `ordinary-turn-default-automation-evidence-rollup.json` as `--previous-evidence-rollup`, window 1 scheduler runner as `--previous-scheduler-report`, and window 1 package post-apply verifier as `--post-apply-verification-report`.
+- It mutates only the copied DB; the live/source DB must remain SHA/table-count unchanged.
+- Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-repeated-window-smoke-20260517T155339Z/scheduler-repeated-window-smoke.json`.
+- Smoke result: `quality_gate.pass=true`, `window_count=2`, `green_integration_count=2`, `green_package_count=2`, `unique_trace_ref_count=2`, `all_rollups_reused_as_next_previous_evidence=true`, `source_db_unchanged=true`, unchanged source DB SHA `0d753d3c89f6c4a2a2efa2117b95dd2e4cb6738039df020c64f75efe08627135`.
+- Validation: focused repeated-window smoke `1 passed`; default-automation corridor `15 passed, 208 deselected`; full suite `405 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99985%+.
+- Next safe slice: operator/status/runbook ergonomics for this repeated-window evidence, then a real local opt-in schedule that invokes the one-cycle runner only when all gates are already green and stops after packaging; still no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-repeated-window-smoke.md`
+
+## Just completed: scheduler package/collector for post-apply evidence before next cycle
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-package`.
 - It consumes a green `ordinary-turn-default-automation-scheduler-integration` report from a prior explicit one-cycle run, validates the nested scheduler runner/apply report, then automatically collects rollback replay, post-apply verification, and default-automation evidence rollup for the next cycle.
@@ -12,8 +26,6 @@ Last updated: 2026-05-18 00:37 KST
 - Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-package-copy-smoke-20260517T153723Z/scheduler-package.json`.
 - Smoke result: `quality_gate.pass=true`, rollback replay/post-apply verifier/evidence rollup all executed, `evidence_rollup.green_report_count=1`, `source_db_unchanged=true`, unchanged source DB SHA `f20a8a8c7746e4dc257e0165df8e506827e2cb4761b45272774f94dd6fe94dda`.
 - Validation: focused scheduler package `2 passed`; default-automation corridor `14 passed, 208 deselected`; full suite `404 passed, 1 xfailed`.
-- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99975%+.
-- Next safe slice: run repeated live-shaped scheduler windows using generated package evidence as the next previous rollup, then harden operator runbook/status output and CI observation; still no unattended/default/background authority.
 
 Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-package.md`
 
