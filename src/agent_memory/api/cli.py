@@ -9644,6 +9644,218 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
 
 
 _DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE = "enable-opt-in-ordinary-turn-default-automation-v1"
+_DEFAULT_AUTOMATION_DISABLE_APPROVAL_PHRASE = "disable-opt-in-ordinary-turn-default-automation-v1"
+_DEFAULT_AUTOMATION_POLICY_STATE_KIND = "agent_memory_ordinary_turn_default_automation_policy_state"
+
+
+def _default_automation_forbidden_authority(*, enablement_executed: bool) -> dict[str, bool]:
+    return {
+        "executes_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+        "enablement_executed": enablement_executed,
+    }
+
+
+def _default_automation_disabled_policy_state(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "kind": _DEFAULT_AUTOMATION_POLICY_STATE_KIND,
+        "schema_version": 1,
+        "policy": args.expected_policy,
+        "manual_opt_in_default_automation_enabled": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "max_default_candidates_per_run": 0,
+        "max_apply_without_fresh_post_apply_verification": 0,
+        "disable_switch_available": True,
+    }
+
+
+def _dogfood_ordinary_turn_default_automation_enablement_switch_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.action not in {"enable", "disable"}:
+        raise ValueError("dogfood ordinary-turn-default-automation-enablement-switch --action must be enable or disable")
+    if args.max_default_candidates_per_run < 1:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-enablement-switch --max-default-candidates-per-run must be >= 1"
+        )
+
+    blocked_reasons: list[str] = []
+    now = datetime.now(timezone.utc).isoformat()
+    preflight_artifact: dict[str, Any] | None = None
+    preflight_payload: dict[str, Any] | None = None
+    config_path = args.config_path.expanduser().resolve(strict=False)
+    existing_state: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            loaded = json.loads(config_path.read_text(encoding="utf-8"))
+            existing_state = loaded if isinstance(loaded, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            existing_state = {}
+
+    if args.action == "enable":
+        if args.approval_phrase != _DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE:
+            blocked_reasons.append("approval_phrase_mismatch")
+        if args.preflight is None:
+            blocked_reasons.append("preflight_required_for_enable")
+        else:
+            preflight_payload, preflight_artifact = _read_json_artifact_summary(args.preflight)
+            if preflight_payload is None:
+                blocked_reasons.append("preflight_unreadable")
+            else:
+                if preflight_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enablement_preflight":
+                    blocked_reasons.append("preflight_kind_mismatch")
+                if preflight_payload.get("read_only") is not True or preflight_payload.get("mutated") is not False:
+                    blocked_reasons.append("preflight_not_read_only")
+                if preflight_payload.get("default_retrieval_unchanged") is not True:
+                    blocked_reasons.append("preflight_default_retrieval_changed")
+                if preflight_payload.get("ordinary_conversation_auto_approval") is not False:
+                    blocked_reasons.append("preflight_ordinary_auto_approval_enabled")
+                quality_gate = (
+                    preflight_payload.get("quality_gate", {})
+                    if isinstance(preflight_payload.get("quality_gate"), dict)
+                    else {}
+                )
+                if quality_gate.get("pass") is not True:
+                    blocked_reasons.append("preflight_not_green")
+                    for reason in quality_gate.get("blocked_reasons", []) if isinstance(quality_gate.get("blocked_reasons"), list) else []:
+                        blocked_reasons.append(f"preflight_quality_reason_{reason}")
+                contract = (
+                    preflight_payload.get("enablement_contract", {})
+                    if isinstance(preflight_payload.get("enablement_contract"), dict)
+                    else {}
+                )
+                if contract.get("policy") != args.expected_policy:
+                    blocked_reasons.append("preflight_policy_mismatch")
+                if contract.get("required_enablement_approval_phrase") != _DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE:
+                    blocked_reasons.append("preflight_required_phrase_mismatch")
+                if contract.get("ready_for_manual_opt_in_enablement") is not True:
+                    blocked_reasons.append("preflight_not_ready_for_manual_opt_in_enablement")
+                if contract.get("ordinary_conversation_auto_approval") is not False:
+                    blocked_reasons.append("preflight_contract_ordinary_auto_approval_enabled")
+                if contract.get("default_background_auto_approval_allowed") is not False:
+                    blocked_reasons.append("preflight_contract_background_default_allowed")
+                if contract.get("unattended_default_apply_allowed") is not False:
+                    blocked_reasons.append("preflight_contract_unattended_default_allowed")
+                if _safe_int(contract.get("max_apply_without_fresh_post_apply_verification")) != 0:
+                    blocked_reasons.append("preflight_contract_allows_apply_without_fresh_verification")
+                forbidden = (
+                    preflight_payload.get("forbidden_authority", {})
+                    if isinstance(preflight_payload.get("forbidden_authority"), dict)
+                    else {}
+                )
+                if any(value is True for value in forbidden.values()):
+                    blocked_reasons.append("preflight_forbidden_authority_granted")
+                privacy = preflight_payload.get("privacy", {}) if isinstance(preflight_payload.get("privacy"), dict) else {}
+                if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+                    blocked_reasons.append("preflight_privacy_not_ref_safe")
+    else:
+        if args.approval_phrase != _DEFAULT_AUTOMATION_DISABLE_APPROVAL_PHRASE:
+            blocked_reasons.append("disable_approval_phrase_mismatch")
+        if existing_state and existing_state.get("policy") != args.expected_policy:
+            blocked_reasons.append("existing_policy_mismatch")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    allowed = not blocked_unique
+    config_written = False
+    policy_state = _default_automation_disabled_policy_state(args)
+    if allowed:
+        audit_events = existing_state.get("audit_events", []) if isinstance(existing_state.get("audit_events"), list) else []
+        if args.action == "enable":
+            policy_state = {
+                "kind": _DEFAULT_AUTOMATION_POLICY_STATE_KIND,
+                "schema_version": 1,
+                "policy": args.expected_policy,
+                "manual_opt_in_default_automation_enabled": True,
+                "ordinary_conversation_auto_approval": False,
+                "default_background_auto_approval_allowed": False,
+                "unattended_default_apply_allowed": False,
+                "max_default_candidates_per_run": args.max_default_candidates_per_run,
+                "max_apply_without_fresh_post_apply_verification": 0,
+                "requires_fresh_post_apply_verification": True,
+                "requires_exact_reviewed_candidate": True,
+                "disable_switch_available": True,
+                "actor": args.actor,
+                "reason": args.reason,
+                "enabled_at": now,
+                "preflight_artifact": preflight_artifact,
+                "audit_events": [
+                    *audit_events,
+                    {
+                        "action": "enable",
+                        "actor": args.actor,
+                        "reason": args.reason,
+                        "created_at": now,
+                        "policy": args.expected_policy,
+                    },
+                ],
+            }
+        else:
+            policy_state = {
+                **_default_automation_disabled_policy_state(args),
+                "actor": args.actor,
+                "reason": args.reason,
+                "disabled_at": now,
+                "audit_events": [
+                    *audit_events,
+                    {
+                        "action": "disable",
+                        "actor": args.actor,
+                        "reason": args.reason,
+                        "created_at": now,
+                        "policy": args.expected_policy,
+                    },
+                ],
+            }
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(policy_state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        config_written = True
+
+    decision = (
+        "ordinary_turn_default_automation_exact_opt_in_enabled_guarded_local_only"
+        if allowed and args.action == "enable"
+        else "ordinary_turn_default_automation_disabled_fail_closed"
+        if allowed and args.action == "disable"
+        else "ordinary_turn_default_automation_enablement_switch_blocked_keep_disabled"
+    )
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enablement_switch",
+        "action": args.action,
+        "read_only": False,
+        "mutated": config_written,
+        "config_path": str(config_path),
+        "config_written": config_written,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "preflight_artifact": preflight_artifact,
+        "policy_state": policy_state,
+        "quality_gate": {
+            "pass": allowed,
+            "decision": decision,
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_forbidden_authority(enablement_executed=config_written),
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "aggregate_only": True,
+            "report_hashes_only": True,
+        },
+    }
+    _write_json_report(args.output, payload)
+    return payload
 
 
 def _dogfood_ordinary_turn_default_automation_enablement_preflight_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -19242,6 +19454,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-default-candidates-per-run", type=int, default=1
     )
     dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enablement-switch",
+        help="Explicitly enable/disable narrow default automation opt-in state with fail-closed guardrails.",
+    )
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument(
+        "--action", required=True, choices=["enable", "disable"]
+    )
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--preflight", type=Path)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--config-path", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--expected-policy", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument(
+        "--max-default-candidates-per-run", type=int, default=1
+    )
+    dogfood_ordinary_turn_default_automation_enablement_switch_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -20669,6 +20898,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-enablement-preflight":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_enablement_preflight_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enablement-switch":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_enablement_switch_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

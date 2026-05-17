@@ -1,7 +1,50 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:34 KST
+Last updated: 2026-05-17 16:50 KST
+
+## Checkpoint: default automation exact opt-in enablement switch
+
+The source checkout now has `dogfood ordinary-turn-default-automation-enablement-switch`, the exact local opt-in enable/disable switch after a green enablement preflight.
+
+What changed:
+
+- `--action enable` consumes a green `dogfood_ordinary_turn_default_automation_enablement_preflight` artifact.
+- Enable requires policy `ordinary-turn-default-automation-policy-v1`, phrase `enable-opt-in-ordinary-turn-default-automation-v1`, actor, reason, and bounded `--max-default-candidates-per-run`.
+- `--action disable` requires phrase `disable-opt-in-ordinary-turn-default-automation-v1` and writes fail-closed state.
+- The command writes only a caller-selected local JSON policy-state file. It does not mutate the memory DB, default retrieval, classifier behavior, scheduler defaults, or background apply settings.
+- Enable state is intentionally narrow: `manual_opt_in_default_automation_enabled=true`, but `ordinary_conversation_auto_approval=false`, `default_background_auto_approval_allowed=false`, `unattended_default_apply_allowed=false`, and `max_apply_without_fresh_post_apply_verification=0`.
+
+Source smoke:
+
+- Input preflight: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-enablement-preflight.json`.
+- Enable output: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-enablement-switch-enable.json`.
+- Disable output: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-enablement-switch-disable.json`.
+- Policy-state file: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-policy-state.json`.
+- Result: enable green, disable green, final policy-state disabled/fail-closed; live memory DB was not mutated.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-default-automation-enablement-switch` subcommand.
+- Focused GREEN: `3 passed` for enablement-switch tests.
+- Enablement GREEN: `5 passed, 202 deselected`.
+- Default automation GREEN: `15 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `34 passed, 173 deselected`.
+- Full suite GREEN: `389 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.997%.
+- Remaining gap: read-path enforcement in the ordinary-turn default automation runner. Absent/disabled policy-state must block default automation; enabled state must still require one exact-reviewed candidate, fresh post-apply verification before any next apply, and no unattended/background apply.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Add policy-state reader/enforcement to the default automation runner next.
+3. Do not enable broad ordinary conversation auto-approval or unattended default/background apply.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enablement-switch.md`
 
 ## Checkpoint: default automation opt-in enablement preflight
 

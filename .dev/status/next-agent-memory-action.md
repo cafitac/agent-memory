@@ -1,7 +1,29 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:34 KST
+Last updated: 2026-05-17 16:50 KST
+
+## Just completed: default automation exact opt-in enablement switch
+
+- Added `dogfood ordinary-turn-default-automation-enablement-switch`, with explicit `enable` and `disable` actions.
+- Enable consumes a green `dogfood_ordinary_turn_default_automation_enablement_preflight` artifact and requires exact phrase `enable-opt-in-ordinary-turn-default-automation-v1`, exact policy `ordinary-turn-default-automation-policy-v1`, actor, reason, and bounded `--max-default-candidates-per-run`.
+- The switch writes only a caller-chosen local JSON policy-state file; it does not mutate the memory DB, default retrieval, classifier, or scheduler defaults.
+- Green enable writes `manual_opt_in_default_automation_enabled=true` while keeping `ordinary_conversation_auto_approval=false`, `default_background_auto_approval_allowed=false`, `unattended_default_apply_allowed=false`, and `max_apply_without_fresh_post_apply_verification=0`.
+- Disable requires exact phrase `disable-opt-in-ordinary-turn-default-automation-v1` and writes fail-closed state with `manual_opt_in_default_automation_enabled=false`.
+- Source smoke enabled and then disabled a policy-state file only under the saved report directory; final state is disabled/fail-closed.
+- Full validation passed: `389 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.997%.
+- Remaining gap: wire the narrow policy-state reader into the ordinary-turn default automation runner so actual runner behavior respects enabled/disabled state while remaining disabled-by-default and fresh-verifier-gated.
+
+Recommended next work now:
+
+1. Commit/push this switch checkpoint and watch CI.
+2. Next code slice should add read-path enforcement: absent/disabled policy state blocks default automation; enabled state only permits one exact-reviewed candidate and never unattended/background apply; stale/missing post-apply verifier evidence blocks the next apply.
+3. Keep broad ordinary conversation auto-approval, default/background unattended apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Just completed: default automation opt-in enablement preflight
 

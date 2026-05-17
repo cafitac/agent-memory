@@ -130,3 +130,4 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 - `references/post-v0.1.162-ordinary-turn-default-automation-post-apply-verification.md` - read-only default automation post-apply verifier stop gate.
 - `references/post-v0.1.162-default-automation-evidence-rollup.md` - repeated default-automation verifier evidence rollup; design-readiness only.
 - `references/post-v0.1.162-default-automation-enablement-preflight.md` - read-only/manual-opt-in-only preflight before any exact enablement switch.
+- `references/post-v0.1.162-default-automation-enablement-switch.md` - exact opt-in enable/disable local policy-state switch; fail-closed and no unattended/background apply.

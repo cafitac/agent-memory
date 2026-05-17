@@ -17494,6 +17494,280 @@ def test_dogfood_ordinary_turn_default_automation_enablement_preflight_blocks_re
 
 
 
+def _write_ordinary_turn_default_automation_enablement_preflight_report(path: Path, *, pass_gate: bool = True) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enablement_preflight",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "evidence_summary": {
+                    "rollup_green": pass_gate,
+                    "rollup_ready_for_default_enablement_design": pass_gate,
+                    "green_report_count": 2 if pass_gate else 1,
+                    "applied_memory_count": 2 if pass_gate else 1,
+                    "min_green_reports": 2,
+                    "default_auto_approval_enabled_in_evidence": False,
+                },
+                "enablement_contract": {
+                    "policy": "ordinary-turn-default-automation-policy-v1",
+                    "required_enablement_approval_phrase": "enable-opt-in-ordinary-turn-default-automation-v1",
+                    "ready_for_manual_opt_in_enablement": pass_gate,
+                    "default_auto_approval_enabled": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "apply_supported": False,
+                    "apply_executed": False,
+                    "max_default_candidates_per_run": 1,
+                    "max_apply_without_fresh_post_apply_verification": 0,
+                    "requires_exact_human_opt_in": True,
+                    "requires_green_repeated_post_apply_evidence": True,
+                    "requires_one_candidate_apply_bound": True,
+                    "requires_backup_before_apply": True,
+                    "requires_rollback_replay": True,
+                    "requires_post_apply_verification": True,
+                    "requires_disable_switch": True,
+                    "requires_audit_row_per_apply": True,
+                },
+                "quality_gate": {
+                    "pass": pass_gate,
+                    "decision": "ordinary_turn_default_automation_enablement_preflight_green_manual_opt_in_only"
+                    if pass_gate
+                    else "ordinary_turn_default_automation_enablement_preflight_not_ready_keep_default_blocked",
+                    "blocked_reasons": [] if pass_gate else ["green_report_count_below_minimum"],
+                },
+                "forbidden_authority": {
+                    "executes_apply": False,
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                    "enablement_executed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                    "aggregate_only": True,
+                    "report_hashes_only": True,
+                },
+                "private_raw_body": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+
+def test_dogfood_ordinary_turn_default_automation_enablement_switch_enable_writes_guarded_local_config(
+    tmp_path: Path,
+) -> None:
+    preflight_path = tmp_path / "default-automation-enablement-preflight.json"
+    config_path = tmp_path / "default-automation-policy.json"
+    output_path = tmp_path / "enablement-switch.json"
+    _write_ordinary_turn_default_automation_enablement_preflight_report(preflight_path)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enablement-switch",
+            "--action",
+            "enable",
+            "--preflight",
+            str(preflight_path),
+            "--config-path",
+            str(config_path),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "enable-opt-in-ordinary-turn-default-automation-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "exact reviewed enablement",
+            "--max-default-candidates-per-run",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enablement_switch"
+    assert payload["action"] == "enable"
+    assert payload["mutated"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_exact_opt_in_enabled_guarded_local_only",
+        "blocked_reasons": [],
+    }
+    assert payload["config_path"] == str(config_path)
+    assert payload["config_written"] is True
+    assert payload["policy_state"]["manual_opt_in_default_automation_enabled"] is True
+    assert payload["policy_state"]["ordinary_conversation_auto_approval"] is False
+    assert payload["policy_state"]["default_background_auto_approval_allowed"] is False
+    assert payload["policy_state"]["unattended_default_apply_allowed"] is False
+    assert payload["policy_state"]["max_apply_without_fresh_post_apply_verification"] == 0
+    assert payload["policy_state"]["disable_switch_available"] is True
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["kind"] == "agent_memory_ordinary_turn_default_automation_policy_state"
+    assert config["manual_opt_in_default_automation_enabled"] is True
+    assert config["policy"] == "ordinary-turn-default-automation-policy-v1"
+    assert config["actor"] == "tester"
+    assert config["reason"] == "exact reviewed enablement"
+    assert config["audit_events"][0]["action"] == "enable"
+    assert config["ordinary_conversation_auto_approval"] is False
+    assert config["unattended_default_apply_allowed"] is False
+
+
+
+def test_dogfood_ordinary_turn_default_automation_enablement_switch_blocks_red_preflight_or_wrong_phrase(
+    tmp_path: Path,
+) -> None:
+    preflight_path = tmp_path / "red-preflight.json"
+    config_path = tmp_path / "default-automation-policy.json"
+    _write_ordinary_turn_default_automation_enablement_preflight_report(preflight_path, pass_gate=False)
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enablement-switch",
+            "--action",
+            "enable",
+            "--preflight",
+            str(preflight_path),
+            "--config-path",
+            str(config_path),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "wrong-phrase",
+            "--actor",
+            "tester",
+            "--reason",
+            "should block",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["mutated"] is False
+    assert payload["config_written"] is False
+    assert not config_path.exists()
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_default_automation_enablement_switch_blocked_keep_disabled",
+        "blocked_reasons": [
+            "approval_phrase_mismatch",
+            "preflight_not_green",
+            "preflight_not_ready_for_manual_opt_in_enablement",
+            "preflight_quality_reason_green_report_count_below_minimum",
+        ],
+    }
+    assert payload["forbidden_authority"]["enablement_executed"] is False
+    assert payload["policy_state"]["manual_opt_in_default_automation_enabled"] is False
+    assert payload["policy_state"]["unattended_default_apply_allowed"] is False
+
+
+
+def test_dogfood_ordinary_turn_default_automation_enablement_switch_disable_is_fail_closed(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "default-automation-policy.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "kind": "agent_memory_ordinary_turn_default_automation_policy_state",
+                "schema_version": 1,
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "manual_opt_in_default_automation_enabled": True,
+                "ordinary_conversation_auto_approval": False,
+                "default_background_auto_approval_allowed": False,
+                "unattended_default_apply_allowed": False,
+                "max_default_candidates_per_run": 1,
+                "max_apply_without_fresh_post_apply_verification": 0,
+                "disable_switch_available": True,
+                "audit_events": [{"action": "enable", "actor": "tester", "reason": "previous"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enablement-switch",
+            "--action",
+            "disable",
+            "--config-path",
+            str(config_path),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "disable-opt-in-ordinary-turn-default-automation-v1",
+            "--actor",
+            "tester",
+            "--reason",
+            "rollback disable",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["action"] == "disable"
+    assert payload["mutated"] is True
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["quality_gate"]["decision"] == "ordinary_turn_default_automation_disabled_fail_closed"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["manual_opt_in_default_automation_enabled"] is False
+    assert config["ordinary_conversation_auto_approval"] is False
+    assert config["unattended_default_apply_allowed"] is False
+    assert config["audit_events"][-1]["action"] == "disable"
+    assert config["audit_events"][-1]["reason"] == "rollback disable"
+
+
+
 def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_apply(
     tmp_path: Path,
 ) -> None:

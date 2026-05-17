@@ -1,7 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:34 KST
+Last updated: 2026-05-17 16:50 KST
+
+## Current checkpoint: default automation exact opt-in enablement switch
+
+- Latest source checkpoint added `dogfood ordinary-turn-default-automation-enablement-switch`.
+- Enable consumes the green preflight and exact phrase `enable-opt-in-ordinary-turn-default-automation-v1`, then writes only a local policy-state JSON file.
+- Disable uses exact phrase `disable-opt-in-ordinary-turn-default-automation-v1` and writes fail-closed state.
+- Source smoke enabled then disabled only `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-policy-state.json`; final state is disabled/fail-closed.
+- Validation: `389 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.997%.
+- Next safe slice: policy-state read-path enforcement in the default automation runner; absent/disabled state blocks, enabled state remains one-candidate/fresh-verifier-gated, unattended/background apply stays false.
+
 
 ## Current checkpoint: default automation opt-in enablement preflight
 
