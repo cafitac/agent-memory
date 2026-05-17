@@ -1,7 +1,21 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 19:02 KST
+Last updated: 2026-05-18 02:35 KST
+
+## Current checkpoint: disabled recurring scheduler config contract
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-disabled-recurring-scheduler-config-contract`.
+- It consumes a green recurring scheduler readiness packet plus exact phrase `approve-disabled-recurring-default-automation-scheduler-config-contract-v1`.
+- It emits a data-only contract whose `default_state` and `enforced_state` are both `disabled`.
+- It keeps recurring/background/cron/execution authority false and records `writes_scheduler_config=false`.
+- It encodes cadence, kill-switch, fresh-evidence, package-stop, CI health, and rollback requirements as data only.
+- Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-contract-20260517T173508Z/disabled-recurring-scheduler-config-contract.json`.
+- Validation so far: focused config contract `1 passed, 227 deselected`; readiness/config/history corridor `3 passed, 225 deselected`; default-automation corridor `36 passed, 192 deselected`; full suite still pending for this checkpoint.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999985%+.
+- Next safe slice: disabled config contract validator/fail-closed tests; no enablement/background/cron execution yet.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-disabled-recurring-scheduler-config-contract.md`
 
 ## Current checkpoint: scheduler integration/config around default automation one-cycle runner
 
