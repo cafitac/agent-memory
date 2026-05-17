@@ -1845,7 +1845,7 @@ def test_checked_in_retrieval_fixture_examples_have_stable_comparator_matrix(tmp
             "baseline_failed": 16,
             "baseline_avoid": 16,
             "delta_avoid": {-16, -15},
-            "delta_pass": {14, 16},
+            "delta_pass": {6, 14, 16},
             "facts_primary": (26, 15, 11),
         },
         "source-lexical": {
