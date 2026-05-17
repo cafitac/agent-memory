@@ -1,7 +1,21 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 18:30 KST
+Last updated: 2026-05-17 19:02 KST
+
+## Current checkpoint: scheduler integration/config around default automation one-cycle runner
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-integration`.
+- It validates explicit scheduler config, enabled policy state, green policy gate, fresh previous evidence rollup, previous scheduler-report state, and queued green post-apply verifier reports before it invokes the scheduler runner.
+- It blocks disabled scheduler config before runner invocation and blocks a next cycle when the previous scheduler report still has unexecuted required post-apply verification.
+- When all gates are green, it invokes exactly one scheduler-runner cycle, applies at most one candidate to the supplied DB, and then requires a new post-apply verifier/evidence-rollup before any later cycle.
+- Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-integration-copy-smoke-20260517T095816Z/scheduler-integration.json`.
+- Smoke result: `quality_gate.pass=true`, `mutated_copy=true`, `scheduler_runner.invoked=true`, `post_apply_verification_queue.queued_report_count=1`, `selected_trace_ref=experience_trace:4130`, `source_db_unchanged=true`, unchanged source DB SHA `1413ffe379ceed84763ab52cb4a6ff7d17e54f4f7733f6b204518f2c1b67d85b`.
+- Validation: focused scheduler integration `3 passed`; default-automation corridor `12 passed, 208 deselected`; full suite `402 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9997%+.
+- Next safe slice: durable scheduler packaging/runbook plus automatic post-apply verifier/evidence-rollup collection and CI watch; still no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-integration.md`
 
 ## Current checkpoint: scheduler-facing default automation one-cycle runner
 

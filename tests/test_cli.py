@@ -17534,6 +17534,363 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_runner_invokes_one_c
 
 
 
+def _write_ordinary_turn_default_automation_scheduler_config(path: Path, *, enabled: bool = True) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "ordinary_turn_default_automation_scheduler_config",
+                "enabled": enabled,
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "max_candidates_per_cycle": 1,
+                "requires_enabled_policy_state": True,
+                "requires_previous_evidence_rollup": True,
+                "requires_post_apply_verification_before_next_cycle": True,
+                "default_background_auto_approval_allowed": False,
+                "unattended_default_apply_allowed": False,
+                "ordinary_conversation_auto_approval": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+
+def _write_ordinary_turn_default_automation_scheduler_report(
+    path: Path,
+    *,
+    applied: bool = True,
+    verification_required: bool = True,
+    verification_executed: bool = False,
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_scheduler_runner",
+                "read_only": not applied,
+                "mutated": applied,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "scheduler": {
+                    "runner_invoked": applied,
+                    "runner_applied": applied,
+                    "requires_previous_evidence_rollup": True,
+                    "requires_post_apply_verification_before_next_cycle": True,
+                    "max_scheduler_candidates_per_cycle": 1,
+                    "background_unattended_cycle_allowed": False,
+                    "next_cycle_allowed_without_fresh_evidence": False,
+                },
+                "runner_report": {
+                    "provided": applied,
+                    "quality_gate_pass": applied,
+                    "selected_trace_ref": "experience_trace:901",
+                },
+                "post_apply_verification": {
+                    "required": verification_required,
+                    "executed": verification_executed,
+                    "required_before_next_cycle": True,
+                },
+                "quality_gate": {"pass": applied, "blocked_reasons": [] if applied else ["not_applied"]},
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {
+                    "raw_trace_summary_included": False,
+                    "raw_transcript_included": False,
+                    "raw_query_text_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "backup_content_included": False,
+                    "raw_report_included": False,
+                },
+                "private_raw_body": "SHOULD_NOT_LEAK",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_integration_blocks_disabled_config_before_runner(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-scheduler-disabled.db"
+    config_path = tmp_path / "scheduler-config.json"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "previous-evidence-rollup.json"
+    report_dir = tmp_path / "scheduler-integration-disabled-reports"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_scheduler_config(config_path, enabled=False)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="y" * 64,
+        summary="User prefers disabled scheduler integration summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-integration",
+            str(db_path),
+            "--scheduler-config",
+            str(config_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--previous-evidence-rollup",
+            str(previous_rollup_path),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--scheduler-approval-phrase",
+            "run-one-default-automation-scheduler-cycle-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "disabled scheduler config must block",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_integration"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["scheduler_config"]["enabled"] is False
+    assert payload["scheduler_runner"]["invoked"] is False
+    assert "scheduler_config_disabled" in payload["quality_gate"]["blocked_reasons"]
+    assert payload["post_apply_verification_queue"]["pending_required_before_cycle"] is False
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_integration_requires_prior_post_apply_verification(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-scheduler-pending-verification.db"
+    config_path = tmp_path / "scheduler-config.json"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "previous-evidence-rollup.json"
+    previous_scheduler_report = tmp_path / "previous-scheduler-runner.json"
+    report_dir = tmp_path / "scheduler-integration-pending-reports"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_scheduler_config(config_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    _write_ordinary_turn_default_automation_scheduler_report(previous_scheduler_report, applied=True)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="z" * 64,
+        summary="User prefers pending scheduler verification summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-integration",
+            str(db_path),
+            "--scheduler-config",
+            str(config_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--previous-evidence-rollup",
+            str(previous_rollup_path),
+            "--previous-scheduler-report",
+            str(previous_scheduler_report),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--scheduler-approval-phrase",
+            "run-one-default-automation-scheduler-cycle-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "prior post apply verification must block next scheduler cycle",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_integration"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["scheduler_runner"]["invoked"] is False
+    assert payload["post_apply_verification_queue"]["pending_required_before_cycle"] is True
+    assert payload["post_apply_verification_queue"]["queued_report_count"] == 0
+    assert "pending_post_apply_verification_required_before_scheduler_cycle" in payload["quality_gate"]["blocked_reasons"]
+    assert "pending scheduler verification summaries" not in result.stdout
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+
+def test_dogfood_ordinary_turn_default_automation_scheduler_integration_records_verification_and_runs_one_cycle(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-scheduler-integration.db"
+    config_path = tmp_path / "scheduler-config.json"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    previous_rollup_path = tmp_path / "previous-evidence-rollup.json"
+    previous_scheduler_report = tmp_path / "previous-scheduler-runner.json"
+    post_apply_verification_report = tmp_path / "previous-post-apply-verification.json"
+    report_dir = tmp_path / "scheduler-integration-reports"
+    output_path = tmp_path / "scheduler-integration.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_scheduler_config(config_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    _write_ordinary_turn_default_automation_evidence_rollup_report(previous_rollup_path)
+    _write_ordinary_turn_default_automation_scheduler_report(previous_scheduler_report, applied=True)
+    _write_ordinary_turn_default_automation_post_apply_verification_report(
+        post_apply_verification_report, trace_ref="experience_trace:901", memory_ref="fact:901"
+    )
+    prior_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="1" * 64,
+        summary="User prefers previous scheduler integration summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{prior_trace.id}",
+        relation_type="ordinary_turn_default_automation_approved_as",
+        to_ref="fact:900",
+        evidence_ids=[],
+        confidence=0.8,
+        review_actor="prior-scheduler",
+        review_reason="prior scheduler integration approval",
+    )
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="2" * 64,
+        summary="User prefers scheduler integration one cycle summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-integration",
+            str(db_path),
+            "--scheduler-config",
+            str(config_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--previous-evidence-rollup",
+            str(previous_rollup_path),
+            "--previous-scheduler-report",
+            str(previous_scheduler_report),
+            "--post-apply-verification-report",
+            str(post_apply_verification_report),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--scheduler-approval-phrase",
+            "run-one-default-automation-scheduler-cycle-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "scheduler integration exact one-cycle approval",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "scheduler integration one cycle summaries" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_scheduler_integration"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["scheduler_config"]["enabled"] is True
+    assert payload["post_apply_verification_queue"]["pending_required_before_cycle"] is True
+    assert payload["post_apply_verification_queue"]["queued_report_count"] == 1
+    assert payload["post_apply_verification_queue"]["all_queued_reports_green"] is True
+    assert payload["scheduler_runner"]["invoked"] is True
+    assert payload["scheduler_runner"]["quality_gate_pass"] is True
+    assert payload["scheduler_runner"]["selected_trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["post_apply_verification_queue"]["next_cycle_requires_new_verification"] is True
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert (report_dir / "scheduler-integration" / "ordinary-turn-default-automation-scheduler-runner.json").exists()
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:

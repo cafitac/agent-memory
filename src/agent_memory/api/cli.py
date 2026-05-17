@@ -8405,6 +8405,232 @@ def _dogfood_ordinary_turn_default_automation_scheduler_runner_payload(args: arg
 
 
 
+def _dogfood_ordinary_turn_default_automation_scheduler_integration_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError("ordinary_turn_default_automation_scheduler_integration_policy_mismatch")
+    if args.scheduler_approval_phrase != "run-one-default-automation-scheduler-cycle-v1":
+        raise ValueError("ordinary_turn_default_automation_scheduler_integration_approval_phrase_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-scheduler-integration --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-scheduler-integration --reason is required")
+
+    blocked_reasons: list[str] = []
+    config_payload, config_artifact = _read_json_artifact_summary(args.scheduler_config)
+    scheduler_config_summary = {
+        **config_artifact,
+        "enabled": False,
+        "policy": None,
+        "max_candidates_per_cycle": None,
+        "requires_previous_evidence_rollup": None,
+        "requires_post_apply_verification_before_next_cycle": None,
+    }
+    if config_payload is None:
+        blocked_reasons.append("scheduler_config_unreadable")
+    else:
+        scheduler_config_summary.update(
+            {
+                "enabled": config_payload.get("enabled") is True,
+                "policy": config_payload.get("policy"),
+                "max_candidates_per_cycle": _safe_int(config_payload.get("max_candidates_per_cycle")),
+                "requires_previous_evidence_rollup": config_payload.get("requires_previous_evidence_rollup") is True,
+                "requires_post_apply_verification_before_next_cycle": config_payload.get(
+                    "requires_post_apply_verification_before_next_cycle"
+                )
+                is True,
+            }
+        )
+        if config_payload.get("kind") != "ordinary_turn_default_automation_scheduler_config":
+            blocked_reasons.append("scheduler_config_kind_invalid")
+        if config_payload.get("enabled") is not True:
+            blocked_reasons.append("scheduler_config_disabled")
+        if config_payload.get("policy") != args.policy:
+            blocked_reasons.append("scheduler_config_policy_mismatch")
+        if _safe_int(config_payload.get("max_candidates_per_cycle")) != 1:
+            blocked_reasons.append("scheduler_config_max_candidates_not_one")
+        if config_payload.get("requires_enabled_policy_state") is not True:
+            blocked_reasons.append("scheduler_config_missing_policy_state_requirement")
+        if config_payload.get("requires_previous_evidence_rollup") is not True:
+            blocked_reasons.append("scheduler_config_missing_previous_rollup_requirement")
+        if config_payload.get("requires_post_apply_verification_before_next_cycle") is not True:
+            blocked_reasons.append("scheduler_config_missing_post_apply_verification_requirement")
+        for key in (
+            "default_background_auto_approval_allowed",
+            "unattended_default_apply_allowed",
+            "ordinary_conversation_auto_approval",
+        ):
+            if config_payload.get(key) is not False:
+                blocked_reasons.append(f"scheduler_config_forbidden_authority_{key}_invalid")
+
+    pending_required = False
+    previous_scheduler_summary: dict[str, Any]
+    previous_scheduler_payload, previous_scheduler_artifact = _read_json_artifact_summary(args.previous_scheduler_report)
+    previous_scheduler_summary = {**previous_scheduler_artifact, "quality_gate_pass": False, "post_apply_verification_required": False}
+    if args.previous_scheduler_report is not None:
+        if previous_scheduler_payload is None:
+            blocked_reasons.append("previous_scheduler_report_unreadable")
+        else:
+            previous_scheduler_quality = (
+                previous_scheduler_payload.get("quality_gate", {})
+                if isinstance(previous_scheduler_payload.get("quality_gate"), dict)
+                else {}
+            )
+            previous_post_apply = (
+                previous_scheduler_payload.get("post_apply_verification", {})
+                if isinstance(previous_scheduler_payload.get("post_apply_verification"), dict)
+                else {}
+            )
+            previous_scheduler_summary.update(
+                {
+                    "quality_gate_pass": previous_scheduler_quality.get("pass") is True,
+                    "post_apply_verification_required": previous_post_apply.get("required") is True,
+                    "post_apply_verification_executed": previous_post_apply.get("executed") is True,
+                }
+            )
+            if previous_scheduler_payload.get("kind") != "dogfood_ordinary_turn_default_automation_scheduler_runner":
+                blocked_reasons.append("previous_scheduler_report_kind_invalid")
+            if previous_scheduler_payload.get("ordinary_conversation_auto_approval") is not False:
+                blocked_reasons.append("previous_scheduler_report_ordinary_auto_approval_enabled")
+            if previous_scheduler_payload.get("policy") != args.policy:
+                blocked_reasons.append("previous_scheduler_report_policy_mismatch")
+            if not _privacy_flags_are_ref_safe(
+                previous_scheduler_payload.get("privacy", {})
+                if isinstance(previous_scheduler_payload.get("privacy"), dict)
+                else {}
+            ):
+                blocked_reasons.append("previous_scheduler_report_privacy_not_ref_safe")
+            pending_required = previous_post_apply.get("required") is True and previous_post_apply.get("executed") is not True
+
+    verifier_summaries: list[dict[str, Any]] = []
+    verifier_green_count = 0
+    verifier_paths = args.post_apply_verification_report or []
+    for verifier_path in verifier_paths:
+        verifier_payload, verifier_artifact = _read_json_artifact_summary(verifier_path)
+        verifier_summary = {**verifier_artifact, "quality_gate_pass": False, "expected_policy": None}
+        if verifier_payload is None:
+            blocked_reasons.append("post_apply_verification_report_unreadable")
+            verifier_summaries.append(verifier_summary)
+            continue
+        verifier_quality = verifier_payload.get("quality_gate", {}) if isinstance(verifier_payload.get("quality_gate"), dict) else {}
+        verifier_summary.update(
+            {
+                "quality_gate_pass": verifier_quality.get("pass") is True,
+                "expected_policy": verifier_payload.get("expected_policy"),
+            }
+        )
+        if verifier_payload.get("kind") != "dogfood_ordinary_turn_default_automation_post_apply_verification":
+            blocked_reasons.append("post_apply_verification_report_kind_invalid")
+        if verifier_payload.get("read_only") is not True or verifier_payload.get("mutated") is not False:
+            blocked_reasons.append("post_apply_verification_report_not_read_only")
+        if verifier_payload.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("post_apply_verification_report_default_retrieval_changed")
+        if verifier_payload.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("post_apply_verification_report_ordinary_auto_approval_enabled")
+        if verifier_payload.get("expected_policy") != args.policy:
+            blocked_reasons.append("post_apply_verification_report_policy_mismatch")
+        if verifier_quality.get("pass") is not True:
+            blocked_reasons.append("post_apply_verification_report_not_green")
+        else:
+            verifier_green_count += 1
+        if not _privacy_flags_are_ref_safe(
+            verifier_payload.get("privacy", {}) if isinstance(verifier_payload.get("privacy"), dict) else {}
+        ):
+            blocked_reasons.append("post_apply_verification_report_privacy_not_ref_safe")
+        forbidden = verifier_payload.get("forbidden_authority", {}) if isinstance(verifier_payload.get("forbidden_authority"), dict) else {}
+        for key in (
+            "ordinary_conversation_auto_approval",
+            "broad_background_apply_allowed",
+            "default_background_auto_approval_allowed",
+            "unattended_default_apply_allowed",
+            "default_ranking_mutated",
+            "collapse_delete_apply_allowed",
+            "telemetry_reset_apply_allowed",
+            "unreviewed_promotion_allowed",
+            "repeated_apply_without_new_approval_allowed",
+        ):
+            if forbidden.get(key) is not False:
+                blocked_reasons.append(f"post_apply_verification_report_forbidden_authority_{key}_invalid")
+        verifier_summaries.append(verifier_summary)
+
+    if pending_required and verifier_green_count < 1:
+        blocked_reasons.append("pending_post_apply_verification_required_before_scheduler_cycle")
+
+    runner_payload: dict[str, Any] | None = None
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    integration_runner_dir = report_dir / "scheduler-integration"
+    integration_runner_dir.mkdir(parents=True, exist_ok=True)
+    runner_path = integration_runner_dir / "ordinary-turn-default-automation-scheduler-runner.json"
+    if not blocked_reasons:
+        runner_payload = _dogfood_ordinary_turn_default_automation_scheduler_runner_payload(
+            argparse.Namespace(
+                db_path=args.db_path,
+                policy_gate=args.policy_gate,
+                policy_state_config=args.policy_state_config,
+                previous_evidence_rollup=args.previous_evidence_rollup,
+                report_dir=integration_runner_dir,
+                policy=args.policy,
+                scheduler_approval_phrase=args.scheduler_approval_phrase,
+                approval_phrase=args.approval_phrase,
+                actor=args.actor,
+                reason=args.reason,
+                limit=args.limit,
+                backup_path=args.backup_path,
+                output=runner_path,
+            )
+        )
+        runner_quality = runner_payload.get("quality_gate", {}) if isinstance(runner_payload.get("quality_gate"), dict) else {}
+        if runner_quality.get("pass") is not True:
+            for reason in runner_quality.get("blocked_reasons", []) if isinstance(runner_quality.get("blocked_reasons"), list) else []:
+                blocked_reasons.append(str(reason))
+            if not blocked_reasons:
+                blocked_reasons.append("scheduler_integration_runner_not_green")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    runner_applied = bool(runner_payload and runner_payload.get("mutated") is True and runner_payload.get("quality_gate", {}).get("pass") is True)
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_scheduler_integration",
+        "read_only": not runner_applied,
+        "mutated": runner_applied,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy": args.policy,
+        "scheduler_config": scheduler_config_summary,
+        "previous_scheduler_report": previous_scheduler_summary,
+        "post_apply_verification_queue": {
+            "pending_required_before_cycle": pending_required,
+            "queued_report_count": len(verifier_summaries),
+            "green_report_count": verifier_green_count,
+            "all_queued_reports_green": len(verifier_summaries) > 0 and verifier_green_count == len(verifier_summaries),
+            "reports": verifier_summaries,
+            "next_cycle_requires_new_verification": runner_applied,
+            "raw_report_included": False,
+        },
+        "scheduler_runner": {
+            "invoked": runner_payload is not None,
+            "path": str(runner_path) if runner_payload is not None else None,
+            "sha256": _sha256_file(runner_path) if runner_path.exists() else None,
+            "quality_gate_pass": runner_payload.get("quality_gate", {}).get("pass") is True if runner_payload else False,
+            "selected_trace_ref": runner_payload.get("runner_report", {}).get("selected_trace_ref") if runner_payload else None,
+            "applied": runner_applied,
+        },
+        "quality_gate": {
+            "pass": runner_applied and not blocked_unique,
+            "decision": "ordinary_turn_default_automation_scheduler_integration_ran_one_cycle_stop_for_post_apply_verification"
+            if runner_applied and not blocked_unique
+            else "ordinary_turn_default_automation_scheduler_integration_blocked_before_cycle",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "run_post_apply_verification_and_evidence_rollup_before_next_scheduler_cycle"
+        if runner_applied
+        else "fix_scheduler_config_or_complete_pending_post_apply_verification_before_scheduler_cycle",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -20217,6 +20443,28 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_scheduler_runner_parser.add_argument("--limit", type=int, default=500)
     dogfood_ordinary_turn_default_automation_scheduler_runner_parser.add_argument("--backup-path", type=Path)
     dogfood_ordinary_turn_default_automation_scheduler_runner_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-scheduler-integration",
+        help="Validate explicit scheduler config, pending post-apply verification artifacts, then run one scheduler cycle if safe.",
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--scheduler-config", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--policy-gate", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--policy-state-config", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--previous-evidence-rollup", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--previous-scheduler-report", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument(
+        "--post-apply-verification-report", type=Path, action="append"
+    )
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--report-dir", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--policy", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--scheduler-approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--backup-path", type=Path)
+    dogfood_ordinary_turn_default_automation_scheduler_integration_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -21761,6 +22009,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-scheduler-runner":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_runner_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-scheduler-integration":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_integration_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))
