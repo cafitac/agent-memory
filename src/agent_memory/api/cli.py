@@ -9599,6 +9599,140 @@ def _dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_payload
 
 
 
+def _dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    history_path = args.one_shot_history_report.expanduser().resolve(strict=False)
+    history_payload, history_artifact = _read_json_artifact_summary(history_path)
+    history_payload = history_payload or {}
+    quality = history_payload.get("quality_gate", {}) if isinstance(history_payload.get("quality_gate"), dict) else {}
+    history_status = (
+        history_payload.get("history_status", {}) if isinstance(history_payload.get("history_status"), dict) else {}
+    )
+    authority = (
+        history_payload.get("automation_authority", {})
+        if isinstance(history_payload.get("automation_authority"), dict)
+        else {}
+    )
+    privacy = history_payload.get("privacy", {}) if isinstance(history_payload.get("privacy"), dict) else {}
+    forbidden = (
+        history_payload.get("forbidden_authority", {})
+        if isinstance(history_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+
+    blocked_reasons: list[str] = []
+    if not history_artifact["provided"]:
+        blocked_reasons.append("one_shot_history_report_not_provided")
+    if history_artifact["error"] is not None:
+        blocked_reasons.append("one_shot_history_report_unreadable")
+    if history_payload.get("kind") != "dogfood_ordinary_turn_default_automation_scheduler_one_shot_history":
+        blocked_reasons.append("one_shot_history_kind_invalid")
+    if history_payload.get("read_only") is not True or history_payload.get("mutated") is not False:
+        blocked_reasons.append("one_shot_history_not_read_only")
+    if history_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("one_shot_history_ordinary_auto_approval_enabled")
+    if quality.get("pass") is not True:
+        blocked_reasons.append("one_shot_history_not_green")
+    if _safe_int(history_status.get("one_shot_count")) < 2:
+        blocked_reasons.append("one_shot_history_count_below_minimum")
+    if _safe_int(history_status.get("green_one_shot_count")) != _safe_int(history_status.get("one_shot_count")):
+        blocked_reasons.append("one_shot_history_not_all_green")
+    if history_status.get("all_runs_stopped_after_package") is not True:
+        blocked_reasons.append("one_shot_history_package_stop_not_proven")
+    if history_status.get("all_copy_runs_preserved_source_db") is not True:
+        blocked_reasons.append("one_shot_history_source_preservation_not_proven")
+    if history_status.get("all_runs_used_fresh_previous_evidence") is not True:
+        blocked_reasons.append("one_shot_history_fresh_evidence_chain_not_proven")
+    if history_status.get("ready_for_recurring_scheduler_design_review") is not True:
+        blocked_reasons.append("one_shot_history_not_ready_for_design_review")
+    if authority.get("executes_scheduler_cycle") is not False or authority.get("executes_apply") is not False:
+        blocked_reasons.append("one_shot_history_not_status_only")
+    if authority.get("background_or_recurring_schedule_enabled") is not False:
+        blocked_reasons.append("one_shot_history_background_or_recurring_enabled")
+    if authority.get("enables_unattended_default_authority") is not False:
+        blocked_reasons.append("one_shot_history_unattended_authority_enabled")
+    if not _privacy_flags_are_ref_safe(privacy):
+        blocked_reasons.append("one_shot_history_privacy_not_ref_safe")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if forbidden.get(key) is not False:
+            blocked_reasons.append(f"one_shot_history_forbidden_authority_{key}_invalid")
+    if not str(args.cadence_policy).strip():
+        blocked_reasons.append("cadence_policy_required")
+    if not str(args.kill_switch_policy).strip():
+        blocked_reasons.append("kill_switch_policy_required")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "source_report": {
+            "path": str(history_path),
+            "sha256": history_artifact.get("report_sha256"),
+            "kind": history_artifact.get("kind"),
+            "quality_gate_pass": quality.get("pass") is True,
+        },
+        "recurring_scheduler_readiness": {
+            "history_green": quality.get("pass") is True,
+            "one_shot_count": _safe_int(history_status.get("one_shot_count")),
+            "fresh_evidence_chain_proven": history_status.get("all_runs_used_fresh_previous_evidence") is True,
+            "source_db_preservation_proven": history_status.get("all_copy_runs_preserved_source_db") is True,
+            "package_stop_proven": history_status.get("all_runs_stopped_after_package") is True,
+            "bounded_cadence_required": True,
+            "kill_switch_required": True,
+            "ci_health_watch_required": True,
+            "rollback_evidence_required": True,
+            "ready_for_disabled_config_contract_slice": not blocked_unique,
+        },
+        "operator_policies": {
+            "cadence_policy_ref": "provided_nonempty_hash_only",
+            "cadence_policy_sha256": hashlib.sha256(str(args.cadence_policy).encode("utf-8")).hexdigest(),
+            "kill_switch_policy_ref": "provided_nonempty_hash_only",
+            "kill_switch_policy_sha256": hashlib.sha256(str(args.kill_switch_policy).encode("utf-8")).hexdigest(),
+        },
+        "future_approval_boundary": {
+            "current_packet_is_approval": False,
+            "exact_phrase_for_next_disabled_config_contract": "approve-disabled-recurring-default-automation-scheduler-config-contract-v1",
+            "later_enablement_requires_separate_approval": True,
+            "later_background_or_cron_requires_separate_approval": True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "recurring_scheduler_enabled": False,
+            "background_or_cron_enabled": False,
+            "enables_unattended_default_authority": False,
+            "status_only": True,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_default_automation_recurring_scheduler_readiness_green_for_disabled_config_contract_only"
+            if not blocked_unique
+            else "ordinary_turn_default_automation_recurring_scheduler_readiness_red_keep_recurring_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "only_after_explicit_phrase_add_disabled_config_contract; do_not_enable_recurring_or_background_execution",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -21490,6 +21624,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "--one-shot-report", type=Path, action="append", required=True
     )
     dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-recurring-scheduler-readiness",
+        help="Read-only readiness packet for a later disabled recurring-scheduler config contract; does not enable recurring/background execution.",
+    )
+    dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_parser.add_argument(
+        "--one-shot-history-report", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_parser.add_argument(
+        "--cadence-policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_parser.add_argument(
+        "--kill-switch-policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -23052,6 +23200,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-scheduler-one-shot-history":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-recurring-scheduler-readiness":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_recurring_scheduler_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))

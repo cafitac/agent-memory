@@ -1,21 +1,22 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 02:03 KST
+Last updated: 2026-05-18 02:20 KST
 
-## Current checkpoint: read-only scheduler one-shot history rollup
+## Current checkpoint: read-only recurring scheduler readiness packet
 
-- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-one-shot-history`.
-- It consumes two or more `ordinary-turn-default-automation-scheduler-one-shot` artifacts and verifies they form a bounded local opt-in sequence, not a background scheduler.
-- It proves every run was green, stopped after scheduler package collection, preserved source DB in copy mode, used unique trace refs, and each later run consumed the previous run's packaged evidence rollup as fresh previous evidence through the scheduler-status artifact.
-- It is status-only: `read_only=true`, `mutated=false`, `automation_authority.executes_scheduler_cycle=false`, `automation_authority.executes_apply=false`, `enables_unattended_default_authority=false`, and `background_or_recurring_schedule_enabled=false`.
-- Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-one-shot-history-smoke-20260517T170330Z/one-shot-history.json`.
-- Smoke result: `quality_gate.pass=true`, `one_shot_count=2`, `green_one_shot_count=2`, `copy_mode_count=2`, `source_db_unchanged_count=2`, `unique_trace_ref_count=2`, `all_runs_stopped_after_package=true`, `all_copy_runs_preserved_source_db=true`, `all_runs_used_fresh_previous_evidence=true`.
-- Validation complete: focused history `1 passed, 225 deselected`; scheduler corridor `11 passed, 215 deselected`; default-automation corridor `34 passed, 192 deselected`; full suite `408 passed, 1 xfailed`.
-- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99997%+.
-- Next safe slice: docs/read-only recurring-scheduler readiness packet with exact future approval boundary, cadence/kill-switch/fresh-evidence requirements, and no recurring/background code enablement yet.
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-recurring-scheduler-readiness`.
+- It consumes a green `dogfood_ordinary_turn_default_automation_scheduler_one_shot_history` artifact and emits a status-only readiness packet for the future disabled recurring-scheduler config contract.
+- It verifies the one-shot history is green/read-only/non-mutating, has at least two green one-shots, proves package-stop, source DB preservation, and fresh-evidence chaining, and keeps recurring/background/unattended authority disabled.
+- It hashes, but does not echo, supplied cadence and kill-switch policies.
+- It is status-only: `read_only=true`, `mutated=false`, `automation_authority.executes_scheduler_cycle=false`, `automation_authority.executes_apply=false`, `recurring_scheduler_enabled=false`, `background_or_cron_enabled=false`, and `enables_unattended_default_authority=false`.
+- Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-recurring-readiness-20260517T172007Z/recurring-scheduler-readiness.json`.
+- Smoke result: `quality_gate.pass=true`, `history_green=true`, `one_shot_count=2`, `fresh_evidence_chain_proven=true`, `source_db_preservation_proven=true`, `package_stop_proven=true`, `ready_for_disabled_config_contract_slice=true`.
+- Validation complete: focused readiness `1 passed, 226 deselected`; scheduler corridor `12 passed, 215 deselected`; default-automation corridor `35 passed, 192 deselected`; full suite `409 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99998%+.
+- Next safe slice: disabled recurring scheduler config contract after exact phrase `approve-disabled-recurring-default-automation-scheduler-config-contract-v1`; no enablement/background/cron execution yet.
 
-Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-one-shot-history.md`
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-recurring-scheduler-readiness.md`
 
 ## Previous checkpoint: repeated scheduler-window copy smoke using package evidence as next previous rollup
 
