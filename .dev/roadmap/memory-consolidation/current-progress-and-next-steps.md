@@ -1,7 +1,47 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:11 KST
+Last updated: 2026-05-17 16:34 KST
+
+## Checkpoint: default automation opt-in enablement preflight
+
+The source checkout now has `dogfood ordinary-turn-default-automation-enablement-preflight`, a read-only/manual-opt-in-only preflight over repeated green default-automation post-apply evidence.
+
+What changed:
+
+- The command consumes a saved `dogfood_ordinary_turn_default_automation_evidence_rollup` artifact.
+- It validates artifact kind, read-only/no-mutation/default-unchanged flags, ordinary auto-approval false, policy match, green rollup quality, minimum green/applied evidence counts, evidence-default auto-approval still false, privacy/ref safety, forbidden authority, and exact opt-in phrase shape.
+- Green means only `ordinary_turn_default_automation_enablement_preflight_green_manual_opt_in_only`; it is not a config write, not an apply trigger, and not unattended/default/background automation enablement.
+- The output contract includes a future enablement checklist: exact human opt-in, green repeated post-apply evidence, one-candidate apply bound, backup, rollback replay, post-apply verification, disable switch, and audit row per apply.
+
+Live/source smoke:
+
+- Input rollup: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-evidence-rollup.json`.
+- Output preflight: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-enablement-preflight.json`.
+- Result: `quality_gate.pass=true`, `green_report_count=2`, `applied_memory_count=2`, `ready_for_manual_opt_in_enablement=true`, `default_auto_approval_enabled=false`, `unattended_default_apply_allowed=false`, `enablement_executed=false`.
+- Live DB was not mutated.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-default-automation-enablement-preflight` subcommand.
+- Focused GREEN: `2 passed` for enablement-preflight tests.
+- Default automation GREEN: `12 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `31 passed, 173 deselected`.
+- Full suite first hit macOS temp/disk exhaustion (`No space left on device`), then passed after transient pytest/build/cache cleanup: `386 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.995%.
+- Remaining gap: a separate exact opt-in enablement switch with disable/rollback guardrails and hard fail-closed default-on tests. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Add an exact opt-in enablement switch next; it should consume a green preflight, require policy `ordinary-turn-default-automation-policy-v1` and phrase `enable-opt-in-ordinary-turn-default-automation-v1`, write only narrow auditable local config/policy state, and include disable/rollback guardrails.
+3. Do not enable unattended default/background apply or broad ordinary conversation auto-approval.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enablement-preflight.md`
 
 ## Checkpoint: default automation verifier smoke and repeated evidence rollup
 

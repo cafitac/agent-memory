@@ -9643,6 +9643,148 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
     return payload
 
 
+_DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE = "enable-opt-in-ordinary-turn-default-automation-v1"
+
+
+def _dogfood_ordinary_turn_default_automation_enablement_preflight_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_green_reports < 1:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-enablement-preflight --min-green-reports must be >= 1"
+        )
+    if args.max_default_candidates_per_run < 1:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-enablement-preflight --max-default-candidates-per-run must be >= 1"
+        )
+
+    blocked_reasons: list[str] = []
+    rollup, artifact = _read_json_artifact_summary(args.evidence_rollup)
+    rollup_green = False
+    ready_for_default_enablement_design = False
+    green_report_count = 0
+    applied_memory_count = 0
+    default_auto_approval_enabled_in_evidence = False
+
+    if rollup is None:
+        blocked_reasons.append("evidence_rollup_unreadable")
+    else:
+        if rollup.get("kind") != "dogfood_ordinary_turn_default_automation_evidence_rollup":
+            blocked_reasons.append("evidence_rollup_kind_mismatch")
+        if rollup.get("read_only") is not True or rollup.get("mutated") is not False:
+            blocked_reasons.append("evidence_rollup_not_read_only")
+        if rollup.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("evidence_rollup_default_retrieval_changed")
+        if rollup.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("evidence_rollup_ordinary_auto_approval_enabled")
+        if rollup.get("expected_policy") != args.expected_policy:
+            blocked_reasons.append("evidence_rollup_policy_mismatch")
+        quality_gate = rollup.get("quality_gate", {}) if isinstance(rollup.get("quality_gate"), dict) else {}
+        rollup_green = quality_gate.get("pass") is True
+        if not rollup_green:
+            blocked_reasons.append("rollup_quality_gate_not_green")
+            for reason in quality_gate.get("blocked_reasons", []) if isinstance(quality_gate.get("blocked_reasons"), list) else []:
+                blocked_reasons.append(str(reason))
+        summary = rollup.get("evidence_summary", {}) if isinstance(rollup.get("evidence_summary"), dict) else {}
+        ready_for_default_enablement_design = summary.get("ready_for_default_enablement_design") is True
+        if not ready_for_default_enablement_design:
+            blocked_reasons.append("rollup_not_ready_for_default_enablement_design")
+        green_report_count = _safe_int(summary.get("green_report_count"))
+        applied_memory_count = _safe_int(summary.get("applied_memory_count"))
+        if green_report_count < args.min_green_reports:
+            blocked_reasons.append("green_report_count_below_minimum")
+        if applied_memory_count < args.min_green_reports:
+            blocked_reasons.append("applied_memory_count_below_minimum")
+        if summary.get("apply_supported") is not False or summary.get("apply_executed") is not False:
+            blocked_reasons.append("evidence_rollup_apply_authority_granted")
+        default_auto_approval_enabled_in_evidence = summary.get("default_auto_approval_enabled") is True
+        if default_auto_approval_enabled_in_evidence:
+            blocked_reasons.append("evidence_default_auto_approval_already_enabled")
+        privacy = rollup.get("privacy", {}) if isinstance(rollup.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+            blocked_reasons.append("evidence_rollup_privacy_not_ref_safe")
+        forbidden = rollup.get("forbidden_authority", {}) if isinstance(rollup.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in forbidden.values()):
+            blocked_reasons.append("evidence_rollup_forbidden_authority_granted")
+
+    if args.approval_phrase != _DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE:
+        blocked_reasons.append("approval_phrase_mismatch")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    ready = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enablement_preflight",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "evidence_artifact": artifact,
+        "evidence_summary": {
+            "rollup_green": rollup_green,
+            "rollup_ready_for_default_enablement_design": ready_for_default_enablement_design,
+            "green_report_count": green_report_count,
+            "applied_memory_count": applied_memory_count,
+            "min_green_reports": args.min_green_reports,
+            "default_auto_approval_enabled_in_evidence": default_auto_approval_enabled_in_evidence,
+        },
+        "enablement_contract": {
+            "policy": args.expected_policy,
+            "required_enablement_approval_phrase": _DEFAULT_AUTOMATION_ENABLEMENT_APPROVAL_PHRASE,
+            "ready_for_manual_opt_in_enablement": ready,
+            "default_auto_approval_enabled": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "apply_supported": False,
+            "apply_executed": False,
+            "max_default_candidates_per_run": args.max_default_candidates_per_run,
+            "max_apply_without_fresh_post_apply_verification": 0,
+            "requires_exact_human_opt_in": True,
+            "requires_green_repeated_post_apply_evidence": True,
+            "requires_one_candidate_apply_bound": True,
+            "requires_backup_before_apply": True,
+            "requires_rollback_replay": True,
+            "requires_post_apply_verification": True,
+            "requires_disable_switch": True,
+            "requires_audit_row_per_apply": True,
+        },
+        "quality_gate": {
+            "pass": ready,
+            "decision": "ordinary_turn_default_automation_enablement_preflight_green_manual_opt_in_only"
+            if ready
+            else "ordinary_turn_default_automation_enablement_preflight_not_ready_keep_default_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+            "enablement_executed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "aggregate_only": True,
+            "report_hashes_only": True,
+        },
+        "recommended_next_step": "write_exact_opt_in_enablement_switch_with_disable_and_rollback_guardrails"
+        if ready
+        else "collect_green_default_automation_rollup_before_enablement_preflight",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_retrieval_ranking_experiment_payload(args: argparse.Namespace) -> dict[str, Any]:
     candidate_policy = _ranking_policy_or_default(args)
     shadow_compare_requested = bool(getattr(args, "shadow_compare", False)) or candidate_policy == "shadow_compare"
@@ -19084,6 +19226,22 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_evidence_rollup_parser.add_argument("--expected-policy", required=True)
     dogfood_ordinary_turn_default_automation_evidence_rollup_parser.add_argument("--min-green-reports", type=int, default=2)
     dogfood_ordinary_turn_default_automation_evidence_rollup_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enablement-preflight",
+        help="Preflight opt-in default automation enablement without mutating defaults or executing apply.",
+    )
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument(
+        "--evidence-rollup", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument("--expected-policy", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument(
+        "--min-green-reports", type=int, default=2
+    )
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument(
+        "--max-default-candidates-per-run", type=int, default=1
+    )
+    dogfood_ordinary_turn_default_automation_enablement_preflight_parser.add_argument("--output", type=Path)
     dogfood_retrieval_ranking_experiment_parser = dogfood_subparsers.add_parser(
         "retrieval-ranking-experiment",
         help="Run the retrieval ranking gate and, only if it passes, produce opt-in ranker previews from fixtures.",
@@ -20508,6 +20666,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-evidence-rollup":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_evidence_rollup_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enablement-preflight":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_enablement_preflight_payload(args), indent=2))
             return
         if args.dogfood_action == "retrieval-ranking-experiment":
             print(json.dumps(_dogfood_retrieval_ranking_experiment_payload(args), indent=2))

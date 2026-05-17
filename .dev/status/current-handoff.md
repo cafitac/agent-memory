@@ -1,7 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:11 KST
+Last updated: 2026-05-17 16:34 KST
+
+## Current checkpoint: default automation opt-in enablement preflight
+
+- Latest source checkpoint added `dogfood ordinary-turn-default-automation-enablement-preflight`.
+- It consumes the green repeated default-automation evidence rollup and emits a read-only/manual-opt-in-only packet.
+- Live/source smoke output: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-verifier-smoke-20260517T070356Z/default-automation-enablement-preflight.json`.
+- Green decision: `ordinary_turn_default_automation_enablement_preflight_green_manual_opt_in_only`.
+- Still blocked: ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh post-apply verifier evidence, default ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.995%.
+- Next safe slice: exact opt-in enablement switch with disable/rollback guardrails and hard fail-closed tests; do not turn on unattended/background apply.
+
 
 ## Just completed: default automation copy-live verifier smoke + repeated evidence rollup
 

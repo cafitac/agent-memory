@@ -128,3 +128,5 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 - `references/post-v0.1.162-ordinary-turn-inferred-evidence-rollup.md` - repeated post-apply verifier evidence rollup for design-readiness only.
 - `references/post-v0.1.162-ordinary-turn-default-automation-apply.md` - exact-reviewed one-candidate default automation apply corridor; stops after one.
 - `references/post-v0.1.162-ordinary-turn-default-automation-post-apply-verification.md` - read-only default automation post-apply verifier stop gate.
+- `references/post-v0.1.162-default-automation-evidence-rollup.md` - repeated default-automation verifier evidence rollup; design-readiness only.
+- `references/post-v0.1.162-default-automation-enablement-preflight.md` - read-only/manual-opt-in-only preflight before any exact enablement switch.
