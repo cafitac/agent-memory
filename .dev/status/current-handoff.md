@@ -1,7 +1,27 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:36 KST
+Last updated: 2026-05-17 11:09 KST
+
+## Just completed: ordinary-turn default automation post-apply verification
+
+- Added `dogfood ordinary-turn-default-automation-post-apply-verification`, a read-only stop gate over saved default automation apply + rollback replay artifacts.
+- It validates artifact kind/contract, exact expected policy, one-at-a-time apply bound, backup SHA/file, rollback replay, `g5_trace_candidate_applications` audit row, and `ordinary_turn_default_automation_approved_as` relation evidence.
+- Green means only `ordinary_turn_default_automation_post_apply_verification_green_stop`. It is a stop gate, not an apply trigger, repeat-apply permission, or auto-approval enablement.
+- Validation: RED missing subcommand; focused GREEN `2 passed`; default-automation GREEN `8 passed, 192 deselected`; broader ordinary-turn GREEN `27 passed, 173 deselected`; full suite GREEN `382 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.985-99.99%.
+- Remaining gap: real/source or copy-live post-apply verifier smoke, repeated green verifier/evidence-rollup windows, and a separate opt-in enablement gate before any default/background automation.
+
+Recommended next work now:
+
+1. Finish full-suite verification, commit/push this verifier checkpoint, and watch CI.
+2. Run a real/source or copy-live verifier smoke from saved apply + rollback replay artifacts.
+3. Add repeated default-automation post-apply evidence rollup only after green verifier artifacts exist.
+4. Do not enable ordinary conversation auto-approval, unattended default/background apply, or repeated apply without fresh exact approval.
 
 ## Just completed: ordinary-turn default automation dry-run
 

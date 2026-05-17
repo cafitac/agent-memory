@@ -1,7 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:55 KST
+Last updated: 2026-05-17 11:09 KST
+
+## Just completed: ordinary-turn default automation post-apply verification
+
+- Added `dogfood ordinary-turn-default-automation-post-apply-verification`, a read-only stop gate over a separately exact-approved default automation apply report plus rollback replay evidence.
+- It validates apply artifact kind/contract, exact policy, one-at-a-time apply bound, backup SHA/file, green rollback replay, `g5_trace_candidate_applications` audit row, and `ordinary_turn_default_automation_approved_as` relation evidence.
+- Green means only `ordinary_turn_default_automation_post_apply_verification_green_stop`; it does not execute apply or enable ordinary conversation auto-approval, broad/background apply, default/background auto-approval, unattended default apply, default ranking mutation, collapse/delete, telemetry reset, or repeated apply without fresh exact approval.
+- Validation: RED missing subcommand; focused GREEN `2 passed`; default-automation GREEN `8 passed, 192 deselected`; broader ordinary-turn GREEN `27 passed, 173 deselected`; full suite GREEN `382 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.985-99.99%.
+- Remaining gap: real/source or copy-live post-apply verifier smoke, repeated independent green verifier windows/evidence rollup, and a separate opt-in enablement gate before any default/background automation.
+
+Recommended next work now:
+
+1. Finish full-suite verification, commit/push this verifier checkpoint, and watch CI.
+2. Run a real/source or copy-live verifier smoke using a saved apply report plus rollback replay artifact; keep output ref-safe and local-only.
+3. Add repeated default-automation post-apply evidence rollup only after green verifier artifacts exist.
+4. Keep ordinary conversation auto-approval and unattended default/background apply blocked.
 
 ## Just completed: ordinary-turn default automation one-candidate apply corridor
 
@@ -16,12 +36,6 @@ Current estimate:
 - Safety-gated operational north-star: still approximately 99%+.
 - Literal scoped human-brain-like local memory lifecycle: approximately 99.98-99.985%.
 - Remaining gap: default-automation post-apply verifier + rollback replay evidence, repeated independent green windows, and a separate opt-in enablement gate before any default/background automation.
-
-Recommended next work now:
-
-1. Commit/push this apply corridor checkpoint and watch CI.
-2. Add `dogfood ordinary-turn-default-automation-post-apply-verification` as a read-only gate over apply report + rollback replay + backup/audit/relation evidence.
-3. Keep ordinary conversation auto-approval and unattended default/background apply blocked.
 
 ## Just completed: ordinary-turn default automation dry-run
 

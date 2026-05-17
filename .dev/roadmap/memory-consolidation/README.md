@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 10:36 KST, source work is on the post-v0.1.162 ordinary-turn default automation dry-run checkpoint.
-- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.97-99.98% for the scoped local human-brain-like lifecycle; the next boundary is a separate exact-reviewed one-candidate default-automation smoke/apply corridor, not ordinary auto-approval or unattended default/background apply from the dry-run itself.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 11:09 KST, source work is on the post-v0.1.162 ordinary-turn default automation post-apply verification checkpoint.
+- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.985-99.99% for the scoped local human-brain-like lifecycle; the next boundary is real/source or copy-live post-apply verifier smoke plus repeated green evidence rollup, not ordinary auto-approval or unattended default/background apply.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.
@@ -126,3 +126,5 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 
 - `references/post-v0.1.162-ordinary-turn-inferred-post-apply-verification.md` - ordinary-turn inferred post-apply verifier stop gate.
 - `references/post-v0.1.162-ordinary-turn-inferred-evidence-rollup.md` - repeated post-apply verifier evidence rollup for design-readiness only.
+- `references/post-v0.1.162-ordinary-turn-default-automation-apply.md` - exact-reviewed one-candidate default automation apply corridor; stops after one.
+- `references/post-v0.1.162-ordinary-turn-default-automation-post-apply-verification.md` - read-only default automation post-apply verifier stop gate.

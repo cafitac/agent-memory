@@ -1,7 +1,40 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:55 KST
+Last updated: 2026-05-17 11:09 KST
+
+## Checkpoint: ordinary-turn default automation post-apply verification
+
+The source checkout now has `dogfood ordinary-turn-default-automation-post-apply-verification`, a read-only stop gate for a separately exact-approved one-candidate default automation apply.
+
+What changed:
+
+- The command consumes a saved `dogfood_ordinary_turn_default_automation_apply` artifact and a saved `dogfood_rollback_replay_validate` artifact.
+- It validates artifact kind/read-only/mutation contracts, default retrieval unchanged, exact policy, one-at-a-time apply bound, valid trace/memory refs, green apply/rollback gates, ref/privacy safety, blocked forbidden authority, backup file SHA, audit row, and `ordinary_turn_default_automation_approved_as` relation evidence.
+- Green means `ordinary_turn_default_automation_post_apply_verification_green_stop` only. It is a stop gate, not an apply trigger, not a repeat-apply permission, and not ordinary/default/background auto-approval enablement.
+
+Validation:
+
+- RED observed: missing `ordinary-turn-default-automation-post-apply-verification` subcommand.
+- Focused GREEN: `2 passed` for the verifier tests.
+- Default automation GREEN: `8 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `27 passed, 173 deselected`.
+- Full suite GREEN: `382 passed, 1 xfailed`
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.985-99.99%.
+- Remaining gap: run a real/source or copy-live verifier smoke and collect repeated independent green verifier/evidence-rollup windows before any opt-in default/background enablement. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
+
+Recommended next work now:
+
+1. Finish full-suite verification, commit/push this post-apply verifier checkpoint, and watch CI.
+2. Run a real/source or copy-live post-apply verification smoke using saved apply + rollback replay artifacts; keep artifacts local-only and ref-safe.
+3. Add default-automation repeated post-apply evidence rollup only after green verifier artifacts exist.
+4. Do not enable ordinary conversation auto-approval, unattended default/background apply, or repeated apply without fresh exact approval.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-ordinary-turn-default-automation-post-apply-verification.md`
 
 ## Checkpoint: ordinary-turn default automation one-candidate apply corridor
 
