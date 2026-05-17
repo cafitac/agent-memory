@@ -18940,6 +18940,134 @@ def test_dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_c
 
 
 
+def test_dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_materialize_writes_disabled_only(
+    tmp_path: Path,
+) -> None:
+    validation_report = tmp_path / "disabled-recurring-scheduler-config-validation.json"
+    config_path = tmp_path / "ordinary-turn-default-automation-recurring-scheduler.disabled.json"
+    output_path = tmp_path / "disabled-recurring-scheduler-config-materialize.json"
+    validation_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "source_report": {"sha256": "c" * 64, "quality_gate_pass": True},
+                "validation": {
+                    "contract_green": True,
+                    "default_state_disabled": True,
+                    "enforced_state_disabled": True,
+                    "execution_authority_absent": True,
+                    "scheduler_config_write_absent": True,
+                    "fresh_evidence_requirements_present": True,
+                    "operator_policy_hashes_present": True,
+                    "future_enablement_separate_approval_preserved": True,
+                    "ready_for_disabled_config_contract_commit": True,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "recurring_scheduler_enabled": False,
+                    "background_or_cron_enabled": False,
+                    "enables_unattended_default_authority": False,
+                    "writes_scheduler_config": False,
+                    "status_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_green_fail_closed",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-disabled-recurring-scheduler-config-materialize",
+            "--validation-report",
+            str(validation_report),
+            "--scheduler-config-output",
+            str(config_path),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "approve-materialize-disabled-recurring-default-automation-scheduler-config-v1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_disabled_recurring_scheduler_config_materialize_green_disabled_only",
+        "blocked_reasons": [],
+    }
+    assert config_payload == {
+        "kind": "ordinary_turn_default_automation_scheduler_config",
+        "enabled": False,
+        "policy": "ordinary-turn-default-automation-policy-v1",
+        "mode": "disabled_recurring_scheduler_contract_v1",
+        "contract_validation_sha256": hashlib.sha256(validation_report.read_bytes()).hexdigest(),
+        "max_candidates_per_cycle": 1,
+        "requires_enabled_policy_state": True,
+        "requires_previous_evidence_rollup": True,
+        "requires_post_apply_verification_before_next_cycle": True,
+        "requires_bounded_cadence_policy": True,
+        "requires_kill_switch_policy": True,
+        "requires_ci_health_watch": True,
+        "requires_rollback_evidence": True,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "recurring_scheduler_enabled": False,
+        "background_or_cron_enabled": False,
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "later_enablement_requires_separate_approval": True,
+        "later_background_or_cron_requires_separate_approval": True,
+    }
+    assert payload["materialized_config"]["enabled"] is False
+    assert payload["materialized_config"]["path"] == str(config_path.resolve(strict=False))
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "recurring_scheduler_enabled": False,
+        "background_or_cron_enabled": False,
+        "enables_unattended_default_authority": False,
+        "writes_scheduler_config": True,
+        "writes_disabled_config_only": True,
+    }
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
