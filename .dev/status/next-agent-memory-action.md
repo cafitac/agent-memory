@@ -1,7 +1,19 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 02:35 KST
+Last updated: 2026-05-18 02:47 KST
+
+## Current checkpoint: disabled recurring scheduler config validation
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-disabled-recurring-scheduler-config-validate`.
+- It consumes the disabled recurring scheduler config contract and fails closed unless the contract is green, disabled by default, disabled as enforced state, execution-free, write-free, fresh-evidence/package-stop/CI/rollback constrained, and still preserves separate approval for later enablement/background/cron.
+- RED proof: the subcommand was initially missing; the test mutates the contract to set `recurring_scheduler_enabled=true` and `executes_scheduler_cycle=true`, and validation returns red blocked reasons while validator authority remains false.
+- Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-validation-20260517T174542Z/disabled-recurring-scheduler-config-validation.json`.
+- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `2 passed, 227 deselected`; full suite still pending for this checkpoint.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99999%+.
+- Next safe slice: disabled config file materialization (`enabled=false`) plus runner refusal tests; no enablement/background/cron execution yet.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-disabled-recurring-scheduler-config-validation.md`
 
 ## Current checkpoint: disabled recurring scheduler config contract
 

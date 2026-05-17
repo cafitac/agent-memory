@@ -9918,6 +9918,181 @@ def _dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_confi
 
 
 
+def _dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError("ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_policy_mismatch")
+
+    report_path = args.config_contract_report.expanduser().resolve(strict=False)
+    contract_payload, artifact = _read_json_artifact_summary(report_path)
+    contract_payload = contract_payload or {}
+    quality = contract_payload.get("quality_gate", {}) if isinstance(contract_payload.get("quality_gate"), dict) else {}
+    contract = (
+        contract_payload.get("config_contract", {})
+        if isinstance(contract_payload.get("config_contract"), dict)
+        else {}
+    )
+    authority = (
+        contract_payload.get("automation_authority", {})
+        if isinstance(contract_payload.get("automation_authority"), dict)
+        else {}
+    )
+    approval_boundary = (
+        contract_payload.get("approval_boundary", {})
+        if isinstance(contract_payload.get("approval_boundary"), dict)
+        else {}
+    )
+    operator_policy_refs = (
+        contract_payload.get("operator_policy_refs", {})
+        if isinstance(contract_payload.get("operator_policy_refs"), dict)
+        else {}
+    )
+    forbidden = (
+        contract_payload.get("forbidden_authority", {})
+        if isinstance(contract_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    privacy = contract_payload.get("privacy", {}) if isinstance(contract_payload.get("privacy"), dict) else {}
+
+    blocked_reasons: list[str] = []
+    if artifact.get("error") is not None:
+        blocked_reasons.append("config_contract_report_unreadable")
+    if contract_payload.get("kind") != "dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_contract":
+        blocked_reasons.append("config_contract_report_kind_invalid")
+    if contract_payload.get("read_only") is not True or contract_payload.get("mutated") is not False:
+        blocked_reasons.append("config_contract_report_not_read_only")
+    if contract_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("config_contract_report_ordinary_auto_approval_enabled")
+    if quality.get("pass") is not True:
+        blocked_reasons.append("config_contract_quality_gate_not_green")
+    if contract.get("kind") != "ordinary_turn_default_automation_recurring_scheduler_config_contract":
+        blocked_reasons.append("config_contract_kind_invalid")
+    if contract.get("policy") != args.policy:
+        blocked_reasons.append("config_contract_policy_mismatch")
+    if contract.get("default_state") != "disabled":
+        blocked_reasons.append("config_contract_default_state_not_disabled")
+    if contract.get("enforced_state") != "disabled":
+        blocked_reasons.append("config_contract_enforced_state_not_disabled")
+    for key in ("recurring_scheduler_enabled", "background_or_cron_enabled", "executes_scheduler_cycle", "executes_apply"):
+        if contract.get(key) is not False:
+            blocked_reasons.append(f"config_contract_{key}_invalid")
+    if _safe_int(contract.get("max_candidates_per_cycle")) != 1:
+        blocked_reasons.append("config_contract_max_candidates_per_cycle_invalid")
+    required_true_keys = (
+        "requires_enabled_policy_state",
+        "requires_green_policy_gate",
+        "requires_fresh_previous_evidence_rollup",
+        "requires_package_stop_after_each_cycle",
+        "requires_post_apply_verification_before_next_cycle",
+        "requires_bounded_cadence_policy",
+        "requires_kill_switch_policy",
+        "requires_ci_health_watch",
+        "requires_rollback_evidence",
+        "later_enablement_requires_separate_approval",
+        "later_background_or_cron_requires_separate_approval",
+    )
+    for key in required_true_keys:
+        if contract.get(key) is not True:
+            blocked_reasons.append(f"config_contract_{key}_missing")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "recurring_scheduler_enabled",
+        "background_or_cron_enabled",
+        "enables_unattended_default_authority",
+        "writes_scheduler_config",
+    ):
+        if authority.get(key) is not False:
+            blocked_reasons.append(f"config_contract_authority_{key}_invalid")
+    if authority.get("status_only") is not True:
+        blocked_reasons.append("config_contract_authority_not_status_only")
+    if approval_boundary.get("approval_phrase_consumed_for_disabled_data_contract_only") is not True:
+        blocked_reasons.append("config_contract_approval_phrase_scope_invalid")
+    if approval_boundary.get("current_contract_enables_execution") is not False:
+        blocked_reasons.append("config_contract_approval_boundary_enables_execution")
+    if approval_boundary.get("later_enablement_requires_separate_approval") is not True:
+        blocked_reasons.append("config_contract_later_enablement_boundary_missing")
+    if approval_boundary.get("later_background_or_cron_requires_separate_approval") is not True:
+        blocked_reasons.append("config_contract_later_background_boundary_missing")
+    for key in ("cadence_policy_sha256", "kill_switch_policy_sha256"):
+        value = operator_policy_refs.get(key)
+        if not isinstance(value, str) or len(value) != 64:
+            blocked_reasons.append(f"config_contract_{key}_missing")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if forbidden.get(key) is not False:
+            blocked_reasons.append(f"config_contract_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(privacy):
+        blocked_reasons.append("config_contract_privacy_not_ref_safe")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "source_report": {
+            "path": str(report_path),
+            "sha256": artifact.get("report_sha256"),
+            "kind": artifact.get("kind"),
+            "quality_gate_pass": quality.get("pass") is True,
+        },
+        "validation": {
+            "contract_green": quality.get("pass") is True,
+            "default_state_disabled": contract.get("default_state") == "disabled",
+            "enforced_state_disabled": contract.get("enforced_state") == "disabled",
+            "execution_authority_absent": all(
+                contract.get(key) is False
+                for key in ("recurring_scheduler_enabled", "background_or_cron_enabled", "executes_scheduler_cycle", "executes_apply")
+            ),
+            "scheduler_config_write_absent": authority.get("writes_scheduler_config") is False,
+            "fresh_evidence_requirements_present": all(contract.get(key) is True for key in required_true_keys[:9]),
+            "operator_policy_hashes_present": all(
+                isinstance(operator_policy_refs.get(key), str) and len(operator_policy_refs.get(key, "")) == 64
+                for key in ("cadence_policy_sha256", "kill_switch_policy_sha256")
+            ),
+            "future_enablement_separate_approval_preserved": (
+                contract.get("later_enablement_requires_separate_approval") is True
+                and contract.get("later_background_or_cron_requires_separate_approval") is True
+                and approval_boundary.get("current_contract_enables_execution") is False
+            ),
+            "ready_for_disabled_config_contract_commit": not blocked_unique,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "recurring_scheduler_enabled": False,
+            "background_or_cron_enabled": False,
+            "enables_unattended_default_authority": False,
+            "writes_scheduler_config": False,
+            "status_only": True,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_green_fail_closed"
+            if not blocked_unique
+            else "ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_red_keep_recurring_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -21839,6 +22014,19 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_contract_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validate_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-disabled-recurring-scheduler-config-validate",
+        help="Validate that a disabled recurring-scheduler config contract remains fail-closed and execution-free.",
+    )
+    dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validate_parser.add_argument(
+        "--config-contract-report", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validate_parser.add_argument(
+        "--policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validate_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -23409,6 +23597,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_contract_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-disabled-recurring-scheduler-config-validate":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_payload(args),
                     indent=2,
                 )
             )

@@ -18800,6 +18800,146 @@ def test_dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_c
 
 
 
+def test_dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_validator_fails_closed(
+    tmp_path: Path,
+) -> None:
+    contract_report = tmp_path / "disabled-recurring-scheduler-config-contract.json"
+    output_path = tmp_path / "disabled-recurring-scheduler-config-validation.json"
+    green_payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_disabled_recurring_scheduler_config_contract",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "config_contract": {
+            "kind": "ordinary_turn_default_automation_recurring_scheduler_config_contract",
+            "policy": "ordinary-turn-default-automation-policy-v1",
+            "default_state": "disabled",
+            "enforced_state": "disabled",
+            "recurring_scheduler_enabled": False,
+            "background_or_cron_enabled": False,
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "max_candidates_per_cycle": 1,
+            "requires_enabled_policy_state": True,
+            "requires_green_policy_gate": True,
+            "requires_fresh_previous_evidence_rollup": True,
+            "requires_package_stop_after_each_cycle": True,
+            "requires_post_apply_verification_before_next_cycle": True,
+            "requires_bounded_cadence_policy": True,
+            "requires_kill_switch_policy": True,
+            "requires_ci_health_watch": True,
+            "requires_rollback_evidence": True,
+            "later_enablement_requires_separate_approval": True,
+            "later_background_or_cron_requires_separate_approval": True,
+        },
+        "operator_policy_refs": {
+            "cadence_policy_ref": "readiness_hash_only",
+            "cadence_policy_sha256": "a" * 64,
+            "kill_switch_policy_ref": "readiness_hash_only",
+            "kill_switch_policy_sha256": "b" * 64,
+        },
+        "approval_boundary": {
+            "approval_phrase_consumed_for_disabled_data_contract_only": True,
+            "current_contract_enables_execution": False,
+            "later_enablement_requires_separate_approval": True,
+            "later_background_or_cron_requires_separate_approval": True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "recurring_scheduler_enabled": False,
+            "background_or_cron_enabled": False,
+            "enables_unattended_default_authority": False,
+            "writes_scheduler_config": False,
+            "status_only": True,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_disabled_recurring_scheduler_config_contract_green_data_only",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+    }
+    contract_report.write_text(json.dumps(green_payload), encoding="utf-8")
+
+    def _run_validate() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "dogfood",
+                "ordinary-turn-default-automation-disabled-recurring-scheduler-config-validate",
+                "--config-contract-report",
+                str(contract_report),
+                "--policy",
+                "ordinary-turn-default-automation-policy-v1",
+                "--output",
+                str(output_path),
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONPATH": "src"},
+            capture_output=True,
+            text=True,
+        )
+
+    green_result = _run_validate()
+    assert green_result.returncode == 0, green_result.stderr
+    green_validation = json.loads(green_result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == green_validation
+    assert green_validation["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_green_fail_closed",
+        "blocked_reasons": [],
+    }
+    assert green_validation["validation"] == {
+        "contract_green": True,
+        "default_state_disabled": True,
+        "enforced_state_disabled": True,
+        "execution_authority_absent": True,
+        "scheduler_config_write_absent": True,
+        "fresh_evidence_requirements_present": True,
+        "operator_policy_hashes_present": True,
+        "future_enablement_separate_approval_preserved": True,
+        "ready_for_disabled_config_contract_commit": True,
+    }
+    assert green_validation["automation_authority"]["recurring_scheduler_enabled"] is False
+    assert green_validation["automation_authority"]["background_or_cron_enabled"] is False
+    assert green_validation["automation_authority"]["writes_scheduler_config"] is False
+
+    red_payload = dict(green_payload)
+    red_contract = dict(green_payload["config_contract"])
+    red_contract["recurring_scheduler_enabled"] = True
+    red_contract["executes_scheduler_cycle"] = True
+    red_payload["config_contract"] = red_contract
+    contract_report.write_text(json.dumps(red_payload), encoding="utf-8")
+    red_result = _run_validate()
+    assert red_result.returncode == 0, red_result.stderr
+    red_validation = json.loads(red_result.stdout)
+    assert red_validation["quality_gate"]["pass"] is False
+    assert red_validation["quality_gate"]["decision"] == (
+        "ordinary_turn_default_automation_disabled_recurring_scheduler_config_validation_red_keep_recurring_blocked"
+    )
+    assert "config_contract_recurring_scheduler_enabled_invalid" in red_validation["quality_gate"]["blocked_reasons"]
+    assert "config_contract_executes_scheduler_cycle_invalid" in red_validation["quality_gate"]["blocked_reasons"]
+    assert red_validation["automation_authority"]["recurring_scheduler_enabled"] is False
+    assert red_validation["automation_authority"]["background_or_cron_enabled"] is False
+    assert red_validation["automation_authority"]["writes_scheduler_config"] is False
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
