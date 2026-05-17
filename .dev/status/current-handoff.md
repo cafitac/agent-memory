@@ -1,7 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:44 KST
+Last updated: 2026-05-17 18:03 KST
+
+## Current checkpoint: explicit opt-in default automation runner
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-runner`.
+- The runner executes the existing dry-run and at most one exact-approved one-candidate apply under enabled policy-state and green policy-gate artifacts.
+- Required exact inputs remain: policy `ordinary-turn-default-automation-policy-v1`, phrase `apply-exact-ordinary-turn-default-automation-candidate-v1`, actor, private reason, enabled policy state, and fresh previous evidence rollup after any prior default-automation apply.
+- Copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-runner-smoke-20260517T090307Z/default-automation-runner.json`.
+- Smoke result: `quality_gate.pass=true`, `apply_executed=true`, `mutated_copy=true`, `source_db_mutated=false`, `ordinary_conversation_auto_approval=false`, `unattended_default_apply_allowed=false`.
+- Validation: runner focused `3 passed, 212 deselected`; default-automation focused `23 passed, 192 deselected`; full suite `397 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9995%+.
+- Next safe slice: scheduler-facing wrapper/runbook that invokes the runner only with enabled policy state plus fresh evidence and immediately stops for post-apply verification; no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-runner.md`
 
 ## Current checkpoint: default automation freshness-boundary copy-live smoke
 

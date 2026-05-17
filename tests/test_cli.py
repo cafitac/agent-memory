@@ -17106,6 +17106,245 @@ def test_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_uses_
 
 
 
+def test_dogfood_ordinary_turn_default_automation_runner_executes_one_exact_approved_candidate(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-runner.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    report_dir = tmp_path / "runner-reports"
+    output_path = tmp_path / "ordinary-turn-default-automation-runner.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="r" * 64,
+        summary="User prefers runner managed terminal summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-runner",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "exact operator approval for the opt-in runner",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "runner managed terminal summaries" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_runner"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["runner"]["dry_run_executed"] is True
+    assert payload["runner"]["apply_executed"] is True
+    assert payload["runner"]["selected_trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["dry_run_report"]["kind"] == "dogfood_ordinary_turn_default_automation_dry_run"
+    assert payload["apply_report"]["kind"] == "dogfood_ordinary_turn_default_automation_apply"
+    assert payload["apply_report"]["apply"]["applied_count"] == 1
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_runner_applied_one_exact_approved_candidate_stop",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["ordinary_conversation_auto_approval"] is False
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["forbidden_authority"]["default_background_auto_approval_allowed"] is False
+    assert payload["privacy"]["raw_trace_summary_included"] is False
+    assert payload["privacy"]["raw_reason_included"] is False
+    assert (report_dir / "ordinary-turn-default-automation-dry-run.json").exists()
+    assert (report_dir / "ordinary-turn-default-automation-apply.json").exists()
+    assert (report_dir / "ordinary-turn-default-automation-apply.bak").exists()
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM relations WHERE relation_type = 'ordinary_turn_default_automation_approved_as'"
+        ).fetchone()[0] == 1
+
+
+
+def test_dogfood_ordinary_turn_default_automation_runner_blocks_disabled_policy_state_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-runner-disabled.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "disabled-policy-state.json"
+    report_dir = tmp_path / "runner-disabled-reports"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=False)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="s" * 64,
+        summary="User prefers blocked runner summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-runner",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "should stay blocked because policy state is disabled",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_runner"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["runner"]["dry_run_executed"] is True
+    assert payload["runner"]["apply_executed"] is False
+    assert payload["quality_gate"]["pass"] is False
+    assert "policy_state_manual_opt_in_disabled" in payload["quality_gate"]["blocked_reasons"]
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+
+def test_dogfood_ordinary_turn_default_automation_runner_requires_fresh_rollup_after_prior_apply(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-runner-freshness.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    report_dir = tmp_path / "runner-freshness-reports"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    prior_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="t" * 64,
+        summary="User prefers prior runner summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{prior_trace.id}",
+        relation_type="ordinary_turn_default_automation_approved_as",
+        to_ref="fact:999",
+        evidence_ids=[],
+        confidence=0.8,
+        review_actor="prior-operator",
+        review_reason="prior exact approval",
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="u" * 64,
+        summary="User prefers fresh rollup runner summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-runner",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--approval-phrase",
+            "apply-exact-ordinary-turn-default-automation-candidate-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "should stay blocked without fresh previous evidence rollup",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is False
+    assert payload["runner"]["dry_run_executed"] is True
+    assert payload["runner"]["apply_executed"] is False
+    assert "previous_evidence_rollup_required_after_prior_default_automation_apply" in payload["quality_gate"]["blocked_reasons"]
+    assert payload["forbidden_authority"]["repeated_apply_without_new_approval_allowed"] is False
+    assert _table_counts(db_path, ["facts", "relations", "source_records"]) == before_counts
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:

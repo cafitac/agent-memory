@@ -8148,6 +8148,122 @@ def _run_default_automation_apply_artifact(
     )
 
 
+def _dogfood_ordinary_turn_default_automation_runner_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError("ordinary_turn_default_automation_runner_policy_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-runner --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-runner --reason is required")
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    db_path = args.db_path.expanduser().resolve(strict=False)
+    dry_run_path = report_dir / "ordinary-turn-default-automation-dry-run.json"
+    apply_path = report_dir / "ordinary-turn-default-automation-apply.json"
+    backup_path = (args.backup_path or (report_dir / "ordinary-turn-default-automation-apply.bak")).expanduser().resolve(
+        strict=False
+    )
+
+    dry_run = _dogfood_ordinary_turn_default_automation_dry_run_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            policy=args.policy,
+            policy_gate=args.policy_gate,
+            policy_state_config=args.policy_state_config,
+            limit=args.limit,
+            max_candidates=1,
+            output=dry_run_path,
+        )
+    )
+    dry_quality = dry_run.get("quality_gate", {}) if isinstance(dry_run.get("quality_gate"), dict) else {}
+    blocked_reasons = [str(reason) for reason in dry_quality.get("blocked_reasons", [])]
+    candidate_refs = dry_run.get("candidate_refs") if isinstance(dry_run.get("candidate_refs"), list) else []
+    selected_trace_ref = str(candidate_refs[0]) if dry_quality.get("pass") is True and candidate_refs else None
+    apply_report: dict[str, Any] | None = None
+    apply_error = None
+
+    if not selected_trace_ref and dry_quality.get("pass") is True:
+        blocked_reasons.append("ordinary_turn_default_automation_runner_no_selected_candidate")
+    if selected_trace_ref:
+        try:
+            apply_report = _dogfood_ordinary_turn_default_automation_apply_payload(
+                argparse.Namespace(
+                    db_path=db_path,
+                    trace_ref=selected_trace_ref,
+                    dry_run_report=dry_run_path,
+                    policy_state_config=args.policy_state_config,
+                    previous_evidence_rollup=args.previous_evidence_rollup,
+                    policy=args.policy,
+                    approval_phrase=args.approval_phrase,
+                    actor=args.actor,
+                    reason=args.reason,
+                    backup_path=backup_path,
+                    output=apply_path,
+                )
+            )
+        except ValueError as exc:
+            apply_error = str(exc)
+            if ": " in apply_error:
+                blocked_reasons.extend(reason for reason in apply_error.split(": ", 1)[1].split(",") if reason)
+            else:
+                blocked_reasons.append(apply_error)
+
+    blocked_unique = sorted(set(blocked_reasons))
+    applied = apply_report is not None and apply_report.get("quality_gate", {}).get("pass") is True
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_runner",
+        "read_only": not applied,
+        "mutated": applied,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy": args.policy,
+        "runner": {
+            "dry_run_executed": True,
+            "apply_attempted": selected_trace_ref is not None,
+            "apply_executed": applied,
+            "selected_trace_ref": selected_trace_ref,
+            "max_default_candidates_per_run": 1,
+            "requires_policy_state_enabled": True,
+            "requires_exact_reviewed_candidate": True,
+            "requires_fresh_previous_evidence_rollup_after_prior_apply": True,
+            "scheduler_safe_when_invoked_with_explicit_approval_only": True,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+        },
+        "input_artifacts": {
+            "policy_gate": str(args.policy_gate.expanduser().resolve(strict=False)),
+            "policy_state_config": str(args.policy_state_config.expanduser().resolve(strict=False)),
+            "previous_evidence_rollup": str(args.previous_evidence_rollup.expanduser().resolve(strict=False))
+            if args.previous_evidence_rollup is not None
+            else None,
+        },
+        "dry_run_report": {
+            "kind": dry_run.get("kind"),
+            "path": str(dry_run_path),
+            "sha256": _sha256_file(dry_run_path) if dry_run_path.exists() else None,
+            "quality_gate_pass": dry_quality.get("pass") is True,
+            "candidate_refs": [str(ref) for ref in candidate_refs],
+        },
+        "apply_report": apply_report,
+        "apply_error": apply_error,
+        "quality_gate": {
+            "pass": applied and not blocked_unique,
+            "decision": "ordinary_turn_default_automation_runner_applied_one_exact_approved_candidate_stop"
+            if applied and not blocked_unique
+            else "ordinary_turn_default_automation_runner_blocked_before_or_during_exact_apply",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "run_post_apply_verification_and_evidence_rollup_before_next_runner_apply"
+        if applied
+        else "fix_policy_state_dry_run_or_previous_evidence_before_runner_apply",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -19927,6 +20043,22 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--reason", required=True)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_runner_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-runner",
+        help="Run the explicit opt-in default-automation runner: dry-run plus at most one exact-approved candidate apply.",
+    )
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--policy-gate", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--policy-state-config", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--previous-evidence-rollup", type=Path)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--report-dir", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--policy", required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--approval-phrase", required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--limit", type=int, default=500)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--backup-path", type=Path)
+    dogfood_ordinary_turn_default_automation_runner_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -21465,6 +21597,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-apply":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-runner":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_runner_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))

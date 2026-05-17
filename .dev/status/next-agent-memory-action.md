@@ -1,7 +1,29 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:44 KST
+Last updated: 2026-05-17 18:03 KST
+
+## Just completed: explicit opt-in default automation runner
+
+- Added `dogfood ordinary-turn-default-automation-runner`, a command-level runner that wires enabled policy-state + green policy gate + read-only dry-run + exact one-candidate apply into a single explicit invocation.
+- The runner applies at most one preference-shaped ordinary-turn candidate and only when the caller supplies exact policy `ordinary-turn-default-automation-policy-v1`, exact phrase `apply-exact-ordinary-turn-default-automation-candidate-v1`, actor, reason, and the enabled policy-state artifact.
+- It inherits the prior freshness boundary: after any prior `ordinary_turn_default_automation_approved_as` relation exists, a fresh green `--previous-evidence-rollup` is required before the runner can apply again.
+- Copy-live smoke wrote `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-runner-smoke-20260517T090307Z/default-automation-runner.json`; it mutated only the copied DB and reported `quality_gate.pass=true`, `apply_executed=true`, `source_db_mutated=false`, `ordinary_conversation_auto_approval=false`, and `unattended_default_apply_allowed=false`.
+- Validation passed: RED missing subcommand, focused runner tests `3 passed, 212 deselected`, default-automation focused `23 passed, 192 deselected`, full suite `397 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.9995%+.
+- Remaining gap: scheduler-facing runbook/wrapper for fresh post-apply verification before repeated runner use; no broad unattended/default/background authority is enabled.
+
+Recommended next work now:
+
+1. Commit/push this runner checkpoint and watch CI.
+2. If continuing toward 100%, add a scheduler-facing wrapper/runbook that calls the runner only when enabled policy-state and fresh evidence rollup are present, then stops for post-apply verification.
+3. Keep broad ordinary conversation auto-approval, default/background unattended apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-runner.md`
 
 ## Just completed: default automation freshness-boundary copy-live smoke
 

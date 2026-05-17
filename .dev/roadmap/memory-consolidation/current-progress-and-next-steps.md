@@ -1,7 +1,46 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:44 KST
+Last updated: 2026-05-17 18:03 KST
+
+## Checkpoint: explicit opt-in default automation runner
+
+The source checkout now has `dogfood ordinary-turn-default-automation-runner`, a command-level runner for the narrow ordinary-turn default automation corridor.
+
+What changed:
+
+- The runner executes the read-only default automation dry-run under enabled policy-state and green policy-gate artifacts.
+- If exactly one candidate is selected and the caller supplied exact approval inputs, it delegates to the existing one-candidate apply corridor.
+- It writes runner-local dry-run/apply/backup artifacts under `--report-dir`.
+- It applies at most one candidate per invocation and immediately stops; post-apply verification/evidence rollup remains the required next step.
+- If any prior default-automation apply relation exists, the runner is blocked unless `--previous-evidence-rollup` is supplied and green.
+
+Copy-live smoke:
+
+- Output: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-runner-smoke-20260517T090307Z/default-automation-runner.json`.
+- Result: `quality_gate.pass=true`, `apply_executed=true`, `mutated_copy=true`, `source_db_mutated=false`, `ordinary_conversation_auto_approval=false`, `unattended_default_apply_allowed=false`.
+
+Validation:
+
+- RED observed: dogfood subcommand was initially missing.
+- Runner focused GREEN: `3 passed, 212 deselected`.
+- Default automation GREEN: `23 passed, 192 deselected`.
+- Full suite GREEN: `397 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.9995%+.
+- Remaining gap: scheduler-facing wrapper/runbook and repeated-run proof that the runner only fires with fresh post-apply evidence.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Add a scheduler-facing wrapper/runbook only if it remains fail-closed, policy-state gated, one-candidate bounded, and fresh-evidence gated.
+3. Do not enable broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-runner.md`
+
 
 ## Checkpoint: default automation freshness-boundary copy-live smoke
 
