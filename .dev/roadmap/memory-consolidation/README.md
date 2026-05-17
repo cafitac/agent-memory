@@ -36,8 +36,8 @@ When a new session starts with a vague prompt such as "이어서 진행해줘":
 
 ## Current checkpoint
 
-- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 10:07 KST, source work is on the post-v0.1.162 ordinary-turn broader automation readiness checkpoint.
-- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.93-99.95% for the scoped local human-brain-like lifecycle; the next boundary is a separate exact policy/runbook before any default/background ordinary-turn automation, not auto-approval from the readiness gate itself.
+- `.dev/status/current-handoff.md` — latest verified handoff. As of 2026-05-17 10:24 KST, source work is on the post-v0.1.162 ordinary-turn default automation policy-gate checkpoint.
+- `current-progress-and-next-steps.md` — current north-star progress, now approximately 99%+ in the safety-gated operational roadmap framing and about 99.95-99.97% for the scoped local human-brain-like lifecycle; the next boundary is a read-only opt-in default-automation dry-run under the exact policy gate, not ordinary auto-approval from the policy gate itself.
 - `g4-readiness-and-first-mutation-plan.md` — historical first-mutation sequence plus guardrails for broader G4 apply-mode contracts.
 
 Use `.dev/status/current-handoff.md` as the first checkpoint before choosing the next PR-sized task, then open the relevant stage file.

@@ -7176,6 +7176,147 @@ def _dogfood_ordinary_turn_broader_automation_readiness_payload(args: argparse.N
     return payload
 
 
+_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY = "ordinary-turn-default-automation-policy-v1"
+_ORDINARY_TURN_DEFAULT_AUTOMATION_ENABLEMENT_PHRASE = "enable-opt-in-ordinary-turn-default-automation-v1"
+
+
+def _dogfood_ordinary_turn_default_automation_policy_gate_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-policy-gate --policy must be "
+            f"{_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY}"
+        )
+    if args.min_independent_green_windows < 2:
+        raise ValueError(
+            "dogfood ordinary-turn-default-automation-policy-gate --min-independent-green-windows must be >= 2"
+        )
+    if args.max_candidates_per_run < 1:
+        raise ValueError("dogfood ordinary-turn-default-automation-policy-gate --max-candidates-per-run must be >= 1")
+    readiness, readiness_artifact = _read_json_artifact_summary(args.broader_automation_readiness)
+    blocked_reasons: list[str] = []
+    readiness_score = 0
+    green_report_count = 0
+    secret_like_count = 0
+    broader_green = False
+    ready_for_design = False
+
+    if readiness is None:
+        blocked_reasons.append("broader_automation_readiness_unreadable")
+    else:
+        if readiness.get("kind") != "dogfood_ordinary_turn_broader_automation_readiness":
+            blocked_reasons.append("broader_automation_readiness_kind_mismatch")
+        if readiness.get("read_only") is not True or readiness.get("mutated") is not False:
+            blocked_reasons.append("broader_automation_readiness_not_read_only")
+        if readiness.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("broader_automation_readiness_default_retrieval_changed")
+        if readiness.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("broader_automation_readiness_ordinary_auto_approval_enabled")
+        quality = readiness.get("quality_gate", {}) if isinstance(readiness.get("quality_gate"), dict) else {}
+        broader_green = quality.get("pass") is True
+        if not broader_green:
+            blocked_reasons.append("broader_automation_readiness_gate_not_green")
+        policy = readiness.get("broader_automation_policy", {}) if isinstance(readiness.get("broader_automation_policy"), dict) else {}
+        ready_for_design = policy.get("ready_for_design") is True
+        if not ready_for_design:
+            blocked_reasons.append("broader_automation_readiness_not_ready_for_design")
+        if policy.get("apply_supported") is not False or policy.get("apply_executed") is not False:
+            blocked_reasons.append("broader_automation_readiness_claims_apply_authority")
+        if policy.get("default_background_auto_approval_allowed") is not False:
+            blocked_reasons.append("broader_automation_readiness_allows_default_background_auto_approval")
+        if _safe_int(policy.get("max_apply_without_new_approval")) != 0:
+            blocked_reasons.append("broader_automation_readiness_allows_apply_without_new_approval")
+        summary = readiness.get("evidence_summary", {}) if isinstance(readiness.get("evidence_summary"), dict) else {}
+        readiness_score = _safe_int(summary.get("ordinary_turn_readiness_score_percent"))
+        green_report_count = _safe_int(summary.get("inferred_rollup_green_report_count"))
+        secret_like_count = _safe_int(summary.get("ordinary_turn_secret_like_count"))
+        if readiness_score < 100:
+            blocked_reasons.append("ordinary_turn_readiness_score_below_policy_minimum")
+        if green_report_count < args.min_independent_green_windows:
+            blocked_reasons.append("inferred_rollup_green_report_count_below_policy_minimum")
+        if secret_like_count > 0:
+            blocked_reasons.append("secret_like_ordinary_turns_present")
+        privacy = readiness.get("privacy", {}) if isinstance(readiness.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(privacy) or privacy.get("raw_report_included") is True:
+            blocked_reasons.append("broader_automation_readiness_privacy_not_ref_safe")
+        forbidden = readiness.get("forbidden_authority", {}) if isinstance(readiness.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in forbidden.values()):
+            blocked_reasons.append("broader_automation_readiness_forbidden_authority_granted")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    ready_for_opt_in_dry_run = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_policy_gate",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "input_artifacts": {
+            "broader_automation_readiness": readiness_artifact,
+        },
+        "evidence_requirements": {
+            "broader_readiness_green": broader_green,
+            "readiness_score_percent": readiness_score,
+            "inferred_rollup_green_report_count": green_report_count,
+            "secret_like_ordinary_turn_count": secret_like_count,
+            "min_independent_green_windows": args.min_independent_green_windows,
+        },
+        "policy_contract": {
+            "policy": args.policy,
+            "required_enablement_approval_phrase": _ORDINARY_TURN_DEFAULT_AUTOMATION_ENABLEMENT_PHRASE,
+            "ready_for_opt_in_dry_run": ready_for_opt_in_dry_run,
+            "default_auto_approval_enabled": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "apply_supported": False,
+            "apply_executed": False,
+            "max_candidates_per_run": args.max_candidates_per_run,
+            "min_independent_green_windows": args.min_independent_green_windows,
+            "allowed_memory_shapes": ["preference"],
+            "requires_non_secret_trace": True,
+            "requires_conflict_preflight": True,
+            "requires_backup_before_apply": True,
+            "requires_post_apply_verification": True,
+            "requires_rollback_replay": True,
+            "requires_operator_review_before_default_enablement": True,
+        },
+        "quality_gate": {
+            "pass": ready_for_opt_in_dry_run,
+            "decision": "ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked"
+            if ready_for_opt_in_dry_run
+            else "ordinary_turn_default_automation_policy_not_ready_keep_default_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "unattended_batch_apply_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "recommended_next_step": "build_opt_in_dry_run_report_without_apply_or_default_enablement"
+        if ready_for_opt_in_dry_run
+        else "collect_green_broader_readiness_before_policy_dry_run",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tuple[bool, str]:
     if _contains_secret_like_report_text(summary):
         return False, "secret_like"
@@ -17995,6 +18136,17 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--min-rollup-green-reports", type=int, default=2)
     dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--min-readiness-score-percent", type=int, default=100)
     dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_policy_gate_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-policy-gate",
+        help="Turn broader ordinary-turn readiness into an exact read-only opt-in policy gate while default auto-approval stays blocked.",
+    )
+    dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--broader-automation-readiness", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument(
+        "--policy", default=_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY
+    )
+    dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--min-independent-green-windows", type=int, default=2)
+    dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--max-candidates-per-run", type=int, default=1)
+    dogfood_ordinary_turn_default_automation_policy_gate_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_label_packet_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-label-packet",
         help="Build a read-only raw-text-free packet of ordinary turns for local human labeling while keeping auto-approval blocked.",
@@ -19460,6 +19612,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-broader-automation-readiness":
             print(json.dumps(_dogfood_ordinary_turn_broader_automation_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-policy-gate":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_policy_gate_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-label-packet":
             print(json.dumps(_dogfood_ordinary_turn_label_packet_payload(args), indent=2))

@@ -1,7 +1,27 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:07 KST
+Last updated: 2026-05-17 10:24 KST
+
+## Just completed: ordinary-turn default automation policy gate
+
+- Added `dogfood ordinary-turn-default-automation-policy-gate`, a read-only exact policy contract gate over saved broader automation readiness artifacts.
+- It validates the saved artifact is kind-matched, green, read-only, non-mutating, default-retrieval-safe, privacy/ref safe, still ordinary-auto-approval false, and free of forbidden authority.
+- It enforces `ordinary-turn-default-automation-policy-v1`, records future enablement phrase `enable-opt-in-ordinary-turn-default-automation-v1`, and checks readiness score 100, minimum independent green windows, and zero secret-like ordinary turns.
+- Green means only `ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked`. It explicitly keeps `default_auto_approval_enabled=false`, `default_background_auto_approval_allowed=false`, `unattended_default_apply_allowed=false`, `apply_supported=false`, and `apply_executed=false`.
+- Validation: RED invalid subcommand; focused GREEN `4 passed, 190 deselected`; broader ordinary-turn GREEN `21 passed, 173 deselected`; full suite GREEN `376 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.95-99.97%.
+- Remaining gap: opt-in dry-run/report over live ordinary-turn candidates under this exact policy, then a separately exact-approved one-candidate default-automation smoke only if repeated dry-runs stay green.
+
+Recommended next work now:
+
+1. Commit/push this policy-gate checkpoint and watch CI.
+2. Continue toward 100% by adding read-only `ordinary-turn-default-automation-dry-run` under the exact policy gate.
+3. Do not enable ordinary conversation auto-approval or unattended default/background apply from this gate alone.
 
 ## Just completed: ordinary-turn broader automation readiness gate
 

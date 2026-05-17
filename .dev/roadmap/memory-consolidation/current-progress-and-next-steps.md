@@ -1,7 +1,38 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 10:07 KST
+Last updated: 2026-05-17 10:24 KST
+
+## Checkpoint: ordinary-turn default automation policy gate
+
+The source checkout now has `dogfood ordinary-turn-default-automation-policy-gate`, a read-only exact policy contract gate for the next step toward default/background ordinary-turn automation.
+
+What changed:
+
+- The command consumes a saved `dogfood_ordinary_turn_broader_automation_readiness` artifact.
+- It validates the artifact is kind-matched, green, read-only, non-mutating, default-retrieval-safe, privacy-safe, still ordinary-auto-approval false, and free of forbidden authority.
+- It enforces `ordinary-turn-default-automation-policy-v1`, minimum independent green windows, readiness score 100, zero secret-like ordinary turns, and a bounded max-candidates-per-run contract.
+- It records the future opt-in enablement phrase `enable-opt-in-ordinary-turn-default-automation-v1` but does not consume that phrase, mutate DB state, or enable defaults.
+- Green means only `ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked`.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-default-automation-policy-gate` subcommand.
+- Focused GREEN: `4 passed, 190 deselected`.
+- Broader ordinary-turn GREEN: `21 passed, 173 deselected`.
+- Full suite GREEN: `376 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.95-99.97%.
+- Remaining gap: opt-in dry-run/report over live ordinary-turn candidates under this exact policy, then a separately exact-approved one-candidate default-automation smoke only if repeated dry-runs stay green. Ordinary conversation auto-approval and unattended default/background apply remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this default-automation policy-gate checkpoint and watch CI.
+2. Add `ordinary-turn-default-automation-dry-run` as read-only/ref-safe candidate scanning under the exact policy gate.
+3. Do not enable ordinary conversation auto-approval or unattended default/background apply from this policy gate alone.
 
 ## Checkpoint: ordinary-turn broader automation readiness gate
 
