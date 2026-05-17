@@ -1,7 +1,28 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:16 KST
+Last updated: 2026-05-17 17:44 KST
+
+## Just completed: default automation freshness-boundary copy-live smoke
+
+- Added `dogfood ordinary-turn-default-automation-freshness-boundary-smoke`, a copy-DB smoke/report command for the default automation apply freshness boundary.
+- The smoke copies the source DB, mutates only the copy, proves a prior exact-reviewed default-automation apply exists, verifies a repeated apply is blocked without `--previous-evidence-rollup`, then verifies the repeated apply passes only with a green previous `dogfood_ordinary_turn_default_automation_evidence_rollup`.
+- Live/source smoke wrote `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-freshness-boundary-smoke-20260517T083948Z/freshness-boundary-smoke.json` and reported `quality_gate.pass=true`, `source_db_mutated=false`, `copied_db_mutated=true`, `missing_rollup_blocked=true`, and `fresh_rollup_apply_passed=true`.
+- Validation passed: RED missing subcommand, focused test `1 passed`, default-automation focused `20 passed, 192 deselected`, full suite `394 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.999%+.
+- Remaining gap: optional explicit-opt-in scheduler/default wiring, if any, must consume enabled policy state plus fresh post-apply evidence and still stay one-candidate/fail-closed.
+
+Recommended next work now:
+
+1. Commit/push this freshness-boundary smoke checkpoint and watch CI.
+2. If continuing toward 100%, add explicit opt-in scheduler/default runner wiring only under the fail-closed policy-state + fresh-evidence boundary; prefer read-only/report-first if uncertainty remains.
+3. Keep broad ordinary conversation auto-approval, default/background unattended apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-freshness-boundary-smoke.md`
 
 ## Just completed: default automation apply-boundary policy-state/freshness enforcement
 

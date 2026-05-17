@@ -1,7 +1,21 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:03 KST
+Last updated: 2026-05-17 17:44 KST
+
+## Current checkpoint: default automation freshness-boundary copy-live smoke
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-freshness-boundary-smoke`.
+- The command copies the input DB and mutates only the copy to prove the default automation apply freshness boundary end-to-end.
+- It proves: enabled policy state works, first exact-reviewed apply establishes prior apply evidence, second apply blocks without previous evidence rollup, and second apply passes only with green previous evidence rollup.
+- Live/source smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-freshness-boundary-smoke-20260517T083948Z/freshness-boundary-smoke.json`.
+- Smoke result: `quality_gate.pass=true`, `source_db_mutated=false`, `copied_db_mutated=true`, `missing_rollup_blocked=true`, `fresh_rollup_apply_passed=true`.
+- Validation: `20 passed, 192 deselected` for default-automation focused tests; full suite `394 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999%+.
+- Next safe slice: optional explicit opt-in scheduler/default wiring under the same policy-state and fresh-evidence gates; no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-freshness-boundary-smoke.md`
+
 
 ## Current checkpoint: default automation policy-state read-path enforcement
 

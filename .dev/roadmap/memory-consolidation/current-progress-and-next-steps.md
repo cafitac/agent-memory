@@ -1,7 +1,46 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 17:03 KST
+Last updated: 2026-05-17 17:44 KST
+
+## Checkpoint: default automation freshness-boundary copy-live smoke
+
+The source checkout now has `dogfood ordinary-turn-default-automation-freshness-boundary-smoke`, a copy-DB smoke/report command for the default automation apply freshness boundary.
+
+What changed:
+
+- The command copies the source DB into a report directory and mutates only the copy.
+- It writes a narrow enabled policy-state artifact and green policy-gate artifact for the copy smoke.
+- It creates a first exact-reviewed default-automation apply on the copy, then verifies a second apply is blocked without `--previous-evidence-rollup`.
+- It writes a green previous evidence rollup artifact and verifies the second apply succeeds only with that fresh rollup.
+- It reports source DB SHA-256/table-count before/after evidence and keeps the live/source DB unchanged.
+
+Live/source smoke:
+
+- Output: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-freshness-boundary-smoke-20260517T083948Z/freshness-boundary-smoke.json`.
+- Result: `quality_gate.pass=true`, `source_db_mutated=false`, `copied_db_mutated=true`, `missing_rollup_blocked=true`, `fresh_rollup_apply_passed=true`, `source_db_unchanged=true`.
+
+Validation:
+
+- RED observed: dogfood subcommand was initially missing.
+- Focused GREEN: `1 passed`.
+- Default automation GREEN: `20 passed, 192 deselected`.
+- Full suite GREEN: `394 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.999%+.
+- Remaining gap: optional explicit-opt-in scheduler/default wiring, if any, must use the same fail-closed policy-state and fresh-evidence boundary.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Next code slice may add explicit opt-in scheduler/default runner wiring, but only as one-candidate/fresh-evidence-gated automation with fail-closed disabled defaults.
+3. Do not enable broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-freshness-boundary-smoke.md`
+
 
 ## Checkpoint: default automation policy-state read-path enforcement
 

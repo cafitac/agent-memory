@@ -7938,6 +7938,406 @@ def _dogfood_ordinary_turn_default_automation_apply_payload(args: argparse.Names
     return payload
 
 
+def _safe_sqlite_table_counts(db_path: Path, table_names: list[str]) -> dict[str, int | None]:
+    counts: dict[str, int | None] = {}
+    try:
+        with sqlite3.connect(db_path) as connection:
+            for table_name in table_names:
+                exists = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    (table_name,),
+                ).fetchone()
+                if exists is None:
+                    counts[table_name] = None
+                    continue
+                counts[table_name] = _safe_int(connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+    except sqlite3.Error:
+        return {table_name: None for table_name in table_names}
+    return counts
+
+
+def _default_automation_ref_safe_forbidden_authority() -> dict[str, bool]:
+    return {
+        "executes_apply": False,
+        "ordinary_conversation_auto_approval": False,
+        "broad_background_apply_allowed": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "default_ranking_mutated": False,
+        "collapse_delete_apply_allowed": False,
+        "telemetry_reset_apply_allowed": False,
+        "unreviewed_promotion_allowed": False,
+        "unattended_batch_apply_allowed": False,
+        "repeated_apply_without_new_approval_allowed": False,
+    }
+
+
+def _default_automation_ref_safe_privacy_flags() -> dict[str, bool]:
+    return {
+        "raw_trace_summary_included": False,
+        "raw_transcript_included": False,
+        "raw_query_text_included": False,
+        "raw_content_included": False,
+        "raw_reason_included": False,
+        "backup_content_included": False,
+        "raw_report_included": False,
+        "sample_values_included": False,
+        "reason_hash_only": True,
+        "trace_ref_only": True,
+    }
+
+
+def _write_default_automation_policy_state_artifact(path: Path, *, policy: str, actor: str, reason: str) -> None:
+    payload = {
+        "kind": _DEFAULT_AUTOMATION_POLICY_STATE_KIND,
+        "schema_version": 1,
+        "policy": policy,
+        "manual_opt_in_default_automation_enabled": True,
+        "ordinary_conversation_auto_approval": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "max_default_candidates_per_run": 1,
+        "max_apply_without_fresh_post_apply_verification": 0,
+        "requires_fresh_post_apply_verification": True,
+        "requires_exact_reviewed_candidate": True,
+        "disable_switch_available": True,
+        "actor": actor,
+        "reason": reason,
+        "audit_events": [
+            {
+                "action": "enable",
+                "actor": actor,
+                "reason_sha256": hashlib.sha256(reason.strip().encode("utf-8")).hexdigest(),
+                "policy": policy,
+            }
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_default_automation_policy_gate_artifact(path: Path, *, policy: str) -> None:
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_policy_gate",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy_contract": {
+            "policy": policy,
+            "ready_for_opt_in_dry_run": True,
+            "default_auto_approval_enabled": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "apply_supported": False,
+            "apply_executed": False,
+            "max_candidates_per_run": 1,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_policy_ready_for_opt_in_dry_run_only_keep_default_blocked",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_default_automation_previous_evidence_rollup_artifact(
+    path: Path,
+    *,
+    policy: str,
+    green_report_count: int,
+    applied_memory_count: int,
+    unique_trace_ref_count: int,
+) -> None:
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_evidence_rollup",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "expected_policy": policy,
+        "evidence_summary": {
+            "green_report_count": green_report_count,
+            "applied_memory_count": applied_memory_count,
+            "unique_trace_ref_count": unique_trace_ref_count,
+            "apply_supported": False,
+            "apply_executed": False,
+            "default_auto_approval_enabled": False,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_repeated_post_apply_evidence_green_for_enablement_design_only",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _insert_default_automation_smoke_trace(db_path: Path, *, summary: str, scope: str) -> str:
+    trace = insert_experience_trace(
+        db_path,
+        surface="ordinary-turn-default-automation-freshness-smoke",
+        event_kind="turn",
+        content_sha256=hashlib.sha256(summary.encode("utf-8")).hexdigest(),
+        summary=summary,
+        scope=scope,
+        session_ref="default-automation-freshness-smoke",
+        salience=0.8,
+        user_emphasis=0.8,
+        retention_policy="review",
+        metadata={"ordinary_turn": True, "smoke_generated": True},
+    )
+    return f"experience_trace:{trace.id}"
+
+
+def _run_default_automation_dry_run_artifact(
+    *,
+    db_path: Path,
+    policy: str,
+    policy_gate_path: Path,
+    policy_state_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    return _dogfood_ordinary_turn_default_automation_dry_run_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            policy=policy,
+            policy_gate=policy_gate_path,
+            policy_state_config=policy_state_path,
+            limit=20,
+            max_candidates=1,
+            output=output_path,
+        )
+    )
+
+
+def _run_default_automation_apply_artifact(
+    *,
+    db_path: Path,
+    trace_ref: str,
+    dry_run_report: Path,
+    policy_state_path: Path,
+    previous_evidence_rollup: Path | None,
+    policy: str,
+    actor: str,
+    reason: str,
+    backup_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    return _dogfood_ordinary_turn_default_automation_apply_payload(
+        argparse.Namespace(
+            db_path=db_path,
+            trace_ref=trace_ref,
+            dry_run_report=dry_run_report,
+            policy_state_config=policy_state_path,
+            previous_evidence_rollup=previous_evidence_rollup,
+            policy=policy,
+            approval_phrase="apply-exact-ordinary-turn-default-automation-candidate-v1",
+            actor=actor,
+            reason=reason,
+            backup_path=backup_path,
+            output=output_path,
+        )
+    )
+
+
+def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-freshness-boundary-smoke --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-freshness-boundary-smoke --reason is required")
+    source_db = args.db_path.expanduser().resolve(strict=False)
+    if not source_db.exists():
+        raise ValueError(f"database missing: {source_db}")
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    copy_db = (args.copy_db_path or (report_dir / "ordinary-turn-default-automation-freshness-copy.db")).expanduser().resolve(strict=False)
+    copy_db.parent.mkdir(parents=True, exist_ok=True)
+
+    table_names = ["facts", "relations", "source_records", "experience_traces"]
+    source_sha_before = _sha256_file(source_db)
+    source_counts_before = _safe_sqlite_table_counts(source_db, table_names)
+    shutil.copy2(source_db, copy_db)
+    initialize_database(copy_db)
+
+    policy_state_path = report_dir / "default-automation-policy-state-enabled.json"
+    policy_gate_path = report_dir / "default-automation-policy-gate.json"
+    _write_default_automation_policy_state_artifact(policy_state_path, policy=args.policy, actor=args.actor, reason=args.reason)
+    _write_default_automation_policy_gate_artifact(policy_gate_path, policy=args.policy)
+
+    first_trace_ref = _insert_default_automation_smoke_trace(
+        copy_db,
+        summary="User prefers amber prompts for default automation copy smoke",
+        scope="default-automation-freshness-smoke-a",
+    )
+    first_dry_run_path = report_dir / "first-default-automation-dry-run.json"
+    first_apply_path = report_dir / "first-default-automation-apply.json"
+    first_dry_run = _run_default_automation_dry_run_artifact(
+        db_path=copy_db,
+        policy=args.policy,
+        policy_gate_path=policy_gate_path,
+        policy_state_path=policy_state_path,
+        output_path=first_dry_run_path,
+    )
+    first_apply = _run_default_automation_apply_artifact(
+        db_path=copy_db,
+        trace_ref=first_trace_ref,
+        dry_run_report=first_dry_run_path,
+        policy_state_path=policy_state_path,
+        previous_evidence_rollup=None,
+        policy=args.policy,
+        actor=args.actor,
+        reason=args.reason,
+        backup_path=report_dir / "first-default-automation-apply.bak",
+        output_path=first_apply_path,
+    )
+
+    second_trace_ref = _insert_default_automation_smoke_trace(
+        copy_db,
+        summary="User prefers teal prompts for default automation copy smoke",
+        scope="default-automation-freshness-smoke-b",
+    )
+    second_dry_run_path = report_dir / "second-default-automation-dry-run.json"
+    second_dry_run = _run_default_automation_dry_run_artifact(
+        db_path=copy_db,
+        policy=args.policy,
+        policy_gate_path=policy_gate_path,
+        policy_state_path=policy_state_path,
+        output_path=second_dry_run_path,
+    )
+    missing_rollup_blocked = False
+    missing_rollup_error = None
+    try:
+        _run_default_automation_apply_artifact(
+            db_path=copy_db,
+            trace_ref=second_trace_ref,
+            dry_run_report=second_dry_run_path,
+            policy_state_path=policy_state_path,
+            previous_evidence_rollup=None,
+            policy=args.policy,
+            actor=args.actor,
+            reason=args.reason,
+            backup_path=report_dir / "second-default-automation-missing-rollup.bak",
+            output_path=report_dir / "second-default-automation-missing-rollup-apply.json",
+        )
+    except ValueError as exc:
+        missing_rollup_error = str(exc)
+        missing_rollup_blocked = "previous_evidence_rollup_required_after_prior_default_automation_apply" in missing_rollup_error
+
+    previous_rollup_path = report_dir / "previous-default-automation-evidence-rollup.json"
+    _write_default_automation_previous_evidence_rollup_artifact(
+        previous_rollup_path,
+        policy=args.policy,
+        green_report_count=1,
+        applied_memory_count=1,
+        unique_trace_ref_count=1,
+    )
+    fresh_apply = _run_default_automation_apply_artifact(
+        db_path=copy_db,
+        trace_ref=second_trace_ref,
+        dry_run_report=second_dry_run_path,
+        policy_state_path=policy_state_path,
+        previous_evidence_rollup=previous_rollup_path,
+        policy=args.policy,
+        actor=args.actor,
+        reason=args.reason,
+        backup_path=report_dir / "second-default-automation-fresh-rollup.bak",
+        output_path=report_dir / "second-default-automation-fresh-rollup-apply.json",
+    )
+
+    source_sha_after = _sha256_file(source_db)
+    source_counts_after = _safe_sqlite_table_counts(source_db, table_names)
+    copy_counts_after = _safe_sqlite_table_counts(copy_db, table_names)
+    blocked_reasons: list[str] = []
+    if source_sha_after != source_sha_before or source_counts_after != source_counts_before:
+        blocked_reasons.append("source_db_mutated")
+    if not missing_rollup_blocked:
+        blocked_reasons.append("missing_previous_evidence_rollup_did_not_block")
+    if fresh_apply.get("quality_gate", {}).get("pass") is not True:
+        blocked_reasons.append("fresh_rollup_apply_not_green")
+    if fresh_apply.get("freshness_evidence", {}).get("previous_evidence_rollup", {}).get("quality_gate_pass") is not True:
+        blocked_reasons.append("fresh_previous_evidence_rollup_not_accepted")
+    passed = not blocked_reasons
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_freshness_boundary_smoke",
+        "read_only": False,
+        "mutated": True,
+        "source_db_mutated": False if source_sha_after == source_sha_before and source_counts_after == source_counts_before else True,
+        "copied_db_mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "policy": args.policy,
+        "source_db": {
+            "path": str(source_db),
+            "sha256_before": source_sha_before,
+            "sha256_after": source_sha_after,
+            "table_counts_before": source_counts_before,
+            "table_counts_after": source_counts_after,
+        },
+        "copy_db": {
+            "path": str(copy_db),
+            "sha256_after": _sha256_file(copy_db),
+            "table_counts_after": copy_counts_after,
+        },
+        "artifacts": {
+            "report_dir": str(report_dir),
+            "policy_state": str(policy_state_path),
+            "policy_gate": str(policy_gate_path),
+            "first_dry_run": str(first_dry_run_path),
+            "first_apply": str(first_apply_path),
+            "second_dry_run": str(second_dry_run_path),
+            "previous_evidence_rollup": str(previous_rollup_path),
+            "fresh_apply": str(report_dir / "second-default-automation-fresh-rollup-apply.json"),
+        },
+        "boundary_checks": {
+            "policy_state_enabled": True,
+            "prior_apply_simulated": first_apply.get("quality_gate", {}).get("pass") is True,
+            "missing_rollup_blocked": missing_rollup_blocked,
+            "fresh_rollup_apply_passed": fresh_apply.get("quality_gate", {}).get("pass") is True,
+            "source_db_unchanged": source_sha_after == source_sha_before and source_counts_after == source_counts_before,
+        },
+        "missing_rollup_error_sha256": hashlib.sha256((missing_rollup_error or "").encode("utf-8")).hexdigest() if missing_rollup_error else None,
+        "first_dry_run_quality_gate": first_dry_run.get("quality_gate", {}),
+        "second_dry_run_quality_gate": second_dry_run.get("quality_gate", {}),
+        "fresh_apply_report": {
+            "kind": fresh_apply.get("kind"),
+            "quality_gate": fresh_apply.get("quality_gate"),
+            "freshness_evidence": fresh_apply.get("freshness_evidence"),
+            "apply": {
+                "applied_count": fresh_apply.get("apply", {}).get("applied_count"),
+                "trace_ref": fresh_apply.get("apply", {}).get("trace_ref"),
+                "memory_ref": fresh_apply.get("apply", {}).get("memory_ref"),
+                "reason_sha256": fresh_apply.get("apply", {}).get("reason_sha256"),
+            },
+        },
+        "quality_gate": {
+            "pass": passed,
+            "decision": "ordinary_turn_default_automation_freshness_boundary_copy_smoke_green"
+            if passed
+            else "ordinary_turn_default_automation_freshness_boundary_copy_smoke_red_keep_blocked",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+        },
+        "forbidden_authority": {
+            **_default_automation_ref_safe_forbidden_authority(),
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "only wire explicit opt-in scheduler/default runs after fresh evidence remains green; keep unattended background authority blocked",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tuple[bool, str]:
     if _contains_secret_like_report_text(summary):
         return False, "secret_like"
@@ -19527,6 +19927,17 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--reason", required=True)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--backup-path", type=Path)
     dogfood_ordinary_turn_default_automation_apply_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-freshness-boundary-smoke",
+        help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
+    )
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("db_path", type=Path)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--report-dir", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--copy-db-path", type=Path)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--policy", required=True)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_default_automation_post_apply_verification_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-post-apply-verification",
         help="Validate default-automation apply, rollback replay, backup, relation, and audit row as a read-only stop gate.",
@@ -21054,6 +21465,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-default-automation-apply":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_apply_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-freshness-boundary-smoke":
+            print(json.dumps(_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-default-automation-post-apply-verification":
             print(json.dumps(_dogfood_ordinary_turn_default_automation_post_apply_verification_payload(args), indent=2))

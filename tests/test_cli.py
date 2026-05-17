@@ -17034,6 +17034,78 @@ def test_dogfood_ordinary_turn_default_automation_apply_requires_previous_rollup
     assert payload["forbidden_authority"]["repeated_apply_without_new_approval_allowed"] is False
 
 
+def test_dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_uses_copy_and_requires_rollup(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "default-automation-freshness-source.db"
+    report_dir = tmp_path / "freshness-smoke"
+    output_path = tmp_path / "freshness-smoke.json"
+    initialize_database(db_path)
+    before_counts = _table_counts(db_path, ["facts", "relations", "source_records", "experience_traces"])
+    before_sha = hashlib.sha256(db_path.read_bytes()).hexdigest()
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-freshness-boundary-smoke",
+            str(db_path),
+            "--report-dir",
+            str(report_dir),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--actor",
+            "test-operator",
+            "--reason",
+            "copy smoke for default automation freshness boundary",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_freshness_boundary_smoke"
+    assert payload["source_db_mutated"] is False
+    assert payload["copied_db_mutated"] is True
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["ordinary_conversation_auto_approval"] is False
+    assert payload["source_db"]["path"] == str(db_path.resolve(strict=False))
+    assert payload["copy_db"]["path"] != payload["source_db"]["path"]
+    assert payload["source_db"]["sha256_before"] == before_sha
+    assert payload["source_db"]["sha256_after"] == before_sha
+    assert payload["boundary_checks"] == {
+        "policy_state_enabled": True,
+        "prior_apply_simulated": True,
+        "missing_rollup_blocked": True,
+        "fresh_rollup_apply_passed": True,
+        "source_db_unchanged": True,
+    }
+    assert payload["fresh_apply_report"]["freshness_evidence"]["previous_evidence_rollup_required"] is True
+    assert payload["fresh_apply_report"]["freshness_evidence"]["previous_evidence_rollup"]["quality_gate_pass"] is True
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_freshness_boundary_copy_smoke_green",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["forbidden_authority"]["repeated_apply_without_new_approval_allowed"] is False
+    assert payload["privacy"]["raw_trace_summary_included"] is False
+    assert payload["privacy"]["raw_reason_included"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert _table_counts(db_path, ["facts", "relations", "source_records", "experience_traces"]) == before_counts
+    assert hashlib.sha256(db_path.read_bytes()).hexdigest() == before_sha
+
+
+
 def test_dogfood_ordinary_turn_default_automation_apply_blocks_red_dry_run_without_mutation(
     tmp_path: Path,
 ) -> None:
