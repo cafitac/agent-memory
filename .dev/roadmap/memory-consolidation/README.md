@@ -132,3 +132,6 @@ For code PRs, add the relevant focused tests, full tests, release readiness chec
 - `references/post-v0.1.162-default-automation-enablement-preflight.md` - read-only/manual-opt-in-only preflight before any exact enablement switch.
 - `references/post-v0.1.162-default-automation-enablement-switch.md` - exact opt-in enable/disable local policy-state switch; fail-closed and no unattended/background apply.
 - `references/post-v0.1.162-default-automation-policy-state-read-path.md` - dry-run read-path enforcement for exact opt-in policy state; missing/disabled blocks candidates.
+- `references/post-v0.1.162-default-automation-freshness-boundary-smoke.md` - copy-live smoke proving repeated default-automation apply requires fresh evidence and keeps source DB unchanged.
+- `references/post-v0.1.162-default-automation-runner.md` - explicit opt-in default-automation runner; dry-run plus at most one exact-reviewed apply.
+- `references/post-v0.1.162-default-automation-scheduler-runner.md` - scheduler-facing one-cycle wrapper; requires fresh evidence, then stops for post-apply verification.

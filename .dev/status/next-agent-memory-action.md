@@ -1,7 +1,29 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 18:03 KST
+Last updated: 2026-05-17 18:30 KST
+
+## Just completed: scheduler-facing default automation one-cycle runner
+
+- Added `dogfood ordinary-turn-default-automation-scheduler-runner`, a scheduler-facing wrapper around the explicit opt-in default automation runner.
+- It requires exact scheduler phrase `run-one-default-automation-scheduler-cycle-v1`, exact apply phrase `apply-exact-ordinary-turn-default-automation-candidate-v1`, exact policy `ordinary-turn-default-automation-policy-v1`, enabled policy state, green policy gate, and a green previous default-automation evidence rollup before it invokes the runner.
+- It invokes at most one runner cycle, can apply at most one candidate, and then stops with `post_apply_verification.required=true` / `executed=false` before any next cycle.
+- Positive copy-live smoke wrote `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-runner-positive-copy-smoke-20260517T092607Z/default-automation-scheduler-runner.json`; it reported `quality_gate.pass=true`, `runner_invoked=true`, `runner_applied=true`, `source_db_unchanged=true`, and unchanged source DB SHA `ec573b446cc9f64c9346a482b3e79633b4e98171b1a9eb2b3a1890c59efb2d71`.
+- Validation passed: scheduler focused `2 passed, 215 deselected`; broader default-automation corridor `12 passed, 205 deselected`; full suite `399 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.9996%+.
+- Remaining gap: wire real scheduler/config around this wrapper and automate repeated post-apply verifier/evidence-rollup collection, still opt-in/fail-closed/one-candidate bounded and without unattended/default/background authority.
+
+Recommended next work now:
+
+1. Commit/push this scheduler-runner checkpoint and watch CI.
+2. Add real scheduler integration/config that calls this wrapper only when enabled policy-state and fresh evidence rollup are present, then automatically queues/records the required post-apply verification artifact before any later cycle.
+3. Keep broad ordinary conversation auto-approval, default/background unattended apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-runner.md`
 
 ## Just completed: explicit opt-in default automation runner
 

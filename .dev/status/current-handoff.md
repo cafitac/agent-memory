@@ -1,7 +1,21 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 18:03 KST
+Last updated: 2026-05-17 18:30 KST
+
+## Current checkpoint: scheduler-facing default automation one-cycle runner
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-scheduler-runner`.
+- It is a scheduler-facing wrapper around the explicit opt-in default automation runner, but still requires exact human/operator-supplied scheduler phrase `run-one-default-automation-scheduler-cycle-v1`.
+- Required inputs: exact policy `ordinary-turn-default-automation-policy-v1`, exact scheduler phrase, exact delegated apply phrase, actor, private reason, enabled policy state, green policy gate, and green previous default-automation evidence rollup.
+- The wrapper invokes at most one underlying runner cycle, applies at most one candidate, and then stops with `post_apply_verification.required=true`; it does not execute the post-apply verifier itself and does not allow a next cycle without fresh evidence.
+- Positive copy-live smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-scheduler-runner-positive-copy-smoke-20260517T092607Z/default-automation-scheduler-runner.json`.
+- Smoke result: `quality_gate.pass=true`, `runner_invoked=true`, `runner_applied=true`, `source_db_unchanged=true`, unchanged source DB SHA `ec573b446cc9f64c9346a482b3e79633b4e98171b1a9eb2b3a1890c59efb2d71`.
+- Validation: scheduler focused `2 passed, 215 deselected`; default-automation corridor `12 passed, 205 deselected`; full suite `399 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9996%+.
+- Next safe slice: real scheduler integration/config around this wrapper plus automatic post-apply verifier/evidence-rollup collection before any later cycle; no unattended/default/background authority.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-scheduler-runner.md`
 
 ## Current checkpoint: explicit opt-in default automation runner
 
