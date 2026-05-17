@@ -7039,6 +7039,143 @@ def _dogfood_ordinary_turn_auto_approval_readiness_payload(args: argparse.Namesp
     return payload
 
 
+def _dogfood_ordinary_turn_broader_automation_readiness_payload(args: argparse.Namespace) -> dict[str, Any]:
+    if args.min_rollup_green_reports < 1:
+        raise ValueError("dogfood ordinary-turn-broader-automation-readiness --min-rollup-green-reports must be >= 1")
+    if not 0 <= args.min_readiness_score_percent <= 100:
+        raise ValueError(
+            "dogfood ordinary-turn-broader-automation-readiness --min-readiness-score-percent must be between 0 and 100"
+        )
+    rollup, rollup_artifact = _read_json_artifact_summary(args.inferred_evidence_rollup)
+    auto, auto_artifact = _read_json_artifact_summary(args.auto_approval_readiness)
+    blocked_reasons: list[str] = []
+
+    rollup_green_reports = 0
+    rollup_applied_memories = 0
+    if rollup is None:
+        blocked_reasons.append("inferred_evidence_rollup_unreadable")
+    else:
+        if rollup.get("kind") != "dogfood_ordinary_turn_inferred_evidence_rollup":
+            blocked_reasons.append("inferred_evidence_rollup_kind_mismatch")
+        if rollup.get("read_only") is not True or rollup.get("mutated") is not False:
+            blocked_reasons.append("inferred_evidence_rollup_not_read_only")
+        if rollup.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("inferred_evidence_rollup_default_retrieval_changed")
+        if rollup.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("inferred_evidence_rollup_ordinary_auto_approval_enabled")
+        rollup_quality = rollup.get("quality_gate", {}) if isinstance(rollup.get("quality_gate"), dict) else {}
+        if rollup_quality.get("pass") is not True:
+            blocked_reasons.append("inferred_evidence_rollup_gate_not_green")
+        rollup_privacy = rollup.get("privacy", {}) if isinstance(rollup.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(rollup_privacy) or rollup_privacy.get("raw_report_included") is True:
+            blocked_reasons.append("inferred_evidence_rollup_privacy_not_ref_safe")
+        rollup_forbidden = rollup.get("forbidden_authority", {}) if isinstance(rollup.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in rollup_forbidden.values()):
+            blocked_reasons.append("inferred_evidence_rollup_forbidden_authority_granted")
+        summary = rollup.get("evidence_summary", {}) if isinstance(rollup.get("evidence_summary"), dict) else {}
+        rollup_green_reports = _safe_int(summary.get("green_report_count"))
+        rollup_applied_memories = _safe_int(summary.get("applied_memory_count"))
+        if rollup_green_reports < args.min_rollup_green_reports:
+            blocked_reasons.append("rollup_green_report_count_below_minimum")
+        if summary.get("apply_supported") is not False or summary.get("apply_executed") is not False:
+            blocked_reasons.append("inferred_evidence_rollup_claims_apply_authority")
+
+    readiness_score = 0
+    secret_like_count = 0
+    preference_like_count = 0
+    if auto is None:
+        blocked_reasons.append("auto_approval_readiness_unreadable")
+    else:
+        if auto.get("kind") != "dogfood_ordinary_turn_auto_approval_readiness":
+            blocked_reasons.append("auto_approval_readiness_kind_mismatch")
+        if auto.get("read_only") is not True or auto.get("mutated") is not False:
+            blocked_reasons.append("auto_approval_readiness_not_read_only")
+        if auto.get("default_retrieval_unchanged") is not True:
+            blocked_reasons.append("auto_approval_readiness_default_retrieval_changed")
+        if auto.get("ordinary_conversation_auto_approval") is not False:
+            blocked_reasons.append("auto_approval_readiness_ordinary_auto_approval_enabled")
+        auto_quality = auto.get("quality_gate", {}) if isinstance(auto.get("quality_gate"), dict) else {}
+        if auto_quality.get("pass") is not True:
+            blocked_reasons.append("auto_approval_readiness_gate_not_green")
+        auto_privacy = auto.get("privacy", {}) if isinstance(auto.get("privacy"), dict) else {}
+        if not _privacy_flags_are_ref_safe(auto_privacy) or auto_privacy.get("raw_report_included") is True:
+            blocked_reasons.append("auto_approval_readiness_privacy_not_ref_safe")
+        auto_forbidden = auto.get("forbidden_authority", {}) if isinstance(auto.get("forbidden_authority"), dict) else {}
+        if any(value is True for value in auto_forbidden.values()):
+            blocked_reasons.append("auto_approval_readiness_forbidden_authority_granted")
+        score = auto.get("readiness_score", {}) if isinstance(auto.get("readiness_score"), dict) else {}
+        readiness_score = _safe_int(score.get("score_percent"))
+        if readiness_score < args.min_readiness_score_percent:
+            blocked_reasons.append("ordinary_turn_readiness_score_below_minimum")
+        risks = auto.get("risk_counts", {}) if isinstance(auto.get("risk_counts"), dict) else {}
+        secret_like_count = _safe_int(risks.get("secret_like_ordinary_turns"))
+        preference_like_count = _safe_int(risks.get("ordinary_preference_like_turns"))
+        if secret_like_count > 0:
+            blocked_reasons.append("secret_like_ordinary_turns_present")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    ready_for_design = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_broader_automation_readiness",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "input_artifacts": {
+            "inferred_evidence_rollup": rollup_artifact,
+            "auto_approval_readiness": auto_artifact,
+        },
+        "evidence_summary": {
+            "inferred_rollup_green_report_count": rollup_green_reports,
+            "inferred_rollup_applied_memory_count": rollup_applied_memories,
+            "ordinary_turn_readiness_score_percent": readiness_score,
+            "ordinary_turn_secret_like_count": secret_like_count,
+            "ordinary_preference_like_turn_count": preference_like_count,
+        },
+        "broader_automation_policy": {
+            "ready_for_design": ready_for_design,
+            "apply_supported": False,
+            "apply_executed": False,
+            "default_background_auto_approval_allowed": False,
+            "requires_separate_exact_policy_before_any_apply": True,
+            "max_apply_without_new_approval": 0,
+        },
+        "quality_gate": {
+            "pass": ready_for_design,
+            "decision": "ordinary_turn_broader_automation_ready_for_design_only_keep_blocked"
+            if ready_for_design
+            else "ordinary_turn_broader_automation_not_ready_keep_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": {
+            "executes_apply": False,
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "unattended_batch_apply_allowed": False,
+        },
+        "privacy": {
+            "raw_trace_summary_included": False,
+            "raw_transcript_included": False,
+            "raw_query_text_included": False,
+            "raw_content_included": False,
+            "raw_reason_included": False,
+            "backup_content_included": False,
+            "raw_report_included": False,
+            "sample_values_included": False,
+            "aggregate_only": True,
+        },
+        "recommended_next_step": "write_separate_exact_policy_design_before_any_background_auto_approval"
+        if ready_for_design
+        else "collect_green_rollup_and_secret_free_auto_approval_readiness_before_broader_design",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _ordinary_turn_memory_worthiness_classification(summary: str | None) -> tuple[bool, str]:
     if _contains_secret_like_report_text(summary):
         return False, "secret_like"
@@ -17849,6 +17986,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--limit", type=int, default=500)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--min-explicit-ready", type=int, default=5)
     dogfood_ordinary_turn_auto_approval_readiness_parser.add_argument("--output", type=Path)
+    dogfood_ordinary_turn_broader_automation_readiness_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-broader-automation-readiness",
+        help="Combine ordinary-turn inferred evidence and auto-approval readiness into a read-only broader-automation design gate.",
+    )
+    dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--inferred-evidence-rollup", type=Path, required=True)
+    dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--auto-approval-readiness", type=Path, required=True)
+    dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--min-rollup-green-reports", type=int, default=2)
+    dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--min-readiness-score-percent", type=int, default=100)
+    dogfood_ordinary_turn_broader_automation_readiness_parser.add_argument("--output", type=Path)
     dogfood_ordinary_turn_label_packet_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-label-packet",
         help="Build a read-only raw-text-free packet of ordinary turns for local human labeling while keeping auto-approval blocked.",
@@ -19311,6 +19457,9 @@ def main() -> None:
             return
         if args.dogfood_action == "ordinary-turn-auto-approval-readiness":
             print(json.dumps(_dogfood_ordinary_turn_auto_approval_readiness_payload(args), indent=2))
+            return
+        if args.dogfood_action == "ordinary-turn-broader-automation-readiness":
+            print(json.dumps(_dogfood_ordinary_turn_broader_automation_readiness_payload(args), indent=2))
             return
         if args.dogfood_action == "ordinary-turn-label-packet":
             print(json.dumps(_dogfood_ordinary_turn_label_packet_payload(args), indent=2))

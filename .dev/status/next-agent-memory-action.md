@@ -1,7 +1,26 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 04:06 KST
+Last updated: 2026-05-17 10:07 KST
+
+## Just completed: ordinary-turn broader automation readiness gate
+
+- Added `dogfood ordinary-turn-broader-automation-readiness`, a read-only gate over saved `dogfood_ordinary_turn_inferred_evidence_rollup` plus saved `dogfood_ordinary_turn_auto_approval_readiness` artifacts.
+- It validates artifact kind, read-only/no-mutation/default-unchanged flags, ordinary-auto-approval still false, green quality gates, minimum inferred rollup green reports, minimum readiness score, no secret-like ordinary turns, privacy safety, and no forbidden authority.
+- Green means design-readiness only: `ordinary_turn_broader_automation_ready_for_design_only_keep_blocked`. It does not execute apply, does not support default/background auto-approval, and sets `max_apply_without_new_approval=0`.
+- Validation: RED invalid subcommand; focused GREEN `5 passed, 187 deselected`; broader ordinary-turn GREEN `19 passed, 173 deselected`; full suite GREEN `374 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.93-99.95%.
+- Remaining gap: a separate exact policy/runbook before any broader/default ordinary-turn automation. Ordinary-turn auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+
+Recommended next work now:
+
+1. Commit/push this broader-readiness checkpoint and watch CI.
+2. Continue toward 100% by designing the separate read-only exact policy/runbook gate for default/background ordinary-turn automation.
+3. Do not enable unattended ordinary conversation auto-approval from this readiness gate alone.
 
 ## Just completed: ordinary-turn inferred evidence rollup
 

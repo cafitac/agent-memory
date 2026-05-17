@@ -1,7 +1,38 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 04:06 KST
+Last updated: 2026-05-17 10:07 KST
+
+## Checkpoint: ordinary-turn broader automation readiness gate
+
+The source checkout now has `dogfood ordinary-turn-broader-automation-readiness`, a read-only gate that combines saved ordinary-turn inferred evidence rollup plus saved ordinary-turn auto-approval readiness evidence.
+
+What changed:
+
+- The command consumes `--inferred-evidence-rollup` and `--auto-approval-readiness` JSON artifacts.
+- It validates both artifacts are the expected kind, read-only, non-mutating, default-retrieval-safe, ordinary-auto-approval false, quality-gate green, ref/privacy safe, and free of forbidden authority.
+- It enforces minimum inferred rollup green-report count and minimum ordinary-turn readiness score, and blocks secret-like ordinary turns.
+- It emits aggregate artifact hashes/counts only; raw report bodies, trace summaries, content, queries, reasons, and sample values remain excluded.
+- Green means design-readiness only: `ordinary_turn_broader_automation_ready_for_design_only_keep_blocked`. It still reports `apply_supported=false`, `apply_executed=false`, `default_background_auto_approval_allowed=false`, `max_apply_without_new_approval=0`, and `ordinary_conversation_auto_approval=false`.
+
+Validation:
+
+- RED observed: invalid `ordinary-turn-broader-automation-readiness` subcommand.
+- Focused GREEN: `5 passed, 187 deselected`.
+- Broader ordinary-turn GREEN: `19 passed, 173 deselected`.
+- Full suite GREEN: `374 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.93-99.95%.
+- Remaining gap: a separate exact policy/runbook before any broader/default ordinary-turn automation. This checkpoint does not authorize unattended ordinary conversation auto-approval, broad/background apply, unattended batch apply, default-ranking automatic rollout, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Recommended next work now:
+
+1. Commit/push this broader-readiness checkpoint and watch CI.
+2. If continuing toward 100%, write the next read-only exact policy/runbook gate for default/background ordinary-turn automation.
+3. Keep all background/default apply authority blocked until that separate policy is RED-tested and explicitly approved.
 
 ## Checkpoint: ordinary-turn inferred evidence rollup
 
