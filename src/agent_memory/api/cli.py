@@ -7317,6 +7317,80 @@ def _dogfood_ordinary_turn_default_automation_policy_gate_payload(args: argparse
     return payload
 
 
+def _load_default_automation_policy_state_for_dry_run(
+    policy_state_config: Path | None,
+    *,
+    expected_policy: str,
+    max_candidates: int,
+) -> tuple[dict[str, Any], list[str]]:
+    summary: dict[str, Any] = {
+        "provided": policy_state_config is not None,
+        "path": str(policy_state_config.expanduser().resolve(strict=False)) if policy_state_config is not None else None,
+        "manual_opt_in_default_automation_enabled": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "max_default_candidates_per_run": 0,
+        "max_apply_without_fresh_post_apply_verification": 0,
+        "disable_switch_available": True,
+    }
+    blocked_reasons: list[str] = []
+    if policy_state_config is None:
+        return summary, blocked_reasons
+    path = policy_state_config.expanduser().resolve(strict=False)
+    if not path.exists():
+        blocked_reasons.append("policy_state_missing")
+        return summary, blocked_reasons
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        blocked_reasons.append("policy_state_unreadable")
+        return summary, blocked_reasons
+    if not isinstance(raw, dict):
+        blocked_reasons.append("policy_state_not_object")
+        return summary, blocked_reasons
+    summary.update(
+        {
+            "kind": raw.get("kind"),
+            "policy": raw.get("policy"),
+            "manual_opt_in_default_automation_enabled": raw.get("manual_opt_in_default_automation_enabled") is True,
+            "ordinary_conversation_auto_approval": raw.get("ordinary_conversation_auto_approval") is True,
+            "default_background_auto_approval_allowed": raw.get("default_background_auto_approval_allowed") is True,
+            "unattended_default_apply_allowed": raw.get("unattended_default_apply_allowed") is True,
+            "max_default_candidates_per_run": _safe_int(raw.get("max_default_candidates_per_run")),
+            "max_apply_without_fresh_post_apply_verification": _safe_int(
+                raw.get("max_apply_without_fresh_post_apply_verification")
+            ),
+            "requires_fresh_post_apply_verification": raw.get("requires_fresh_post_apply_verification") is True,
+            "requires_exact_reviewed_candidate": raw.get("requires_exact_reviewed_candidate") is True,
+            "disable_switch_available": raw.get("disable_switch_available") is True,
+        }
+    )
+    if raw.get("kind") != _DEFAULT_AUTOMATION_POLICY_STATE_KIND:
+        blocked_reasons.append("policy_state_kind_mismatch")
+    if raw.get("policy") != expected_policy:
+        blocked_reasons.append("policy_state_policy_mismatch")
+    if raw.get("manual_opt_in_default_automation_enabled") is not True:
+        blocked_reasons.append("policy_state_manual_opt_in_disabled")
+    if raw.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("policy_state_ordinary_auto_approval_enabled")
+    if raw.get("default_background_auto_approval_allowed") is not False:
+        blocked_reasons.append("policy_state_background_default_allowed")
+    if raw.get("unattended_default_apply_allowed") is not False:
+        blocked_reasons.append("policy_state_unattended_default_allowed")
+    if _safe_int(raw.get("max_default_candidates_per_run")) < max_candidates:
+        blocked_reasons.append("policy_state_max_candidates_below_request")
+    if _safe_int(raw.get("max_apply_without_fresh_post_apply_verification")) != 0:
+        blocked_reasons.append("policy_state_allows_apply_without_fresh_verification")
+    if raw.get("requires_fresh_post_apply_verification") is not True:
+        blocked_reasons.append("policy_state_missing_fresh_post_apply_verification_requirement")
+    if raw.get("requires_exact_reviewed_candidate") is not True:
+        blocked_reasons.append("policy_state_missing_exact_review_requirement")
+    if raw.get("disable_switch_available") is not True:
+        blocked_reasons.append("policy_state_disable_switch_missing")
+    return summary, blocked_reasons
+
+
 def _dogfood_ordinary_turn_default_automation_dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError(
@@ -7329,7 +7403,12 @@ def _dogfood_ordinary_turn_default_automation_dry_run_payload(args: argparse.Nam
         raise ValueError("dogfood ordinary-turn-default-automation-dry-run --max-candidates must be >= 1")
     db_path = args.db_path.expanduser().resolve(strict=False)
     gate, gate_artifact = _read_json_artifact_summary(args.policy_gate)
-    blocked_reasons: list[str] = []
+    policy_state, policy_state_blocked_reasons = _load_default_automation_policy_state_for_dry_run(
+        args.policy_state_config,
+        expected_policy=args.policy,
+        max_candidates=args.max_candidates,
+    )
+    blocked_reasons: list[str] = [*policy_state_blocked_reasons]
     gate_ready = False
     gate_contract: dict[str, Any] = {}
     if gate is None:
@@ -7420,7 +7499,12 @@ def _dogfood_ordinary_turn_default_automation_dry_run_payload(args: argparse.Nam
         "ordinary_conversation_auto_approval": False,
         "input_artifacts": {
             "policy_gate": gate_artifact,
+            "policy_state_config": {
+                "provided": bool(args.policy_state_config is not None),
+                "path": policy_state.get("path"),
+            },
         },
+        "policy_state": policy_state,
         "policy_contract": {
             "policy": args.policy,
             "ready_for_opt_in_dry_run": gate_ready and not blocked_unique,
@@ -19321,6 +19405,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("db_path", type=Path)
     dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--policy-gate", type=Path, required=True)
+    dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--policy-state-config", type=Path)
     dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--policy", default=_ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY)
     dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--limit", type=int, default=500)
     dogfood_ordinary_turn_default_automation_dry_run_parser.add_argument("--max-candidates", type=int, default=1)

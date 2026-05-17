@@ -1,7 +1,17 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:50 KST
+Last updated: 2026-05-17 17:03 KST
+
+## Current checkpoint: default automation policy-state read-path enforcement
+
+- Latest source checkpoint added optional `--policy-state-config` to `dogfood ordinary-turn-default-automation-dry-run`.
+- Missing/disabled/invalid supplied policy-state now blocks selected candidates; enabled policy-state still only allows bounded exact-review candidate refs.
+- Still blocked: ordinary conversation auto-approval, background/default unattended apply, default ranking mutation, collapse/delete, telemetry reset, unreviewed promotion, and apply without fresh verification.
+- Validation: `391 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.998%.
+- Next safe slice: apply-boundary policy-state enforcement plus post-apply verifier/evidence freshness linkage before repeated apply.
+
 
 ## Current checkpoint: default automation exact opt-in enablement switch
 

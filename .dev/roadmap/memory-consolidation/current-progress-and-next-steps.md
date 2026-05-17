@@ -1,7 +1,39 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:50 KST
+Last updated: 2026-05-17 17:03 KST
+
+## Checkpoint: default automation policy-state read-path enforcement
+
+The source checkout now wires the exact opt-in policy-state file into `dogfood ordinary-turn-default-automation-dry-run` via optional `--policy-state-config`.
+
+What changed:
+
+- Missing or disabled supplied policy-state now blocks dry-run candidate selection.
+- Invalid kind/policy, ordinary auto-approval, background/default/unattended authority, candidate bound mismatch, nonzero apply-without-fresh-verification, missing fresh-verifier requirement, missing exact-review requirement, or missing disable switch all block.
+- Enabled policy-state still only allows bounded exact-review candidate refs; dry-run remains read-only, does not mutate the DB, and does not expose raw ordinary-turn text.
+
+Validation:
+
+- RED observed: `--policy-state-config` was unrecognized.
+- Policy-state focused GREEN: `2 passed, 207 deselected`.
+- Default automation GREEN: `17 passed, 192 deselected`.
+- Broader ordinary-turn GREEN: `36 passed, 173 deselected`.
+- Full suite GREEN: `391 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.998%.
+- Remaining gap: apply-boundary policy-state enforcement and freshness linkage to post-apply verifier/evidence-rollup before repeated apply.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Add `--policy-state-config` enforcement to `ordinary-turn-default-automation-apply`.
+3. Add or prove freshness linkage so repeated apply cannot happen without fresh post-apply verifier/evidence-rollup from the prior apply.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-policy-state-read-path.md`
 
 ## Checkpoint: default automation exact opt-in enablement switch
 

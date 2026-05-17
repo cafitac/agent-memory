@@ -16457,6 +16457,153 @@ def test_dogfood_ordinary_turn_default_automation_dry_run_lists_ref_safe_candida
 
 
 
+def _write_ordinary_turn_default_automation_policy_state(path: Path, *, enabled: bool = True) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "agent_memory_ordinary_turn_default_automation_policy_state",
+                "schema_version": 1,
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "manual_opt_in_default_automation_enabled": enabled,
+                "ordinary_conversation_auto_approval": False,
+                "default_background_auto_approval_allowed": False,
+                "unattended_default_apply_allowed": False,
+                "max_default_candidates_per_run": 1,
+                "max_apply_without_fresh_post_apply_verification": 0,
+                "requires_fresh_post_apply_verification": True,
+                "requires_exact_reviewed_candidate": True,
+                "disable_switch_available": True,
+                "audit_events": [{"action": "enable" if enabled else "disable", "actor": "tester"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+
+def test_dogfood_ordinary_turn_default_automation_dry_run_policy_state_blocks_missing_or_disabled(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-dry-run-policy-state.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    missing_policy_state = tmp_path / "missing-policy-state.json"
+    disabled_policy_state = tmp_path / "disabled-policy-state.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(disabled_policy_state, enabled=False)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="d" * 64,
+        summary="User prefers concise terminal summaries.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    for policy_state_path, expected_reason in [
+        (missing_policy_state, "policy_state_missing"),
+        (disabled_policy_state, "policy_state_manual_opt_in_disabled"),
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agent_memory.api.cli",
+                "dogfood",
+                "ordinary-turn-default-automation-dry-run",
+                str(db_path),
+                "--policy-gate",
+                str(gate_path),
+                "--policy-state-config",
+                str(policy_state_path),
+                "--policy",
+                "ordinary-turn-default-automation-policy-v1",
+                "--limit",
+                "20",
+                "--max-candidates",
+                "1",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["quality_gate"]["pass"] is False
+        assert expected_reason in payload["quality_gate"]["blocked_reasons"]
+        assert payload["candidate_counts"]["selected_candidate_count"] == 0
+        assert payload["candidate_refs"] == []
+        assert payload["policy_state"]["manual_opt_in_default_automation_enabled"] is False
+        assert payload["policy_contract"]["unattended_default_apply_allowed"] is False
+        assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+
+
+
+def test_dogfood_ordinary_turn_default_automation_dry_run_policy_state_enabled_allows_one_candidate_only(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-default-automation-dry-run-policy-state-enabled.db"
+    gate_path = tmp_path / "ordinary-turn-default-automation-policy-gate.json"
+    policy_state_path = tmp_path / "enabled-policy-state.json"
+    initialize_database(db_path)
+    _write_ordinary_turn_default_automation_policy_gate_report(gate_path)
+    _write_ordinary_turn_default_automation_policy_state(policy_state_path, enabled=True)
+    for digest in ["e", "f"]:
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=digest * 64,
+            summary=f"User prefers concise terminal summaries {digest}.",
+            scope="project:g2",
+            retention_policy="ephemeral",
+            metadata={"ordinary_turn": True},
+        )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-dry-run",
+            str(db_path),
+            "--policy-gate",
+            str(gate_path),
+            "--policy-state-config",
+            str(policy_state_path),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--limit",
+            "20",
+            "--max-candidates",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["quality_gate"]["pass"] is True
+    assert payload["candidate_counts"]["eligible_preference_candidate_count"] == 2
+    assert payload["candidate_counts"]["selected_candidate_count"] == 1
+    assert payload["candidate_counts"]["deferred_candidate_count"] == 1
+    assert payload["policy_state"]["manual_opt_in_default_automation_enabled"] is True
+    assert payload["policy_state"]["unattended_default_apply_allowed"] is False
+    assert payload["policy_contract"]["max_candidates_per_run"] == 1
+    assert payload["policy_contract"]["unattended_default_apply_allowed"] is False
+
+
+
 def _write_ordinary_turn_default_automation_dry_run_report(
     path: Path,
     *,

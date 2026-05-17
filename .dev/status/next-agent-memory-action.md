@@ -1,7 +1,26 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-17 16:50 KST
+Last updated: 2026-05-17 17:03 KST
+
+## Just completed: default automation policy-state read-path enforcement
+
+- Added optional `--policy-state-config` to `dogfood ordinary-turn-default-automation-dry-run`.
+- When supplied, dry-run now fail-closes if policy state is missing, disabled, wrong kind/policy, grants ordinary/background/unattended authority, lacks fresh-verifier/exact-review/disable requirements, or requests more candidates than the enabled policy allows.
+- Enabled policy state still permits only bounded exact-review candidate refs; dry-run remains read-only and raw-text-free.
+- Validation passed: default-automation focused `17 passed`, broader ordinary-turn `36 passed`, full suite `391 passed, 1 xfailed`.
+
+Current estimate:
+
+- Safety-gated operational north-star: still approximately 99%+.
+- Literal scoped human-brain-like local memory lifecycle: approximately 99.998%.
+- Remaining gap: apply-boundary policy-state enforcement plus freshness linkage to post-apply verifier/evidence-rollup before repeated apply.
+
+Recommended next work now:
+
+1. Commit/push this read-path enforcement checkpoint and watch CI.
+2. Next code slice should require enabled policy state at `ordinary-turn-default-automation-apply`, while preserving exact trace-ref review, one-candidate bound, backup, rollback replay, and no unattended/background apply.
+3. Add freshness linkage so a second apply requires fresh post-apply verifier/evidence-rollup from the previous apply.
 
 ## Just completed: default automation exact opt-in enablement switch
 
