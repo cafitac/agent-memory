@@ -1,9 +1,21 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:47 KST
+Last updated: 2026-05-18 11:57 KST
 
-## Current checkpoint: enabled recurring scheduler final start boundary
+## Current checkpoint: enabled recurring scheduler local start smoke
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke`.
+- It consumes the final-start-boundary report plus local start manifest and verifies the manifest is hash-bound and still constrained.
+- It is read-only: `executes_scheduler_cycle=false`, `executes_apply=false`, `writes_scheduler_config=false`, `installs_background_or_cron=false`, `starts_background_or_cron=false`, and `enables_unattended_default_authority=false`.
+- It fails closed if the manifest is missing, tampered, not hash-bound, or widens max candidates beyond `1`.
+- Validation complete: focused final-boundary/local-smoke test `1 passed`; local-start/final-start/activation/recurrence/post-run/execute/smoke corridor `7 passed, 234 deselected`; ordinary-turn default automation corridor `49 passed, 192 deselected`; full suite `423 passed, 1 xfailed`; release smoke `3 passed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9999999%+.
+- Next safe slice: exact OS background/cron activation boundary; this remains separately gated and must still be kill-switchable, CI-green gated, rollback-evidence gated, max-one-candidate bounded, package-stop constrained, and post-apply-verifier constrained.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-local-start-smoke.md`
+
+## Previous checkpoint: enabled recurring scheduler final start boundary
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary`.
 - It consumes a green activation-packet verifier and enabled recurring scheduler config with exact phrase `start-recurring-default-automation-scheduler-local-boundary-v1`.
