@@ -20240,6 +20240,87 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_fi
         b"restore from per-cycle backup and disable scheduler manifest before any later cycle"
     ).hexdigest()
 
+    smoke_output = tmp_path / "local-start-smoke.json"
+    smoke_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke",
+            "--final-start-boundary",
+            str(output_path),
+            "--report-dir",
+            str(report_dir / "smoke"),
+            "--output",
+            str(smoke_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert smoke_result.returncode == 0, smoke_result.stderr
+    smoke_payload = json.loads(smoke_result.stdout)
+    assert json.loads(smoke_output.read_text(encoding="utf-8")) == smoke_payload
+    assert smoke_payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke"
+    assert smoke_payload["read_only"] is True
+    assert smoke_payload["mutated"] is False
+    assert smoke_payload["local_start_smoke"] == {
+        "local_manifest_consumed": True,
+        "manifest_hash_bound": True,
+        "ready_for_os_activation_boundary": True,
+        "os_background_or_cron_started": False,
+        "background_or_cron_install_performed": False,
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "max_candidates_per_cycle": 1,
+        "package_stop_per_cycle_required": True,
+        "post_apply_verification_before_next_cycle_required": True,
+    }
+    assert smoke_payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "writes_scheduler_config": False,
+        "installs_background_or_cron": False,
+        "starts_background_or_cron": False,
+        "enables_unattended_default_authority": False,
+        "readiness_only": True,
+    }
+    assert smoke_payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_green_ready_for_exact_os_activation_boundary_only",
+        "blocked_reasons": [],
+    }
+
+    tampered_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tampered_manifest["max_candidates_per_cycle"] = 2
+    manifest_path.write_text(json.dumps(tampered_manifest), encoding="utf-8")
+    red_smoke_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke",
+            "--final-start-boundary",
+            str(output_path),
+            "--local-start-manifest",
+            str(manifest_path),
+            "--report-dir",
+            str(report_dir / "red-smoke"),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_smoke_result.returncode == 0, red_smoke_result.stderr
+    red_smoke_payload = json.loads(red_smoke_result.stdout)
+    assert red_smoke_payload["quality_gate"]["pass"] is False
+    assert "local_start_manifest_sha_mismatch" in red_smoke_payload["quality_gate"]["blocked_reasons"]
+    assert "local_start_manifest_max_candidates_not_one" in red_smoke_payload["quality_gate"]["blocked_reasons"]
+
     kill_switch_path.write_text("stop", encoding="utf-8")
     red_result = subprocess.run(
         [

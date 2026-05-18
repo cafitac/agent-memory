@@ -12219,6 +12219,166 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_
     return payload
 
 
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    boundary_path = args.final_start_boundary.expanduser().resolve(strict=False)
+    boundary_payload, boundary_artifact = _read_json_artifact_summary(boundary_path)
+    boundary_payload = boundary_payload or {}
+    boundary_quality = boundary_payload.get("quality_gate", {}) if isinstance(boundary_payload.get("quality_gate"), dict) else {}
+    boundary = (
+        boundary_payload.get("local_start_boundary", {})
+        if isinstance(boundary_payload.get("local_start_boundary"), dict)
+        else {}
+    )
+    boundary_authority = (
+        boundary_payload.get("automation_authority", {})
+        if isinstance(boundary_payload.get("automation_authority"), dict)
+        else {}
+    )
+    boundary_forbidden = (
+        boundary_payload.get("forbidden_authority", {})
+        if isinstance(boundary_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    boundary_privacy = boundary_payload.get("privacy", {}) if isinstance(boundary_payload.get("privacy"), dict) else {}
+
+    manifest_path = (args.local_start_manifest or Path(str(boundary.get("local_start_manifest_path") or ""))).expanduser().resolve(strict=False)
+    manifest_payload, manifest_artifact = _read_json_artifact_summary(manifest_path)
+    manifest_payload = manifest_payload or {}
+
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    blocked_reasons: list[str] = []
+    if boundary_artifact.get("error") is not None:
+        blocked_reasons.append("final_start_boundary_unreadable")
+    if boundary_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary":
+        blocked_reasons.append("final_start_boundary_kind_invalid")
+    if boundary_quality.get("pass") is not True:
+        blocked_reasons.append("final_start_boundary_not_green")
+    if boundary_quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_green_local_manifest_ready_for_start_smoke_only":
+        blocked_reasons.append("final_start_boundary_decision_invalid")
+    if boundary.get("ready_for_local_start_smoke") is not True:
+        blocked_reasons.append("final_start_boundary_not_ready_for_local_start_smoke")
+    if boundary.get("os_background_or_cron_started") is not False:
+        blocked_reasons.append("final_start_boundary_os_background_or_cron_started")
+    if boundary.get("background_or_cron_install_performed") is not False:
+        blocked_reasons.append("final_start_boundary_background_or_cron_install_performed")
+    if boundary.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("final_start_boundary_max_candidates_not_one")
+    for key in (
+        "requires_package_stop_per_cycle",
+        "requires_post_apply_verification_before_next_cycle",
+        "requires_stale_evidence_prevention",
+        "kill_switch_fail_closed",
+    ):
+        if boundary.get(key) is not True:
+            blocked_reasons.append(f"final_start_boundary_{key}_missing")
+    if boundary_authority.get("writes_local_start_manifest") is not True:
+        blocked_reasons.append("final_start_boundary_manifest_not_written")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "writes_scheduler_config",
+        "installs_background_or_cron",
+        "starts_background_or_cron",
+        "enables_unattended_default_authority",
+    ):
+        if boundary_authority.get(key) is not False:
+            blocked_reasons.append(f"final_start_boundary_authority_{key}_not_false")
+    if boundary_authority.get("ready_for_local_start_smoke_only") is not True:
+        blocked_reasons.append("final_start_boundary_not_smoke_only")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if boundary_forbidden.get(key) is not False:
+            blocked_reasons.append(f"final_start_boundary_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(boundary_privacy):
+        blocked_reasons.append("final_start_boundary_privacy_not_ref_safe")
+
+    if manifest_artifact.get("error") is not None:
+        blocked_reasons.append("local_start_manifest_unreadable")
+    if manifest_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_manifest":
+        blocked_reasons.append("local_start_manifest_kind_invalid")
+    if boundary.get("local_start_manifest_sha256") != manifest_artifact.get("report_sha256"):
+        blocked_reasons.append("local_start_manifest_sha_mismatch")
+    if manifest_payload.get("ready_for_local_start_smoke") is not True:
+        blocked_reasons.append("local_start_manifest_not_ready")
+    if manifest_payload.get("os_background_or_cron_started") is not False:
+        blocked_reasons.append("local_start_manifest_os_background_or_cron_started")
+    if manifest_payload.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("local_start_manifest_max_candidates_not_one")
+    for key in (
+        "requires_package_stop_per_cycle",
+        "requires_post_apply_verification_before_next_cycle",
+        "requires_stale_evidence_prevention",
+        "requires_kill_switch_absent_before_start",
+    ):
+        if manifest_payload.get(key) is not True:
+            blocked_reasons.append(f"local_start_manifest_{key}_missing")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    gate_pass = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "local_start_inputs": {
+            "final_start_boundary": {
+                **boundary_artifact,
+                "quality_gate_pass": boundary_quality.get("pass") is True,
+            },
+            "local_start_manifest": manifest_artifact,
+        },
+        "local_start_smoke": {
+            "local_manifest_consumed": manifest_artifact.get("error") is None,
+            "manifest_hash_bound": boundary.get("local_start_manifest_sha256") == manifest_artifact.get("report_sha256"),
+            "ready_for_os_activation_boundary": gate_pass,
+            "os_background_or_cron_started": False,
+            "background_or_cron_install_performed": False,
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "max_candidates_per_cycle": 1,
+            "package_stop_per_cycle_required": True,
+            "post_apply_verification_before_next_cycle_required": True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "writes_scheduler_config": False,
+            "installs_background_or_cron": False,
+            "starts_background_or_cron": False,
+            "enables_unattended_default_authority": False,
+            "readiness_only": True,
+        },
+        "quality_gate": {
+            "pass": gate_pass,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_green_ready_for_exact_os_activation_boundary_only"
+            if gate_pass
+            else "ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_red_keep_os_activation_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "exact_os_background_or_cron_activation_boundary_or_stop"
+        if gate_pass
+        else "fix_local_start_manifest_before_os_activation",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -24386,6 +24546,22 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke",
+        help="Read-only smoke over the final local start manifest before any OS background/cron activation.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_parser.add_argument(
+        "--final-start-boundary", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_parser.add_argument(
+        "--local-start-manifest", type=Path
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_parser.add_argument(
+        "--report-dir", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -26060,6 +26236,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_payload(args),
                     indent=2,
                 )
             )
