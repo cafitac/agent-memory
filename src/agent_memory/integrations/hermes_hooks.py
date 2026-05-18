@@ -151,9 +151,12 @@ class HermesDoctorResult(BaseModel):
     config_exists: bool
     hook_installed: bool
     hook_occurrences: int = 0
+    plugin_enabled: bool = False
+    duplicate_context_injection_risk: bool = False
     status: str
     recommended_command: str
     checks: list[dict[str, Any]]
+    warnings: list[dict[str, Any]] = []
 
 
 def build_hermes_hook_config_snippet(options: HermesHookConfigSnippetOptions) -> str:
@@ -366,6 +369,33 @@ def install_hermes_hook_config(options: HermesHookInstallOptions) -> HermesHookI
     )
 
 
+def _hermes_agent_memory_plugin_enabled(config_text: str) -> bool:
+    lines = config_text.splitlines()
+    plugins_index = None
+    for index, line in enumerate(lines):
+        if line.strip() == "plugins:" and not line.startswith(" "):
+            plugins_index = index
+            break
+    if plugins_index is None:
+        return False
+    plugins_end = _find_next_top_level_line(lines, plugins_index)
+    enabled_index = None
+    for index in range(plugins_index + 1, plugins_end):
+        if lines[index].rstrip() == "  enabled:":
+            enabled_index = index
+            break
+    if enabled_index is None:
+        return False
+    for index in range(enabled_index + 1, plugins_end):
+        line = lines[index]
+        if line.startswith("  ") and not line.startswith("  -") and line.strip().endswith(":"):
+            break
+        stripped = line.strip().strip('"\'')
+        if stripped in {"- agent-memory", "agent-memory"}:
+            return True
+    return False
+
+
 def diagnose_hermes_hook_setup(options: HermesHookInstallOptions) -> HermesDoctorResult:
     db_path = options.snippet_options.db_path.expanduser().resolve(strict=False)
     config_path = options.config_path.expanduser().resolve(strict=False)
@@ -375,6 +405,9 @@ def diagnose_hermes_hook_setup(options: HermesHookInstallOptions) -> HermesDocto
     db_exists = db_path.exists()
     config_exists = config_path.exists()
     hook_installed = hook_occurrences > 0
+    plugin_enabled = _hermes_agent_memory_plugin_enabled(config_text)
+    integration_installed = hook_installed or plugin_enabled
+    duplicate_context_injection_risk = hook_installed and plugin_enabled
     checks = [
         {
             "name": "database_exists",
@@ -387,12 +420,23 @@ def diagnose_hermes_hook_setup(options: HermesHookInstallOptions) -> HermesDocto
             "detail": str(config_path),
         },
         {
-            "name": "hook_installed",
-            "ok": hook_installed,
-            "detail": f"occurrences={hook_occurrences}",
+            "name": "integration_installed",
+            "ok": integration_installed,
+            "detail": f"hook_occurrences={hook_occurrences}; plugin_enabled={plugin_enabled}",
         },
     ]
+    warnings = []
+    if duplicate_context_injection_risk:
+        warnings.append(
+            {
+                "name": "duplicate_context_injection_risk",
+                "detail": "agent-memory is enabled both as a Hermes plugin and as a pre_llm_call shell hook; remove one path to avoid duplicate memory context injection.",
+                "recommended_action": "Prefer the Hermes plugin path or remove the hermes-pre-llm-hook entry from hooks.pre_llm_call.",
+            }
+        )
     status = "ok" if all(check["ok"] for check in checks) else "needs_setup"
+    if status == "ok" and warnings:
+        status = "warning"
     recommended_command = f"agent-memory bootstrap {shlex.quote(str(db_path))} --config-path {shlex.quote(str(config_path))}"
     return HermesDoctorResult(
         db_path=str(db_path),
@@ -401,9 +445,12 @@ def diagnose_hermes_hook_setup(options: HermesHookInstallOptions) -> HermesDocto
         config_exists=config_exists,
         hook_installed=hook_installed,
         hook_occurrences=hook_occurrences,
+        plugin_enabled=plugin_enabled,
+        duplicate_context_injection_risk=duplicate_context_injection_risk,
         status=status,
         recommended_command=recommended_command,
         checks=checks,
+        warnings=warnings,
     )
 
 

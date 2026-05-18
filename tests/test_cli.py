@@ -9031,6 +9031,82 @@ def test_python_module_cli_hermes_doctor_reports_missing_setup_and_fix_command(t
 
 
 
+def test_python_module_cli_hermes_doctor_reports_ok_for_plugin_only_setup(tmp_path: Path) -> None:
+    db_path = tmp_path / ".agent-memory" / "memory.db"
+    initialize_database(db_path)
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "plugins:\n"
+        "  enabled:\n"
+        "  - agent-memory\n"
+        "hooks:\n"
+        "  pre_llm_call:\n"
+        "  - command: /other/context-hook.py\n"
+        "    timeout: 15\n"
+    )
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "hermes-doctor"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert payload["hook_installed"] is False
+    assert payload["plugin_enabled"] is True
+    assert payload["duplicate_context_injection_risk"] is False
+    assert payload["warnings"] == []
+    assert any(check["name"] == "integration_installed" and check["ok"] is True for check in payload["checks"])
+
+
+
+def test_python_module_cli_hermes_doctor_warns_when_plugin_and_shell_hook_overlap(tmp_path: Path) -> None:
+    db_path = tmp_path / ".agent-memory" / "memory.db"
+    initialize_database(db_path)
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "hooks:\n"
+        "  pre_llm_call:\n"
+        f"  - command: agent-memory hermes-pre-llm-hook {db_path}\n"
+        "    timeout: 10\n"
+        "plugins:\n"
+        "  enabled:\n"
+        "  - agent-memory\n"
+    )
+    env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_memory.api.cli", "hermes-doctor"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "warning"
+    assert payload["hook_installed"] is True
+    assert payload["hook_occurrences"] == 1
+    assert payload["plugin_enabled"] is True
+    assert payload["duplicate_context_injection_risk"] is True
+    assert payload["warnings"] == [
+        {
+            "name": "duplicate_context_injection_risk",
+            "detail": "agent-memory is enabled both as a Hermes plugin and as a pre_llm_call shell hook; remove one path to avoid duplicate memory context injection.",
+            "recommended_action": "Prefer the Hermes plugin path or remove the hermes-pre-llm-hook entry from hooks.pre_llm_call.",
+        }
+    ]
+
+
+
 def test_python_module_cli_hermes_doctor_reports_ok_after_bootstrap(tmp_path: Path) -> None:
     env = {**os.environ, "PYTHONPATH": "src", "HOME": str(tmp_path)}
     cwd = Path(__file__).resolve().parents[1]

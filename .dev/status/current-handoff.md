@@ -1,9 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 13:29 KST
+Last updated: 2026-05-18 14:48 KST
 
-## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
+## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+
+- Pushed develop through `825270b Harden consolidation telemetry reports` to `origin/develop`; GitHub Actions run `26015270138` completed green on commit `825270ba329540f36ccfc41dcfdf9882bcbf0fa8`.
+- Live personal-oss Hermes plugin dogfood remains plugin-only from `agent-memory`'s perspective: `hermes-doctor /Users/reddit/.agent-memory/memory.db --config-path /Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, and no warnings.
+- Live activation observation over the latest 80 activations reports `candidate_activation_count=73`, `sentinel_or_empty_noise_count=7`, `ratio=0.0875`, and `excluded_from_candidate_reports=true`; noise is visible but filtered from reinforcement candidates.
+- New doctor/UX slice adds plugin-aware Hermes doctor output: plugin-only setup is valid, and simultaneous plugin + `hermes-pre-llm-hook` shell hook returns `status=warning` with `duplicate_context_injection_risk=true` and a concrete remove-one-path recommendation.
+- Focused doctor/plugin tests and full test suite pass locally: `433 passed, 1 xfailed`. Next gate is commit/push and CI watch for the doctor guard commit.
+- Current progress framing: core scoped local human-brain-like memory loop remains 100% at the bounded/review-gated/local-first boundary. The new remaining work is operational confidence/UX, not new memory mutation authority.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
 - Latest source checkpoint tightens the G4/G5 memory-consolidation corridor: activation reports now emit noise diagnostics and exclude sentinel/empty retrieval telemetry from reinforcement candidates; graph snapshots split semantic relation edges from activation telemetry edges; consolidation candidates now project fact/procedure/episode promotion shapes; G4 review queue supports an explicit `conflict` review state without applying mutations.
 - Live personal-oss Hermes profile was dogfooded safely: the old agent-memory shell `hermes-pre-llm-hook` entry was removed from `hooks.pre_llm_call`, `/Users/reddit/.hermes/profiles/personal-oss/plugins/agent-memory` now symlinks to this repo, `plugins.enabled` already contains `agent-memory`, and `hermes plugins list` reports `agent-memory enabled 0.1.162`. This avoids duplicate memory-context injection between shell hook and plugin.

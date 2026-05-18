@@ -1,9 +1,28 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 13:29 KST
+Last updated: 2026-05-18 14:48 KST
 
-## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
+## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+
+- `825270b Harden consolidation telemetry reports` is pushed to `origin/develop`; GitHub Actions run `26015270138` completed successfully for commit `825270ba329540f36ccfc41dcfdf9882bcbf0fa8`.
+- Live personal-oss plugin dogfood now has a first explicit doctor signal for duplicate injection risk: `/Users/reddit/.agent-memory/memory.db` with `/Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports plugin enabled, shell hook absent, duplicate risk false, and no warnings.
+- Live activation observation over the latest 80 activation rows shows 7 empty/sentinel activations (`ratio=0.0875`) and confirms `excluded_from_candidate_reports=true`; the new noise diagnostics are doing the intended job without hiding the evidence.
+- Doctor/UX polish is implemented locally: `hermes-doctor` treats a Hermes plugin-only setup as installed and warns when both plugin and `hermes-pre-llm-hook` shell hook are present. The warning gives an explicit remove-one-path recommendation and does not mutate config.
+- Focused doctor/plugin tests pass locally, and the full suite is green: `433 passed, 1 xfailed`. The first full-suite attempt failed only because the macOS volume had 116 MiB free; after removing local pytest temp/cache plus Poetry cache/artifacts, the rerun passed.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively 100% at the bounded/review-gated/local-first boundary.
+- Remaining work is operational confidence/UX: commit/push, CI watch, longer normal-turn dogfood, and documentation polish. No additional mutation authority is needed for this slice.
+
+Recommended next work now:
+
+1. Commit/push the doctor guard + docs and watch CI.
+2. Continue live plugin dogfood under personal-oss; if duplicate context appears again, use doctor output plus Hermes config inspection before changing runtime paths.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+## Previous checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
 - Activation/reinforcement reports now carry `noise_diagnostics` and use filtered `candidate_activations`, excluding QA sentinel and empty-retrieval telemetry from reinforcement candidate scoring while preserving negative-evidence counts for visibility.
 - Memory graph snapshots now label every edge with a `domain` and return separate `semantic_relation_edges`, `activation_telemetry_edges`, and `edge_domain_counts`. Durable relation graph consumers can now ignore retrieval telemetry without losing observability data.

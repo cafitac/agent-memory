@@ -1,9 +1,20 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 13:29 KST
+Last updated: 2026-05-18 14:48 KST
 
-## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
+## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+
+- `825270b` is pushed to `origin/develop`; CI run `26015270138` is green.
+- Live plugin dogfood confirms personal-oss is not double-injecting agent-memory through the old shell hook: doctor reports hook occurrences `0`, plugin enabled `true`, duplicate risk `false`.
+- Live reinforcement observation confirms latest activation noise is diagnosed and filtered: 7/80 recent activations were empty/sentinel noise and excluded from reinforcement candidates.
+- Doctor/UX polish is implemented locally: plugin-only setup is accepted as installed; plugin + shell hook overlap is surfaced as `status=warning` / `duplicate_context_injection_risk=true`.
+- Next safe action: commit docs/code/tests, push, and watch CI again. Local verification is green: focused doctor/plugin tests and full suite `433 passed, 1 xfailed`.
+- Keep mutation authority unchanged: no broad ordinary auto-approval, unattended/background apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
 - Activation reports now distinguish signal from QA/sentinel/empty-retrieval noise: diagnostics are emitted, and reinforcement candidates use filtered candidate activations.
 - Memory graph output now separates `semantic_relation_edges` from `activation_telemetry_edges` with `edge_domain_counts`, so report consumers do not confuse retrieval telemetry with durable knowledge relations.
