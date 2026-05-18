@@ -1,7 +1,19 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 09:31 KST
+Last updated: 2026-05-18 09:58 KST
+
+## Current checkpoint: enabled recurring scheduler one-cycle smoke gate
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-smoke`.
+- It consumes the green enabled config materialization report plus the written scheduler config and validates them as a read-only readiness gate for exactly one explicit scheduler one-shot boundary.
+- It verifies config SHA/path binding, `enabled=true`, `recurring_scheduler_enabled=true`, `background_or_cron_enabled=false`, `max_candidates_per_cycle=1`, previous-evidence/package-stop/post-apply/CI/rollback/kill-switch requirements, and ref-safe forbidden authority flags.
+- It emits a command preview for `ordinary-turn-default-automation-scheduler-one-shot` with schedule phrase `run-one-local-default-automation-schedule-v1` and apply phrase `apply-exact-ordinary-turn-default-automation-candidate-v1`, but does not execute scheduler cycle/apply or install background/cron.
+- Validation so far: focused one-cycle smoke `1 passed`; enabled+disabled config corridor `8 passed, 227 deselected`; ordinary-turn default automation corridor `43 passed, 192 deselected`; full suite `417 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999997%+.
+- Next safe slice: exact one-cycle execution boundary that consumes the smoke gate and stops after package; still no background/cron recurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-one-cycle-smoke.md`
 
 ## Current checkpoint: enabled recurring scheduler config materializer
 
