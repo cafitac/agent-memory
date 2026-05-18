@@ -1,18 +1,20 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 12:33 KST
+Last updated: 2026-05-18 13:29 KST
 
-## Current checkpoint: Hermes plugin/default integration complete
+## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
-- Latest source checkpoint adds a repo-level Hermes plugin manifest and `register(ctx)` entry point.
-- Hermes users can use `hermes plugins install cafitac/agent-memory --enable` as the direct plugin/default path; npm `agent-memory bootstrap` remains the agent-agnostic hook/config path.
-- The plugin registers `pre_llm_call`, initializes/reuses the local DB, returns prompt-cache-friendly context injection, and fails soft on empty/bad inputs.
-- Validation complete: `tests/test_hermes_plugin_integration.py -q` -> `4 passed`; Hermes adapter/npm/docs/release corridor -> `30 passed`; full suite -> `428 passed, 1 xfailed`.
-- Current progress framing: Hermes plugin/default integration 100%; broader human-brain-like lifecycle remains bounded by the prior no-auto-OS-scheduler safety boundary.
-- Next safe action: commit/push only the plugin/default integration files and docs; leave unrelated untracked harness directories untouched.
+- Activation reports now distinguish signal from QA/sentinel/empty-retrieval noise: diagnostics are emitted, and reinforcement candidates use filtered candidate activations.
+- Memory graph output now separates `semantic_relation_edges` from `activation_telemetry_edges` with `edge_domain_counts`, so report consumers do not confuse retrieval telemetry with durable knowledge relations.
+- Consolidation candidate preview now exposes projected fact/procedure/episode promotion requirements while preserving human-review-only promotion.
+- G4 review queue now supports approve/reject/conflict transitions as review state only; apply authority remains separately guarded.
+- Live personal-oss Hermes profile now runs the repo plugin instead of the old duplicate shell hook path: `hermes plugins list` shows `agent-memory enabled`, shell `hermes-pre-llm-hook` is absent from `hooks.pre_llm_call`, and a real `hermes chat -Q -q` smoke returned `AGENT_MEMORY_PLUGIN_SMOKE_OK`.
+- Validation complete: focused corridor `31 passed`; full suite `431 passed, 1 xfailed`.
+- Current progress framing: practical scoped local human-brain-like lifecycle remains 100% at the explicit-review/local-first/safety-gated boundary; remaining work is confidence/operational polish, not a missing core loop.
+- Next safe action: commit/push only the source/docs/config-safe checkpoint; leave unrelated untracked `.agent-learner/`, `.claude/`, `.omc/`, `.worktrees/`, and KB scratch docs out unless explicitly requested.
 
-Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 
 ## Previous checkpoint: enabled recurring scheduler activation packet verification
 

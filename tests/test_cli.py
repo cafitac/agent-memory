@@ -5482,6 +5482,7 @@ def test_python_module_cli_dogfood_g4_review_queue_approval_report_is_ref_safe_r
         "total_count": 3,
         "approved_count": 1,
         "rejected_count": 1,
+        "conflict_count": 0,
         "pending_count": 1,
         "reviewed_count": 2,
     }
@@ -5937,9 +5938,27 @@ def test_python_module_cli_dogfood_g4_review_queue_persist_lists_and_updates_wit
     )
     assert updated.returncode == 0, updated.stderr
     assert json.loads(updated.stdout)["apply_supported"] is False
+
+    conflict = subprocess.run(
+        [
+            sys.executable, "-m", "agent_memory.api.cli", "dogfood", "g4-review-queue-update", str(db_path), queue_id,
+            "--status", "conflict", "--actor", "pytest", "--reason", "marked as conflicting refs only",
+            "--approval-phrase", "conflict-g4-review-queue-item-v1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert conflict.returncode == 0, conflict.stderr
+    conflict_payload = json.loads(conflict.stdout)
+    assert conflict_payload["status_before"] == "approved"
+    assert conflict_payload["status_after"] == "conflict"
+    assert conflict_payload["approval_phrase_matched"] is True
     with sqlite3.connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == before_facts
-        assert connection.execute("SELECT status FROM g4_review_queue_items WHERE queue_id = ?", (queue_id,)).fetchone()[0] == "approved"
+        assert connection.execute("SELECT status FROM g4_review_queue_items WHERE queue_id = ?", (queue_id,)).fetchone()[0] == "conflict"
+
 
 
 

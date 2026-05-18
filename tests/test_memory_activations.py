@@ -19,6 +19,7 @@ from agent_memory.storage.sqlite import (
     list_relations_for_node,
     record_retrieval_observation,
 )
+from agent_memory.api.cli import _memory_graph_snapshot
 
 
 def _trace(memory_id: int, *, label: str = "Agent Memory project fact") -> RetrievalTraceEntry:
@@ -242,6 +243,14 @@ def test_cli_activations_summary_reports_read_only_reinforcement_and_negative_ev
     assert payload["activation_kind_counts"] == {"empty_retrieval": 1, "retrieved": 3}
     assert payload["surface_counts"] == {"cli": 1, "hermes": 3}
     assert payload["scope_counts"] == {"project:activation-summary": 3, "project:missing": 1}
+    assert payload["noise_diagnostics"] == {
+        "sentinel_or_empty_noise_count": 1,
+        "ratio": 0.25,
+        "by_activation_kind": {"empty_retrieval": 1},
+        "by_surface": {"hermes": 1},
+        "sample_activation_ids": [4],
+        "excluded_from_candidate_reports": True,
+    }
     assert payload["empty_retrieval"]["count"] == 1
     assert payload["empty_retrieval"]["ratio"] == 0.25
     assert payload["status_summary"] == {"approved": 1, "deprecated": 1}
@@ -750,6 +759,14 @@ def test_cli_consolidation_candidates_clusters_safe_trace_evidence(tmp_path: Pat
     assert candidate["candidate_id"].startswith("candidate:")
     assert candidate["cluster_key"] == "scope:project:consolidation-candidates|memory:fact:1"
     assert candidate["guessed_memory_type"] == "preference"
+    assert candidate["proposed_memory_kind"] == "fact"
+    assert candidate["candidate_projection"] == {
+        "memory_kind": "fact",
+        "promotion_path": "reviewed_fact_candidate",
+        "requires_human_review": True,
+        "required_human_fields": ["subject_ref", "predicate", "object_ref_or_value", "scope", "confidence"],
+        "auto_promotion_allowed": False,
+    }
     assert candidate["evidence_count"] == 3
     assert candidate["surfaces"] == ["cli", "hermes"]
     assert candidate["scopes"] == ["project:consolidation-candidates"]
@@ -1687,3 +1704,208 @@ def test_cli_consolidation_promote_fact_allow_conflict_is_explicit_and_preserves
     assert payload["conflict_preflight"]["conflicts"][0]["fact_id"] == existing_fact.id
     assert payload["retrieval_policy"] == "default_retrieval_remains_approved_only"
     assert get_fact(db_path, fact_id=payload["fact"]["id"]).status == "candidate"
+
+
+def test_cli_activations_reinforcement_filters_qa_sentinel_noise_from_candidates(tmp_path: Path) -> None:
+    db_path = tmp_path / "activation-noise.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="Noise filtering source text.",
+        metadata={"project": "activation-noise"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Noise filter",
+        predicate="target",
+        object_ref_or_value="stable",
+        evidence_ids=[source.id],
+        scope="project:activation-noise",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+            ) VALUES (1, '2026-05-10 00:00:00', 'qa-sentinel', 'retrieved', ?, NULL, NULL,
+                      'project:activation-noise', 1.0, '{"qa_sentinel": true}')
+            """,
+            (f"fact:{fact.id}",),
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+            ) VALUES (2, '2026-05-10 00:01:00', 'hermes', 'empty_retrieval', 'empty_retrieval', NULL, NULL,
+                      'project:activation-noise', 0.0, '{}')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO memory_activations (
+                id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+            ) VALUES (3, '2026-05-10 00:02:00', 'hermes', 'retrieved', ?, NULL, NULL,
+                      'project:activation-noise', 1.0, '{}')
+            """,
+            (f"fact:{fact.id}",),
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "activations",
+            "reinforcement-report",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["activation_count"] == 3
+    assert payload["candidate_activation_count"] == 1
+    assert payload["noise_diagnostics"]["sentinel_or_empty_noise_count"] == 2
+    assert payload["noise_diagnostics"]["excluded_from_candidate_reports"] is True
+    assert payload["reinforcement_candidates"][0]["activation_count"] == 1
+    assert {candidate["memory_ref"] for candidate in payload["reinforcement_candidates"]} == {f"fact:{fact.id}"}
+
+
+def test_memory_graph_snapshot_separates_semantic_relations_from_activation_telemetry(tmp_path: Path) -> None:
+    db_path = tmp_path / "graph-domains.db"
+    initialize_database(db_path)
+    source = ingest_source_text(db_path=db_path, source_type="note", content="Graph domain source.", metadata={})
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="Graph",
+        predicate="domain",
+        object_ref_or_value="separated",
+        evidence_ids=[source.id],
+        scope="project:graph-domains",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+    insert_relation(
+        db_path,
+        from_ref=f"fact:{fact.id}",
+        relation_type="mentions",
+        to_ref="concept:graph-domain",
+        evidence_ids=[source.id],
+        weight=1.0,
+        confidence=0.9,
+    )
+    record_retrieval_observation(
+        db_path,
+        surface="hermes",
+        query="graph domain",
+        preferred_scope="project:graph-domains",
+        limit=5,
+        statuses=("approved",),
+        retrieval_trace=[_trace(fact.id)],
+        response_mode="direct",
+        metadata={},
+    )
+
+    snapshot = _memory_graph_snapshot(db_path, limit=50, include_memory_labels=False)
+
+    assert snapshot["edge_domain_counts"]["semantic_relation"] == 1
+    assert snapshot["edge_domain_counts"]["activation_telemetry"] >= 1
+    assert {edge["type"] for edge in snapshot["semantic_relation_edges"]} == {"mentions"}
+    assert all(edge["domain"] == "semantic_relation" for edge in snapshot["semantic_relation_edges"])
+    assert all(edge["domain"] == "activation_telemetry" for edge in snapshot["activation_telemetry_edges"])
+
+
+def test_cli_consolidation_candidates_project_fact_procedure_and_episode_kinds(tmp_path: Path) -> None:
+    db_path = tmp_path / "consolidation-kinds.db"
+    initialize_database(db_path)
+    for idx in range(2):
+        insert_experience_trace(
+            db_path,
+            surface="hermes",
+            event_kind="turn",
+            content_sha256=f"fact-{idx}",
+            summary="Project alpha uses durable factual language.",
+            scope="project:kind-fact",
+            salience=0.7,
+            user_emphasis=0.5,
+            retention_policy="review",
+        )
+        insert_experience_trace(
+            db_path,
+            surface="hermes",
+            event_kind="turn",
+            content_sha256=f"procedure-{idx}",
+            summary="Workflow step command run export before deploy.",
+            scope="project:kind-procedure",
+            salience=0.7,
+            user_emphasis=0.5,
+            retention_policy="review",
+        )
+        insert_experience_trace(
+            db_path,
+            surface="hermes",
+            event_kind="turn",
+            content_sha256=f"episode-{idx}",
+            summary="Incident happened during session and was resolved.",
+            scope="project:kind-episode",
+            salience=0.7,
+            user_emphasis=0.5,
+            retention_policy="review",
+        )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "consolidation",
+            "candidates",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "10",
+            "--min-evidence",
+            "2",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    by_scope = {candidate["scopes"][0]: candidate for candidate in payload["candidates"]}
+    assert by_scope["project:kind-fact"]["proposed_memory_kind"] == "fact"
+    assert by_scope["project:kind-procedure"]["proposed_memory_kind"] == "procedure"
+    assert by_scope["project:kind-episode"]["proposed_memory_kind"] == "episode"
+    assert by_scope["project:kind-procedure"]["candidate_projection"]["required_human_fields"] == [
+        "name",
+        "trigger_context",
+        "steps",
+        "scope",
+        "confidence",
+    ]
+    assert by_scope["project:kind-episode"]["candidate_projection"]["required_human_fields"] == [
+        "title",
+        "summary",
+        "tags",
+        "scope",
+        "importance_score",
+    ]

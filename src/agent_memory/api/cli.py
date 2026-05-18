@@ -2437,6 +2437,36 @@ def _sample_observation_ids(activations) -> list[int]:
     return observation_ids
 
 
+def _is_sentinel_activation_noise(activation: Any) -> bool:
+    memory_ref = str(getattr(activation, "memory_ref", None) or "")
+    activation_kind = str(getattr(activation, "activation_kind", "") or "")
+    surface = str(getattr(activation, "surface", "") or "").lower()
+    metadata = getattr(activation, "metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+    if activation_kind == "empty_retrieval" or memory_ref in {"empty_retrieval", "memory:empty_retrieval"}:
+        return True
+    if "sentinel" in surface or surface.startswith("qa-") or surface.startswith("test-"):
+        return True
+    if metadata.get("qa_sentinel") is True or metadata.get("sentinel") is True:
+        return True
+    return False
+
+
+def _activation_noise_diagnostics(activations) -> dict[str, Any]:
+    noise = [activation for activation in activations if _is_sentinel_activation_noise(activation)]
+    kind_counts = Counter(str(getattr(activation, "activation_kind", "unknown") or "unknown") for activation in noise)
+    surface_counts = Counter(str(getattr(activation, "surface", "unknown") or "unknown") for activation in noise)
+    return {
+        "sentinel_or_empty_noise_count": len(noise),
+        "ratio": round(len(noise) / len(activations), 4) if activations else 0.0,
+        "by_activation_kind": {key: kind_counts[key] for key in sorted(kind_counts)},
+        "by_surface": {key: surface_counts[key] for key in sorted(surface_counts)},
+        "sample_activation_ids": [activation.id for activation in noise[:5]],
+        "excluded_from_candidate_reports": True,
+    }
+
+
 def _reinforcement_scoring_contract() -> dict[str, Any]:
     return {
         "max_score": 1.0,
@@ -2573,11 +2603,13 @@ def _activation_reinforcement_report(db_path: Path, *, limit: int, top: int, fre
         raise ValueError("activations reinforcement-report frequent threshold must be >= 1")
 
     activations = list_memory_activations(db_path, limit=limit)
+    candidate_activations = [activation for activation in activations if not _is_sentinel_activation_noise(activation)]
     activations_by_ref: dict[str, list[Any]] = defaultdict(list)
     empty_retrieval_count = 0
     for activation in activations:
         if activation.activation_kind == "empty_retrieval":
             empty_retrieval_count += 1
+    for activation in candidate_activations:
         if activation.memory_ref is not None:
             activations_by_ref[activation.memory_ref].append(activation)
 
@@ -2613,6 +2645,8 @@ def _activation_reinforcement_report(db_path: Path, *, limit: int, top: int, fre
             "empty_retrieval_count": empty_retrieval_count,
             "empty_retrieval_ratio": round(empty_ratio, 4),
         },
+        "noise_diagnostics": _activation_noise_diagnostics(activations),
+        "candidate_activation_count": len(candidate_activations),
         "reinforcement_candidates": candidates[:top],
         "suggested_next_steps": [
             "Inspect strong candidates with activations summary before any promotion workflow.",
@@ -3310,6 +3344,30 @@ def _guess_consolidation_memory_type(traces: list[Any]) -> str:
     return "unknown"
 
 
+def _consolidation_candidate_memory_kind(guessed_memory_type: str) -> str:
+    if guessed_memory_type == "procedural":
+        return "procedure"
+    if guessed_memory_type == "episodic":
+        return "episode"
+    return "fact"
+
+
+def _consolidation_candidate_projection(guessed_memory_type: str) -> dict[str, Any]:
+    memory_kind = _consolidation_candidate_memory_kind(guessed_memory_type)
+    required_fields = {
+        "fact": ["subject_ref", "predicate", "object_ref_or_value", "scope", "confidence"],
+        "procedure": ["name", "trigger_context", "steps", "scope", "confidence"],
+        "episode": ["title", "summary", "tags", "scope", "importance_score"],
+    }[memory_kind]
+    return {
+        "memory_kind": memory_kind,
+        "promotion_path": f"reviewed_{memory_kind}_candidate",
+        "requires_human_review": True,
+        "required_human_fields": required_fields,
+        "auto_promotion_allowed": False,
+    }
+
+
 def _consolidation_candidate_payload(db_path: Path, *, cluster_key: str, traces: list[Any]) -> dict[str, Any]:
     trace_ids = sorted(trace.id for trace in traces)
     related_memory_refs = sorted({ref for trace in traces for ref in trace.related_memory_refs})
@@ -3344,11 +3402,15 @@ def _consolidation_candidate_payload(db_path: Path, *, cluster_key: str, traces:
     }
     fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     candidate_id = f"candidate:{fingerprint}"
+    guessed_memory_type = _guess_consolidation_memory_type(traces)
+    candidate_projection = _consolidation_candidate_projection(guessed_memory_type)
     return {
         "candidate_id": candidate_id,
         "cluster_key": cluster_key,
         "fingerprint": fingerprint,
-        "guessed_memory_type": _guess_consolidation_memory_type(traces),
+        "guessed_memory_type": guessed_memory_type,
+        "proposed_memory_kind": candidate_projection["memory_kind"],
+        "candidate_projection": candidate_projection,
         "evidence_count": len(traces),
         "evidence_trace_ids": trace_ids,
         "evidence_window": {
@@ -6204,7 +6266,11 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
             continue
         guessed_type = str(cluster.get("guessed_memory_type") or "fact")
         proposal_type = "preference" if guessed_type == "preference" else guessed_type
-        if proposal_type not in {"fact", "procedure", "preference"}:
+        if proposal_type == "episodic":
+            proposal_type = "episode"
+        if proposal_type == "procedural":
+            proposal_type = "procedure"
+        if proposal_type not in {"fact", "procedure", "preference", "episode"}:
             proposal_type = "fact"
         generated.append(
             {
@@ -6215,6 +6281,8 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
                 "required_human_fields": (
                     ["subject", "predicate", "object", "scope", "confidence"]
                     if proposal_type in {"fact", "preference"}
+                    else ["title", "summary", "tag", "scope", "importance_score"]
+                    if proposal_type == "episode"
                     else ["name", "trigger_context", "step", "scope", "confidence"]
                 ),
                 "safe_evidence": {
@@ -6237,6 +6305,8 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
                     "missing_human_fields": (
                         ["subject", "predicate", "object", "scope", "confidence"]
                         if proposal_type in {"fact", "preference"}
+                        else ["title", "summary", "tag", "scope", "importance_score"]
+                        if proposal_type == "episode"
                         else ["name", "trigger_context", "step", "scope", "confidence"]
                     ),
                     "auto_promotion_allowed": False,
@@ -6244,6 +6314,8 @@ def _dogfood_trace_candidate_generate_payload(args: argparse.Namespace) -> dict[
                 "promotion_template": (
                     {"promotion_type": proposal_type, "subject": None, "predicate": None, "object": None, "scope": "global", "confidence": 0.7}
                     if proposal_type in {"fact", "preference"}
+                    else {"promotion_type": proposal_type, "title": None, "summary": None, "tag": [], "scope": "global", "importance_score": 0.5}
+                    if proposal_type == "episode"
                     else {"promotion_type": proposal_type, "name": None, "trigger_context": None, "precondition": [], "step": [], "scope": "global", "confidence": 0.7}
                 ),
                 "next_review_command": "agent-memory dogfood trace-candidate-update ... --promotion-type " + proposal_type,
@@ -18078,6 +18150,7 @@ def _activation_summary(db_path: Path, *, limit: int, top: int, frequent_thresho
         "surface_counts": dict(sorted(surface_counts.items())),
         "scope_counts": dict(sorted(scope_counts.items())),
         "status_summary": dict(sorted(status_summary.items())),
+        "noise_diagnostics": _activation_noise_diagnostics(activations),
         "empty_retrieval": {
             "count": len(empty_retrieval_activations),
             "ratio": round(empty_ratio, 4),
@@ -19950,7 +20023,7 @@ def _ensure_g4_review_queue_table(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS g4_review_queue_items (
             queue_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+            status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'conflict')),
             proposal_type TEXT NOT NULL,
             target_ref TEXT,
             proposal_json TEXT NOT NULL,
@@ -20076,8 +20149,8 @@ def _dogfood_g4_review_queue_list_payload(args: argparse.Namespace) -> dict[str,
 
 
 def _dogfood_g4_review_queue_update_payload(args: argparse.Namespace) -> dict[str, Any]:
-    if args.status not in {"approved", "rejected"}:
-        raise ValueError("dogfood g4-review-queue-update status must be approved or rejected")
+    if args.status not in {"approved", "rejected", "conflict"}:
+        raise ValueError("dogfood g4-review-queue-update status must be approved, rejected, or conflict")
     if not args.actor.strip() or not args.reason.strip():
         raise ValueError("dogfood g4-review-queue-update requires non-empty --actor and --reason")
     policy = args.policy or "g4-review-queue-transition-v1"
@@ -20166,8 +20239,9 @@ def _dogfood_g4_review_queue_approval_report_payload(args: argparse.Namespace) -
     total_count = len(rows)
     approved_count = status_counts.get("approved", 0)
     rejected_count = status_counts.get("rejected", 0)
+    conflict_count = status_counts.get("conflict", 0)
     pending_count = status_counts.get("pending", 0)
-    reviewed_count = approved_count + rejected_count
+    reviewed_count = approved_count + rejected_count + conflict_count
     blocked_reasons: list[str] = []
     if total_count == 0:
         blocked_reasons.append("review_queue_empty")
@@ -20201,6 +20275,7 @@ def _dogfood_g4_review_queue_approval_report_payload(args: argparse.Namespace) -
             "total_count": total_count,
             "approved_count": approved_count,
             "rejected_count": rejected_count,
+            "conflict_count": conflict_count,
             "pending_count": pending_count,
             "reviewed_count": reviewed_count,
         },
@@ -23070,7 +23145,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
     def should_skip_ref(memory_ref: str) -> bool:
         return memory_ref in {"empty_retrieval", "memory:empty_retrieval"}
 
-    def edge(from_id: str, to_id: str, edge_type: str, *, weight: float = 1.0) -> None:
+    def edge(from_id: str, to_id: str, edge_type: str, *, weight: float = 1.0, domain: str = "semantic_relation") -> None:
         nonlocal truncated
         key = (from_id, to_id, edge_type)
         if key in seen_edges:
@@ -23079,7 +23154,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
             truncated = True
             return
         seen_edges.add(key)
-        edges.append({"from": from_id, "to": to_id, "type": edge_type, "weight": weight})
+        edges.append({"from": from_id, "to": to_id, "type": edge_type, "weight": weight, "domain": domain})
 
     with connect(db_path) as connection:
         for table_name, memory_type, label_sql in (
@@ -23150,7 +23225,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
             for memory_ref in related_memory_refs:
                 memory_ref = str(memory_ref)
                 _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
-                edge(trace_ref, memory_ref, "trace_supports")
+                edge(trace_ref, memory_ref, "trace_supports", domain="evidence_trace")
             try:
                 related_observation_ids = json.loads(row["related_observation_ids_json"] or "[]")
             except json.JSONDecodeError:
@@ -23158,7 +23233,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
             for observation_id in related_observation_ids:
                 observation_ref = f"observation:{int(observation_id)}"
                 _add_graph_node(nodes, node_id=observation_ref, node_type="observation")
-                edge(trace_ref, observation_ref, "trace_observed")
+                edge(trace_ref, observation_ref, "trace_observed", domain="activation_telemetry")
 
         for row in connection.execute(
             """
@@ -23181,7 +23256,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
                     skipped_empty_retrieval_edges += 1
                     continue
                 _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
-                edge(observation_ref, memory_ref, "retrieved")
+                edge(observation_ref, memory_ref, "retrieved", domain="activation_telemetry")
             top_ref = row["top_memory_ref"]
             if top_ref:
                 top_ref = str(top_ref)
@@ -23189,7 +23264,7 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
                     skipped_empty_retrieval_edges += 1
                     continue
                 _add_graph_node(nodes, node_id=top_ref, node_type=_node_type_from_ref(top_ref))
-                edge(observation_ref, top_ref, "top_retrieval", weight=1.5)
+                edge(observation_ref, top_ref, "top_retrieval", weight=1.5, domain="activation_telemetry")
 
         for row in connection.execute(
             """
@@ -23214,19 +23289,25 @@ def _memory_graph_snapshot(db_path: Path, *, limit: int, include_memory_labels: 
                     skipped_empty_retrieval_edges += 1
                 else:
                     _add_graph_node(nodes, node_id=memory_ref, node_type=_node_type_from_ref(memory_ref))
-                    edge(activation_ref, memory_ref, str(row["activation_kind"]), weight=float(row["strength"] or 1.0))
+                    edge(activation_ref, memory_ref, str(row["activation_kind"]), weight=float(row["strength"] or 1.0), domain="activation_telemetry")
             if row["observation_id"] is not None:
                 observation_ref = f"observation:{row['observation_id']}"
                 _add_graph_node(nodes, node_id=observation_ref, node_type="observation")
-                edge(activation_ref, observation_ref, "activation_observed")
+                edge(activation_ref, observation_ref, "activation_observed", domain="activation_telemetry")
             if row["trace_id"] is not None:
                 trace_ref = f"trace:{row['trace_id']}"
                 _add_graph_node(nodes, node_id=trace_ref, node_type="trace")
-                edge(activation_ref, trace_ref, "activation_traced")
+                edge(activation_ref, trace_ref, "activation_traced", domain="activation_telemetry")
 
+    semantic_edges = [edge_payload for edge_payload in edges if edge_payload.get("domain") == "semantic_relation"]
+    telemetry_edges = [edge_payload for edge_payload in edges if edge_payload.get("domain") == "activation_telemetry"]
+    edge_domain_counts = Counter(str(edge_payload.get("domain", "semantic_relation")) for edge_payload in edges)
     return {
         "nodes": list(nodes.values()),
         "edges": edges,
+        "semantic_relation_edges": semantic_edges,
+        "activation_telemetry_edges": telemetry_edges,
+        "edge_domain_counts": {key: edge_domain_counts[key] for key in sorted(edge_domain_counts)},
         "truncated": truncated,
         "skipped_empty_retrieval_edges": skipped_empty_retrieval_edges,
     }
@@ -25304,14 +25385,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "g4-review-queue-list", help="List persisted G4 review queue items without proposal raw JSON."
     )
     dogfood_g4_review_queue_list_parser.add_argument("db_path", type=Path)
-    dogfood_g4_review_queue_list_parser.add_argument("--status", choices=["pending", "approved", "rejected"])
+    dogfood_g4_review_queue_list_parser.add_argument("--status", choices=["pending", "approved", "rejected", "conflict"])
     dogfood_g4_review_queue_list_parser.add_argument("--limit", type=int, default=50)
     dogfood_g4_review_queue_update_parser = dogfood_subparsers.add_parser(
         "g4-review-queue-update", help="Approve or reject a persisted G4 review queue item; does not apply it."
     )
     dogfood_g4_review_queue_update_parser.add_argument("db_path", type=Path)
     dogfood_g4_review_queue_update_parser.add_argument("queue_id")
-    dogfood_g4_review_queue_update_parser.add_argument("--status", required=True, choices=["approved", "rejected"])
+    dogfood_g4_review_queue_update_parser.add_argument("--status", required=True, choices=["approved", "rejected", "conflict"])
     dogfood_g4_review_queue_update_parser.add_argument("--actor", required=True)
     dogfood_g4_review_queue_update_parser.add_argument("--reason", required=True)
     dogfood_g4_review_queue_update_parser.add_argument("--policy")

@@ -1,19 +1,29 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 12:33 KST
+Last updated: 2026-05-18 13:29 KST
 
-## Current checkpoint: Hermes plugin/default integration complete
+## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
-- Latest source checkpoint adds a repo-level Hermes plugin manifest (`plugin.yaml`) and plugin entry point (`__init__.py`).
-- The plugin registers a fail-soft `pre_llm_call` hook that adapts Hermes plugin callback arguments to the existing `HermesShellHookPayload` / `HermesPreLlmHookOptions` code path.
-- Default DB remains local-first at `~/.agent-memory/memory.db`, with `AGENT_MEMORY_DB_PATH` and `AGENT_MEMORY_HERMES_*` environment overrides.
-- README, first-run docs, and install smoke docs now present `hermes plugins install cafitac/agent-memory --enable` as the Hermes-native path while retaining npm/bootstrap for generic CLI installs.
-- Validation complete: focused plugin integration `4 passed`; Hermes adapter/npm/docs/release corridor `30 passed`; full suite `428 passed, 1 xfailed`.
-- Current progress framing: Hermes plugin/default integration is 100%; practical scoped human-brain-like lifecycle remains 100% at the bounded/verified/local-first design boundary, with actual OS background scheduler loading still deliberately outside agent automation.
-- Next safe action: commit/push this checkpoint and keep unrelated untracked harness/worktree files out of the commit.
+- Activation/reinforcement reports now carry `noise_diagnostics` and use filtered `candidate_activations`, excluding QA sentinel and empty-retrieval telemetry from reinforcement candidate scoring while preserving negative-evidence counts for visibility.
+- Memory graph snapshots now label every edge with a `domain` and return separate `semantic_relation_edges`, `activation_telemetry_edges`, and `edge_domain_counts`. Durable relation graph consumers can now ignore retrieval telemetry without losing observability data.
+- Consolidation candidate generation now projects candidate memory kinds (`fact`, `procedure`, `episode`) and the exact human fields required for reviewed promotion. This closes the trace -> candidate shape gap without enabling raw automatic promotion.
+- G4 review queue update/list/report paths now include an explicit `conflict` state. Conflict is counted as reviewed evidence, but queue apply remains separately guarded and does not create memory mutations from the review transition itself.
+- Live Hermes plugin dogfood completed in the personal-oss profile without duplicate hook injection: the old shell `hermes-pre-llm-hook` entry was removed from `hooks.pre_llm_call`, the plugin is installed as a symlink at `/Users/reddit/.hermes/profiles/personal-oss/plugins/agent-memory`, `plugins.enabled` contains `agent-memory`, and `hermes plugins list` reports it enabled.
+- Live smoke: `AGENT_MEMORY_DB_PATH=/Users/reddit/.agent-memory/memory.db AGENT_MEMORY_HERMES_SCOPE=project:agent-memory hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_PLUGIN_SMOKE_OK'` -> `AGENT_MEMORY_PLUGIN_SMOKE_OK`.
+- Validation complete: focused activation/G4/plugin corridor `31 passed`; full suite `431 passed, 1 xfailed`.
 
-Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+Current estimate:
+
+- Core local memory brain-loop mechanics for the scoped project are now effectively 100% at the bounded/review-gated/local-first design boundary: perceive/retrieve, observe activation, distinguish telemetry from semantic relation, consolidate traces into candidate shapes, review approve/reject/conflict, guarded apply paths, rollback/evidence reports, and plugin-context dogfood all exist and pass tests.
+- Literal always-on human-brain-like autonomy is still intentionally below 100% because unattended/default/background mutation authority remains safety-gated. The remaining gap is operational trust, not missing primitives: longer dogfood windows, CI confirmation, UX/docs, and carefully bounded future default authority if explicitly approved.
+
+Recommended next work now:
+
+1. Commit/push this checkpoint and watch CI.
+2. Keep the live personal-oss plugin path enabled and observe normal turns for duplicate context/noise regressions.
+3. Add only polish/observability next unless a new approval is given for broader mutation authority: plugin install UX docs, hook duplicate doctor warnings, and longer dogfood reports are safer than adding new apply power.
+4. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Previous checkpoint: enabled recurring scheduler OS activation boundary and verifier
 

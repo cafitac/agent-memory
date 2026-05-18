@@ -1,18 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 12:33 KST
+Last updated: 2026-05-18 13:29 KST
 
-## Current checkpoint: Hermes plugin/default integration complete
+## Current checkpoint: consolidation telemetry cleanup and live Hermes plugin dogfood complete
 
-- Latest source checkpoint adds a repo-level Hermes plugin manifest (`plugin.yaml`) and plugin entry point (`__init__.py`) so `hermes plugins install cafitac/agent-memory --enable` is a first-class/default Hermes integration surface.
-- The plugin registers a fail-soft `pre_llm_call` hook and reuses the existing local-first `build_pre_llm_hook_context` path, defaulting to `~/.agent-memory/memory.db` with `AGENT_MEMORY_DB_PATH` / `AGENT_MEMORY_HERMES_*` overrides.
-- It avoids editing `~/.hermes/config.yaml` when users choose the plugin path; existing npm/bootstrap shell-hook integration remains documented and working for agent-agnostic installs.
-- Validation complete: focused plugin integration `4 passed`; Hermes adapter/npm/docs/release corridor `30 passed`; full suite `428 passed, 1 xfailed`.
-- Current progress framing: Hermes plugin/default integration is now 100% at the local-first, fail-soft, prompt-cache-preserving plugin boundary; actual OS scheduler loading remains outside automatic execution per prior safety boundary.
-- Next safe action: commit/push this checkpoint, then after the commit exists run a clean `hermes plugins install file://... --enable` clone smoke if desired; do not include unrelated untracked harness directories.
+- Latest source checkpoint tightens the G4/G5 memory-consolidation corridor: activation reports now emit noise diagnostics and exclude sentinel/empty retrieval telemetry from reinforcement candidates; graph snapshots split semantic relation edges from activation telemetry edges; consolidation candidates now project fact/procedure/episode promotion shapes; G4 review queue supports an explicit `conflict` review state without applying mutations.
+- Live personal-oss Hermes profile was dogfooded safely: the old agent-memory shell `hermes-pre-llm-hook` entry was removed from `hooks.pre_llm_call`, `/Users/reddit/.hermes/profiles/personal-oss/plugins/agent-memory` now symlinks to this repo, `plugins.enabled` already contains `agent-memory`, and `hermes plugins list` reports `agent-memory enabled 0.1.162`. This avoids duplicate memory-context injection between shell hook and plugin.
+- Live smoke passed with current OpenAI Codex lane: `AGENT_MEMORY_DB_PATH=/Users/reddit/.agent-memory/memory.db AGENT_MEMORY_HERMES_SCOPE=project:agent-memory hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_PLUGIN_SMOKE_OK'` -> `AGENT_MEMORY_PLUGIN_SMOKE_OK`.
+- Validation complete: focused activation/G4/plugin corridor `31 passed`; full suite `431 passed, 1 xfailed`.
+- Current progress framing: scoped local human-brain-like lifecycle is effectively 100% at the bounded/local-first/review-gated design boundary. Remaining gap is not core mechanics, but broader real-world trust: longer live dogfood windows, CI confirmation, operator docs, and any future default/background authority still require explicit safety gates.
+- Next safe action: commit this source checkpoint and docs; do not include unrelated untracked harness directories. Then watch CI and continue with longer live plugin dogfood/UX polishing rather than adding new mutation authority.
 
-Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 
 ## Previous checkpoint: enabled recurring scheduler OS activation boundary and verifier
 
