@@ -1,7 +1,20 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 10:52 KST
+Last updated: 2026-05-18 11:10 KST
+
+## Current checkpoint: enabled recurring scheduler recurrence-install preflight packet
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-recurrence-install-preflight`.
+- It consumes the green one-cycle post-run verification artifact and produces a read-only recurrence-install preflight packet.
+- Cadence and kill-switch policy inputs are hashed only; raw policy text is not echoed.
+- It preserves `installs_background_or_cron=false`, `activation_allowed=false`, exact activation approval requirements, CI health watch, rollback evidence, stale-evidence prevention, and max one candidate per cycle.
+- It still does not run the scheduler, apply memory, write scheduler config, install background/cron, or grant unattended/default authority.
+- Validation complete: focused recurrence-install preflight `1 passed`; recurrence/post-run/execute/smoke corridor `4 passed, 234 deselected`; enabled+disabled config corridor `11 passed, 227 deselected`; ordinary-turn default automation corridor `46 passed, 192 deselected`; full suite `420 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9999992%+.
+- Next safe slice: exact-approved activation packet that still does not start background/cron by default; final actual background/cron start remains separately gated.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-recurrence-install-preflight.md`
 
 ## Current checkpoint: enabled recurring scheduler one-cycle post-run verification
 
