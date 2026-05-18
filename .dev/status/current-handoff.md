@@ -1,7 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 03:12 KST
+Last updated: 2026-05-18 09:06 KST
+
+## Current checkpoint: enabled recurring scheduler config preflight
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-preflight`.
+- It consumes a green disabled recurring scheduler config materialization report plus the materialized disabled scheduler config and exact phrase `preflight-enabled-recurring-default-automation-scheduler-config-v1`.
+- It is status-only/read-only: `read_only=true`, `mutated=false`, `executes_scheduler_cycle=false`, `executes_apply=false`, `writes_scheduler_config=false`, `recurring_scheduler_enabled=false`, and `background_or_cron_enabled=false`.
+- It verifies the current config is still disabled, SHA matches the materialize report, fresh-evidence/post-apply/CI/rollback requirements remain present, and later enabled materialization/background-or-cron still require separate approval.
+- Tampered config preflight is red if `enabled=true` or `recurring_scheduler_enabled=true`, while still not writing config or invoking scheduler/apply.
+- Validation so far: focused preflight `1 passed`; disabled+preflight corridor `4 passed, 227 deselected`; ordinary-turn default automation corridor `39 passed, 192 deselected`; full suite `413 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999993%+.
+- Next safe slice: enabled recurring scheduler config contract design packet only; still no enabled config write, background/cron installation, or unattended recurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-preflight.md`
 
 ## CI compatibility checkpoint: retrieval-eval lexical delta tolerance
 
@@ -18,7 +31,7 @@ Last updated: 2026-05-18 03:12 KST
 - The materialized config records validation hash and keeps policy-state/fresh-evidence/package-stop/CI/rollback requirements present as data.
 - Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-materialize-20260517T175433Z/disabled-recurring-scheduler-config-materialize.json`.
 - Materialized config: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-materialize-20260517T175433Z/ordinary-turn-default-automation-recurring-scheduler.disabled.json`.
-- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `3 passed, 227 deselected`; `tests/test_cli.py -q -k "disabled_recurring_scheduler_config_materialize"` -> `1 passed, 229 deselected`; `tests/test_cli.py -q -k "ordinary_turn_default_automation"` -> `38 passed, 192 deselected`; full suite still pending for this checkpoint.
+- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `3 passed, 227 deselected`; `tests/test_cli.py -q -k "disabled_recurring_scheduler_config_materialize"` -> `1 passed, 229 deselected`; `tests/test_cli.py -q -k "ordinary_turn_default_automation"` -> `38 passed, 192 deselected`; full suite `413 passed, 1 xfailed`.
 - Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999992%+.
 - Latest test update feeds the materialized disabled config through scheduler integration and proves runner invocation remains false with `scheduler_config_disabled`; next safe slice is enabled-config preflight design only, still no enabled recurrence/background/cron.
 
@@ -30,7 +43,7 @@ Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-a
 - It consumes the disabled recurring scheduler config contract and fails closed unless the contract is green, disabled by default, disabled as enforced state, execution-free, write-free, fresh-evidence/package-stop/CI/rollback constrained, and still preserves separate approval for later enablement/background/cron.
 - RED proof: the subcommand was initially missing; the test mutates the contract to set `recurring_scheduler_enabled=true` and `executes_scheduler_cycle=true`, and validation returns red blocked reasons while validator authority remains false.
 - Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-validation-20260517T174542Z/disabled-recurring-scheduler-config-validation.json`.
-- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `2 passed, 227 deselected`; full suite still pending for this checkpoint.
+- Validation so far: `tests/test_cli.py -q -k "disabled_recurring_scheduler_config"` -> `2 passed, 227 deselected`; full suite `413 passed, 1 xfailed`.
 - Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99999%+.
 - Next safe slice: disabled config file materialization (`enabled=false`) plus runner refusal tests; no enablement/background/cron execution yet.
 
@@ -45,7 +58,7 @@ Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-a
 - It encodes cadence, kill-switch, fresh-evidence, package-stop, CI health, and rollback proof requirements as data only; cadence/kill-switch prose remains hash-only.
 - Positive local smoke: `/Users/reddit/.agent-memory/reports/post-v0.1.162-default-automation-disabled-recurring-config-contract-20260517T173508Z/disabled-recurring-scheduler-config-contract.json`.
 - Smoke result: `quality_gate.pass=true`, `config_contract.default_state=disabled`, `config_contract.enforced_state=disabled`, `automation_authority.writes_scheduler_config=false`.
-- Validation so far: focused config contract `1 passed, 227 deselected`; readiness/config/history corridor `3 passed, 225 deselected`; default-automation corridor `36 passed, 192 deselected`; full suite still pending for this checkpoint.
+- Validation so far: focused config contract `1 passed, 227 deselected`; readiness/config/history corridor `3 passed, 225 deselected`; default-automation corridor `36 passed, 192 deselected`; full suite `413 passed, 1 xfailed`.
 - Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999985%+.
 - Next safe slice: disabled config contract validator/fail-closed tests; no enablement/background/cron execution yet.
 
