@@ -12009,6 +12009,216 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activa
 
 
 
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.approval_phrase != "start-recurring-default-automation-scheduler-local-boundary-v1":
+        raise ValueError("ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_approval_phrase_mismatch")
+    if args.ci_health_status != "green":
+        raise ValueError("dogfood final-start-boundary --ci-health-status must be green")
+    if not args.rollback_plan.strip():
+        raise ValueError("dogfood final-start-boundary --rollback-plan is required")
+    if args.max_candidates_per_cycle != 1:
+        raise ValueError("dogfood final-start-boundary --max-candidates-per-cycle must be 1")
+
+    verifier_path = args.activation_packet_verification.expanduser().resolve(strict=False)
+    verifier_payload, verifier_artifact = _read_json_artifact_summary(verifier_path)
+    verifier_payload = verifier_payload or {}
+    verifier_quality = verifier_payload.get("quality_gate", {}) if isinstance(verifier_payload.get("quality_gate"), dict) else {}
+    verifier_gate = (
+        verifier_payload.get("activation_packet_verification", {})
+        if isinstance(verifier_payload.get("activation_packet_verification"), dict)
+        else {}
+    )
+    verifier_authority = (
+        verifier_payload.get("automation_authority", {})
+        if isinstance(verifier_payload.get("automation_authority"), dict)
+        else {}
+    )
+    verifier_forbidden = (
+        verifier_payload.get("forbidden_authority", {})
+        if isinstance(verifier_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    verifier_privacy = verifier_payload.get("privacy", {}) if isinstance(verifier_payload.get("privacy"), dict) else {}
+
+    scheduler_config_path = args.scheduler_config.expanduser().resolve(strict=False)
+    scheduler_config_payload, scheduler_config_artifact = _read_json_artifact_summary(scheduler_config_path)
+    scheduler_config_payload = scheduler_config_payload or {}
+
+    kill_switch_path = args.kill_switch_path.expanduser().resolve(strict=False)
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    local_start_manifest_path = (args.local_start_manifest or (report_dir / "enabled-recurring-scheduler-local-start-manifest.json")).expanduser().resolve(strict=False)
+
+    blocked_reasons: list[str] = []
+    if verifier_artifact.get("error") is not None:
+        blocked_reasons.append("activation_packet_verification_unreadable")
+    if verifier_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification":
+        blocked_reasons.append("activation_packet_verification_kind_invalid")
+    if verifier_payload.get("read_only") is not True or verifier_payload.get("mutated") is not False:
+        blocked_reasons.append("activation_packet_verification_not_read_only")
+    if verifier_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("activation_packet_verification_ordinary_auto_approval_enabled")
+    if verifier_quality.get("pass") is not True:
+        blocked_reasons.append("activation_packet_verification_not_green")
+    if verifier_quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification_green_ready_for_exact_final_start_only":
+        blocked_reasons.append("activation_packet_verification_decision_invalid")
+    for key in (
+        "activation_packet_green",
+        "hash_bound_activation_packet",
+        "ready_for_final_start_slice",
+        "background_or_cron_start_still_blocked",
+        "exact_final_start_approval_required",
+        "per_cycle_post_apply_verification_required",
+        "package_stop_per_cycle_required",
+    ):
+        if verifier_gate.get(key) is not True:
+            blocked_reasons.append(f"activation_packet_verification_{key}_missing")
+    if verifier_gate.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("activation_packet_verification_max_candidates_not_one")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "writes_scheduler_config",
+        "installs_background_or_cron",
+        "starts_background_or_cron",
+        "enables_unattended_default_authority",
+    ):
+        if verifier_authority.get(key) is not False:
+            blocked_reasons.append(f"activation_packet_verification_authority_{key}_not_false")
+    if verifier_authority.get("readiness_only") is not True:
+        blocked_reasons.append("activation_packet_verification_authority_not_readiness_only")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if verifier_forbidden.get(key) is not False:
+            blocked_reasons.append(f"activation_packet_verification_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(verifier_privacy):
+        blocked_reasons.append("activation_packet_verification_privacy_not_ref_safe")
+
+    if scheduler_config_artifact.get("error") is not None:
+        blocked_reasons.append("scheduler_config_unreadable")
+    if scheduler_config_payload.get("kind") != "ordinary_turn_default_automation_scheduler_config":
+        blocked_reasons.append("scheduler_config_kind_invalid")
+    if scheduler_config_payload.get("enabled") is not True:
+        blocked_reasons.append("scheduler_config_not_enabled")
+    if scheduler_config_payload.get("recurring_scheduler_enabled") is not True:
+        blocked_reasons.append("scheduler_config_recurring_scheduler_not_enabled")
+    if scheduler_config_payload.get("background_or_cron_enabled") is not False:
+        blocked_reasons.append("scheduler_config_background_or_cron_already_enabled")
+    if scheduler_config_payload.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("scheduler_config_max_candidates_not_one")
+    if scheduler_config_payload.get("requires_post_apply_verification_before_next_cycle") is not True:
+        blocked_reasons.append("scheduler_config_missing_post_apply_verification_stop")
+    if scheduler_config_payload.get("requires_package_stop_after_each_cycle") is not True:
+        blocked_reasons.append("scheduler_config_missing_package_stop")
+    if scheduler_config_payload.get("requires_previous_evidence_rollup") is not True:
+        blocked_reasons.append("scheduler_config_missing_stale_evidence_prevention")
+    if scheduler_config_payload.get("requires_kill_switch_policy") is not True:
+        blocked_reasons.append("scheduler_config_missing_kill_switch_policy")
+    if scheduler_config_payload.get("requires_ci_health_watch") is not True:
+        blocked_reasons.append("scheduler_config_missing_ci_health_watch")
+    if scheduler_config_payload.get("requires_rollback_evidence") is not True:
+        blocked_reasons.append("scheduler_config_missing_rollback_evidence")
+    if scheduler_config_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("scheduler_config_ordinary_auto_approval_enabled")
+    if scheduler_config_payload.get("default_background_auto_approval_allowed") is not False:
+        blocked_reasons.append("scheduler_config_default_background_auto_approval_allowed")
+    if scheduler_config_payload.get("unattended_default_apply_allowed") is not False:
+        blocked_reasons.append("scheduler_config_unattended_authority_enabled")
+    if kill_switch_path.exists():
+        blocked_reasons.append("kill_switch_path_already_exists")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    gate_pass = not blocked_unique
+    local_start_manifest = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_manifest",
+        "scheduler_config": scheduler_config_artifact,
+        "activation_packet_verification": verifier_artifact,
+        "ci_health_status": args.ci_health_status,
+        "kill_switch_path": str(kill_switch_path),
+        "rollback_plan_sha256": hashlib.sha256(args.rollback_plan.strip().encode("utf-8")).hexdigest(),
+        "max_candidates_per_cycle": args.max_candidates_per_cycle,
+        "requires_package_stop_per_cycle": True,
+        "requires_post_apply_verification_before_next_cycle": True,
+        "requires_stale_evidence_prevention": True,
+        "requires_kill_switch_absent_before_start": True,
+        "os_background_or_cron_started": False,
+        "ready_for_local_start_smoke": gate_pass,
+    }
+    if gate_pass:
+        _write_json_report(local_start_manifest_path, local_start_manifest)
+
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary",
+        "read_only": not gate_pass,
+        "mutated": gate_pass,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "final_start_inputs": {
+            "activation_packet_verification": {
+                **verifier_artifact,
+                "quality_gate_pass": verifier_quality.get("pass") is True,
+            },
+            "scheduler_config": {
+                **scheduler_config_artifact,
+                "enabled": scheduler_config_payload.get("enabled") is True,
+                "recurring_scheduler_enabled": scheduler_config_payload.get("recurring_scheduler_enabled") is True,
+            },
+            "ci_health_status": args.ci_health_status,
+            "kill_switch_path": str(kill_switch_path),
+            "kill_switch_absent": not kill_switch_path.exists(),
+            "rollback_plan_sha256": hashlib.sha256(args.rollback_plan.strip().encode("utf-8")).hexdigest(),
+        },
+        "local_start_boundary": {
+            "exact_final_start_approval_consumed": True,
+            "local_start_manifest_path": str(local_start_manifest_path) if gate_pass else None,
+            "local_start_manifest_sha256": _sha256_file(local_start_manifest_path) if gate_pass else None,
+            "ready_for_local_start_smoke": gate_pass,
+            "os_background_or_cron_started": False,
+            "background_or_cron_install_performed": False,
+            "max_candidates_per_cycle": args.max_candidates_per_cycle,
+            "requires_package_stop_per_cycle": True,
+            "requires_post_apply_verification_before_next_cycle": True,
+            "requires_stale_evidence_prevention": True,
+            "kill_switch_fail_closed": True,
+        },
+        "automation_authority": {
+            "writes_local_start_manifest": gate_pass,
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "writes_scheduler_config": False,
+            "installs_background_or_cron": False,
+            "starts_background_or_cron": False,
+            "enables_unattended_default_authority": False,
+            "ready_for_local_start_smoke_only": gate_pass,
+        },
+        "quality_gate": {
+            "pass": gate_pass,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_green_local_manifest_ready_for_start_smoke_only"
+            if gate_pass
+            else "ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_red_keep_background_or_cron_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "run_local_start_smoke_before_os_background_or_cron_activation"
+        if gate_pass
+        else "fix_final_start_boundary_inputs_before_local_start",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -24142,6 +24352,40 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary",
+        help="Exact-approved final local start boundary; writes a local start manifest but does not install/start OS background or cron.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--activation-packet-verification", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--scheduler-config", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--approval-phrase", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--ci-health-status", required=True, choices=["green", "red"]
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--kill-switch-path", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--rollback-plan", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--max-candidates-per-cycle", type=int, default=1
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--report-dir", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--local-start-manifest", type=Path
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -25808,6 +26052,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_payload(args),
                     indent=2,
                 )
             )

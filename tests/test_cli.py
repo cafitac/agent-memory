@@ -20085,6 +20085,197 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_ac
     assert "activation_packet_authority_starts_background_or_cron_not_false" in red_payload["quality_gate"]["blocked_reasons"]
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_writes_local_manifest_only(
+    tmp_path: Path,
+) -> None:
+    activation_verification = tmp_path / "activation-packet-verification.json"
+    scheduler_config = tmp_path / "ordinary-turn-default-automation-recurring-scheduler.enabled.json"
+    report_dir = tmp_path / "reports"
+    output_path = tmp_path / "final-start-boundary.json"
+    kill_switch_path = tmp_path / "STOP-DEFAULT-AUTOMATION"
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    activation_verification.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "activation_packet_artifact": {"path": str(tmp_path / "packet.json"), "sha256": "d" * 64, "quality_gate_pass": True},
+                "activation_packet_verification": {
+                    "activation_packet_green": True,
+                    "hash_bound_activation_packet": True,
+                    "ready_for_final_start_slice": True,
+                    "background_or_cron_start_still_blocked": True,
+                    "exact_final_start_approval_required": True,
+                    "per_cycle_post_apply_verification_required": True,
+                    "package_stop_per_cycle_required": True,
+                    "max_candidates_per_cycle": 1,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "writes_scheduler_config": False,
+                    "installs_background_or_cron": False,
+                    "starts_background_or_cron": False,
+                    "enables_unattended_default_authority": False,
+                    "readiness_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification_green_ready_for_exact_final_start_only",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    scheduler_config.write_text(
+        json.dumps(
+            {
+                "kind": "ordinary_turn_default_automation_scheduler_config",
+                "policy": "ordinary-turn-default-automation-policy-v1",
+                "enabled": True,
+                "mode": "enabled_recurring_scheduler_contract_v1",
+                "recurring_scheduler_enabled": True,
+                "background_or_cron_enabled": False,
+                "max_candidates_per_cycle": 1,
+                "requires_enabled_policy_state": True,
+                "requires_green_policy_gate": True,
+                "requires_previous_evidence_rollup": True,
+                "requires_package_stop_after_each_cycle": True,
+                "requires_post_apply_verification_before_next_cycle": True,
+                "requires_bounded_cadence_policy": True,
+                "requires_kill_switch_policy": True,
+                "requires_ci_health_watch": True,
+                "requires_rollback_evidence": True,
+                "later_background_or_cron_requires_separate_approval": True,
+                "ordinary_conversation_auto_approval": False,
+                "default_background_auto_approval_allowed": False,
+                "unattended_default_apply_allowed": False,
+                "executes_scheduler_cycle": False,
+                "executes_apply": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary",
+            "--activation-packet-verification",
+            str(activation_verification),
+            "--scheduler-config",
+            str(scheduler_config),
+            "--approval-phrase",
+            "start-recurring-default-automation-scheduler-local-boundary-v1",
+            "--ci-health-status",
+            "green",
+            "--kill-switch-path",
+            str(kill_switch_path),
+            "--rollback-plan",
+            "restore from per-cycle backup and disable scheduler manifest before any later cycle",
+            "--max-candidates-per-cycle",
+            "1",
+            "--report-dir",
+            str(report_dir),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "restore from per-cycle backup" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    manifest_path = Path(payload["local_start_boundary"]["local_start_manifest_path"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["local_start_boundary"]["ready_for_local_start_smoke"] is True
+    assert payload["local_start_boundary"]["os_background_or_cron_started"] is False
+    assert payload["local_start_boundary"]["background_or_cron_install_performed"] is False
+    assert payload["automation_authority"] == {
+        "writes_local_start_manifest": True,
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "writes_scheduler_config": False,
+        "installs_background_or_cron": False,
+        "starts_background_or_cron": False,
+        "enables_unattended_default_authority": False,
+        "ready_for_local_start_smoke_only": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_final_start_boundary_green_local_manifest_ready_for_start_smoke_only",
+        "blocked_reasons": [],
+    }
+    assert manifest["ready_for_local_start_smoke"] is True
+    assert manifest["os_background_or_cron_started"] is False
+    assert manifest["max_candidates_per_cycle"] == 1
+    assert manifest["rollback_plan_sha256"] == hashlib.sha256(
+        b"restore from per-cycle backup and disable scheduler manifest before any later cycle"
+    ).hexdigest()
+
+    kill_switch_path.write_text("stop", encoding="utf-8")
+    red_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary",
+            "--activation-packet-verification",
+            str(activation_verification),
+            "--scheduler-config",
+            str(scheduler_config),
+            "--approval-phrase",
+            "start-recurring-default-automation-scheduler-local-boundary-v1",
+            "--ci-health-status",
+            "green",
+            "--kill-switch-path",
+            str(kill_switch_path),
+            "--rollback-plan",
+            "restore from per-cycle backup and disable scheduler manifest before any later cycle",
+            "--report-dir",
+            str(report_dir / "red"),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_result.returncode == 0, red_result.stderr
+    red_payload = json.loads(red_result.stdout)
+    assert red_payload["quality_gate"]["pass"] is False
+    assert red_payload["read_only"] is True
+    assert red_payload["mutated"] is False
+    assert "kill_switch_path_already_exists" in red_payload["quality_gate"]["blocked_reasons"]
+
+
 
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,
