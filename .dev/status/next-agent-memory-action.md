@@ -1,7 +1,18 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 03:12 KST
+Last updated: 2026-05-18 10:26 KST
+
+## Current checkpoint: enabled recurring scheduler one-cycle execution boundary
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute`.
+- It consumes a green one-cycle smoke gate and green scheduler status, runs exactly one explicit scheduler one-shot, immediately packages evidence, and stops.
+- Copy mode preserves the source DB; background/cron/unattended/default authority remains false.
+- Validation complete: focused one-cycle execute `1 passed`; one-cycle execute/smoke corridor `2 passed, 234 deselected`; enabled+disabled config corridor `9 passed, 227 deselected`; ordinary-turn default automation corridor `44 passed, 192 deselected`; full suite `418 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999998%+.
+- Next safe slice: post-run verification hardening/read-only recurrence-install preflight readiness over the one-cycle execution report. Do not install background/cron or enable unattended recurrence yet.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-one-cycle-execution.md`
 
 ## CI compatibility checkpoint: retrieval-eval lexical delta tolerance
 
