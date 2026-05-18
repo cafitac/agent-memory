@@ -19782,6 +19782,173 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_co
 
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_requires_green_preflight(
+    tmp_path: Path,
+) -> None:
+    preflight_report = tmp_path / "recurrence-install-preflight.json"
+    output_path = tmp_path / "activation-packet.json"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    preflight_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "preflight_inputs": {
+                    "path": str(tmp_path / "post-run.json"),
+                    "sha256": "a" * 64,
+                    "post_run_verification_quality_gate_pass": True,
+                    "cadence_policy_sha256": hashlib.sha256(b"bounded local cadence").hexdigest(),
+                    "kill_switch_policy_sha256": hashlib.sha256(b"operator kill switch").hexdigest(),
+                },
+                "recurrence_install_gate": {
+                    "ready_for_activation_packet": True,
+                    "installs_background_or_cron": False,
+                    "activation_allowed": False,
+                    "requires_exact_activation_approval": True,
+                    "requires_ci_health_watch": True,
+                    "requires_rollback_evidence": True,
+                    "requires_stale_evidence_prevention": True,
+                    "max_candidates_per_cycle": 1,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "writes_scheduler_config": False,
+                    "installs_background_or_cron": False,
+                    "enables_unattended_default_authority": False,
+                    "readiness_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_green_ready_for_activation_packet_only",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet",
+            "--recurrence-install-preflight",
+            str(preflight_report),
+            "--approval-phrase",
+            "activate-recurring-default-automation-scheduler-packet-v1",
+            "--activation-window-policy",
+            "local bounded activation window with one cycle package stop",
+            "--ci-watchdog-policy",
+            "ci must be green before final start",
+            "--rollback-policy",
+            "rollback evidence must exist per cycle",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "local bounded activation window" not in result.stdout
+    assert "ci must be green" not in result.stdout
+    assert "rollback evidence" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["activation_inputs"]["recurrence_install_preflight_quality_gate_pass"] is True
+    assert payload["activation_inputs"]["activation_window_policy_sha256"] == hashlib.sha256(
+        b"local bounded activation window with one cycle package stop"
+    ).hexdigest()
+    assert payload["activation_inputs"]["ci_watchdog_policy_sha256"] == hashlib.sha256(
+        b"ci must be green before final start"
+    ).hexdigest()
+    assert payload["activation_inputs"]["rollback_policy_sha256"] == hashlib.sha256(
+        b"rollback evidence must exist per cycle"
+    ).hexdigest()
+    assert payload["activation_packet"] == {
+        "ready_for_final_start_slice": True,
+        "background_or_cron_start_allowed": False,
+        "starts_background_or_cron": False,
+        "requires_exact_final_start_approval": True,
+        "requires_ci_health_watch": True,
+        "requires_rollback_evidence": True,
+        "requires_stale_evidence_prevention": True,
+        "requires_package_stop_per_cycle": True,
+        "requires_post_apply_verification_per_cycle": True,
+        "max_candidates_per_cycle": 1,
+    }
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "writes_scheduler_config": False,
+        "installs_background_or_cron": False,
+        "starts_background_or_cron": False,
+        "enables_unattended_default_authority": False,
+        "readiness_only": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_green_ready_for_final_start_slice_only",
+        "blocked_reasons": [],
+    }
+    assert payload["recommended_next_step"] == "final_exact_start_slice_or_keep_activation_blocked"
+
+    tampered = json.loads(preflight_report.read_text(encoding="utf-8"))
+    tampered["recurrence_install_gate"]["activation_allowed"] = True
+    preflight_report.write_text(json.dumps(tampered), encoding="utf-8")
+    red_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet",
+            "--recurrence-install-preflight",
+            str(preflight_report),
+            "--approval-phrase",
+            "activate-recurring-default-automation-scheduler-packet-v1",
+            "--activation-window-policy",
+            "local bounded activation window with one cycle package stop",
+            "--ci-watchdog-policy",
+            "ci must be green before final start",
+            "--rollback-policy",
+            "rollback evidence must exist per cycle",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_result.returncode == 0, red_result.stderr
+    red_payload = json.loads(red_result.stdout)
+    assert red_payload["quality_gate"]["pass"] is False
+    assert "preflight_activation_already_allowed" in red_payload["quality_gate"]["blocked_reasons"]
+
+
+
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,
 ) -> None:
