@@ -19228,6 +19228,206 @@ def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_runs_copy_c
     assert _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"]) == source_counts_after_seed
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_consumes_smoke_gate(
+    tmp_path: Path,
+) -> None:
+    source_db = tmp_path / "enabled-one-cycle-execute-source.db"
+    smoke_report_dir = tmp_path / "enabled-one-cycle-execute-seed"
+    repeated_smoke_output = tmp_path / "scheduler-repeated-window-smoke.json"
+    status_output = tmp_path / "scheduler-status.json"
+    one_cycle_smoke = tmp_path / "enabled-one-cycle-smoke.json"
+    execute_report_dir = tmp_path / "enabled-one-cycle-execute"
+    execute_output = tmp_path / "enabled-one-cycle-execute.json"
+    initialize_database(source_db)
+    trace = insert_experience_trace(
+        source_db,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="e" * 64,
+        summary="User prefers enabled one-cycle execution summaries.",
+        scope="project:agent-memory",
+        retention_policy="review",
+        metadata={"ordinary_turn": True},
+    )
+    source_counts_after_seed = _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    repeated_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-repeated-window-smoke",
+            str(source_db),
+            "--policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "enabled one-cycle seed evidence",
+            "--report-dir",
+            str(smoke_report_dir),
+            "--output",
+            str(repeated_smoke_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert repeated_result.returncode == 0, repeated_result.stderr
+    status_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-scheduler-status",
+            "--repeated-window-smoke-report",
+            str(repeated_smoke_output),
+            "--expected-policy",
+            "ordinary-turn-default-automation-policy-v1",
+            "--output",
+            str(status_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert status_result.returncode == 0, status_result.stderr
+    one_cycle_smoke.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "one_cycle_gate": {
+                    "ready": True,
+                    "max_candidates_per_cycle": 1,
+                    "scheduler_cycle_executed": False,
+                    "apply_executed": False,
+                    "background_or_cron_enabled": False,
+                    "package_stop_required": True,
+                    "post_apply_verification_required_before_next_cycle": True,
+                    "previous_evidence_rollup_required": True,
+                    "ci_health_watch_required": True,
+                    "kill_switch_required": True,
+                    "rollback_evidence_required": True,
+                },
+                "one_cycle_command_preview": {
+                    "dogfood_action": "ordinary-turn-default-automation-scheduler-one-shot",
+                    "schedule_approval_phrase": "run-one-local-default-automation-schedule-v1",
+                    "apply_approval_phrase": "apply-exact-ordinary-turn-default-automation-candidate-v1",
+                    "requires_actor": True,
+                    "requires_private_reason_placeholder": True,
+                    "requires_previous_evidence_rollup": True,
+                    "requires_post_apply_verification_after_run": True,
+                    "background_or_cron_install": False,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "recurring_scheduler_enabled": True,
+                    "background_or_cron_enabled": False,
+                    "enables_unattended_default_authority": False,
+                    "writes_scheduler_config": False,
+                    "readiness_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke_green_ready_for_explicit_one_shot_only",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute",
+            str(source_db),
+            "--one-cycle-smoke",
+            str(one_cycle_smoke),
+            "--scheduler-status",
+            str(status_output),
+            "--db-approval-mode",
+            "copy",
+            "--report-dir",
+            str(execute_report_dir),
+            "--schedule-approval-phrase",
+            "run-one-local-default-automation-schedule-v1",
+            "--actor",
+            "test-scheduler",
+            "--reason",
+            "enabled one-cycle execution SHOULD_NOT_LEAK",
+            "--output",
+            str(execute_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "enabled one-cycle execution summaries" not in result.stdout
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert json.loads(execute_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute"
+    assert payload["one_cycle_smoke"]["quality_gate_pass"] is True
+    assert payload["scheduler_one_shot"]["quality_gate_pass"] is True
+    assert payload["scheduler_one_shot"]["selected_trace_ref"] == f"experience_trace:{trace.id}"
+    assert payload["execution_boundary"] == {
+        "smoke_gate_consumed": True,
+        "scheduler_one_shot_executed": True,
+        "scheduler_package_collected": True,
+        "stopped_after_one_package": True,
+        "post_apply_verification_required_before_next_cycle": True,
+        "background_or_cron_enabled": False,
+    }
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": True,
+        "executes_apply": True,
+        "max_scheduler_cycles": 1,
+        "requires_enabled_one_cycle_smoke_green": True,
+        "requires_status_green": True,
+        "requires_exact_local_schedule_approval": True,
+        "enables_unattended_default_authority": False,
+        "background_or_recurring_schedule_enabled": False,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_green_ran_one_shot_packaged_and_stopped",
+        "blocked_reasons": [],
+    }
+    assert payload["forbidden_authority"]["unattended_default_apply_allowed"] is False
+    assert payload["privacy"]["raw_report_included"] is False
+    assert (execute_report_dir / "scheduler-one-shot.json").exists()
+    assert _table_counts(source_db, ["facts", "relations", "source_records", "experience_traces"]) == source_counts_after_seed
+
+
 
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,

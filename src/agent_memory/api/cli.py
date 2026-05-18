@@ -11172,6 +11172,192 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config
     return payload
 
 
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.schedule_approval_phrase != "run-one-local-default-automation-schedule-v1":
+        raise ValueError("ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_approval_phrase_mismatch")
+    if not args.actor.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute --actor is required")
+    if not args.reason.strip():
+        raise ValueError("dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute --reason is required")
+
+    smoke_path = args.one_cycle_smoke.expanduser().resolve(strict=False)
+    smoke_payload, smoke_artifact = _read_json_artifact_summary(smoke_path)
+    smoke_payload = smoke_payload or {}
+    smoke_quality = smoke_payload.get("quality_gate", {}) if isinstance(smoke_payload.get("quality_gate"), dict) else {}
+    smoke_gate = smoke_payload.get("one_cycle_gate", {}) if isinstance(smoke_payload.get("one_cycle_gate"), dict) else {}
+    smoke_preview = (
+        smoke_payload.get("one_cycle_command_preview", {})
+        if isinstance(smoke_payload.get("one_cycle_command_preview"), dict)
+        else {}
+    )
+    smoke_authority = (
+        smoke_payload.get("automation_authority", {})
+        if isinstance(smoke_payload.get("automation_authority"), dict)
+        else {}
+    )
+    smoke_forbidden = (
+        smoke_payload.get("forbidden_authority", {})
+        if isinstance(smoke_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    smoke_privacy = smoke_payload.get("privacy", {}) if isinstance(smoke_payload.get("privacy"), dict) else {}
+
+    report_dir = args.report_dir.expanduser().resolve(strict=False)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    one_shot_output = report_dir / "scheduler-one-shot.json"
+    blocked_reasons: list[str] = []
+
+    if smoke_artifact.get("error") is not None:
+        blocked_reasons.append("one_cycle_smoke_unreadable")
+    if smoke_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke":
+        blocked_reasons.append("one_cycle_smoke_kind_invalid")
+    if smoke_payload.get("read_only") is not True or smoke_payload.get("mutated") is not False:
+        blocked_reasons.append("one_cycle_smoke_not_read_only")
+    if smoke_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("one_cycle_smoke_ordinary_auto_approval_enabled")
+    if smoke_quality.get("pass") is not True:
+        blocked_reasons.append("one_cycle_smoke_not_green")
+    if smoke_quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke_green_ready_for_explicit_one_shot_only":
+        blocked_reasons.append("one_cycle_smoke_decision_invalid")
+    if smoke_gate.get("ready") is not True:
+        blocked_reasons.append("one_cycle_smoke_gate_not_ready")
+    if smoke_gate.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("one_cycle_smoke_max_candidates_not_one")
+    for key in ("scheduler_cycle_executed", "apply_executed", "background_or_cron_enabled"):
+        if smoke_gate.get(key) is not False:
+            blocked_reasons.append(f"one_cycle_smoke_gate_{key}_invalid")
+    for key in (
+        "package_stop_required",
+        "post_apply_verification_required_before_next_cycle",
+        "previous_evidence_rollup_required",
+        "ci_health_watch_required",
+        "kill_switch_required",
+        "rollback_evidence_required",
+    ):
+        if smoke_gate.get(key) is not True:
+            blocked_reasons.append(f"one_cycle_smoke_gate_{key}_missing")
+    if smoke_preview.get("dogfood_action") != "ordinary-turn-default-automation-scheduler-one-shot":
+        blocked_reasons.append("one_cycle_smoke_preview_action_invalid")
+    if smoke_preview.get("schedule_approval_phrase") != "run-one-local-default-automation-schedule-v1":
+        blocked_reasons.append("one_cycle_smoke_preview_schedule_phrase_invalid")
+    if smoke_preview.get("apply_approval_phrase") != "apply-exact-ordinary-turn-default-automation-candidate-v1":
+        blocked_reasons.append("one_cycle_smoke_preview_apply_phrase_invalid")
+    if smoke_preview.get("background_or_cron_install") is not False:
+        blocked_reasons.append("one_cycle_smoke_preview_background_or_cron_install_enabled")
+    if smoke_authority.get("executes_scheduler_cycle") is not False or smoke_authority.get("executes_apply") is not False:
+        blocked_reasons.append("one_cycle_smoke_already_has_execution_authority")
+    if smoke_authority.get("recurring_scheduler_enabled") is not True:
+        blocked_reasons.append("one_cycle_smoke_recurring_scheduler_not_enabled")
+    if smoke_authority.get("background_or_cron_enabled") is not False:
+        blocked_reasons.append("one_cycle_smoke_background_or_cron_enabled")
+    if smoke_authority.get("enables_unattended_default_authority") is not False:
+        blocked_reasons.append("one_cycle_smoke_unattended_authority_enabled")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if smoke_forbidden.get(key) is not False:
+            blocked_reasons.append(f"one_cycle_smoke_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(smoke_privacy):
+        blocked_reasons.append("one_cycle_smoke_privacy_not_ref_safe")
+
+    one_shot_payload: dict[str, Any] | None = None
+    if not blocked_reasons:
+        one_shot_payload = _dogfood_ordinary_turn_default_automation_scheduler_one_shot_payload(
+            argparse.Namespace(
+                db_path=args.db_path,
+                scheduler_status=args.scheduler_status,
+                db_approval_mode=args.db_approval_mode,
+                report_dir=report_dir,
+                copy_db_path=args.copy_db_path,
+                schedule_approval_phrase=args.schedule_approval_phrase,
+                actor=args.actor,
+                reason=args.reason,
+                limit=args.limit,
+                output=one_shot_output,
+            )
+        )
+        if one_shot_payload.get("quality_gate", {}).get("pass") is not True:
+            blocked_reasons.append("scheduler_one_shot_not_green")
+
+    one_shot_quality = one_shot_payload.get("quality_gate", {}) if isinstance(one_shot_payload, dict) else {}
+    one_shot_scheduler_package = (
+        one_shot_payload.get("scheduler_package", {})
+        if isinstance(one_shot_payload, dict) and isinstance(one_shot_payload.get("scheduler_package"), dict)
+        else {}
+    )
+    one_shot_scheduler_integration = (
+        one_shot_payload.get("scheduler_integration", {})
+        if isinstance(one_shot_payload, dict) and isinstance(one_shot_payload.get("scheduler_integration"), dict)
+        else {}
+    )
+    blocked_unique = sorted(set(blocked_reasons))
+    one_shot_green = one_shot_quality.get("pass") is True
+    package_green = one_shot_scheduler_package.get("quality_gate_pass") is True
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute",
+        "read_only": not one_shot_green,
+        "mutated": one_shot_green,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "one_cycle_smoke": {
+            **smoke_artifact,
+            "quality_gate_pass": smoke_quality.get("pass") is True,
+            "ready": smoke_gate.get("ready") is True,
+        },
+        "scheduler_one_shot": {
+            "path": str(one_shot_output) if one_shot_payload is not None else None,
+            "sha256": _sha256_file(one_shot_output) if one_shot_output.exists() else None,
+            "quality_gate_pass": one_shot_green,
+            "db_approval_mode": one_shot_payload.get("db_approval_mode") if isinstance(one_shot_payload, dict) else args.db_approval_mode,
+            "source_db_mutated": one_shot_payload.get("source_db_mutated") if isinstance(one_shot_payload, dict) else None,
+            "copy_db_mutated": one_shot_payload.get("copy_db_mutated") if isinstance(one_shot_payload, dict) else None,
+            "scheduler_package_quality_gate_pass": package_green,
+            "evidence_rollup_quality_gate_pass": one_shot_scheduler_package.get("evidence_rollup_quality_gate_pass") is True,
+            "selected_trace_ref": one_shot_scheduler_integration.get("selected_trace_ref"),
+        },
+        "execution_boundary": {
+            "smoke_gate_consumed": smoke_quality.get("pass") is True,
+            "scheduler_one_shot_executed": one_shot_payload is not None,
+            "scheduler_package_collected": package_green,
+            "stopped_after_one_package": package_green,
+            "post_apply_verification_required_before_next_cycle": True,
+            "background_or_cron_enabled": False,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": one_shot_payload is not None,
+            "executes_apply": one_shot_green,
+            "max_scheduler_cycles": 1,
+            "requires_enabled_one_cycle_smoke_green": True,
+            "requires_status_green": True,
+            "requires_exact_local_schedule_approval": True,
+            "enables_unattended_default_authority": False,
+            "background_or_recurring_schedule_enabled": False,
+        },
+        "quality_gate": {
+            "pass": not blocked_unique,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_green_ran_one_shot_packaged_and_stopped"
+            if not blocked_unique
+            else "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_red_keep_recurrence_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "run_post_apply_verification_and_evidence_rollup_before_any_later_cycle_or_recurring_install",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -23211,6 +23397,39 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute",
+        help="Consume the enabled one-cycle smoke gate, run one explicit scheduler one-shot, package, and stop without background/cron.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "db_path", type=Path
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--one-cycle-smoke", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--scheduler-status", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--db-approval-mode", required=True, choices=["copy", "explicit-approved-db"]
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--report-dir", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--copy-db-path", type=Path
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--schedule-approval-phrase", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument("--actor", required=True)
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument("--reason", required=True)
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--limit", type=int, default=50
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -24837,6 +25056,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_smoke_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-execute":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_payload(args),
                     indent=2,
                 )
             )
