@@ -8,6 +8,14 @@ Local-first memory for AI agents.
 
 ## Install
 
+For Hermes, install it directly as a plugin:
+
+```bash
+hermes plugins install cafitac/agent-memory --enable
+```
+
+Agent-agnostic CLI install:
+
 ```bash
 npm install -g @cafitac/agent-memory
 agent-memory bootstrap

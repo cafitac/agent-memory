@@ -1,9 +1,20 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:23 KST
+Last updated: 2026-05-18 12:33 KST
 
-## Current checkpoint: enabled recurring scheduler activation packet verification
+## Current checkpoint: Hermes plugin/default integration complete
+
+- Latest source checkpoint adds a repo-level Hermes plugin manifest and `register(ctx)` entry point.
+- Hermes users can use `hermes plugins install cafitac/agent-memory --enable` as the direct plugin/default path; npm `agent-memory bootstrap` remains the agent-agnostic hook/config path.
+- The plugin registers `pre_llm_call`, initializes/reuses the local DB, returns prompt-cache-friendly context injection, and fails soft on empty/bad inputs.
+- Validation complete: `tests/test_hermes_plugin_integration.py -q` -> `4 passed`; Hermes adapter/npm/docs/release corridor -> `30 passed`; full suite -> `428 passed, 1 xfailed`.
+- Current progress framing: Hermes plugin/default integration 100%; broader human-brain-like lifecycle remains bounded by the prior no-auto-OS-scheduler safety boundary.
+- Next safe action: commit/push only the plugin/default integration files and docs; leave unrelated untracked harness directories untouched.
+
+Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+
+## Previous checkpoint: enabled recurring scheduler activation packet verification
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify`.
 - It consumes the green activation packet artifact and verifies it as read-only/hash-bound evidence for the exact final start boundary.

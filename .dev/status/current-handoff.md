@@ -1,9 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 12:11 KST
+Last updated: 2026-05-18 12:33 KST
 
-## Current checkpoint: enabled recurring scheduler OS activation boundary and verifier
+## Current checkpoint: Hermes plugin/default integration complete
+
+- Latest source checkpoint adds a repo-level Hermes plugin manifest (`plugin.yaml`) and plugin entry point (`__init__.py`) so `hermes plugins install cafitac/agent-memory --enable` is a first-class/default Hermes integration surface.
+- The plugin registers a fail-soft `pre_llm_call` hook and reuses the existing local-first `build_pre_llm_hook_context` path, defaulting to `~/.agent-memory/memory.db` with `AGENT_MEMORY_DB_PATH` / `AGENT_MEMORY_HERMES_*` overrides.
+- It avoids editing `~/.hermes/config.yaml` when users choose the plugin path; existing npm/bootstrap shell-hook integration remains documented and working for agent-agnostic installs.
+- Validation complete: focused plugin integration `4 passed`; Hermes adapter/npm/docs/release corridor `30 passed`; full suite `428 passed, 1 xfailed`.
+- Current progress framing: Hermes plugin/default integration is now 100% at the local-first, fail-soft, prompt-cache-preserving plugin boundary; actual OS scheduler loading remains outside automatic execution per prior safety boundary.
+- Next safe action: commit/push this checkpoint, then after the commit exists run a clean `hermes plugins install file://... --enable` clone smoke if desired; do not include unrelated untracked harness directories.
+
+Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+
+## Previous checkpoint: enabled recurring scheduler OS activation boundary and verifier
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-boundary` and `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-verify`.
 - The boundary consumes green local-start smoke plus exact phrase `activate-os-background-or-cron-default-automation-scheduler-v1` and writes only an OS activation definition JSON.

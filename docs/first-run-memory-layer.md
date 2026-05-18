@@ -1,8 +1,14 @@
 # First-run setup
 
-The default setup is npm-first and local-first.
+The default setup is local-first. For Hermes, the plugin path avoids manual config edits:
 
-## Install
+```bash
+hermes plugins install cafitac/agent-memory --enable
+```
+
+The plugin uses `~/.agent-memory/memory.db` by default and injects recalled context through Hermes' `pre_llm_call` plugin hook. Set `AGENT_MEMORY_DB_PATH` if you want a different database.
+
+For an agent-agnostic CLI setup, use npm:
 
 ```bash
 npm install -g @cafitac/agent-memory

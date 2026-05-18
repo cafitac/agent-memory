@@ -1,9 +1,21 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 12:11 KST
+Last updated: 2026-05-18 12:33 KST
 
-## Current checkpoint: enabled recurring scheduler OS activation boundary and verifier
+## Current checkpoint: Hermes plugin/default integration complete
+
+- Latest source checkpoint adds a repo-level Hermes plugin manifest (`plugin.yaml`) and plugin entry point (`__init__.py`).
+- The plugin registers a fail-soft `pre_llm_call` hook that adapts Hermes plugin callback arguments to the existing `HermesShellHookPayload` / `HermesPreLlmHookOptions` code path.
+- Default DB remains local-first at `~/.agent-memory/memory.db`, with `AGENT_MEMORY_DB_PATH` and `AGENT_MEMORY_HERMES_*` environment overrides.
+- README, first-run docs, and install smoke docs now present `hermes plugins install cafitac/agent-memory --enable` as the Hermes-native path while retaining npm/bootstrap for generic CLI installs.
+- Validation complete: focused plugin integration `4 passed`; Hermes adapter/npm/docs/release corridor `30 passed`; full suite `428 passed, 1 xfailed`.
+- Current progress framing: Hermes plugin/default integration is 100%; practical scoped human-brain-like lifecycle remains 100% at the bounded/verified/local-first design boundary, with actual OS background scheduler loading still deliberately outside agent automation.
+- Next safe action: commit/push this checkpoint and keep unrelated untracked harness/worktree files out of the commit.
+
+Reference: `.dev/roadmap/memory-consolidation/hermes-plugin-default-integration-plan.md`
+
+## Previous checkpoint: enabled recurring scheduler OS activation boundary and verifier
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-boundary` and `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-verify`.
 - The boundary consumes green local-start smoke plus exact phrase `activate-os-background-or-cron-default-automation-scheduler-v1` and writes only an OS activation definition JSON.

@@ -2,6 +2,19 @@
 
 Use these checks after publishing or when changing install/launcher behavior. Run them from a temporary directory, not from the source checkout.
 
+## Hermes plugin install
+
+```bash
+hermes plugins install cafitac/agent-memory --enable
+hermes plugins list
+```
+
+Expected:
+
+- `agent-memory` appears as an enabled plugin
+- Hermes can call the `pre_llm_call` plugin hook without editing `~/.hermes/config.yaml`
+- the local memory database defaults to `~/.agent-memory/memory.db`
+
 ## npm global install
 
 ```bash

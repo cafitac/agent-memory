@@ -1,0 +1,8 @@
+manifest_version: 1
+name: agent-memory
+version: 0.1.162
+description: local-first memory context for Hermes via the pre-LLM plugin hook
+provides_hooks:
+  - pre_llm_call
+provides_skills:
+  - agent-memory
