@@ -1,9 +1,23 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 16:08 KST
+Last updated: 2026-05-18 17:00 KST
 
-## Current checkpoint: decay-risk review pass connected isolated approved memories
+## Current checkpoint: scheduled blocker-resolution decision refinement complete
+
+- Added the safe read-only refinement for mixed scheduled decay blockers. `dogfood scheduled-blocker-resolution` now separates monitor-only advisory refs from evidence-collection refs in the operator-facing resolution payload.
+- Latest live shape remains: trace quality resolved, background warnings resolved, decay blocker still unresolved because there is 1 evidence-collection candidate and 7 monitor-only refs. The CLI now reports this as `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=7`, and `monitor_only_resolution=advisory_only`.
+- No authority was widened: broad G4 apply, bounded partial automation, ordinary auto-approval, unattended/background apply, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion remain blocked.
+- Verification: focused scheduled tests `3 passed, 244 deselected`; full suite `436 passed, 1 xfailed`; live CLI smoke against `/tmp/agent-memory-scheduled-dry-run-now.json` emitted the refined payload.
+
+Next safe action:
+
+1. Continue normal-turn dogfood and re-run decay-risk to see whether the current evidence-collection candidate gains enough activation evidence to become monitor-only.
+2. If that happens, re-run `dogfood scheduled-dry-run` and `dogfood scheduled-blocker-resolution --allow-monitor-only-decay`; bounded partial automation may only become resolution-green when all decay refs are monitor-only low-risk and no storage/privacy/linkage warnings exist.
+3. Do not convert this operator-facing refinement into mutation authority. It is only severity/explainability over aggregate-safe evidence.
+
+
+## Previous checkpoint: decay-risk review pass connected isolated approved memories
 
 - Completed the next live review pass. Decay-risk inspection found 8 advisory refs after the latest dogfood, not a storage failure: `fact:5` needs more activation evidence; the remaining 7 are monitor-only after review.
 - A live DB backup was created before relation review: `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db` (`cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`).

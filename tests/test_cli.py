@@ -6903,6 +6903,90 @@ def test_python_module_cli_dogfood_scheduled_blocker_resolution_classifies_fresh
     assert payload["privacy"]["raw_report_included"] is False
 
 
+def test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection(
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "scheduled-report-mixed-decay.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_scheduled_dry_run",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "reports": {
+                    "trace_quality": {
+                        "recommendation": "consider_g4_plan",
+                        "coverage": {"observation_trace_coverage_ratio": 1.0},
+                        "retrieval_quality": {"empty_retrieval_ratio": 0.3235},
+                        "warnings": [],
+                    },
+                    "background_dry_run": {
+                        "scan": {"quality_warnings": []},
+                        "reports": {
+                            "decay_risk": {
+                                "candidate_decomposition": {
+                                    "candidate_count": 8,
+                                    "max_score": 0.5333,
+                                    "resolution_hint_counts": {
+                                        "collect_more_activation_evidence_before_decay_action": 1,
+                                        "monitor_only_no_mutation": 7,
+                                    },
+                                    "raw_content_included": False,
+                                }
+                            }
+                        },
+                    },
+                },
+                "quality_gate": {
+                    "pass": False,
+                    "blocked_reasons": ["decay_risk_above_threshold"],
+                },
+                "privacy": {
+                    "raw_conversation_content_included": False,
+                    "sample_values_included": False,
+                    "raw_query_text_included": False,
+                },
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-blocker-resolution",
+            "--report",
+            str(report_path),
+            "--accept-ready-trace-quality",
+            "--allow-monitor-only-decay",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    decay_resolution = payload["resolutions"]["decay_risk_above_threshold"]
+    assert decay_resolution["resolved"] is False
+    assert decay_resolution["resolution"] == "evidence_collection_candidates_still_block"
+    assert decay_resolution["operator_severity"] == "hard_blocker"
+    assert decay_resolution["evidence_collection_candidate_count"] == 1
+    assert decay_resolution["monitor_only_candidate_count"] == 7
+    assert decay_resolution["monitor_only_resolution"] == "advisory_only"
+    assert payload["resolution_gate"] == {
+        "pass": False,
+        "decision": "scheduled_blockers_still_unresolved",
+        "unresolved_blockers": ["decay_risk_above_threshold"],
+    }
+    assert payload["automation_policy"]["bounded_partial_automation_allowed"] is False
+    assert payload["automation_policy"]["broad_g4_apply_allowed"] is False
+
+
 def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_raw_content(
     tmp_path: Path,
 ) -> None:

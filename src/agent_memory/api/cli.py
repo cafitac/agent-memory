@@ -17446,6 +17446,7 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
     empty_ratio = _safe_float(retrieval_quality.get("empty_retrieval_ratio"))
     hint_counts = candidate_decomposition.get("resolution_hint_counts", {}) if isinstance(candidate_decomposition.get("resolution_hint_counts"), dict) else {}
     monitor_only_count = _safe_int(hint_counts.get("monitor_only_no_mutation"))
+    evidence_collection_count = _safe_int(hint_counts.get("collect_more_activation_evidence_before_decay_action"))
     decay_candidate_count = _safe_int(candidate_decomposition.get("candidate_count"))
     decay_max_score = _safe_float(candidate_decomposition.get("max_score"))
 
@@ -17478,9 +17479,28 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
         },
         "decay_risk_above_threshold": {
             "resolved": decay_resolved,
-            "resolution": "monitor_only_low_risk_decay_classified" if decay_resolved and "decay_risk_above_threshold" in blocked_reasons else ("not_blocked" if decay_resolved else "unresolved"),
+            "resolution": (
+                "monitor_only_low_risk_decay_classified"
+                if decay_resolved and "decay_risk_above_threshold" in blocked_reasons
+                else (
+                    "not_blocked"
+                    if decay_resolved
+                    else (
+                        "evidence_collection_candidates_still_block"
+                        if evidence_collection_count > 0
+                        else "unresolved"
+                    )
+                )
+            ),
+            "operator_severity": (
+                "advisory"
+                if decay_resolved
+                else ("hard_blocker" if evidence_collection_count > 0 else "unresolved")
+            ),
             "candidate_count": decay_candidate_count,
             "monitor_only_candidate_count": monitor_only_count,
+            "evidence_collection_candidate_count": evidence_collection_count,
+            "monitor_only_resolution": "advisory_only" if monitor_only_count > 0 else "none",
             "max_score": round(decay_max_score, 4),
             "raw_content_included": candidate_decomposition.get("raw_content_included") is True,
         },

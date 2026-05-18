@@ -1,9 +1,27 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 16:08 KST
+Last updated: 2026-05-18 17:00 KST
 
-## Current checkpoint: decay-risk review pass connected isolated approved memories
+## Current checkpoint: scheduled blocker resolution now distinguishes hard decay blockers from advisory monitor-only refs
+
+- Implemented the next safe read-only operator UX slice: `dogfood scheduled-blocker-resolution` now classifies mixed decay-risk sets with explicit `operator_severity`, `evidence_collection_candidate_count`, `monitor_only_candidate_count`, and `monitor_only_resolution` fields.
+- The latest live scheduled report shape is now explainable without widening authority: trace quality is native-green (`consider_g4_plan`), background quality warnings are absent, monitor-only decay refs are classified as advisory-only, but the one evidence-collection decay candidate still keeps `decay_risk_above_threshold` unresolved and hard-blocking.
+- Live smoke output over `/tmp/agent-memory-scheduled-dry-run-now.json`: `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `candidate_count=8`, `monitor_only_candidate_count=7`, `evidence_collection_candidate_count=1`, `monitor_only_resolution=advisory_only`, `resolution_gate.pass=false`, `bounded_partial_automation_allowed=false`, `broad_g4_apply_allowed=false`.
+- TDD/verification: added `test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection`; RED failed on the previous generic `resolution=unresolved`, GREEN passes. Focused scheduled tests: `3 passed, 244 deselected`. Full suite: `436 passed, 1 xfailed`.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively 100% at the bounded/review-gated/local-first boundary.
+- Operational confidence remains about 98%: the system is healthy and now explains the remaining scheduled blocker more accurately, but it still needs another observation window to determine whether the current evidence-collection candidate should stay active, become monitor-only, or receive manual review.
+
+Recommended next work now:
+
+1. Continue normal-turn dogfood and re-run `activations decay-risk-report` until the current evidence-collection candidate either gains enough activation evidence or remains weak across another window.
+2. Re-run scheduled-dry-run and scheduled-blocker-resolution after that window. If all decay refs are monitor-only low-risk and storage/privacy/linkage remain green, the blocker-resolution gate can become green for bounded partial automation only.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+## Previous checkpoint: decay-risk review pass connected isolated approved memories
 
 - Inspected the live decay-risk set with read-only `activations decay-risk-report`, graph inspection, review history, and aggregate SQL. The latest advisory set has 8 refs after new dogfood activity: `fact:5` remains a real evidence-collection candidate; the other 7 are monitor-only after review.
 - Created a live DB backup before relation review: `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db`, SHA-256 `cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`.

@@ -1,9 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 16:08 KST
+Last updated: 2026-05-18 17:00 KST
 
-## Current checkpoint: decay-risk review pass connected isolated approved memories
+## Current checkpoint: scheduled blocker resolution separates hard decay blockers from advisory decay refs
+
+- Implemented the read-only scheduled-blocker-resolution refinement for the latest live pattern: mixed decay-risk sets now report `evidence_collection_candidate_count`, `monitor_only_candidate_count`, `monitor_only_resolution`, and `operator_severity` instead of leaving all decay-risk candidates as undifferentiated `unresolved`.
+- The live scheduled report still resolves trace quality and background warnings, but keeps `decay_risk_above_threshold` red as `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=7`, and `monitor_only_resolution=advisory_only`.
+- This does not widen mutation authority: `broad_g4_apply_allowed=false`, `bounded_partial_automation_allowed=false` while an evidence-collection candidate remains, `ordinary_conversation_auto_approval=false`, and default retrieval remains `approved_only_unchanged`.
+- TDD gate: new RED test `test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection` failed on the old `resolution=unresolved`; after implementation, focused scheduled tests pass (`3 passed, 244 deselected`) and full suite passes (`436 passed, 1 xfailed`).
+- Live CLI smoke over `/tmp/agent-memory-scheduled-dry-run-now.json` confirms the operator-facing split above without raw report/query/sample exposure.
+- Current progress framing: scoped local human-brain-like lifecycle remains 100% at the bounded/review-gated/local-first boundary; operational confidence remains about 98%, with the next real blocker narrowed to collecting/observing evidence for the current one evidence-collection decay candidate.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: decay-risk review pass connected isolated approved memories
 
 - Followed up the live storage/Hermes dogfood by inspecting the decay-risk candidates with read-only decay, graph, history, and SQL aggregate checks. The post-review decay set contains 8 refs: 1 true evidence-collection candidate and 7 monitor-only refs.
 - Before mutation, created live DB backup `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db` with SHA-256 `cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`.
