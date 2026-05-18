@@ -3,6 +3,19 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-18 09:06 KST
 
+## Current checkpoint: enabled recurring scheduler config contract
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-contract`.
+- It consumes a green enabled recurring scheduler config preflight report plus exact phrase `approve-enabled-recurring-default-automation-scheduler-config-contract-v1`.
+- It emits a data-only target-state contract for later enabled scheduler materialization: `target_state=enabled`, `recurring_scheduler_enabled=true`, `background_or_cron_enabled=false`, one candidate per cycle, fresh-evidence/post-apply/package-stop/CI/rollback requirements preserved.
+- The command itself remains status-only/read-only: `read_only=true`, `mutated=false`, `executes_scheduler_cycle=false`, `executes_apply=false`, and `writes_scheduler_config=false`.
+- Enabled config materialization and background/cron still require separate approval boundaries.
+- Validation so far: focused contract `1 passed`; enabled+disabled config corridor `5 passed, 227 deselected`; ordinary-turn default automation corridor `40 passed, 192 deselected`; full suite `414 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999994%+.
+- Next safe slice: fail-closed enabled contract validator; still no enabled config write, background/cron installation, or unattended recurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-contract.md`
+
 ## Current checkpoint: enabled recurring scheduler config preflight
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-preflight`.
