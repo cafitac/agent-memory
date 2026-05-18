@@ -1,16 +1,17 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:11 KST
+Last updated: 2026-05-18 15:51 KST
 
-## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+## Current checkpoint: live storage-health now recognizes Hermes plugin-only runtime
 
-- Continued live personal-oss Hermes plugin dogfood with five normal `hermes chat -Q -q` turns. Four reported no duplicate/plugin-only context issue; one reported the context still feels noisy, so noise remains an observation target but not a duplicate-injection failure.
-- `hermes-doctor /Users/reddit/.agent-memory/memory.db --config-path /Users/reddit/.hermes/profiles/personal-oss/config.yaml` still reports `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, and no warnings.
-- Latest activation observation over 100 rows reports `candidate_activation_count=88`, `sentinel_or_empty_noise_count=12`, `ratio=0.12`, and `excluded_from_candidate_reports=true`; noise is still visible but excluded from reinforcement candidates.
-- New operator-confidence slice wires `--hermes-config-path` into `dogfood live-evidence-bundle` and includes a read-only `hermes_doctor` artifact plus rollup fields for doctor status, plugin enabled, hook occurrences, and duplicate-context risk.
-- Live bundle smoke against personal-oss passed with doctor rollup `status=ok`, `plugin_enabled=true`, `hook_occurrences=0`, `duplicate_context_injection_risk=false`, and quality gate green.
-- Focused dogfood/doctor corridor and full suite pass locally: `433 passed, 1 xfailed`. Commit/push/CI is the next gate for this slice.
+- Continued actual-data dogfood against `/Users/reddit/.agent-memory/memory.db` and personal-oss Hermes config. `dogfood storage-health` is healthy with no warnings; live counts are now `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`, `facts=9`, `procedures=1`, and `episodes=1`.
+- Fixed an operator-visibility gap found during dogfood: `dogfood storage-health` previously reported only shell-hook markers, so the current valid plugin-only setup looked like `agent_memory_hook_present=false` / `configured_db_path_present=false` with no explicit plugin signal. It now reuses the Hermes doctor logic and reports `plugin_enabled`, `integration_installed`, `hook_occurrences`, `duplicate_context_injection_risk`, and `doctor_status`.
+- Live personal-oss storage-health now reports `doctor_status=ok`, `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `agent_memory_hook_present=false`, and `duplicate_context_injection_risk=false`.
+- Real Hermes turn smoke passed: `hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_LIVE_STORAGE_FLOW_OK'` returned the marker and advanced the live DB by `+1 retrieval_observation`, `+2 memory_activations`, and `+1 experience_trace`. Latest rows link observation `5189` to trace `4472`, record model `gpt-5.5`, keep `summary=null`, and keep `query_preview=null`.
+- Trace quality over the last 24h is structurally healthy: 469+ observations, 469+ traces, 1.0 observation/trace coverage, 1.0 activation trace-link coverage, no linkage gap, and no trace-quality warnings. Empty retrieval ratio remains about 0.336 over 24h, but trace-quality recommendation is still `consider_g4_plan`.
+- Scheduled dry-run remains correctly conservative: read-only/no mutation/privacy-safe, but quality gate is red on `decay_risk_above_threshold` with 7 aggregate decay-risk candidates. This is an expected review signal, not a storage/runtime failure.
+- Validation complete: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full test suite `435 passed, 1 xfailed`.
 
 Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 

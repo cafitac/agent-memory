@@ -1263,10 +1263,110 @@ def test_python_module_cli_dogfood_storage_health_reports_safe_read_only_invaria
     assert remember["rejected_secret_like_count"] == 1
     assert remember["violation_count"] == 0
     assert payload["hermes"]["config_exists"] is False
+    assert payload["hermes"]["plugin_enabled"] is False
+    assert payload["hermes"]["integration_installed"] is False
+    assert payload["hermes"]["duplicate_context_injection_risk"] is False
+    assert payload["hermes"]["doctor_status"] == "needs_setup"
     assert "query_text" not in health_result.stdout
     assert "query_preview" not in health_result.stdout
     assert "SHOULD_NOT_LEAK" not in health_result.stdout
     assert "api key" not in health_result.stdout.lower()
+
+
+def test_python_module_cli_dogfood_storage_health_recognizes_hermes_plugin_only_setup(tmp_path: Path) -> None:
+    db_path = tmp_path / "plugin-storage-health.db"
+    initialize_database(db_path)
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "plugins:",
+                "  enabled:",
+                "    - agent-memory",
+                "hooks:",
+                "  pre_llm_call:",
+                "    - command: \"other-tool pre-llm\"",
+                "      timeout: 5",
+                "",
+            ]
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "storage-health",
+            str(db_path),
+            "--hermes-config",
+            str(config_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["hermes"]["config_exists"] is True
+    assert payload["hermes"]["agent_memory_hook_present"] is False
+    assert payload["hermes"]["hook_occurrences"] == 0
+    assert payload["hermes"]["plugin_enabled"] is True
+    assert payload["hermes"]["integration_installed"] is True
+    assert payload["hermes"]["duplicate_context_injection_risk"] is False
+    assert payload["hermes"]["doctor_status"] == "ok"
+    assert payload["hermes"]["configured_db_path_present"] is False
+
+
+def test_python_module_cli_dogfood_storage_health_flags_duplicate_hermes_plugin_and_shell_hook(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "duplicate-storage-health.db"
+    initialize_database(db_path)
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "plugins:",
+                "  enabled:",
+                "    - agent-memory",
+                "hooks:",
+                "  pre_llm_call:",
+                f"    - command: \"agent-memory hermes-pre-llm-hook {db_path}\"",
+                "      timeout: 5",
+                "",
+            ]
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "storage-health",
+            str(db_path),
+            "--hermes-config",
+            str(config_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["hermes"]["agent_memory_hook_present"] is True
+    assert payload["hermes"]["hook_occurrences"] == 1
+    assert payload["hermes"]["plugin_enabled"] is True
+    assert payload["hermes"]["integration_installed"] is True
+    assert payload["hermes"]["duplicate_context_injection_risk"] is True
+    assert payload["hermes"]["doctor_status"] == "warning"
 
 
 

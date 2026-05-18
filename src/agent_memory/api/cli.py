@@ -22992,19 +22992,39 @@ def _dogfood_query_preview_cleanup_payload(args: argparse.Namespace) -> dict[str
 
 def _storage_health_hermes_payload(*, hermes_config: Path | None, db_path: Path) -> dict[str, Any]:
     if hermes_config is None:
-        return {"config_checked": False, "config_exists": None, "agent_memory_hook_present": None}
+        return {
+            "config_checked": False,
+            "config_exists": None,
+            "agent_memory_hook_present": None,
+            "configured_db_path_present": None,
+            "hook_occurrences": None,
+            "plugin_enabled": None,
+            "integration_installed": None,
+            "duplicate_context_injection_risk": None,
+            "doctor_status": None,
+        }
     resolved_config = hermes_config.expanduser().resolve(strict=False)
+    doctor = diagnose_hermes_hook_setup(
+        HermesHookInstallOptions(
+            config_path=resolved_config,
+            snippet_options=HermesHookConfigSnippetOptions(db_path=db_path),
+        )
+    )
     payload: dict[str, Any] = {
         "config_checked": True,
         "config_path": str(resolved_config),
-        "config_exists": resolved_config.exists(),
-        "agent_memory_hook_present": False,
+        "config_exists": doctor.config_exists,
+        "agent_memory_hook_present": doctor.hook_installed,
         "configured_db_path_present": False,
+        "hook_occurrences": doctor.hook_occurrences,
+        "plugin_enabled": doctor.plugin_enabled,
+        "integration_installed": doctor.hook_installed or doctor.plugin_enabled,
+        "duplicate_context_injection_risk": doctor.duplicate_context_injection_risk,
+        "doctor_status": doctor.status,
     }
     if not resolved_config.exists():
         return payload
     text = resolved_config.read_text()
-    payload["agent_memory_hook_present"] = "agent-memory" in text and "hermes-pre-llm-hook" in text
     payload["configured_db_path_present"] = str(db_path.expanduser().resolve(strict=False)) in text
     return payload
 

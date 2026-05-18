@@ -1,28 +1,29 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:11 KST
+Last updated: 2026-05-18 15:51 KST
 
-## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+## Current checkpoint: actual-data storage/runtime dogfood plus plugin-aware storage-health
 
-- Continued live personal-oss Hermes plugin dogfood with five normal `hermes chat -Q -q` turns: no duplicate context was observed, the current path appears plugin-only, but one turn flagged the retrieved memory context as noisy. Treat noise as an ongoing observation target, not as a duplicate-hook regression.
-- Personal-oss doctor remains green: `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, `warnings=[]` for `/Users/reddit/.agent-memory/memory.db` and `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`.
-- Latest activation report over 100 rows shows `candidate_activation_count=88`, `sentinel_or_empty_noise_count=12`, `ratio=0.12`, and `excluded_from_candidate_reports=true`.
-- New local slice adds `--hermes-config-path` to `dogfood live-evidence-bundle`, writes a read-only `hermes_doctor` artifact, and exposes rollup fields: `hermes_doctor_status`, `hermes_plugin_enabled`, `hermes_hook_occurrences`, and `hermes_duplicate_context_injection_risk`.
-- The live bundle quality gate now blocks on non-ok Hermes doctor status or duplicate context injection risk while preserving the existing read-only/no-mutation contract.
-- Live bundle smoke against personal-oss is green: `fixture_task_count=5`, `hermes_doctor_status=ok`, `hermes_plugin_enabled=true`, `hermes_hook_occurrences=0`, `hermes_duplicate_context_injection_risk=false`, and bundle quality gate pass.
-- Focused dogfood/doctor corridor passes locally, and the full suite is green: `433 passed, 1 xfailed`.
+- Ran actual-data checks against `/Users/reddit/.agent-memory/memory.db` and `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`. Live storage health is clean: `status=healthy`, warnings `[]`, query-preview/hash/JSON/linkage/ordinary-trace/remember-intent invariants all pass, with roughly `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`, `facts=9`, `procedures=1`, `episodes=1`.
+- Found and fixed an observability mismatch: `dogfood storage-health` still checked only shell-hook markers even though personal-oss now uses the Hermes plugin. Storage-health now reuses the same Hermes doctor setup logic and exposes `hook_occurrences`, `plugin_enabled`, `integration_installed`, `duplicate_context_injection_risk`, and `doctor_status`.
+- Live storage-health now agrees with doctor/plugin reality: `doctor_status=ok`, `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `agent_memory_hook_present=false`, and `duplicate_context_injection_risk=false`.
+- Real Hermes smoke under gpt-5.5 passed: `hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_LIVE_STORAGE_FLOW_OK'` returned `AGENT_MEMORY_LIVE_STORAGE_FLOW_OK` and advanced the DB by `+1 retrieval_observation`, `+2 memory_activations`, and `+1 experience_trace`. The latest trace is metadata-only (`summary=null`, `candidate_policy=evidence_only`, `auto_approved=false`) and links to the retrieval observation; `query_preview` remains null.
+- Last-24h trace quality is healthy for structure: observation/trace coverage `1.0`, activation trace-link coverage `1.0`, no linkage gap, no trace-quality warnings. Empty retrieval ratio is about `0.336`, which remains an observation target but not a broken storage path.
+- Scheduled dry-run is still correctly conservative: read-only/no mutation/privacy-safe, but quality gate is red on `decay_risk_above_threshold` with 7 aggregate decay-risk candidates. This means storage/runtime are working, while review-quality cleanup/relationship decisions still need human-gated follow-up before any broader G4/default authority.
+- Validation after the fix: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full suite `435 passed, 1 xfailed`.
 
 Current estimate:
 
 - Scoped local human-brain-like memory lifecycle remains effectively 100% at the bounded/review-gated/local-first boundary.
-- Operational confidence is now slightly stronger because the live evidence bundle captures the runtime integration baseline instead of requiring a separate manual doctor check. Remaining work is push/CI and continued longer dogfood.
+- Operational confidence is now about 97%: actual live data flow, Hermes plugin runtime, privacy-safe storage, and linkage invariants are verified; the remaining gap is review-quality decay/noise resolution and longer trend evidence, not missing storage mechanics.
 
 Recommended next work now:
 
-1. Commit/push the live-evidence-bundle doctor artifact slice and watch CI.
-2. Continue normal-turn dogfood; if noise ratio keeps rising, investigate retrieval/noise filtering separately without widening mutation authority.
-3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+1. Commit/push the plugin-aware storage-health fix and updated docs, then watch CI.
+2. Inspect the 7 aggregate decay-risk candidates via read-only decay/review/graph reports and either add reviewed relations for intentionally isolated approved memories or keep collecting evidence where weak activation is expected.
+3. Continue normal-turn Hermes dogfood and compare scheduled-dry-run artifacts; treat sustained empty/noise growth or new privacy/linkage warnings as blockers.
+4. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard
 

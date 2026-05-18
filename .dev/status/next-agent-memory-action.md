@@ -1,14 +1,15 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:11 KST
+Last updated: 2026-05-18 15:51 KST
 
-## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+## Current checkpoint: actual-data storage/runtime dogfood plus plugin-aware storage-health
 
-- Next operator-confidence slice is implemented locally: `dogfood live-evidence-bundle --hermes-config-path ...` now records a read-only Hermes doctor artifact and blocks the bundle if doctor status is not green or duplicate context injection risk appears.
-- Live personal-oss dogfood remains plugin-only/no-duplicate by doctor evidence: hook occurrences `0`, plugin enabled `true`, duplicate risk `false`.
-- Latest 100 activation rows show 12 empty/sentinel rows (`ratio=0.12`) and candidate filtering still excludes them from reinforcement reports.
-- Local focused dogfood/doctor corridor and full suite are green: `433 passed, 1 xfailed`. Next safe action is docs/code commit, push, and CI watch.
+- Actual live DB health is good: `dogfood storage-health /Users/reddit/.agent-memory/memory.db --hermes-config /Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports `status=healthy`, no warnings, clean query-preview/hash/JSON/linkage/ordinary-trace/remember-intent invariants, and live counts around `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`.
+- Hermes integration is confirmed plugin-only and not duplicated: storage-health now reports `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `duplicate_context_injection_risk=false`, and `doctor_status=ok`.
+- Real Hermes smoke returned `AGENT_MEMORY_LIVE_STORAGE_FLOW_OK` and wrote exactly the intended evidence shape: one retrieval observation, linked metadata-only turn trace, and retrieved-memory activations; no raw query preview was stored.
+- Data-quality gate is structurally green for storage/linkage, but scheduled dry-run is intentionally red on `decay_risk_above_threshold` with 7 aggregate candidates. Next safe work should inspect/resolve those decay-risk candidates through review/relations or continued dogfood, not widen mutation authority.
+- Local validation is green after the plugin-aware storage-health fix: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full suite `435 passed, 1 xfailed`.
 - Keep mutation authority unchanged: no broad ordinary auto-approval, unattended/background apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
 
 Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
