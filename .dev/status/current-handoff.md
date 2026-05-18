@@ -1,7 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:10 KST
+Last updated: 2026-05-18 11:13 KST
+
+## Current checkpoint: enabled recurring scheduler activation packet
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet`.
+- It consumes the green recurrence-install preflight artifact and produces an exact-approved activation packet for the final start boundary.
+- Activation window, CI watchdog, and rollback policy inputs are hashed only; raw policy text is not echoed.
+- It preserves `starts_background_or_cron=false`, `background_or_cron_start_allowed=false`, exact final start approval, CI health watch, rollback evidence, stale-evidence prevention, package-stop per cycle, post-apply verification per cycle, and max one candidate per cycle.
+- It still does not run the scheduler, apply memory, write scheduler config, install/start background/cron, or grant unattended/default authority.
+- Validation complete: focused activation packet `1 passed`; activation/recurrence/post-run/execute/smoke corridor `5 passed, 234 deselected`; enabled+disabled config corridor `11 passed, 228 deselected`; ordinary-turn default automation corridor `47 passed, 192 deselected`; full suite `421 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9999995%+.
+- Next safe slice: final exact start slice/verifier that consumes this activation packet; actual background/cron start remains separately exact-gated and fail-closed.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-activation-packet.md`
 
 ## Current checkpoint: enabled recurring scheduler recurrence-install preflight packet
 
