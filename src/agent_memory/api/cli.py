@@ -10752,6 +10752,223 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config
     return payload
 
 
+
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
+        raise ValueError("ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_policy_mismatch")
+    expected_phrase = "materialize-enabled-recurring-default-automation-scheduler-config-v1"
+    if args.approval_phrase != expected_phrase:
+        raise ValueError("ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_approval_phrase_mismatch")
+
+    validation_path = args.enabled_config_validation_report.expanduser().resolve(strict=False)
+    validation_payload, artifact = _read_json_artifact_summary(validation_path)
+    validation_payload = validation_payload or {}
+    validation = validation_payload.get("validation", {}) if isinstance(validation_payload.get("validation"), dict) else {}
+    quality = validation_payload.get("quality_gate", {}) if isinstance(validation_payload.get("quality_gate"), dict) else {}
+    authority = (
+        validation_payload.get("automation_authority", {})
+        if isinstance(validation_payload.get("automation_authority"), dict)
+        else {}
+    )
+    boundary = (
+        validation_payload.get("approval_boundary", {})
+        if isinstance(validation_payload.get("approval_boundary"), dict)
+        else {}
+    )
+    forbidden = (
+        validation_payload.get("forbidden_authority", {})
+        if isinstance(validation_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    privacy = validation_payload.get("privacy", {}) if isinstance(validation_payload.get("privacy"), dict) else {}
+
+    blocked_reasons: list[str] = []
+    if artifact.get("error") is not None:
+        blocked_reasons.append("enabled_config_validation_report_unreadable")
+    if validation_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_validate":
+        blocked_reasons.append("enabled_config_validation_report_kind_invalid")
+    if validation_payload.get("read_only") is not True or validation_payload.get("mutated") is not False:
+        blocked_reasons.append("enabled_config_validation_report_not_read_only")
+    if validation_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("enabled_config_validation_ordinary_auto_approval_enabled")
+    if quality.get("pass") is not True:
+        blocked_reasons.append("enabled_config_validation_quality_gate_not_green")
+    if quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_config_validate_green_materialization_design_ready":
+        blocked_reasons.append("enabled_config_validation_decision_invalid")
+    if quality.get("blocked_reasons") != []:
+        blocked_reasons.append("enabled_config_validation_blocked_reasons_not_empty")
+    required_validation_flags = (
+        "contract_green",
+        "enabled_config_materialization_ready",
+        "background_or_cron_still_blocked",
+        "scheduler_cycle_not_executed",
+        "apply_not_executed",
+        "scheduler_config_not_written",
+    )
+    for key in required_validation_flags:
+        if validation.get(key) is not True:
+            blocked_reasons.append(f"enabled_config_validation_{key}_not_true")
+    if validation.get("expected_policy") != args.policy:
+        blocked_reasons.append("enabled_config_validation_policy_mismatch")
+    if validation.get("target_state") != "enabled":
+        blocked_reasons.append("enabled_config_validation_target_state_invalid")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "recurring_scheduler_enabled",
+        "background_or_cron_enabled",
+        "enables_unattended_default_authority",
+        "writes_scheduler_config",
+    ):
+        if authority.get(key) is not False:
+            blocked_reasons.append(f"enabled_config_validation_authority_{key}_invalid")
+    if authority.get("status_only") is not True:
+        blocked_reasons.append("enabled_config_validation_authority_status_only_missing")
+    if boundary.get("current_validation_writes_enabled_config") is not False:
+        blocked_reasons.append("enabled_config_validation_boundary_writes_enabled_config")
+    if boundary.get("current_validation_executes_scheduler_cycle") is not False:
+        blocked_reasons.append("enabled_config_validation_boundary_executes_scheduler_cycle")
+    if boundary.get("later_enabled_config_materialization_requires_separate_approval") is not True:
+        blocked_reasons.append("enabled_config_validation_materialization_approval_missing")
+    if boundary.get("later_background_or_cron_requires_separate_approval") is not True:
+        blocked_reasons.append("enabled_config_validation_background_approval_missing")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if forbidden.get(key) is not False:
+            blocked_reasons.append(f"enabled_config_validation_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(privacy):
+        blocked_reasons.append("enabled_config_validation_privacy_not_ref_safe")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    if blocked_unique:
+        payload = {
+            "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize",
+            "read_only": True,
+            "mutated": False,
+            "default_retrieval_unchanged": True,
+            "ordinary_conversation_auto_approval": False,
+            "source_report": {
+                "path": str(validation_path),
+                "sha256": artifact.get("report_sha256"),
+                "kind": artifact.get("kind"),
+                "quality_gate_pass": quality.get("pass") is True,
+            },
+            "materialized_config": {
+                "path": str(args.scheduler_config.expanduser().resolve(strict=False)),
+                "written": False,
+                "enabled": None,
+                "recurring_scheduler_enabled": None,
+                "background_or_cron_enabled": None,
+                "sha256": None,
+            },
+            "automation_authority": {
+                "executes_scheduler_cycle": False,
+                "executes_apply": False,
+                "recurring_scheduler_enabled": False,
+                "background_or_cron_enabled": False,
+                "enables_unattended_default_authority": False,
+                "writes_scheduler_config": False,
+                "writes_enabled_config_only": False,
+            },
+            "quality_gate": {
+                "pass": False,
+                "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_red_keep_config_unwritten",
+                "blocked_reasons": blocked_unique,
+            },
+            "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+            "privacy": _default_automation_ref_safe_privacy_flags(),
+            "recommended_next_step": "fix_enabled_config_validation_before_materialization; do_not_start_background_cron",
+        }
+        _write_json_report(args.output, payload)
+        return payload
+
+    config_path = args.scheduler_config.expanduser().resolve(strict=False)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    enabled_config = {
+        "kind": "ordinary_turn_default_automation_scheduler_config",
+        "policy": args.policy,
+        "enabled": True,
+        "mode": "enabled_recurring_scheduler_contract_v1",
+        "recurring_scheduler_enabled": True,
+        "background_or_cron_enabled": False,
+        "max_candidates_per_cycle": 1,
+        "requires_enabled_policy_state": True,
+        "requires_green_policy_gate": True,
+        "requires_previous_evidence_rollup": True,
+        "requires_package_stop_after_each_cycle": True,
+        "requires_post_apply_verification_before_next_cycle": True,
+        "requires_bounded_cadence_policy": True,
+        "requires_kill_switch_policy": True,
+        "requires_ci_health_watch": True,
+        "requires_rollback_evidence": True,
+        "later_background_or_cron_requires_separate_approval": True,
+        "ordinary_conversation_auto_approval": False,
+        "default_background_auto_approval_allowed": False,
+        "unattended_default_apply_allowed": False,
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+    }
+    config_path.write_text(json.dumps(enabled_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    config_sha = _sha256_file(config_path)
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize",
+        "read_only": False,
+        "mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "source_report": {
+            "path": str(validation_path),
+            "sha256": artifact.get("report_sha256"),
+            "kind": artifact.get("kind"),
+            "quality_gate_pass": True,
+        },
+        "materialized_config": {
+            "path": str(config_path),
+            "written": True,
+            "enabled": True,
+            "recurring_scheduler_enabled": True,
+            "background_or_cron_enabled": False,
+            "sha256": config_sha,
+        },
+        "approval_boundary": {
+            "approval_phrase_consumed_for_enabled_config_materialization_only": True,
+            "current_materialization_executes_scheduler_cycle": False,
+            "current_materialization_executes_apply": False,
+            "later_background_or_cron_requires_separate_approval": True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "recurring_scheduler_enabled": True,
+            "background_or_cron_enabled": False,
+            "enables_unattended_default_authority": False,
+            "writes_scheduler_config": True,
+            "writes_enabled_config_only": True,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_green_enabled_config_written_no_background",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "validate_materialized_enabled_config_then_design_one_cycle_smoke; do_not_start_background_cron",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -22753,6 +22970,25 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_validate_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-config-materialize",
+        help="Materialize an enabled recurring-scheduler config after exact approval; does not run cycles or enable background/cron.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser.add_argument(
+        "--enabled-config-validation-report", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser.add_argument(
+        "--scheduler-config", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser.add_argument(
+        "--policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser.add_argument(
+        "--approval-phrase", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -24363,6 +24599,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_validate_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-config-materialize":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_materialize_payload(args),
                     indent=2,
                 )
             )

@@ -3,6 +3,19 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-18 09:31 KST
 
+## Current checkpoint: enabled recurring scheduler config materializer
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-materialize`.
+- It consumes a green enabled scheduler config validation report plus exact phrase `materialize-enabled-recurring-default-automation-scheduler-config-v1`.
+- It writes only the requested enabled scheduler config JSON: `enabled=true`, `mode=enabled_recurring_scheduler_contract_v1`, `recurring_scheduler_enabled=true`, `background_or_cron_enabled=false`, one candidate per cycle, previous-evidence/package-stop/post-apply/CI/rollback/kill-switch requirements preserved.
+- Wrong approval phrase fails non-zero before config write.
+- The command does not execute scheduler cycles, does not execute apply, and does not install/enable background or cron.
+- Validation so far: focused materializer `1 passed`; enabled+disabled config corridor `7 passed, 227 deselected`; ordinary-turn default automation corridor `42 passed, 192 deselected`; full suite `416 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999996%+.
+- Next safe slice: materialized enabled-config validation/single-cycle smoke gate; still no background/cron installation or unattended recurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-materializer.md`
+
 ## Current checkpoint: enabled recurring scheduler config validator
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-validate`.
