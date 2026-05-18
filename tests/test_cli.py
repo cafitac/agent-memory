@@ -20358,6 +20358,202 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_fi
 
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_os_activation_boundary_and_verifier_are_hash_bound(
+    tmp_path: Path,
+) -> None:
+    local_start_smoke = tmp_path / "local-start-smoke.json"
+    report_dir = tmp_path / "reports"
+    output_path = tmp_path / "os-activation-boundary.json"
+    verify_output = tmp_path / "os-activation-verification.json"
+    kill_switch_path = tmp_path / "STOP-DEFAULT-AUTOMATION"
+    scheduler_command = "agent-memory dogfood ordinary-turn-default-automation-scheduler-one-shot --config enabled.json"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    local_start_smoke.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "local_start_smoke": {
+                    "local_manifest_consumed": True,
+                    "manifest_hash_bound": True,
+                    "ready_for_os_activation_boundary": True,
+                    "os_background_or_cron_started": False,
+                    "background_or_cron_install_performed": False,
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "max_candidates_per_cycle": 1,
+                    "package_stop_per_cycle_required": True,
+                    "post_apply_verification_before_next_cycle_required": True,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "writes_scheduler_config": False,
+                    "installs_background_or_cron": False,
+                    "starts_background_or_cron": False,
+                    "enables_unattended_default_authority": False,
+                    "readiness_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_local_start_smoke_green_ready_for_exact_os_activation_boundary_only",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-boundary",
+            "--local-start-smoke",
+            str(local_start_smoke),
+            "--approval-phrase",
+            "activate-os-background-or-cron-default-automation-scheduler-v1",
+            "--activation-kind",
+            "launchd",
+            "--scheduler-command",
+            scheduler_command,
+            "--schedule-expression",
+            "StartInterval=900",
+            "--ci-health-status",
+            "green",
+            "--kill-switch-path",
+            str(kill_switch_path),
+            "--rollback-plan",
+            "unload exact launchd definition and restore previous package evidence",
+            "--max-candidates-per-cycle",
+            "1",
+            "--report-dir",
+            str(report_dir),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert scheduler_command not in result.stdout
+    assert "unload exact launchd" not in result.stdout
+    payload = json.loads(result.stdout)
+    definition_path = Path(payload["os_activation_boundary"]["activation_definition_path"])
+    definition = json.loads(definition_path.read_text(encoding="utf-8"))
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_os_activation_boundary"
+    assert payload["read_only"] is False
+    assert payload["mutated"] is True
+    assert payload["os_activation_boundary"]["ready_for_os_activation_verification"] is True
+    assert payload["os_activation_boundary"]["os_service_loaded_or_cron_installed"] is False
+    assert payload["automation_authority"] == {
+        "writes_os_activation_definition": True,
+        "loads_os_service_or_installs_cron": False,
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "writes_scheduler_config": False,
+        "enables_unattended_default_authority": False,
+        "ready_for_os_activation_verifier_only": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_os_activation_boundary_green_definition_materialized_for_verification_only",
+        "blocked_reasons": [],
+    }
+    assert definition["scheduler_command_sha256"] == hashlib.sha256(scheduler_command.encode("utf-8")).hexdigest()
+    assert definition["raw_scheduler_command_included"] is False
+    assert definition["os_service_loaded_or_cron_installed"] is False
+
+    verify_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-verify",
+            "--os-activation-boundary",
+            str(output_path),
+            "--expected-scheduler-command",
+            scheduler_command,
+            "--output",
+            str(verify_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert verify_result.returncode == 0, verify_result.stderr
+    verify_payload = json.loads(verify_result.stdout)
+    assert json.loads(verify_output.read_text(encoding="utf-8")) == verify_payload
+    assert verify_payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_os_activation_verification"
+    assert verify_payload["os_activation_verification"] == {
+        "boundary_green": True,
+        "definition_hash_bound": True,
+        "scheduler_command_hash_matches": True,
+        "ready_for_operator_load_or_install": True,
+        "os_service_loaded_or_cron_installed": False,
+        "kill_switch_absent": True,
+        "max_candidates_per_cycle": 1,
+        "package_stop_per_cycle_required": True,
+        "post_apply_verification_before_next_cycle_required": True,
+    }
+    assert verify_payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_os_activation_verification_green_ready_for_operator_load_or_install",
+        "blocked_reasons": [],
+    }
+
+    tampered = json.loads(definition_path.read_text(encoding="utf-8"))
+    tampered["max_candidates_per_cycle"] = 2
+    definition_path.write_text(json.dumps(tampered), encoding="utf-8")
+    red_verify_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-verify",
+            "--os-activation-boundary",
+            str(output_path),
+            "--activation-definition",
+            str(definition_path),
+            "--expected-scheduler-command",
+            scheduler_command,
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_verify_result.returncode == 0, red_verify_result.stderr
+    red_verify_payload = json.loads(red_verify_result.stdout)
+    assert red_verify_payload["quality_gate"]["pass"] is False
+    assert "os_activation_definition_sha_mismatch" in red_verify_payload["quality_gate"]["blocked_reasons"]
+    assert "os_activation_definition_max_candidates_not_one" in red_verify_payload["quality_gate"]["blocked_reasons"]
+
+
+
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,
 ) -> None:
