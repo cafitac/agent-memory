@@ -1,28 +1,33 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:51 KST
+Last updated: 2026-05-18 16:08 KST
 
-## Current checkpoint: actual-data storage/runtime dogfood plus plugin-aware storage-health
+## Current checkpoint: decay-risk review pass connected isolated approved memories
 
-- Ran actual-data checks against `/Users/reddit/.agent-memory/memory.db` and `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`. Live storage health is clean: `status=healthy`, warnings `[]`, query-preview/hash/JSON/linkage/ordinary-trace/remember-intent invariants all pass, with roughly `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`, `facts=9`, `procedures=1`, `episodes=1`.
-- Found and fixed an observability mismatch: `dogfood storage-health` still checked only shell-hook markers even though personal-oss now uses the Hermes plugin. Storage-health now reuses the same Hermes doctor setup logic and exposes `hook_occurrences`, `plugin_enabled`, `integration_installed`, `duplicate_context_injection_risk`, and `doctor_status`.
-- Live storage-health now agrees with doctor/plugin reality: `doctor_status=ok`, `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `agent_memory_hook_present=false`, and `duplicate_context_injection_risk=false`.
-- Real Hermes smoke under gpt-5.5 passed: `hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_LIVE_STORAGE_FLOW_OK'` returned `AGENT_MEMORY_LIVE_STORAGE_FLOW_OK` and advanced the DB by `+1 retrieval_observation`, `+2 memory_activations`, and `+1 experience_trace`. The latest trace is metadata-only (`summary=null`, `candidate_policy=evidence_only`, `auto_approved=false`) and links to the retrieval observation; `query_preview` remains null.
-- Last-24h trace quality is healthy for structure: observation/trace coverage `1.0`, activation trace-link coverage `1.0`, no linkage gap, no trace-quality warnings. Empty retrieval ratio is about `0.336`, which remains an observation target but not a broken storage path.
-- Scheduled dry-run is still correctly conservative: read-only/no mutation/privacy-safe, but quality gate is red on `decay_risk_above_threshold` with 7 aggregate decay-risk candidates. This means storage/runtime are working, while review-quality cleanup/relationship decisions still need human-gated follow-up before any broader G4/default authority.
-- Validation after the fix: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full suite `435 passed, 1 xfailed`.
+- Inspected the live decay-risk set with read-only `activations decay-risk-report`, graph inspection, review history, and aggregate SQL. The latest advisory set has 8 refs after new dogfood activity: `fact:5` remains a real evidence-collection candidate; the other 7 are monitor-only after review.
+- Created a live DB backup before relation review: `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db`, SHA-256 `cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`.
+- Added three explicit reviewed semantic relation edges for approved memories that were frequently activated but graph-isolated:
+  - `fact:4 --reviewed_as_safety_gate--> concept:g4-safety-gates`
+  - `procedure:1 --reviewed_as_shadow_corpus_component--> concept:live-mixed-retrieval-shadow-corpus`
+  - `episode:1 --reviewed_as_shadow_corpus_checkpoint--> concept:live-mixed-retrieval-shadow-corpus`
+- No memory status, retrieval ranking, default prompt surface, fact/procedure/episode rows, or automation authority was changed. The relation review only made intentional approved memories explainable in the semantic graph.
+- Post-review decay diagnostics improved: `low_connectivity` max dropped to `0.0`, all 8 candidates are now connected, and hints are `collect_more_activation_evidence_before_decay_action=1` plus `monitor_only_no_mutation=7`.
+- `dogfood scheduled-dry-run` still correctly stays red on `decay_risk_above_threshold` because the configured threshold is strict (`--max-decay-risk 0`) and advisory candidates still exist. This is now mostly an operator UX/decision-threshold issue, not a storage/Hermes/runtime issue.
+- Ran three additional real Hermes normal-turn marker smokes. They succeeded and advanced the live DB by `+4 retrieval_observations`, `+7 memory_activations`, and `+4 experience_traces`; relation count stayed unchanged during those smokes.
+- Latest live storage-health: `status=healthy`, warnings `[]`, `retrieval_observations=2950`, `memory_activations=5760`, `experience_traces=2950`, plugin enabled, hook occurrences `0`, duplicate risk `false`, doctor status `ok`.
+- Latest 24h trace-quality: observation/trace coverage `1.0`, activation count `1491`, empty retrieval ratio `0.3251`, warnings `[]`, recommendation `consider_g4_plan`.
 
 Current estimate:
 
 - Scoped local human-brain-like memory lifecycle remains effectively 100% at the bounded/review-gated/local-first boundary.
-- Operational confidence is now about 97%: actual live data flow, Hermes plugin runtime, privacy-safe storage, and linkage invariants are verified; the remaining gap is review-quality decay/noise resolution and longer trend evidence, not missing storage mechanics.
+- Operational confidence is about 98% now: live storage/runtime/linkage/plugin behavior is verified, isolated approved memory graph gaps were reviewed/connected, and decay risk has narrowed to one evidence-collection candidate plus monitor-only refs.
 
 Recommended next work now:
 
-1. Commit/push the plugin-aware storage-health fix and updated docs, then watch CI.
-2. Inspect the 7 aggregate decay-risk candidates via read-only decay/review/graph reports and either add reviewed relations for intentionally isolated approved memories or keep collecting evidence where weak activation is expected.
-3. Continue normal-turn Hermes dogfood and compare scheduled-dry-run artifacts; treat sustained empty/noise growth or new privacy/linkage warnings as blockers.
+1. Continue normal-turn dogfood over another observation window and check whether `fact:5` gains sufficient activation evidence or remains weak.
+2. Add a separate read-only scheduled-dry-run decision refinement if desired: monitor-only decay refs should probably not keep the same operator severity as `collect_more_activation_evidence` candidates, but this should be RED-tested and should not loosen mutation authority.
+3. Compare scheduled-dry-run artifacts over time and block on any new privacy/linkage/storage warnings or rising empty retrieval.
 4. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
 ## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard

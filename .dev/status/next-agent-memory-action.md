@@ -1,18 +1,23 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:51 KST
+Last updated: 2026-05-18 16:08 KST
 
-## Current checkpoint: actual-data storage/runtime dogfood plus plugin-aware storage-health
+## Current checkpoint: decay-risk review pass connected isolated approved memories
 
-- Actual live DB health is good: `dogfood storage-health /Users/reddit/.agent-memory/memory.db --hermes-config /Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports `status=healthy`, no warnings, clean query-preview/hash/JSON/linkage/ordinary-trace/remember-intent invariants, and live counts around `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`.
-- Hermes integration is confirmed plugin-only and not duplicated: storage-health now reports `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `duplicate_context_injection_risk=false`, and `doctor_status=ok`.
-- Real Hermes smoke returned `AGENT_MEMORY_LIVE_STORAGE_FLOW_OK` and wrote exactly the intended evidence shape: one retrieval observation, linked metadata-only turn trace, and retrieved-memory activations; no raw query preview was stored.
-- Data-quality gate is structurally green for storage/linkage, but scheduled dry-run is intentionally red on `decay_risk_above_threshold` with 7 aggregate candidates. Next safe work should inspect/resolve those decay-risk candidates through review/relations or continued dogfood, not widen mutation authority.
-- Local validation is green after the plugin-aware storage-health fix: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full suite `435 passed, 1 xfailed`.
+- Completed the next live review pass. Decay-risk inspection found 8 advisory refs after the latest dogfood, not a storage failure: `fact:5` needs more activation evidence; the remaining 7 are monitor-only after review.
+- A live DB backup was created before relation review: `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db` (`cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`).
+- Added reviewed semantic relation edges for the three isolated but valid approved memories: G4 safety gate fact -> safety-gate concept, shadow-corpus procedure -> shadow-corpus concept, and shadow-corpus episode -> shadow-corpus concept. This improved graph connectivity without changing memory statuses, default retrieval, ranking, or automation authority.
+- Post-review decay diagnostics: `low_connectivity=0.0`, `connected_memory=8`, `collect_more_activation_evidence_before_decay_action=1`, `monitor_only_no_mutation=7`. The remaining actionable item is evidence collection/monitoring for `fact:5`.
+- Normal-turn Hermes dogfood still works: three marker turns succeeded and advanced observations/activations/traces together. Latest storage-health is healthy with no warnings; latest 24h trace quality has coverage `1.0`, empty retrieval ratio `0.3251`, and no warnings.
 - Keep mutation authority unchanged: no broad ordinary auto-approval, unattended/background apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
 
-Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+Next safe action:
+
+1. Continue normal-turn dogfood until `fact:5` either gains enough fresh activation evidence or remains weak across another observation window.
+2. Compare scheduled-dry-run artifacts over time; treat new blocker names, privacy/linkage warnings, or rising empty retrieval as blockers.
+3. Do not lower the strict decay threshold or green-light G4/default apply merely because the remaining candidates are monitor-only; add a separate read-only threshold/decision refinement slice if the operator UX should stop flagging monitor-only refs as hard blockers.
+
 
 ## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard
 

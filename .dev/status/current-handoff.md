@@ -1,17 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 15:51 KST
+Last updated: 2026-05-18 16:08 KST
 
-## Current checkpoint: live storage-health now recognizes Hermes plugin-only runtime
+## Current checkpoint: decay-risk review pass connected isolated approved memories
 
-- Continued actual-data dogfood against `/Users/reddit/.agent-memory/memory.db` and personal-oss Hermes config. `dogfood storage-health` is healthy with no warnings; live counts are now `retrieval_observations=2929+`, `memory_activations=5699+`, `experience_traces=2929+`, `facts=9`, `procedures=1`, and `episodes=1`.
-- Fixed an operator-visibility gap found during dogfood: `dogfood storage-health` previously reported only shell-hook markers, so the current valid plugin-only setup looked like `agent_memory_hook_present=false` / `configured_db_path_present=false` with no explicit plugin signal. It now reuses the Hermes doctor logic and reports `plugin_enabled`, `integration_installed`, `hook_occurrences`, `duplicate_context_injection_risk`, and `doctor_status`.
-- Live personal-oss storage-health now reports `doctor_status=ok`, `plugin_enabled=true`, `integration_installed=true`, `hook_occurrences=0`, `agent_memory_hook_present=false`, and `duplicate_context_injection_risk=false`.
-- Real Hermes turn smoke passed: `hermes chat -Q -q 'Reply with exactly: AGENT_MEMORY_LIVE_STORAGE_FLOW_OK'` returned the marker and advanced the live DB by `+1 retrieval_observation`, `+2 memory_activations`, and `+1 experience_trace`. Latest rows link observation `5189` to trace `4472`, record model `gpt-5.5`, keep `summary=null`, and keep `query_preview=null`.
-- Trace quality over the last 24h is structurally healthy: 469+ observations, 469+ traces, 1.0 observation/trace coverage, 1.0 activation trace-link coverage, no linkage gap, and no trace-quality warnings. Empty retrieval ratio remains about 0.336 over 24h, but trace-quality recommendation is still `consider_g4_plan`.
-- Scheduled dry-run remains correctly conservative: read-only/no mutation/privacy-safe, but quality gate is red on `decay_risk_above_threshold` with 7 aggregate decay-risk candidates. This is an expected review signal, not a storage/runtime failure.
-- Validation complete: focused storage-health tests `3 passed`; full CLI suite `245 passed, 1 xfailed`; full test suite `435 passed, 1 xfailed`.
+- Followed up the live storage/Hermes dogfood by inspecting the decay-risk candidates with read-only decay, graph, history, and SQL aggregate checks. The post-review decay set contains 8 refs: 1 true evidence-collection candidate and 7 monitor-only refs.
+- Before mutation, created live DB backup `/Users/reddit/.agent-memory/backups/manual-decay-relation-review-20260518-160554.db` with SHA-256 `cfef7424b5d4fbb7a08c79f39d82b6b1c06bc05c553ce8e051505cc3346354ec`.
+- Added three reviewed semantic relation edges for approved memories that were frequently activated but graph-isolated: `fact:4 -> concept:g4-safety-gates`, `procedure:1 -> concept:live-mixed-retrieval-shadow-corpus`, and `episode:1 -> concept:live-mixed-retrieval-shadow-corpus`. No statuses, retrieval ranking, facts/procedures/episodes, or automation authority were changed.
+- Post-review decay report now has `low_connectivity=0.0`, all candidates are connected, and resolution hints changed to `collect_more_activation_evidence_before_decay_action=1` plus `monitor_only_no_mutation=7`. `fact:5` remains the only real follow-up candidate due to low recent activation evidence.
+- Scheduled dry-run remains intentionally conservative: read-only/no mutation/privacy-safe, but `decay_risk_above_threshold` remains red because the strict threshold is `--max-decay-risk 0` and advisory candidates still exist. This is expected and should not authorize deletion or broad G4/default apply.
+- Ran three additional real Hermes normal-turn dogfood smokes; all returned markers successfully and advanced the live DB by `+4 retrieval_observations`, `+7 memory_activations`, and `+4 experience_traces`. Relation count stayed unchanged during dogfood.
+- Latest storage-health remains healthy with no warnings: `retrieval_observations=2950`, `memory_activations=5760`, `experience_traces=2950`, plugin enabled, hook occurrences `0`, duplicate risk `false`, doctor status `ok`.
+- Latest 24h trace-quality remains green for structure: 483 observations, 483 traces, 1491 activations, observation/trace coverage `1.0`, empty retrieval ratio `0.3251`, no warnings, recommendation `consider_g4_plan`.
 
 Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 
