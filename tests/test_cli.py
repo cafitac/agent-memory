@@ -19949,6 +19949,143 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_ac
 
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verifier_requires_green_packet(
+    tmp_path: Path,
+) -> None:
+    activation_packet = tmp_path / "activation-packet.json"
+    output_path = tmp_path / "activation-packet-verification.json"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    activation_packet.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "ordinary_conversation_auto_approval": False,
+                "activation_inputs": {
+                    "path": str(tmp_path / "preflight.json"),
+                    "sha256": "b" * 64,
+                    "recurrence_install_preflight_quality_gate_pass": True,
+                    "activation_window_policy_sha256": hashlib.sha256(b"window").hexdigest(),
+                    "ci_watchdog_policy_sha256": hashlib.sha256(b"ci").hexdigest(),
+                    "rollback_policy_sha256": hashlib.sha256(b"rollback").hexdigest(),
+                },
+                "activation_packet": {
+                    "ready_for_final_start_slice": True,
+                    "background_or_cron_start_allowed": False,
+                    "starts_background_or_cron": False,
+                    "requires_exact_final_start_approval": True,
+                    "requires_ci_health_watch": True,
+                    "requires_rollback_evidence": True,
+                    "requires_stale_evidence_prevention": True,
+                    "requires_package_stop_per_cycle": True,
+                    "requires_post_apply_verification_per_cycle": True,
+                    "max_candidates_per_cycle": 1,
+                },
+                "automation_authority": {
+                    "executes_scheduler_cycle": False,
+                    "executes_apply": False,
+                    "writes_scheduler_config": False,
+                    "installs_background_or_cron": False,
+                    "starts_background_or_cron": False,
+                    "enables_unattended_default_authority": False,
+                    "readiness_only": True,
+                },
+                "quality_gate": {
+                    "pass": True,
+                    "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_green_ready_for_final_start_slice_only",
+                    "blocked_reasons": [],
+                },
+                "forbidden_authority": {
+                    "ordinary_conversation_auto_approval": False,
+                    "broad_background_apply_allowed": False,
+                    "default_background_auto_approval_allowed": False,
+                    "unattended_default_apply_allowed": False,
+                    "default_ranking_mutated": False,
+                    "collapse_delete_apply_allowed": False,
+                    "telemetry_reset_apply_allowed": False,
+                    "unreviewed_promotion_allowed": False,
+                    "repeated_apply_without_new_approval_allowed": False,
+                },
+                "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify",
+            "--activation-packet",
+            str(activation_packet),
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification"
+    assert payload["activation_packet_verification"] == {
+        "activation_packet_green": True,
+        "hash_bound_activation_packet": True,
+        "ready_for_final_start_slice": True,
+        "background_or_cron_start_still_blocked": True,
+        "exact_final_start_approval_required": True,
+        "per_cycle_post_apply_verification_required": True,
+        "package_stop_per_cycle_required": True,
+        "max_candidates_per_cycle": 1,
+    }
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "writes_scheduler_config": False,
+        "installs_background_or_cron": False,
+        "starts_background_or_cron": False,
+        "enables_unattended_default_authority": False,
+        "readiness_only": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification_green_ready_for_exact_final_start_only",
+        "blocked_reasons": [],
+    }
+
+    tampered = json.loads(activation_packet.read_text(encoding="utf-8"))
+    tampered["automation_authority"]["starts_background_or_cron"] = True
+    activation_packet.write_text(json.dumps(tampered), encoding="utf-8")
+    red_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify",
+            "--activation-packet",
+            str(activation_packet),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_result.returncode == 0, red_result.stderr
+    red_payload = json.loads(red_result.stdout)
+    assert red_payload["quality_gate"]["pass"] is False
+    assert "activation_packet_authority_starts_background_or_cron_not_false" in red_payload["quality_gate"]["blocked_reasons"]
+
+
+
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,
 ) -> None:

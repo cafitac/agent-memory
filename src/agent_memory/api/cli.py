@@ -11878,6 +11878,137 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activa
 
 
 
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    packet_path = args.activation_packet.expanduser().resolve(strict=False)
+    packet_payload, packet_artifact = _read_json_artifact_summary(packet_path)
+    packet_payload = packet_payload or {}
+    packet_quality = packet_payload.get("quality_gate", {}) if isinstance(packet_payload.get("quality_gate"), dict) else {}
+    packet = packet_payload.get("activation_packet", {}) if isinstance(packet_payload.get("activation_packet"), dict) else {}
+    packet_authority = (
+        packet_payload.get("automation_authority", {})
+        if isinstance(packet_payload.get("automation_authority"), dict)
+        else {}
+    )
+    packet_forbidden = (
+        packet_payload.get("forbidden_authority", {})
+        if isinstance(packet_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    packet_privacy = packet_payload.get("privacy", {}) if isinstance(packet_payload.get("privacy"), dict) else {}
+
+    blocked_reasons: list[str] = []
+    if packet_artifact.get("error") is not None:
+        blocked_reasons.append("activation_packet_unreadable")
+    if packet_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet":
+        blocked_reasons.append("activation_packet_kind_invalid")
+    if packet_payload.get("read_only") is not True or packet_payload.get("mutated") is not False:
+        blocked_reasons.append("activation_packet_not_read_only")
+    if packet_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("activation_packet_ordinary_auto_approval_enabled")
+    if packet_quality.get("pass") is not True:
+        blocked_reasons.append("activation_packet_not_green")
+    if packet_quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_green_ready_for_final_start_slice_only":
+        blocked_reasons.append("activation_packet_decision_invalid")
+    if packet.get("ready_for_final_start_slice") is not True:
+        blocked_reasons.append("activation_packet_not_ready_for_final_start")
+    if packet.get("background_or_cron_start_allowed") is not False:
+        blocked_reasons.append("activation_packet_background_or_cron_start_allowed")
+    if packet.get("starts_background_or_cron") is not False:
+        blocked_reasons.append("activation_packet_starts_background_or_cron")
+    if packet.get("requires_exact_final_start_approval") is not True:
+        blocked_reasons.append("activation_packet_missing_exact_final_start_approval")
+    if packet.get("requires_ci_health_watch") is not True:
+        blocked_reasons.append("activation_packet_missing_ci_health_watch")
+    if packet.get("requires_rollback_evidence") is not True:
+        blocked_reasons.append("activation_packet_missing_rollback_evidence")
+    if packet.get("requires_stale_evidence_prevention") is not True:
+        blocked_reasons.append("activation_packet_missing_stale_evidence_prevention")
+    if packet.get("requires_package_stop_per_cycle") is not True:
+        blocked_reasons.append("activation_packet_missing_package_stop_per_cycle")
+    if packet.get("requires_post_apply_verification_per_cycle") is not True:
+        blocked_reasons.append("activation_packet_missing_post_apply_verification_per_cycle")
+    if packet.get("max_candidates_per_cycle") != 1:
+        blocked_reasons.append("activation_packet_max_candidates_per_cycle_not_one")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "writes_scheduler_config",
+        "installs_background_or_cron",
+        "starts_background_or_cron",
+        "enables_unattended_default_authority",
+    ):
+        if packet_authority.get(key) is not False:
+            blocked_reasons.append(f"activation_packet_authority_{key}_not_false")
+    if packet_authority.get("readiness_only") is not True:
+        blocked_reasons.append("activation_packet_authority_not_readiness_only")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if packet_forbidden.get(key) is not False:
+            blocked_reasons.append(f"activation_packet_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(packet_privacy):
+        blocked_reasons.append("activation_packet_privacy_not_ref_safe")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    gate_pass = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "activation_packet_artifact": {
+            **packet_artifact,
+            "quality_gate_pass": packet_quality.get("pass") is True,
+        },
+        "activation_packet_verification": {
+            "activation_packet_green": packet_quality.get("pass") is True,
+            "hash_bound_activation_packet": packet_artifact.get("report_sha256") is not None,
+            "ready_for_final_start_slice": packet.get("ready_for_final_start_slice") is True,
+            "background_or_cron_start_still_blocked": packet.get("background_or_cron_start_allowed") is False
+            and packet.get("starts_background_or_cron") is False,
+            "exact_final_start_approval_required": packet.get("requires_exact_final_start_approval") is True,
+            "per_cycle_post_apply_verification_required": packet.get("requires_post_apply_verification_per_cycle") is True,
+            "package_stop_per_cycle_required": packet.get("requires_package_stop_per_cycle") is True,
+            "max_candidates_per_cycle": packet.get("max_candidates_per_cycle"),
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "writes_scheduler_config": False,
+            "installs_background_or_cron": False,
+            "starts_background_or_cron": False,
+            "enables_unattended_default_authority": False,
+            "readiness_only": True,
+        },
+        "quality_gate": {
+            "pass": gate_pass,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification_green_ready_for_exact_final_start_only"
+            if gate_pass
+            else "ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verification_red_keep_final_start_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "implement_exact_final_start_boundary_with_fail_closed_runtime_guards"
+        if gate_pass
+        else "fix_activation_packet_before_final_start",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -24001,6 +24132,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify",
+        help="Read-only verifier over the activation packet before any exact final background/cron start.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_parser.add_argument(
+        "--activation-packet", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -25659,6 +25800,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_activation_packet_verify_payload(args),
                     indent=2,
                 )
             )
