@@ -11579,6 +11579,154 @@ def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config
     return payload
 
 
+def _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_payload(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.approval_phrase != "preflight-recurrence-install-default-automation-scheduler-v1":
+        raise ValueError("ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_approval_phrase_mismatch")
+    if not args.cadence_policy.strip():
+        raise ValueError("dogfood recurrence-install-preflight --cadence-policy is required")
+    if not args.kill_switch_policy.strip():
+        raise ValueError("dogfood recurrence-install-preflight --kill-switch-policy is required")
+
+    post_run_path = args.post_run_verification.expanduser().resolve(strict=False)
+    post_run_payload, post_run_artifact = _read_json_artifact_summary(post_run_path)
+    post_run_payload = post_run_payload or {}
+    post_run_quality = post_run_payload.get("quality_gate", {}) if isinstance(post_run_payload.get("quality_gate"), dict) else {}
+    post_run_checks = (
+        post_run_payload.get("post_run_verification", {})
+        if isinstance(post_run_payload.get("post_run_verification"), dict)
+        else {}
+    )
+    post_run_preflight = (
+        post_run_payload.get("recurrence_install_preflight", {})
+        if isinstance(post_run_payload.get("recurrence_install_preflight"), dict)
+        else {}
+    )
+    post_run_authority = (
+        post_run_payload.get("automation_authority", {})
+        if isinstance(post_run_payload.get("automation_authority"), dict)
+        else {}
+    )
+    post_run_forbidden = (
+        post_run_payload.get("forbidden_authority", {})
+        if isinstance(post_run_payload.get("forbidden_authority"), dict)
+        else {}
+    )
+    post_run_privacy = (
+        post_run_payload.get("privacy", {}) if isinstance(post_run_payload.get("privacy"), dict) else {}
+    )
+
+    blocked_reasons: list[str] = []
+    if post_run_artifact.get("error") is not None:
+        blocked_reasons.append("post_run_verification_unreadable")
+    if post_run_payload.get("kind") != "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification":
+        blocked_reasons.append("post_run_verification_kind_invalid")
+    if post_run_payload.get("read_only") is not True or post_run_payload.get("mutated") is not False:
+        blocked_reasons.append("post_run_verification_not_read_only")
+    if post_run_payload.get("ordinary_conversation_auto_approval") is not False:
+        blocked_reasons.append("post_run_ordinary_auto_approval_enabled")
+    if post_run_quality.get("pass") is not True:
+        blocked_reasons.append("post_run_verification_not_green")
+    if post_run_quality.get("decision") != "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification_green_ready_for_recurrence_install_preflight_only":
+        blocked_reasons.append("post_run_verification_decision_invalid")
+    for key in (
+        "one_cycle_execute_green",
+        "scheduler_one_shot_green",
+        "scheduler_one_shot_hash_matches",
+        "scheduler_package_green",
+        "evidence_rollup_green",
+        "source_copy_boundary_verified",
+        "stopped_after_one_package",
+    ):
+        if post_run_checks.get(key) is not True:
+            blocked_reasons.append(f"post_run_check_{key}_missing")
+    if post_run_preflight.get("ready_for_preflight_packet") is not True:
+        blocked_reasons.append("post_run_not_ready_for_preflight_packet")
+    if post_run_preflight.get("background_or_cron_install_allowed") is not False:
+        blocked_reasons.append("post_run_preflight_background_or_cron_allowed")
+    if post_run_preflight.get("unattended_default_authority_allowed") is not False:
+        blocked_reasons.append("post_run_preflight_unattended_authority_allowed")
+    if post_run_preflight.get("requires_exact_install_approval") is not True:
+        blocked_reasons.append("post_run_preflight_missing_exact_install_approval")
+    if post_run_preflight.get("requires_fresh_post_run_verification") is not True:
+        blocked_reasons.append("post_run_preflight_missing_fresh_verification")
+    for key in (
+        "executes_scheduler_cycle",
+        "executes_apply",
+        "installs_background_or_cron",
+        "enables_unattended_default_authority",
+        "writes_scheduler_config",
+    ):
+        if post_run_authority.get(key) is not False:
+            blocked_reasons.append(f"post_run_authority_{key}_not_false")
+    if post_run_authority.get("readiness_only") is not True:
+        blocked_reasons.append("post_run_authority_not_readiness_only")
+    for key in (
+        "ordinary_conversation_auto_approval",
+        "broad_background_apply_allowed",
+        "default_background_auto_approval_allowed",
+        "unattended_default_apply_allowed",
+        "default_ranking_mutated",
+        "collapse_delete_apply_allowed",
+        "telemetry_reset_apply_allowed",
+        "unreviewed_promotion_allowed",
+        "repeated_apply_without_new_approval_allowed",
+    ):
+        if post_run_forbidden.get(key) is not False:
+            blocked_reasons.append(f"post_run_forbidden_authority_{key}_invalid")
+    if not _privacy_flags_are_ref_safe(post_run_privacy):
+        blocked_reasons.append("post_run_privacy_not_ref_safe")
+
+    blocked_unique = sorted(set(blocked_reasons))
+    gate_pass = not blocked_unique
+    payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "preflight_inputs": {
+            **post_run_artifact,
+            "post_run_verification_quality_gate_pass": post_run_quality.get("pass") is True,
+            "cadence_policy_sha256": hashlib.sha256(args.cadence_policy.strip().encode("utf-8")).hexdigest(),
+            "kill_switch_policy_sha256": hashlib.sha256(args.kill_switch_policy.strip().encode("utf-8")).hexdigest(),
+        },
+        "recurrence_install_gate": {
+            "ready_for_activation_packet": gate_pass,
+            "installs_background_or_cron": False,
+            "activation_allowed": False,
+            "requires_exact_activation_approval": True,
+            "requires_ci_health_watch": True,
+            "requires_rollback_evidence": True,
+            "requires_stale_evidence_prevention": True,
+            "max_candidates_per_cycle": 1,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": False,
+            "executes_apply": False,
+            "writes_scheduler_config": False,
+            "installs_background_or_cron": False,
+            "enables_unattended_default_authority": False,
+            "readiness_only": True,
+        },
+        "quality_gate": {
+            "pass": gate_pass,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_green_ready_for_activation_packet_only"
+            if gate_pass
+            else "ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_red_keep_activation_blocked",
+            "blocked_reasons": blocked_unique,
+        },
+        "forbidden_authority": _default_automation_ref_safe_forbidden_authority(),
+        "privacy": _default_automation_ref_safe_privacy_flags(),
+        "recommended_next_step": "build_exact_approved_activation_packet_without_starting_background_or_cron"
+        if gate_pass
+        else "fix_post_run_verification_before_recurrence_install_preflight",
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.policy != _ORDINARY_TURN_DEFAULT_AUTOMATION_POLICY:
         raise ValueError("ordinary_turn_default_automation_freshness_boundary_smoke_policy_mismatch")
@@ -23661,6 +23809,25 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification_parser.add_argument(
         "--output", type=Path
     )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser = dogfood_subparsers.add_parser(
+        "ordinary-turn-default-automation-enabled-recurring-scheduler-config-recurrence-install-preflight",
+        help="Read-only recurrence install preflight packet over a green post-run verifier; does not install background/cron.",
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser.add_argument(
+        "--post-run-verification", type=Path, required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser.add_argument(
+        "--approval-phrase", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser.add_argument(
+        "--cadence-policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser.add_argument(
+        "--kill-switch-policy", required=True
+    )
+    dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_parser.add_argument(
+        "--output", type=Path
+    )
     dogfood_ordinary_turn_default_automation_freshness_boundary_smoke_parser = dogfood_subparsers.add_parser(
         "ordinary-turn-default-automation-freshness-boundary-smoke",
         help="Run a copy-DB smoke for the default automation freshness boundary; live/source DB must remain unchanged.",
@@ -25303,6 +25470,14 @@ def main() -> None:
             print(
                 json.dumps(
                     _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification_payload(args),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "ordinary-turn-default-automation-enabled-recurring-scheduler-config-recurrence-install-preflight":
+            print(
+                json.dumps(
+                    _dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_recurrence_install_preflight_payload(args),
                     indent=2,
                 )
             )
