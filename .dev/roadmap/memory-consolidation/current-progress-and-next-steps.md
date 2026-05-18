@@ -1,7 +1,19 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:13 KST
+Last updated: 2026-05-18 11:23 KST
+
+## Current checkpoint: enabled recurring scheduler activation packet verification
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify`.
+- It consumes the green activation packet artifact and verifies it as read-only/hash-bound evidence for the exact final start boundary.
+- It preserves `starts_background_or_cron=false`, `background_or_cron_start_allowed=false`, exact final start approval, package-stop per cycle, post-apply verification per cycle, and max one candidate per cycle.
+- It still does not run the scheduler, apply memory, write scheduler config, install/start background/cron, or grant unattended/default authority.
+- Validation complete: focused activation packet verifier `1 passed`; activation/recurrence/post-run/execute/smoke corridor `6 passed, 234 deselected`; ordinary-turn default automation corridor `48 passed, 192 deselected`; full suite `422 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.9999997%+.
+- Next safe slice: final exact start boundary that consumes this verifier with fail-closed runtime guards; actual background/cron start remains separately exact-gated.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-activation-packet-verification.md`
 
 ## Current checkpoint: enabled recurring scheduler activation packet
 
