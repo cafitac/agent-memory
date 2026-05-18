@@ -19429,6 +19429,204 @@ def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_co
 
 
 
+def test_dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification_hardens_recurrence_preflight(
+    tmp_path: Path,
+) -> None:
+    one_shot_output = tmp_path / "scheduler-one-shot.json"
+    execute_output = tmp_path / "enabled-one-cycle-execute.json"
+    verifier_output = tmp_path / "one-cycle-post-run-verification.json"
+    env = {**os.environ, "PYTHONPATH": "src"}
+    evidence_rollup = tmp_path / "ordinary-turn-default-automation-evidence-rollup.json"
+    evidence_rollup.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_ordinary_turn_default_automation_evidence_rollup",
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {"raw_report_included": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    one_shot_payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_scheduler_one_shot",
+        "read_only": False,
+        "mutated": True,
+        "db_approval_mode": "copy",
+        "source_db_mutated": False,
+        "copy_db_mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "scheduler_status": {"quality_gate_pass": True, "ready_for_next_explicit_scheduler_cycle": True},
+        "scheduler_integration": {"quality_gate_pass": True, "selected_trace_ref": "experience_trace:42"},
+        "scheduler_package": {
+            "quality_gate_pass": True,
+            "evidence_rollup_path": str(evidence_rollup),
+            "evidence_rollup_quality_gate_pass": True,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": True,
+            "executes_apply": True,
+            "max_scheduler_cycles": 1,
+            "requires_status_green": True,
+            "requires_exact_local_schedule_approval": True,
+            "enables_unattended_default_authority": False,
+            "background_or_recurring_schedule_enabled": False,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_scheduler_one_shot_ran_copy_cycle_packaged_and_stopped",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+    }
+    one_shot_output.write_text(json.dumps(one_shot_payload), encoding="utf-8")
+    execute_payload = {
+        "kind": "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute",
+        "read_only": False,
+        "mutated": True,
+        "default_retrieval_unchanged": True,
+        "ordinary_conversation_auto_approval": False,
+        "one_cycle_smoke": {"quality_gate_pass": True, "ready": True},
+        "scheduler_one_shot": {
+            "path": str(one_shot_output),
+            "sha256": hashlib.sha256(one_shot_output.read_bytes()).hexdigest(),
+            "quality_gate_pass": True,
+            "db_approval_mode": "copy",
+            "source_db_mutated": False,
+            "copy_db_mutated": True,
+            "scheduler_package_quality_gate_pass": True,
+            "evidence_rollup_quality_gate_pass": True,
+            "selected_trace_ref": "experience_trace:42",
+        },
+        "execution_boundary": {
+            "smoke_gate_consumed": True,
+            "scheduler_one_shot_executed": True,
+            "scheduler_package_collected": True,
+            "stopped_after_one_package": True,
+            "post_apply_verification_required_before_next_cycle": True,
+            "background_or_cron_enabled": False,
+        },
+        "automation_authority": {
+            "executes_scheduler_cycle": True,
+            "executes_apply": True,
+            "max_scheduler_cycles": 1,
+            "requires_enabled_one_cycle_smoke_green": True,
+            "requires_status_green": True,
+            "requires_exact_local_schedule_approval": True,
+            "enables_unattended_default_authority": False,
+            "background_or_recurring_schedule_enabled": False,
+        },
+        "quality_gate": {
+            "pass": True,
+            "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_execute_green_ran_one_shot_packaged_and_stopped",
+            "blocked_reasons": [],
+        },
+        "forbidden_authority": {
+            "ordinary_conversation_auto_approval": False,
+            "broad_background_apply_allowed": False,
+            "default_background_auto_approval_allowed": False,
+            "unattended_default_apply_allowed": False,
+            "default_ranking_mutated": False,
+            "collapse_delete_apply_allowed": False,
+            "telemetry_reset_apply_allowed": False,
+            "unreviewed_promotion_allowed": False,
+            "repeated_apply_without_new_approval_allowed": False,
+        },
+        "privacy": {"raw_report_included": False, "raw_trace_summary_included": False},
+    }
+    execute_output.write_text(json.dumps(execute_payload), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-post-run-verification",
+            "--one-cycle-execute",
+            str(execute_output),
+            "--output",
+            str(verifier_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(verifier_output.read_text(encoding="utf-8")) == payload
+    assert payload["kind"] == "dogfood_ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["post_run_verification"] == {
+        "one_cycle_execute_green": True,
+        "scheduler_one_shot_green": True,
+        "scheduler_one_shot_hash_matches": True,
+        "scheduler_package_green": True,
+        "evidence_rollup_green": True,
+        "source_copy_boundary_verified": True,
+        "stopped_after_one_package": True,
+    }
+    assert payload["recurrence_install_preflight"] == {
+        "ready_for_preflight_packet": True,
+        "background_or_cron_install_allowed": False,
+        "unattended_default_authority_allowed": False,
+        "requires_exact_install_approval": True,
+        "requires_fresh_post_run_verification": True,
+    }
+    assert payload["automation_authority"] == {
+        "executes_scheduler_cycle": False,
+        "executes_apply": False,
+        "installs_background_or_cron": False,
+        "enables_unattended_default_authority": False,
+        "writes_scheduler_config": False,
+        "readiness_only": True,
+    }
+    assert payload["quality_gate"] == {
+        "pass": True,
+        "decision": "ordinary_turn_default_automation_enabled_recurring_scheduler_config_one_cycle_post_run_verification_green_ready_for_recurrence_install_preflight_only",
+        "blocked_reasons": [],
+    }
+    assert payload["recommended_next_step"] == "build_recurrence_install_preflight_packet_without_installing_background_or_cron"
+
+    tampered = json.loads(execute_output.read_text(encoding="utf-8"))
+    tampered["automation_authority"]["background_or_recurring_schedule_enabled"] = True
+    execute_output.write_text(json.dumps(tampered), encoding="utf-8")
+    red_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-default-automation-enabled-recurring-scheduler-config-one-cycle-post-run-verification",
+            "--one-cycle-execute",
+            str(execute_output),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert red_result.returncode == 0, red_result.stderr
+    red_payload = json.loads(red_result.stdout)
+    assert red_payload["quality_gate"]["pass"] is False
+    assert "one_cycle_execute_background_or_recurring_enabled" in red_payload["quality_gate"]["blocked_reasons"]
+
+
+
 def test_dogfood_ordinary_turn_default_automation_scheduler_one_shot_history_rollup_proves_fresh_packaged_chain(
     tmp_path: Path,
 ) -> None:
