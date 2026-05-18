@@ -1,7 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 09:06 KST
+Last updated: 2026-05-18 09:31 KST
+
+## Current checkpoint: enabled recurring scheduler config validator
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-config-validate`.
+- It consumes a green enabled recurring scheduler config contract report and validates the contract fail-closed before any later materialization design.
+- It requires `target_state=enabled`, `recurring_scheduler_enabled=true`, `background_or_cron_enabled=false`, one candidate per cycle, and fresh-evidence/package-stop/post-apply/CI/rollback/kill-switch boundaries.
+- Tampered contracts are red if they enable background/cron, widen candidate count, allow config writes from the contract artifact, or drop required safety flags.
+- The command itself remains status-only/read-only: `read_only=true`, `mutated=false`, `executes_scheduler_cycle=false`, `executes_apply=false`, and `writes_scheduler_config=false`.
+- Validation so far: focused validator `1 passed`; enabled+disabled config corridor `6 passed, 227 deselected`; ordinary-turn default automation corridor `41 passed, 192 deselected`; full suite `415 passed, 1 xfailed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.999995%+.
+- Next safe slice: exact-approved enabled recurring scheduler config materializer; still no background/cron installation or unattended recurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-config-validator.md`
 
 ## Current checkpoint: enabled recurring scheduler config contract
 
