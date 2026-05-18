@@ -1,9 +1,30 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 14:48 KST
+Last updated: 2026-05-18 15:11 KST
 
-## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+
+- Continued live personal-oss Hermes plugin dogfood with five normal `hermes chat -Q -q` turns: no duplicate context was observed, the current path appears plugin-only, but one turn flagged the retrieved memory context as noisy. Treat noise as an ongoing observation target, not as a duplicate-hook regression.
+- Personal-oss doctor remains green: `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, `warnings=[]` for `/Users/reddit/.agent-memory/memory.db` and `/Users/reddit/.hermes/profiles/personal-oss/config.yaml`.
+- Latest activation report over 100 rows shows `candidate_activation_count=88`, `sentinel_or_empty_noise_count=12`, `ratio=0.12`, and `excluded_from_candidate_reports=true`.
+- New local slice adds `--hermes-config-path` to `dogfood live-evidence-bundle`, writes a read-only `hermes_doctor` artifact, and exposes rollup fields: `hermes_doctor_status`, `hermes_plugin_enabled`, `hermes_hook_occurrences`, and `hermes_duplicate_context_injection_risk`.
+- The live bundle quality gate now blocks on non-ok Hermes doctor status or duplicate context injection risk while preserving the existing read-only/no-mutation contract.
+- Live bundle smoke against personal-oss is green: `fixture_task_count=5`, `hermes_doctor_status=ok`, `hermes_plugin_enabled=true`, `hermes_hook_occurrences=0`, `hermes_duplicate_context_injection_risk=false`, and bundle quality gate pass.
+- Focused dogfood/doctor corridor passes locally, and the full suite is green: `433 passed, 1 xfailed`.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively 100% at the bounded/review-gated/local-first boundary.
+- Operational confidence is now slightly stronger because the live evidence bundle captures the runtime integration baseline instead of requiring a separate manual doctor check. Remaining work is push/CI and continued longer dogfood.
+
+Recommended next work now:
+
+1. Commit/push the live-evidence-bundle doctor artifact slice and watch CI.
+2. Continue normal-turn dogfood; if noise ratio keeps rising, investigate retrieval/noise filtering separately without widening mutation authority.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard
 
 - `825270b Harden consolidation telemetry reports` is pushed to `origin/develop`; GitHub Actions run `26015270138` completed successfully for commit `825270ba329540f36ccfc41dcfdf9882bcbf0fa8`.
 - Live personal-oss plugin dogfood now has a first explicit doctor signal for duplicate injection risk: `/Users/reddit/.agent-memory/memory.db` with `/Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports plugin enabled, shell hook absent, duplicate risk false, and no warnings.

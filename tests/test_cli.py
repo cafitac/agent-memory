@@ -15479,6 +15479,13 @@ def test_dogfood_live_evidence_bundle_chains_read_only_artifacts(tmp_path: Path)
         scope="project:live-evidence-bundle",
     )
     approve_memory(db_path=db_path, memory_type="episode", memory_id=episode.id)
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "plugins:\n"
+        "  enabled:\n"
+        "  - agent-memory\n"
+    )
     env = {**os.environ, "PYTHONPATH": "src"}
 
     result = subprocess.run(
@@ -15491,6 +15498,8 @@ def test_dogfood_live_evidence_bundle_chains_read_only_artifacts(tmp_path: Path)
             str(db_path),
             "--output-dir",
             str(output_dir),
+            "--hermes-config-path",
+            str(config_path),
             "--limit-per-type",
             "3",
             "--min-reliable-tasks",
@@ -15528,11 +15537,16 @@ def test_dogfood_live_evidence_bundle_chains_read_only_artifacts(tmp_path: Path)
     assert payload["rollup"]["rollback_checked_application_count"] == 0
     assert payload["rollup"]["audit_application_count"] == 0
     assert payload["rollup"]["audit_required_evidence_gate_pass"] is True
+    assert payload["rollup"]["hermes_doctor_status"] == "ok"
+    assert payload["rollup"]["hermes_plugin_enabled"] is True
+    assert payload["rollup"]["hermes_hook_occurrences"] == 0
+    assert payload["rollup"]["hermes_duplicate_context_injection_risk"] is False
     assert set(payload["artifacts"]) == {
         "live_retrieval_ranking_fixtures",
         "retrieval_ranking_experiment",
         "rollback_replay_validate",
         "trace_candidate_application_audit",
+        "hermes_doctor",
     }
     for artifact in payload["artifacts"].values():
         assert artifact["provided"] is True

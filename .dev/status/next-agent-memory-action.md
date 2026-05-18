@@ -1,9 +1,19 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 14:48 KST
+Last updated: 2026-05-18 15:11 KST
 
-## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+
+- Next operator-confidence slice is implemented locally: `dogfood live-evidence-bundle --hermes-config-path ...` now records a read-only Hermes doctor artifact and blocks the bundle if doctor status is not green or duplicate context injection risk appears.
+- Live personal-oss dogfood remains plugin-only/no-duplicate by doctor evidence: hook occurrences `0`, plugin enabled `true`, duplicate risk `false`.
+- Latest 100 activation rows show 12 empty/sentinel rows (`ratio=0.12`) and candidate filtering still excludes them from reinforcement reports.
+- Local focused dogfood/doctor corridor and full suite are green: `433 passed, 1 xfailed`. Next safe action is docs/code commit, push, and CI watch.
+- Keep mutation authority unchanged: no broad ordinary auto-approval, unattended/background apply, repeated apply without fresh evidence, default-ranking mutation, collapse/delete, telemetry reset, or unreviewed promotion.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard
 
 - `825270b` is pushed to `origin/develop`; CI run `26015270138` is green.
 - Live plugin dogfood confirms personal-oss is not double-injecting agent-memory through the old shell hook: doctor reports hook occurrences `0`, plugin enabled `true`, duplicate risk `false`.

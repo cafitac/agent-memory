@@ -14704,6 +14704,7 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
     ranking_report_path = output_dir / "retrieval-ranking-experiment.json"
     rollback_report_path = output_dir / "rollback-replay-validate.json"
     application_audit_report_path = output_dir / "trace-candidate-application-audit.json"
+    hermes_doctor_report_path = output_dir / "hermes-doctor.json"
 
     fixture_payload = _dogfood_live_retrieval_ranking_fixtures_payload(
         argparse.Namespace(
@@ -14745,11 +14746,30 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
             output=application_audit_report_path,
         )
     )
+    hermes_config_path = (args.hermes_config_path or (Path.home() / ".hermes" / "config.yaml")).expanduser().resolve(
+        strict=False
+    )
+    hermes_doctor_payload = diagnose_hermes_hook_setup(
+        HermesHookInstallOptions(
+            config_path=hermes_config_path,
+            snippet_options=HermesHookConfigSnippetOptions(db_path=db_path),
+        )
+    ).model_dump(mode="json")
+    hermes_doctor_payload.pop("recommended_command", None)
+    hermes_doctor_artifact_payload = {
+        "kind": "hermes_doctor_baseline",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "doctor": hermes_doctor_payload,
+    }
+    _write_json_report(hermes_doctor_report_path, hermes_doctor_artifact_payload)
 
     _, fixture_artifact = _read_json_artifact_summary(fixture_report_path)
     _, ranking_artifact = _read_json_artifact_summary(ranking_report_path)
     _, rollback_artifact = _read_json_artifact_summary(rollback_report_path)
     _, audit_artifact = _read_json_artifact_summary(application_audit_report_path)
+    _, hermes_doctor_artifact = _read_json_artifact_summary(hermes_doctor_report_path)
     fixture_reliability = fixture_payload.get("reliability_gate", {}) if isinstance(fixture_payload.get("reliability_gate"), dict) else {}
     fixture_retrieval = fixture_payload.get("retrieval_diagnostics", {}) if isinstance(fixture_payload.get("retrieval_diagnostics"), dict) else {}
     ranking_quality = ranking_payload.get("quality_gate", {}) if isinstance(ranking_payload.get("quality_gate"), dict) else {}
@@ -14768,6 +14788,10 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
         blocked_reasons.append("rollback_replay_validate_not_green")
     if audit_quality.get("pass") is not True:
         blocked_reasons.append("trace_candidate_application_audit_not_green")
+    if hermes_doctor_payload.get("status") != "ok":
+        blocked_reasons.append("hermes_doctor_not_ok")
+    if hermes_doctor_payload.get("duplicate_context_injection_risk") is True:
+        blocked_reasons.append("hermes_duplicate_context_injection_risk")
 
     payload = {
         "kind": "dogfood_live_evidence_bundle",
@@ -14782,6 +14806,7 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
             "retrieval_ranking_experiment": ranking_artifact,
             "rollback_replay_validate": rollback_artifact,
             "trace_candidate_application_audit": audit_artifact,
+            "hermes_doctor": hermes_doctor_artifact,
         },
         "rollup": {
             "fixture_task_count": fixture_payload.get("fixture_task_count", 0),
@@ -14803,6 +14828,12 @@ def _dogfood_live_evidence_bundle_payload(args: argparse.Namespace) -> dict[str,
             "audit_required_evidence_gate_pass": bool(audit_payload.get("required_evidence_gate", {}).get("pass"))
             if isinstance(audit_payload.get("required_evidence_gate"), dict)
             else False,
+            "hermes_doctor_status": hermes_doctor_payload.get("status"),
+            "hermes_plugin_enabled": bool(hermes_doctor_payload.get("plugin_enabled")),
+            "hermes_hook_occurrences": _safe_int(hermes_doctor_payload.get("hook_occurrences", 0)),
+            "hermes_duplicate_context_injection_risk": bool(
+                hermes_doctor_payload.get("duplicate_context_injection_risk")
+            ),
         },
         "quality_gate": {
             "pass": not blocked_reasons,
@@ -24478,6 +24509,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dogfood_live_evidence_bundle_parser.add_argument("--policy", default="g5-reviewed-candidate-promotion-v1")
     dogfood_live_evidence_bundle_parser.add_argument("--application-limit", type=int, default=50)
+    dogfood_live_evidence_bundle_parser.add_argument(
+        "--hermes-config-path",
+        type=Path,
+        help="Optional Hermes config path to doctor-check as part of the read-only live evidence bundle.",
+    )
     dogfood_live_evidence_bundle_parser.add_argument("--output", type=Path)
     dogfood_live_evidence_bundle_compare_parser = dogfood_subparsers.add_parser(
         "live-evidence-bundle-compare",

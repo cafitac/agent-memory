@@ -1,9 +1,20 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 14:48 KST
+Last updated: 2026-05-18 15:11 KST
 
-## Current checkpoint: pushed green CI plus duplicate-hook doctor guard
+## Current checkpoint: live evidence bundle now captures Hermes doctor baseline
+
+- Continued live personal-oss Hermes plugin dogfood with five normal `hermes chat -Q -q` turns. Four reported no duplicate/plugin-only context issue; one reported the context still feels noisy, so noise remains an observation target but not a duplicate-injection failure.
+- `hermes-doctor /Users/reddit/.agent-memory/memory.db --config-path /Users/reddit/.hermes/profiles/personal-oss/config.yaml` still reports `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, and no warnings.
+- Latest activation observation over 100 rows reports `candidate_activation_count=88`, `sentinel_or_empty_noise_count=12`, `ratio=0.12`, and `excluded_from_candidate_reports=true`; noise is still visible but excluded from reinforcement candidates.
+- New operator-confidence slice wires `--hermes-config-path` into `dogfood live-evidence-bundle` and includes a read-only `hermes_doctor` artifact plus rollup fields for doctor status, plugin enabled, hook occurrences, and duplicate-context risk.
+- Live bundle smoke against personal-oss passed with doctor rollup `status=ok`, `plugin_enabled=true`, `hook_occurrences=0`, `duplicate_context_injection_risk=false`, and quality gate green.
+- Focused dogfood/doctor corridor and full suite pass locally: `433 passed, 1 xfailed`. Commit/push/CI is the next gate for this slice.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: pushed green CI plus duplicate-hook doctor guard
 
 - Pushed develop through `825270b Harden consolidation telemetry reports` to `origin/develop`; GitHub Actions run `26015270138` completed green on commit `825270ba329540f36ccfc41dcfdf9882bcbf0fa8`.
 - Live personal-oss Hermes plugin dogfood remains plugin-only from `agent-memory`'s perspective: `hermes-doctor /Users/reddit/.agent-memory/memory.db --config-path /Users/reddit/.hermes/profiles/personal-oss/config.yaml` reports `status=ok`, `hook_installed=false`, `hook_occurrences=0`, `plugin_enabled=true`, `duplicate_context_injection_risk=false`, and no warnings.
