@@ -1,9 +1,21 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:57 KST
+Last updated: 2026-05-18 12:11 KST
 
-## Current checkpoint: enabled recurring scheduler local start smoke
+## Current checkpoint: enabled recurring scheduler OS activation boundary and verifier
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-boundary` and `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-os-activation-verify`.
+- The boundary consumes green local-start smoke plus exact phrase `activate-os-background-or-cron-default-automation-scheduler-v1` and writes only an OS activation definition JSON.
+- The verifier proves the definition is hash-bound, expected scheduler-command hash matches, kill-switch is absent, max candidates remains `1`, package-stop and post-apply-verification gates remain present, and no raw scheduler command is exposed.
+- Both commands keep `loads_os_service_or_installs_cron=false`, `executes_scheduler_cycle=false`, `executes_apply=false`, `writes_scheduler_config=false`, and `enables_unattended_default_authority=false`.
+- Validation complete: focused OS activation boundary/verifier `1 passed`; OS/local/final/activation/recurrence/post-run/execute/smoke corridor `8 passed, 234 deselected`; ordinary-turn default automation corridor `50 passed, 192 deselected`; full suite `424 passed, 1 xfailed`; release smoke `3 passed`.
+- Current progress framing: practical scoped human-brain-like lifecycle automation is now 100% at the bounded/verified/kill-switchable/rollbackable/evidence-chained design boundary; operator OS load/install remains deliberately outside automatic execution.
+- Next safe action: do not auto-load launchd/cron from the agent. If an operator chooses to proceed, load/install only the exact verified activation definition after accepting the green verifier.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-os-activation-boundary-and-verifier.md`
+
+## Previous checkpoint: enabled recurring scheduler local start smoke
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-local-start-smoke`.
 - It consumes the final-start-boundary report plus local start manifest and verifies the manifest is hash-bound and still constrained.
