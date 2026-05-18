@@ -1,9 +1,22 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 11:23 KST
+Last updated: 2026-05-18 11:47 KST
 
-## Current checkpoint: enabled recurring scheduler activation packet verification
+## Current checkpoint: enabled recurring scheduler final start boundary
+
+- Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-final-start-boundary`.
+- It consumes a green activation-packet verifier and enabled recurring scheduler config with exact phrase `start-recurring-default-automation-scheduler-local-boundary-v1`.
+- It writes only a local start manifest for the next local-start smoke; raw rollback text is hashed only.
+- It keeps `executes_scheduler_cycle=false`, `executes_apply=false`, `writes_scheduler_config=false`, `installs_background_or_cron=false`, `starts_background_or_cron=false`, and `enables_unattended_default_authority=false`.
+- It fails closed on existing kill switch, non-green CI status, stale/invalid verifier/config evidence, or max candidates per cycle not equal to `1`.
+- Validation complete: focused final-start boundary `1 passed`; activation/final-start/recurrence/post-run/execute/smoke corridor `7 passed, 234 deselected`; ordinary-turn default automation corridor `49 passed, 192 deselected`; full suite `423 passed, 1 xfailed`; release smoke `3 passed`.
+- Current progress framing: safety-gated operational north-star about 99%+; scoped local human-brain-like lifecycle about 99.99999985%+.
+- Next safe slice: local-start smoke over the manifest; actual OS background/cron activation remains separately exact-gated and fail-closed.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-default-automation-enabled-recurring-scheduler-final-start-boundary.md`
+
+## Previous checkpoint: enabled recurring scheduler activation packet verification
 
 - Latest source checkpoint adds `dogfood ordinary-turn-default-automation-enabled-recurring-scheduler-activation-packet-verify`.
 - It consumes the green activation packet artifact and verifies it as read-only/hash-bound evidence for the exact final start boundary.
