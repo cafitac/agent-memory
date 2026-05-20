@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-20 19:59 KST
+Last updated: 2026-05-20 20:06 KST
 
 ## Current checkpoint: continue from two live evidence blockers with a new read-only classification packet
 
@@ -9,29 +9,24 @@ The latest live recheck is documented in `.dev/status/current-handoff.md` and `.
 
 Current live shape:
 
-- Source/CI: `develop` at `f2b5c03 Expose scheduled decay evidence candidates`; `origin/develop` matched before this local slice. Local tracked edits now add `dogfood scheduled-evidence-blocker-packet` plus tests/docs; full suite, commit, push, and CI are still pending.
+- Source/CI: `develop` includes `89bc353 Add scheduled evidence blocker packet` and `0c796fc Stabilize lexical global baseline assertion`; GitHub Actions CI run `26158333016` completed successfully. Local tracked edits now only refresh docs with that CI result; commit/push is pending for the docs-only status refresh.
 - Tracked working tree: source/test/doc edits for read-only scheduled evidence blocker packet. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
 - Latest live artifacts: `/tmp/agent-memory-decay-risk-next-check.json`, `/tmp/agent-memory-scheduled-dry-run-next-check.json`, `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json`, `/tmp/agent-memory-fact6-explain-next.txt`, `/tmp/agent-memory-fact6-history-next.txt`, and `/tmp/agent-memory-fact6-graph-next.json`.
 - Live decay risk: 8 candidates, max score `0.5333`, resolution hints `collect_more_activation_evidence_before_decay_action=2` and `monitor_only_no_mutation=6`.
 - Hard blockers: `fact:5` and `fact:6` are approved/connected but still have low recent activation evidence (`activation_count=1` and `activation_count=2`). They are not deletion/collapse/deprecation candidates from this signal alone.
 - Latest scheduler blocker state: trace quality resolved (`consider_g4_plan`), storage healthy, background warnings absent, but `decay_risk_above_threshold` still hard-blocks bounded partial automation because `evidence_collection_candidate_count=2`.
 - New operator UX change: `dogfood scheduled-evidence-blocker-packet --blocker-resolution <resolution.json>` emits a ref-safe human-classification packet for the current evidence blockers. It includes classification options and inspect commands, but `classification_gate.pass=false`, `classified_candidate_count=0`, and automation authority remains false.
-- Verification so far: targeted packet test passes; focused scheduled suite passes (`4 passed, 244 deselected`); full local suite passes (`437 passed, 1 xfailed`). Initial CI for `89bc353` failed on a Linux-only brittle retrieval-eval exact-delta assertion, now narrowed locally. Follow-up commit/push/CI rerun is pending.
+- Verification: targeted packet test passes; focused scheduled suite passes (`4 passed, 244 deselected`); full local suite passes (`437 passed, 1 xfailed`). Initial CI for `89bc353` failed on a Linux-only brittle retrieval-eval exact-delta assertion; `0c796fc` narrowed the assertion and CI `26158333016` passed.
 - Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
 
 Next safe action:
 
-1. Finish verification for the local read-only packet slice:
-   - `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options -q`
-   - `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run or scheduled_evidence_blocker_packet"`
-   - `uv run pytest tests/ -q`
-   - `git diff --check`
-2. If green, commit/push only tracked source/test/doc changes; do not include unrelated untracked scratch dirs.
-3. Re-run or inspect the packet as needed:
+1. Commit/push this docs-only CI-result refresh, or leave it local if you want no CI churn.
+2. Re-run or inspect the packet as needed:
    - `PYTHONPATH=src uv run python -m agent_memory.api.cli dogfood scheduled-evidence-blocker-packet --blocker-resolution /tmp/agent-memory-scheduled-blocker-resolution-next-check.json --output /tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json --min-candidates 1`
-4. Continue observing `fact:5`/`fact:6` with normal-turn dogfood, or implement a later exact human-classification validation artifact. Do not mutate memory status/retrieval ranking/default authority from the packet itself.
-5. The next green condition remains strict: evidence blockers must be naturally resolved or explicitly classified through a separately reviewed validation path, all remaining decay refs monitor-only low-risk, storage/privacy/linkage/background warnings empty, and trace still resolved.
-6. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+3. Continue observing `fact:5`/`fact:6` with normal-turn dogfood, or implement a later exact human-classification validation artifact. Do not mutate memory status/retrieval ranking/default authority from the packet itself.
+4. The next green condition remains strict: evidence blockers must be naturally resolved or explicitly classified through a separately reviewed validation path, all remaining decay refs monitor-only low-risk, storage/privacy/linkage/background warnings empty, and trace still resolved.
+5. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 If `fact:5`/`fact:6` remain hard blockers after more observation, the next implementation slice should still stay read-only: exact human classification validation over the packet, with explicit proof that it does not mutate memory status or enable broad/default automation.
 

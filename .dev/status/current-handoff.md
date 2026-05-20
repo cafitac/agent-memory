@@ -1,7 +1,7 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-20 19:59 KST
+Last updated: 2026-05-20 20:06 KST
 
 ## Current checkpoint: evidence blockers expanded to fact:5/fact:6; read-only classification packet added locally
 
@@ -14,10 +14,10 @@ Last updated: 2026-05-20 19:59 KST
 - Fresh `dogfood scheduled-blocker-resolution --allow-monitor-only-decay` keeps decay red: `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `candidate_count=8`, `evidence_collection_candidate_count=2`, `monitor_only_candidate_count=6`, `bounded_partial_automation_allowed=false`, and `broad_g4_apply_allowed=false`.
 - Implemented the next safe read-only UX slice: `dogfood scheduled-evidence-blocker-packet --blocker-resolution <resolution.json>` emits a ref-safe human-classification packet for evidence blockers. It includes per-ref classification options (`keep_blocked_collect_more_activation_evidence`, `manual_review_harmless_low_activation`, `manual_review_stale_or_wrong_follow_up_required`) and the existing inspect commands, but it does not classify by itself, does not resolve the scheduled gate, and does not mutate memory status/retrieval ranking/default/background authority.
 - Live packet smoke over `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json` reports `classification_gate.pass=false`, `evidence_collection_candidate_count=2`, `classified_candidate_count=0`, privacy flags false, and automation policy false for broad G4, bounded partial automation, ordinary auto-approval, status writes, ranking writes, and background/unattended apply.
-- Validation so far: RED observed for missing `scheduled-evidence-blocker-packet`; GREEN `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options -q`; focused scheduled suite `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run or scheduled_evidence_blocker_packet"` -> `4 passed, 244 deselected`; full local suite `uv run pytest tests/ -q` -> `437 passed, 1 xfailed in 216.82s`. First GitHub CI run for commit `89bc353` exposed a Linux-only brittle retrieval-eval assertion in `test_evaluate_retrieval_fixtures_includes_lexical_global_baseline_when_requested`; the assertion was narrowed to the owned lexical-global baseline contract and is pending a follow-up push/CI rerun.
+- Validation: RED observed for missing `scheduled-evidence-blocker-packet`; GREEN `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options -q`; focused scheduled suite `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run or scheduled_evidence_blocker_packet"` -> `4 passed, 244 deselected`; full local suite `uv run pytest tests/ -q` -> `437 passed, 1 xfailed in 216.82s`. First GitHub CI run for commit `89bc353` exposed a Linux-only brittle retrieval-eval assertion in `test_evaluate_retrieval_fixtures_includes_lexical_global_baseline_when_requested`; follow-up commit `0c796fc` narrowed it to the owned lexical-global baseline contract. GitHub Actions CI run `26158333016` completed successfully.
 - Current progress framing: scoped local human-brain-like lifecycle remains 100% at the bounded/review-gated/local-first boundary. Operational confidence remains about `98%`: runtime/storage/trace are healthy, but scheduled bounded partial automation is still blocked until the evidence blockers naturally gain activation evidence or a later exact human-classification validation path is implemented and reviewed.
 
-Next session should start from `.dev/status/next-agent-memory-action.md`: finish verification/commit for this read-only packet slice, then either continue normal-turn observation for `fact:5`/`fact:6` or add a separate exact human-classification validation artifact. Do not mutate either ref from decay score alone.
+Next session should start from `.dev/status/next-agent-memory-action.md`: continue normal-turn observation for `fact:5`/`fact:6` or add a separate exact human-classification validation artifact. Do not mutate either ref from decay score alone.
 
 Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 
