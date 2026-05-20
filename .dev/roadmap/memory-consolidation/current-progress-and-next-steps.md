@@ -1,9 +1,35 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 17:00 KST
+Last updated: 2026-05-20 18:26 KST
 
-## Current checkpoint: scheduled blocker resolution now distinguishes hard decay blockers from advisory monitor-only refs
+## Current checkpoint: live blocker remains one ref; scheduled blocker-resolution now shows ref-safe candidate details
+
+- Rechecked the live `agent-memory` path so a future session can resume from documents alone. Current source is `develop` at `88723ed Refine scheduled decay blocker severity`; `origin/develop` matches. Tracked working tree now includes a read-only operator UX slice plus docs/tests.
+- Read-only `review explain/history` plus `graph inspect` for `fact:5` wrote `/tmp/agent-memory-fact5-explain-current.txt`, `/tmp/agent-memory-fact5-history-current.txt`, and `/tmp/agent-memory-fact5-graph-current.json`. The ref remains approved/visible, project-scoped, and connected to only its approval trace. No memory status, retrieval ranking, relation, or automation authority was changed.
+- Three Hermes marker dogfood smokes succeeded and advanced live counts from `retrieval_observations=3388`, `memory_activations=7081`, `experience_traces=3388` to `retrieval_observations=3392`, `memory_activations=7092`, `experience_traces=3392`.
+- Fresh live decay-risk report over `/Users/reddit/.agent-memory/memory.db` with `--limit 200 --top 20` wrote `/tmp/agent-memory-decay-risk-current-check.json`: `activation_count=200`, `decay_risk_candidate_count=7`, `max_score=0.5333`, resolution hints `collect_more_activation_evidence_before_decay_action=1` and `monitor_only_no_mutation=6`.
+- The only hard blocker is still `fact:5`. It is approved and connected, but has low recent activation evidence in the current window (`activation_count=1`, score `0.5333`). Treat it as an evidence-collection/manual-classification candidate only; do not delete, collapse, deprecate, or lower authority from this decay score alone.
+- The six advisory refs are `episode:1`, `fact:4`, `fact:8`, `fact:1`, `procedure:1`, and `fact:7`; these are monitor-only unless a later report introduces a new factor. `fact:6` fell out of the current top decay-risk set.
+- Fresh scheduled dry-run artifact: `/tmp/agent-memory-scheduled-dry-run-current-check.json`. It reports storage `healthy`, storage warnings `[]`, trace recommendation `consider_g4_plan`, trace coverage `0.7751`, trace warnings `[]`, empty retrieval ratio `0.4239`, background warnings `[]`, and only `decay_risk_above_threshold` as a blocker.
+- Fresh scheduled blocker-resolution artifact: `/tmp/agent-memory-scheduled-blocker-resolution-current-check.json`. It resolves trace/background blockers but leaves decay red: `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `candidate_count=7`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=6`, `monitor_only_resolution=advisory_only`, `bounded_partial_automation_allowed=false`, `broad_g4_apply_allowed=false`.
+- Implemented a small read-only operator UX improvement: `dogfood scheduled-blocker-resolution` now emits ref-safe `evidence_collection_candidates` with memory ref, score, activation count, signals, recommended actions, and operator commands. The live artifact now points directly at `fact:5` without exposing raw report content, raw query text, or sample values.
+- Focused regression test now covers the per-ref detail and raw-content non-leakage: `test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection`. RED observed before implementation; focused scheduled suite passes (`3 passed, 244 deselected`). Full suite is still pending for this local slice.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
+- Operational confidence is about `98%`: storage/runtime/plugin/trace quality are healthy and operator evidence is clearer, but scheduled bounded partial automation must stay red until `fact:5` either naturally activates enough to become monitor-only or gets an explicit human-safe classification path.
+- Literal broad/unattended/default background mutation remains intentionally below 100% and should not be enabled from this checkpoint.
+
+Recommended next work now:
+
+1. Finish the verification ladder for this local read-only UX slice: full suite, `git diff --check`, then commit/push only tracked source/test/doc changes and watch CI.
+2. Continue normal-turn dogfood and re-run decay-risk, scheduled-dry-run, and scheduled-blocker-resolution; only consider bounded partial automation green when `evidence_collection_candidate_count=0` and all storage/privacy/linkage/background/trace checks remain clean.
+3. If `fact:5` continues to stay low-activation despite being an approved preference, add a separate read-only human classification/waiver surface for evidence-collection blockers. That surface must not mutate memory status, retrieval ranking, or default/background authority.
+4. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+
+## Previous checkpoint: scheduled blocker resolution now distinguishes hard decay blockers from advisory monitor-only refs
 
 - Implemented the next safe read-only operator UX slice: `dogfood scheduled-blocker-resolution` now classifies mixed decay-risk sets with explicit `operator_severity`, `evidence_collection_candidate_count`, `monitor_only_candidate_count`, and `monitor_only_resolution` fields.
 - The latest live scheduled report shape is now explainable without widening authority: trace quality is native-green (`consider_g4_plan`), background quality warnings are absent, monitor-only decay refs are classified as advisory-only, but the one evidence-collection decay candidate still keeps `decay_risk_above_threshold` unresolved and hard-blocking.

@@ -17449,6 +17449,41 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
     evidence_collection_count = _safe_int(hint_counts.get("collect_more_activation_evidence_before_decay_action"))
     decay_candidate_count = _safe_int(candidate_decomposition.get("candidate_count"))
     decay_max_score = _safe_float(candidate_decomposition.get("max_score"))
+    decay_candidates = decay_risk.get("decay_risk_candidates", []) if isinstance(decay_risk.get("decay_risk_candidates"), list) else []
+    evidence_collection_candidates: list[dict[str, Any]] = []
+    for candidate in decay_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("resolution_hint") != "collect_more_activation_evidence_before_decay_action":
+            continue
+        review_support = candidate.get("review_support", {}) if isinstance(candidate.get("review_support"), dict) else {}
+        recommended_actions = [
+            str(action)
+            for action in review_support.get("recommended_actions", [])
+            if isinstance(action, str) and action
+        ]
+        if not recommended_actions:
+            recommended_actions = [
+                "inspect_ref_safe_evidence",
+                "collect_more_activation_evidence_before_decay_action",
+            ]
+        operator_commands = [
+            str(command)
+            for command in review_support.get("operator_commands", [])
+            if isinstance(command, str) and command
+        ]
+        evidence_collection_candidates.append(
+            {
+                "memory_ref": str(candidate.get("memory_ref", "unknown")),
+                "score": round(_safe_float(candidate.get("score")), 4),
+                "activation_count": _safe_int(candidate.get("activation_count")),
+                "resolution_hint": "collect_more_activation_evidence_before_decay_action",
+                "signals": sorted(str(signal) for signal in candidate.get("signals", []) if signal),
+                "recommended_actions": recommended_actions,
+                "operator_commands": operator_commands,
+                "raw_content_included": review_support.get("raw_content_included") is True,
+            }
+        )
 
     trace_resolved = trace_recommendation == "consider_g4_plan" or (
         args.accept_ready_trace_quality
@@ -17501,6 +17536,7 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
             "monitor_only_candidate_count": monitor_only_count,
             "evidence_collection_candidate_count": evidence_collection_count,
             "monitor_only_resolution": "advisory_only" if monitor_only_count > 0 else "none",
+            "evidence_collection_candidates": evidence_collection_candidates,
             "max_score": round(decay_max_score, 4),
             "raw_content_included": candidate_decomposition.get("raw_content_included") is True,
         },

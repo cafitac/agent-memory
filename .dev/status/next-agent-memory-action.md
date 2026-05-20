@@ -1,9 +1,46 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 17:00 KST
+Last updated: 2026-05-20 18:26 KST
 
-## Current checkpoint: scheduled blocker-resolution decision refinement complete
+## Current checkpoint: continue from one live evidence blocker, now with ref-safe operator detail
+
+The latest live recheck is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
+
+Current live shape:
+
+- Source/CI: `develop` at `88723ed Refine scheduled decay blocker severity`; `origin/develop` matches. Local source now has a read-only operator UX change that still needs full-suite/CI before push.
+- Tracked working tree: source/test/doc edits for `dogfood scheduled-blocker-resolution` evidence-collection candidate detail. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
+- Live read-only fact inspection artifacts: `/tmp/agent-memory-fact5-explain-current.txt`, `/tmp/agent-memory-fact5-history-current.txt`, `/tmp/agent-memory-fact5-graph-current.json`. `fact:5` is approved/visible, project-scoped, and connected to its approval trace only; no mutation was performed.
+- Live dogfood counts advanced during this slice: `retrieval_observations 3388 -> 3392`, `memory_activations 7081 -> 7092`, `experience_traces 3388 -> 3392`.
+- Live decay risk: 7 candidates, max score `0.5333`, resolution hints `collect_more_activation_evidence_before_decay_action=1` and `monitor_only_no_mutation=6`.
+- Hard blocker: `fact:5` is approved/connected but still has low recent activation evidence (`activation_count=1`). It is not a deletion/collapse/deprecation candidate from this signal alone.
+- Monitor-only refs: `episode:1`, `fact:4`, `fact:8`, `fact:1`, `procedure:1`, and `fact:7`. `fact:6` is no longer in the current top decay-risk set.
+- Latest scheduler artifacts: `/tmp/agent-memory-decay-risk-current-check.json`, `/tmp/agent-memory-scheduled-dry-run-current-check.json`, and `/tmp/agent-memory-scheduled-blocker-resolution-current-check.json`.
+- Scheduler blocker state: trace quality resolved (`consider_g4_plan`, coverage `0.7751`), storage healthy, background warnings absent, but `decay_risk_above_threshold` still hard-blocks bounded partial automation because `evidence_collection_candidate_count=1`.
+- Operator UX change: `dogfood scheduled-blocker-resolution` now emits `resolutions.decay_risk_above_threshold.evidence_collection_candidates` with ref-safe `memory_ref`, `score`, `activation_count`, `signals`, `recommended_actions`, and `operator_commands`. It still reports privacy flags false for raw report/query/content/sample exposure.
+- Verification so far: focused scheduled tests pass (`3 passed, 244 deselected`). Full suite and CI are still pending for this local UX slice.
+- Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
+
+Next safe action:
+
+1. Finish verification for the local read-only UX slice:
+   - `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection -q`
+   - `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run"`
+   - `uv run pytest tests/ -q`
+   - `git diff --check`
+2. If green, commit/push only the tracked source/test/doc changes; do not include unrelated untracked scratch dirs.
+3. Continue observing `fact:5` with normal-turn dogfood, or add a separate read-only human classification/waiver surface if the operator wants to mark this approved preference as harmless despite low activation evidence. Do not mutate from decay score alone.
+4. Re-run these read-only checks and compare with the artifact paths above:
+   - `PYTHONPATH=src uv run python -m agent_memory.api.cli activations decay-risk-report /Users/reddit/.agent-memory/memory.db --limit 200 --top 20 > /tmp/agent-memory-decay-risk-current-check.json`
+   - `PYTHONPATH=src uv run python -m agent_memory.api.cli dogfood scheduled-dry-run /Users/reddit/.agent-memory/memory.db --output /tmp/agent-memory-scheduled-dry-run-current-check.json --since-hours 24 --epoch-start 2000-01-01T00:00:00Z --min-trace-coverage 0.25 --min-evidence-count 1 --candidate-min 0 --max-decay-risk 0`
+   - `PYTHONPATH=src uv run python -m agent_memory.api.cli dogfood scheduled-blocker-resolution --report /tmp/agent-memory-scheduled-dry-run-current-check.json --output /tmp/agent-memory-scheduled-blocker-resolution-current-check.json --accept-ready-trace-quality --allow-monitor-only-decay`
+5. The next green condition is strict: `evidence_collection_candidate_count=0`, all remaining decay refs monitor-only low-risk, storage/privacy/linkage/background warnings empty, and trace still resolved. Only then can bounded partial automation be considered resolution-green.
+6. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+
+If `fact:5` remains a hard blocker after more observation, the next implementation slice should stay read-only: a human classification/waiver surface for evidence-collection blockers, with explicit proof that it does not mutate memory status or enable broad/default automation.
+
+## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 
 - Added the safe read-only refinement for mixed scheduled decay blockers. `dogfood scheduled-blocker-resolution` now separates monitor-only advisory refs from evidence-collection refs in the operator-facing resolution payload.
 - Latest live shape remains: trace quality resolved, background warnings resolved, decay blocker still unresolved because there is 1 evidence-collection candidate and 7 monitor-only refs. The CLI now reports this as `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=7`, and `monitor_only_resolution=advisory_only`.

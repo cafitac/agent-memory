@@ -1,9 +1,27 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-18 17:00 KST
+Last updated: 2026-05-20 18:26 KST
 
-## Current checkpoint: scheduled blocker resolution separates hard decay blockers from advisory decay refs
+## Current checkpoint: fact:5 remains hard blocker; blocker-resolution now surfaces ref-safe next actions
+
+- Rechecked the live personal DB and scheduler blocker path from the current checkout. Source is `develop` at `88723ed Refine scheduled decay blocker severity`; `origin/develop` matches. Tracked working tree has source/docs/test edits for this read-only operator UX slice; unrelated untracked harness/scratch dirs remain (`.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`).
+- Read-only `review explain/history` plus `graph inspect` for `fact:5` wrote `/tmp/agent-memory-fact5-explain-current.txt`, `/tmp/agent-memory-fact5-history-current.txt`, and `/tmp/agent-memory-fact5-graph-current.json`. The ref is approved, visible in default retrieval, project-scoped, and connected only to its approval trace; history has one candidate->approved transition from the narrow remember-preferences smoke. No mutation was performed.
+- Ran three marker Hermes normal-turn dogfood smokes. Live counts advanced from `retrieval_observations=3388`, `memory_activations=7081`, `experience_traces=3388` to `retrieval_observations=3392`, `memory_activations=7092`, `experience_traces=3392`.
+- Fresh `activations decay-risk-report` over `/Users/reddit/.agent-memory/memory.db` with `--limit 200 --top 20` wrote `/tmp/agent-memory-decay-risk-current-check.json`: `activation_count=200`, `decay candidate count=7`, `max_score=0.5333`. Candidate hints remain `collect_more_activation_evidence_before_decay_action=1` and `monitor_only_no_mutation=6`.
+- The only hard evidence-collection ref is still `fact:5`: approved/connected, score `0.5333`, recent-window `activation_count=1`, signals `decay_review_candidate`, `low_activation_count`, and `connected_memory`. It must not be deleted/collapsed/deprecated from decay score alone.
+- The six advisory monitor-only refs are now `episode:1`, `fact:4`, `fact:8`, `fact:1`, `procedure:1`, and `fact:7`. `fact:6` fell out of the current top decay-risk set; `fact:7` entered as monitor-only with score `0.0` and activation_count `3`.
+- Fresh `dogfood scheduled-dry-run` wrote `/tmp/agent-memory-scheduled-dry-run-current-check.json`: storage is `healthy`, storage warnings `[]`, trace recommendation `consider_g4_plan`, trace coverage `0.7751`, trace warnings `[]`, empty retrieval ratio `0.4239`, background warnings `[]`, but quality gate remains red only on `decay_risk_above_threshold`.
+- Fresh `dogfood scheduled-blocker-resolution --allow-monitor-only-decay` wrote `/tmp/agent-memory-scheduled-blocker-resolution-current-check.json`: trace and background blockers resolve, but decay remains `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `candidate_count=7`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=6`, `monitor_only_resolution=advisory_only`, `bounded_partial_automation_allowed=false`, and `broad_g4_apply_allowed=false`.
+- Implemented a small read-only operator UX improvement: `dogfood scheduled-blocker-resolution` now includes ref-safe `evidence_collection_candidates` entries with memory ref, score, activation count, signals, recommended actions, and operator commands; it does not include raw report content, raw query text, or sample values.
+- Validation so far: RED observed for missing `evidence_collection_candidates`; GREEN `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monitor_only_from_evidence_collection -q`; focused scheduled suite `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run"` -> `3 passed, 244 deselected`.
+- Current progress framing: scoped local human-brain-like lifecycle remains 100% at the bounded/review-gated/local-first boundary. Operational confidence remains about `98%`: runtime/storage/trace are healthy and operator evidence is clearer, but scheduled bounded partial automation is still blocked until `fact:5` gains sufficient activation evidence or gets an explicit human classification path.
+
+Next session should start from `.dev/status/next-agent-memory-action.md`: either continue normal-turn observation for `fact:5`, or add a separate read-only human classification/waiver surface for evidence-collection blockers. Do not mutate `fact:5` from decay score alone.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: scheduled blocker resolution separates hard decay blockers from advisory decay refs
 
 - Implemented the read-only scheduled-blocker-resolution refinement for the latest live pattern: mixed decay-risk sets now report `evidence_collection_candidate_count`, `monitor_only_candidate_count`, `monitor_only_resolution`, and `operator_severity` instead of leaving all decay-risk candidates as undifferentiated `unresolved`.
 - The live scheduled report still resolves trace quality and background warnings, but keeps `decay_risk_above_threshold` red as `resolution=evidence_collection_candidates_still_block`, `operator_severity=hard_blocker`, `evidence_collection_candidate_count=1`, `monitor_only_candidate_count=7`, and `monitor_only_resolution=advisory_only`.

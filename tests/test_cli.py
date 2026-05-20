@@ -6933,7 +6933,36 @@ def test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monito
                                         "monitor_only_no_mutation": 7,
                                     },
                                     "raw_content_included": False,
-                                }
+                                },
+                                "decay_risk_candidates": [
+                                    {
+                                        "memory_ref": "fact:5",
+                                        "score": 0.5333,
+                                        "activation_count": 2,
+                                        "resolution_hint": "collect_more_activation_evidence_before_decay_action",
+                                        "signals": ["low_activation_count", "connected_memory"],
+                                        "raw_content": "SHOULD_NOT_LEAK",
+                                        "review_support": {
+                                            "raw_content_included": False,
+                                            "recommended_actions": [
+                                                "inspect_ref_safe_evidence",
+                                                "collect_more_activation_evidence_before_decay_action",
+                                            ],
+                                            "operator_commands": [
+                                                "agent-memory review explain fact /tmp/safe.db 5",
+                                                "agent-memory review history fact /tmp/safe.db 5",
+                                                "agent-memory graph inspect /tmp/safe.db fact:5 --depth 1",
+                                            ],
+                                        },
+                                    },
+                                    {
+                                        "memory_ref": "fact:1",
+                                        "score": 0.2,
+                                        "activation_count": 9,
+                                        "resolution_hint": "monitor_only_no_mutation",
+                                        "signals": ["frequently_activated", "connected_memory"],
+                                    },
+                                ],
                             }
                         },
                     },
@@ -6978,6 +7007,26 @@ def test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monito
     assert decay_resolution["evidence_collection_candidate_count"] == 1
     assert decay_resolution["monitor_only_candidate_count"] == 7
     assert decay_resolution["monitor_only_resolution"] == "advisory_only"
+    assert decay_resolution["evidence_collection_candidates"] == [
+        {
+            "memory_ref": "fact:5",
+            "score": 0.5333,
+            "activation_count": 2,
+            "resolution_hint": "collect_more_activation_evidence_before_decay_action",
+            "signals": ["connected_memory", "low_activation_count"],
+            "recommended_actions": [
+                "inspect_ref_safe_evidence",
+                "collect_more_activation_evidence_before_decay_action",
+            ],
+            "operator_commands": [
+                "agent-memory review explain fact /tmp/safe.db 5",
+                "agent-memory review history fact /tmp/safe.db 5",
+                "agent-memory graph inspect /tmp/safe.db fact:5 --depth 1",
+            ],
+            "raw_content_included": False,
+        }
+    ]
+    assert "SHOULD_NOT_LEAK" not in result.stdout
     assert payload["resolution_gate"] == {
         "pass": False,
         "decision": "scheduled_blockers_still_unresolved",
