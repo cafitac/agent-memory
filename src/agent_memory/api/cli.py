@@ -17587,6 +17587,110 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
     return payload
 
 
+def _dogfood_scheduled_evidence_blocker_packet_payload(args: argparse.Namespace) -> dict[str, Any]:
+    report_path = args.blocker_resolution.expanduser().resolve(strict=False)
+    raw_text = report_path.read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    if not isinstance(raw, dict) or raw.get("kind") != "dogfood_scheduled_blocker_resolution":
+        raise ValueError("dogfood scheduled-evidence-blocker-packet requires a dogfood_scheduled_blocker_resolution report")
+    if raw.get("mutated") is True or raw.get("default_retrieval_unchanged") is False:
+        raise ValueError("dogfood scheduled-evidence-blocker-packet requires a read-only unchanged blocker-resolution report")
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    if any(
+        privacy.get(key) is True
+        for key in (
+            "raw_report_included",
+            "raw_conversation_content_included",
+            "sample_values_included",
+            "raw_query_text_included",
+        )
+    ):
+        raise ValueError("dogfood scheduled-evidence-blocker-packet refuses reports that claim raw/sample content exposure")
+
+    resolutions = raw.get("resolutions", {}) if isinstance(raw.get("resolutions"), dict) else {}
+    decay_resolution = (
+        resolutions.get("decay_risk_above_threshold", {})
+        if isinstance(resolutions.get("decay_risk_above_threshold"), dict)
+        else {}
+    )
+    raw_candidates = decay_resolution.get("evidence_collection_candidates", [])
+    if not isinstance(raw_candidates, list):
+        raw_candidates = []
+    candidates: list[dict[str, Any]] = []
+    raw_candidate_content_included = False
+    for candidate in raw_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("raw_content_included") is True:
+            raw_candidate_content_included = True
+        candidates.append(
+            {
+                "memory_ref": str(candidate.get("memory_ref", "unknown")),
+                "score": round(_safe_float(candidate.get("score")), 4),
+                "activation_count": _safe_int(candidate.get("activation_count")),
+                "signals": sorted(str(signal) for signal in candidate.get("signals", []) if signal),
+                "recommended_actions": [
+                    str(action)
+                    for action in candidate.get("recommended_actions", [])
+                    if isinstance(action, str) and action
+                ],
+                "operator_commands": [
+                    str(command)
+                    for command in candidate.get("operator_commands", [])
+                    if isinstance(command, str) and command
+                ],
+                "classification_options": [
+                    "keep_blocked_collect_more_activation_evidence",
+                    "manual_review_harmless_low_activation",
+                    "manual_review_stale_or_wrong_follow_up_required",
+                ],
+                "raw_content_included": candidate.get("raw_content_included") is True,
+            }
+        )
+
+    if len(candidates) < args.min_candidates:
+        raise ValueError("dogfood scheduled-evidence-blocker-packet found fewer evidence blockers than required")
+
+    payload = {
+        "kind": "dogfood_scheduled_evidence_blocker_packet",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "blocker_resolution_path": str(report_path),
+        "blocker_resolution_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "evidence_collection_candidates": candidates,
+        "classification_gate": {
+            "pass": False,
+            "decision": "human_classification_required_before_any_resolution_claim",
+            "evidence_collection_candidate_count": len(candidates),
+            "classified_candidate_count": 0,
+        },
+        "automation_policy": {
+            "broad_g4_apply_allowed": False,
+            "bounded_partial_automation_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "writes_memory_status": False,
+            "writes_retrieval_ranking": False,
+            "enables_background_or_unattended_apply": False,
+        },
+        "privacy": {
+            "raw_report_included": False,
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+            "raw_candidate_content_included": raw_candidate_content_included,
+        },
+        "suggested_next_steps": [
+            "Inspect each ref with the included operator commands before choosing any classification.",
+            "Treat this packet as human-review input only; it does not resolve scheduled blockers by itself.",
+            "Keep broad G4 apply, default-ranking mutation, collapse/delete, and ordinary auto-approval blocked.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _scheduled_dry_run_comparison_report(
     *,
     report_paths: list[Path],
@@ -25646,6 +25750,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_scheduled_blocker_resolution_parser.add_argument("--min-trace-coverage", type=float, default=0.25)
     dogfood_scheduled_blocker_resolution_parser.add_argument("--max-empty-retrieval-ratio", type=float, default=0.5)
     dogfood_scheduled_blocker_resolution_parser.add_argument("--max-monitor-decay-score", type=float, default=0.25)
+    dogfood_scheduled_evidence_blocker_packet_parser = dogfood_subparsers.add_parser(
+        "scheduled-evidence-blocker-packet",
+        help="Build a read-only ref-safe packet for human classification of scheduled evidence-collection blockers.",
+    )
+    dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--blocker-resolution", type=Path, required=True)
+    dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--output", type=Path)
+    dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--min-candidates", type=int, default=1)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -26987,6 +27098,9 @@ def main() -> None:
             return
         if args.dogfood_action == "scheduled-blocker-resolution":
             print(json.dumps(_dogfood_scheduled_blocker_resolution_payload(args), indent=2))
+            return
+        if args.dogfood_action == "scheduled-evidence-blocker-packet":
+            print(json.dumps(_dogfood_scheduled_evidence_blocker_packet_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(

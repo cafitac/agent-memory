@@ -7036,6 +7036,128 @@ def test_python_module_cli_dogfood_scheduled_blocker_resolution_separates_monito
     assert payload["automation_policy"]["broad_g4_apply_allowed"] is False
 
 
+def test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options(
+    tmp_path: Path,
+) -> None:
+    blocker_resolution_path = tmp_path / "blocker-resolution.json"
+    output_path = tmp_path / "evidence-blocker-packet.json"
+    blocker_resolution_path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_scheduled_blocker_resolution",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "report_path": "/tmp/scheduled-report.json",
+                "resolution_gate": {
+                    "pass": False,
+                    "decision": "scheduled_blockers_still_unresolved",
+                    "unresolved_blockers": ["decay_risk_above_threshold"],
+                },
+                "resolutions": {
+                    "decay_risk_above_threshold": {
+                        "resolved": False,
+                        "resolution": "evidence_collection_candidates_still_block",
+                        "operator_severity": "hard_blocker",
+                        "candidate_count": 2,
+                        "evidence_collection_candidate_count": 1,
+                        "monitor_only_candidate_count": 1,
+                        "evidence_collection_candidates": [
+                            {
+                                "memory_ref": "fact:5",
+                                "score": 0.5333,
+                                "activation_count": 1,
+                                "resolution_hint": "collect_more_activation_evidence_before_decay_action",
+                                "signals": ["low_activation_count", "connected_memory"],
+                                "recommended_actions": ["inspect_ref_safe_evidence"],
+                                "operator_commands": [
+                                    "agent-memory review explain fact /tmp/safe.db 5",
+                                    "agent-memory review history fact /tmp/safe.db 5",
+                                ],
+                                "raw_content_included": False,
+                                "raw_content": "SHOULD_NOT_LEAK",
+                            }
+                        ],
+                    }
+                },
+                "automation_policy": {
+                    "broad_g4_apply_allowed": False,
+                    "bounded_partial_automation_allowed": False,
+                    "ordinary_conversation_auto_approval": False,
+                },
+                "privacy": {
+                    "raw_report_included": False,
+                    "raw_conversation_content_included": False,
+                    "sample_values_included": False,
+                    "raw_query_text_included": False,
+                },
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-evidence-blocker-packet",
+            "--blocker-resolution",
+            str(blocker_resolution_path),
+            "--output",
+            str(output_path),
+            "--min-candidates",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_scheduled_evidence_blocker_packet"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["classification_gate"] == {
+        "pass": False,
+        "decision": "human_classification_required_before_any_resolution_claim",
+        "evidence_collection_candidate_count": 1,
+        "classified_candidate_count": 0,
+    }
+    assert payload["evidence_collection_candidates"] == [
+        {
+            "memory_ref": "fact:5",
+            "score": 0.5333,
+            "activation_count": 1,
+            "signals": ["connected_memory", "low_activation_count"],
+            "recommended_actions": ["inspect_ref_safe_evidence"],
+            "operator_commands": [
+                "agent-memory review explain fact /tmp/safe.db 5",
+                "agent-memory review history fact /tmp/safe.db 5",
+            ],
+            "classification_options": [
+                "keep_blocked_collect_more_activation_evidence",
+                "manual_review_harmless_low_activation",
+                "manual_review_stale_or_wrong_follow_up_required",
+            ],
+            "raw_content_included": False,
+        }
+    ]
+    assert payload["automation_policy"]["bounded_partial_automation_allowed"] is False
+    assert payload["automation_policy"]["broad_g4_apply_allowed"] is False
+    assert payload["privacy"] == {
+        "raw_report_included": False,
+        "raw_conversation_content_included": False,
+        "sample_values_included": False,
+        "raw_query_text_included": False,
+        "raw_candidate_content_included": False,
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
 def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_raw_content(
     tmp_path: Path,
 ) -> None:
