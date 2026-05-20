@@ -1,34 +1,30 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-20 20:06 KST
+Last updated: 2026-05-21 08:19 KST
 
-## Current checkpoint: continue from two live evidence blockers with a new read-only classification packet
+## Current checkpoint: exact read-only classification validation artifact added
 
 The latest live recheck is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
 
 Current live shape:
 
-- Source/CI: `develop` includes `89bc353 Add scheduled evidence blocker packet` and `0c796fc Stabilize lexical global baseline assertion`; GitHub Actions CI run `26158333016` completed successfully. Local tracked edits now only refresh docs with that CI result; commit/push is pending for the docs-only status refresh.
-- Tracked working tree: source/test/doc edits for read-only scheduled evidence blocker packet. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
-- Latest live artifacts: `/tmp/agent-memory-decay-risk-next-check.json`, `/tmp/agent-memory-scheduled-dry-run-next-check.json`, `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json`, `/tmp/agent-memory-fact6-explain-next.txt`, `/tmp/agent-memory-fact6-history-next.txt`, and `/tmp/agent-memory-fact6-graph-next.json`.
-- Live decay risk: 8 candidates, max score `0.5333`, resolution hints `collect_more_activation_evidence_before_decay_action=2` and `monitor_only_no_mutation=6`.
-- Hard blockers: `fact:5` and `fact:6` are approved/connected but still have low recent activation evidence (`activation_count=1` and `activation_count=2`). They are not deletion/collapse/deprecation candidates from this signal alone.
-- Latest scheduler blocker state: trace quality resolved (`consider_g4_plan`), storage healthy, background warnings absent, but `decay_risk_above_threshold` still hard-blocks bounded partial automation because `evidence_collection_candidate_count=2`.
-- New operator UX change: `dogfood scheduled-evidence-blocker-packet --blocker-resolution <resolution.json>` emits a ref-safe human-classification packet for the current evidence blockers. It includes classification options and inspect commands, but `classification_gate.pass=false`, `classified_candidate_count=0`, and automation authority remains false.
-- Verification: targeted packet test passes; focused scheduled suite passes (`4 passed, 244 deselected`); full local suite passes (`437 passed, 1 xfailed`). Initial CI for `89bc353` failed on a Linux-only brittle retrieval-eval exact-delta assertion; `0c796fc` narrowed the assertion and CI `26158333016` passed.
+- Source/CI: `develop` is currently based on pushed green `c899ae1 Record scheduled evidence packet CI result`; this local slice adds `scheduled-evidence-blocker-classification-validate` plus tests/docs. Full local verification is green; commit/push and CI are still pending for this slice.
+- Tracked working tree: source/test/doc edits for the read-only exact classification validation artifact. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
+- Latest live artifacts: `/tmp/agent-memory-decay-risk-next-check.json`, `/tmp/agent-memory-scheduled-dry-run-next-check.json`, `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json`, `/tmp/agent-memory-fact6-explain-next.txt`, `/tmp/agent-memory-fact6-history-next.txt`, and `/tmp/agent-memory-fact6-graph-next.json`.
+- Hard blockers remain `fact:5` and `fact:6`; both are approved/connected but low-activation evidence candidates. They are not deletion/collapse/deprecation/ranking-mutation candidates from this signal alone.
+- New operator UX change: `dogfood scheduled-evidence-blocker-classification-validate --packet <packet.json> --classification <ref>=<option> ...` validates exact classifications against the packet, hash-binds the packet, writes only a read-only validation artifact, and rejects invalid classifications. It does not mutate memory status/retrieval ranking/default retrieval or enable broad/default/background automation.
+- Live validation smoke used conservative keep-blocked classifications for both refs. Output: `classification_gate.pass=true`, `classified_candidate_count=2`, `unclassified_memory_refs=[]`, `invalid_classifications=[]`, automation policy all false, privacy flags false. This is exact read-only classification evidence only; scheduled bounded partial automation remains blocked until a separate blocker-resolution follow-up consumes the validation safely.
+- Verification so far: targeted validation test passes (`1 passed`); focused scheduled suite passes (`5 passed, 244 deselected`); `git diff --check` passes; full local suite passes (`438 passed, 1 xfailed`). Commit/push/CI pending.
 - Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
 
 Next safe action:
 
-1. Commit/push this docs-only CI-result refresh, or leave it local if you want no CI churn.
-2. Re-run or inspect the packet as needed:
-   - `PYTHONPATH=src uv run python -m agent_memory.api.cli dogfood scheduled-evidence-blocker-packet --blocker-resolution /tmp/agent-memory-scheduled-blocker-resolution-next-check.json --output /tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json --min-candidates 1`
-3. Continue observing `fact:5`/`fact:6` with normal-turn dogfood, or implement a later exact human-classification validation artifact. Do not mutate memory status/retrieval ranking/default authority from the packet itself.
-4. The next green condition remains strict: evidence blockers must be naturally resolved or explicitly classified through a separately reviewed validation path, all remaining decay refs monitor-only low-risk, storage/privacy/linkage/background warnings empty, and trace still resolved.
-5. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Commit/push only tracked source/test/doc changes and watch CI.
+2. After CI is green, either continue normal-turn observation for `fact:5`/`fact:6`, or add a separate read-only blocker-resolution follow-up that consumes the validation artifact. That follow-up must still not write memory status, mutate ranking, enable default retrieval changes, or grant background/unattended authority.
+3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
-If `fact:5`/`fact:6` remain hard blockers after more observation, the next implementation slice should still stay read-only: exact human classification validation over the packet, with explicit proof that it does not mutate memory status or enable broad/default automation.
+If `fact:5`/`fact:6` remain hard blockers after more observation, the next implementation slice should stay read-only: a validation-consumer/report-only resolution artifact that distinguishes keep-blocked classifications from harmless/stale manual-review outcomes without widening mutation authority.
 
 ## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 

@@ -7158,6 +7158,153 @@ def test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_hu
     assert "SHOULD_NOT_LEAK" not in result.stdout
 
 
+def test_python_module_cli_dogfood_scheduled_evidence_blocker_classification_validate_is_read_only(
+    tmp_path: Path,
+) -> None:
+    packet_path = tmp_path / "evidence-blocker-packet.json"
+    output_path = tmp_path / "classification-validation.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_scheduled_evidence_blocker_packet",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "evidence_collection_candidates": [
+                    {
+                        "memory_ref": "fact:5",
+                        "score": 0.5333,
+                        "activation_count": 1,
+                        "signals": ["connected_memory", "low_activation_count"],
+                        "classification_options": [
+                            "keep_blocked_collect_more_activation_evidence",
+                            "manual_review_harmless_low_activation",
+                            "manual_review_stale_or_wrong_follow_up_required",
+                        ],
+                        "raw_content_included": False,
+                        "raw_content": "SHOULD_NOT_LEAK",
+                    },
+                    {
+                        "memory_ref": "fact:6",
+                        "score": 0.3667,
+                        "activation_count": 2,
+                        "signals": ["connected_memory", "low_activation_count"],
+                        "classification_options": [
+                            "keep_blocked_collect_more_activation_evidence",
+                            "manual_review_harmless_low_activation",
+                            "manual_review_stale_or_wrong_follow_up_required",
+                        ],
+                        "raw_content_included": False,
+                    },
+                ],
+                "classification_gate": {
+                    "pass": False,
+                    "decision": "human_classification_required_before_any_resolution_claim",
+                    "evidence_collection_candidate_count": 2,
+                    "classified_candidate_count": 0,
+                },
+                "privacy": {
+                    "raw_report_included": False,
+                    "raw_conversation_content_included": False,
+                    "sample_values_included": False,
+                    "raw_query_text_included": False,
+                    "raw_candidate_content_included": False,
+                },
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-evidence-blocker-classification-validate",
+            "--packet",
+            str(packet_path),
+            "--classification",
+            "fact:5=keep_blocked_collect_more_activation_evidence",
+            "--classification",
+            "fact:6=manual_review_harmless_low_activation",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text()) == payload
+    assert payload["kind"] == "dogfood_scheduled_evidence_blocker_classification_validation"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["classification_gate"] == {
+        "pass": True,
+        "decision": "all_evidence_blockers_classified_read_only",
+        "evidence_collection_candidate_count": 2,
+        "classified_candidate_count": 2,
+        "unclassified_memory_refs": [],
+        "invalid_classifications": [],
+    }
+    assert payload["validated_classifications"] == [
+        {
+            "memory_ref": "fact:5",
+            "classification": "keep_blocked_collect_more_activation_evidence",
+            "accepted": True,
+            "resolution_effect": "keeps_scheduled_blocker_unresolved_pending_more_activation_evidence",
+        },
+        {
+            "memory_ref": "fact:6",
+            "classification": "manual_review_harmless_low_activation",
+            "accepted": True,
+            "resolution_effect": "human_review_signal_only_separate_resolution_required",
+        },
+    ]
+    assert payload["automation_policy"] == {
+        "broad_g4_apply_allowed": False,
+        "bounded_partial_automation_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "default_retrieval_policy": "approved_only_unchanged",
+        "writes_memory_status": False,
+        "writes_retrieval_ranking": False,
+        "enables_background_or_unattended_apply": False,
+    }
+    assert payload["privacy"] == {
+        "raw_packet_included": False,
+        "raw_conversation_content_included": False,
+        "sample_values_included": False,
+        "raw_query_text_included": False,
+        "raw_candidate_content_included": False,
+    }
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+
+    bad_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "scheduled-evidence-blocker-classification-validate",
+            "--packet",
+            str(packet_path),
+            "--classification",
+            "fact:5=delete_it",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+    assert bad_result.returncode != 0
+    assert "invalid scheduled evidence blocker classification" in bad_result.stderr
+    assert "SHOULD_NOT_LEAK" not in bad_result.stderr
+
+
 def test_python_module_cli_dogfood_scheduled_compare_summarizes_reports_without_raw_content(
     tmp_path: Path,
 ) -> None:

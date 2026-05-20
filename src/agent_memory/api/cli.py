@@ -17586,7 +17586,6 @@ def _dogfood_scheduled_blocker_resolution_payload(args: argparse.Namespace) -> d
     _write_json_report(args.output, payload)
     return payload
 
-
 def _dogfood_scheduled_evidence_blocker_packet_payload(args: argparse.Namespace) -> dict[str, Any]:
     report_path = args.blocker_resolution.expanduser().resolve(strict=False)
     raw_text = report_path.read_text(encoding="utf-8")
@@ -17685,6 +17684,141 @@ def _dogfood_scheduled_evidence_blocker_packet_payload(args: argparse.Namespace)
             "Inspect each ref with the included operator commands before choosing any classification.",
             "Treat this packet as human-review input only; it does not resolve scheduled blockers by itself.",
             "Keep broad G4 apply, default-ranking mutation, collapse/delete, and ordinary auto-approval blocked.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
+_SCHEDULED_EVIDENCE_BLOCKER_CLASSIFICATIONS = {
+    "keep_blocked_collect_more_activation_evidence": "keeps_scheduled_blocker_unresolved_pending_more_activation_evidence",
+    "manual_review_harmless_low_activation": "human_review_signal_only_separate_resolution_required",
+    "manual_review_stale_or_wrong_follow_up_required": "human_review_signal_only_follow_up_required",
+}
+
+
+def _parse_scheduled_evidence_blocker_classifications(raw_values: list[str] | None) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for raw_value in raw_values or []:
+        if "=" not in raw_value:
+            raise ValueError("scheduled evidence blocker classifications must use memory_ref=classification")
+        memory_ref, classification = raw_value.split("=", 1)
+        memory_ref = memory_ref.strip()
+        classification = classification.strip()
+        if not memory_ref or not classification:
+            raise ValueError("scheduled evidence blocker classifications must include non-empty memory_ref and classification")
+        if classification not in _SCHEDULED_EVIDENCE_BLOCKER_CLASSIFICATIONS:
+            raise ValueError("invalid scheduled evidence blocker classification")
+        parsed[memory_ref] = classification
+    return parsed
+
+
+def _dogfood_scheduled_evidence_blocker_classification_validation_payload(args: argparse.Namespace) -> dict[str, Any]:
+    packet_path = args.packet.expanduser().resolve(strict=False)
+    raw_text = packet_path.read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    if not isinstance(raw, dict) or raw.get("kind") != "dogfood_scheduled_evidence_blocker_packet":
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-validate requires a dogfood_scheduled_evidence_blocker_packet report"
+        )
+    if raw.get("mutated") is True or raw.get("default_retrieval_unchanged") is False:
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-validate requires a read-only unchanged evidence-blocker packet"
+        )
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    if any(
+        privacy.get(key) is True
+        for key in (
+            "raw_report_included",
+            "raw_packet_included",
+            "raw_conversation_content_included",
+            "sample_values_included",
+            "raw_query_text_included",
+            "raw_candidate_content_included",
+        )
+    ):
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-validate refuses packets that claim raw/sample content exposure"
+        )
+
+    candidates = raw.get("evidence_collection_candidates", [])
+    if not isinstance(candidates, list):
+        candidates = []
+    candidate_refs: list[str] = []
+    allowed_by_ref: dict[str, set[str]] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        memory_ref = str(candidate.get("memory_ref", "")).strip()
+        if not memory_ref:
+            continue
+        candidate_refs.append(memory_ref)
+        options = candidate.get("classification_options", [])
+        if not isinstance(options, list):
+            options = []
+        allowed = {str(option) for option in options if str(option) in _SCHEDULED_EVIDENCE_BLOCKER_CLASSIFICATIONS}
+        if not allowed:
+            allowed = set(_SCHEDULED_EVIDENCE_BLOCKER_CLASSIFICATIONS)
+        allowed_by_ref[memory_ref] = allowed
+
+    classifications = _parse_scheduled_evidence_blocker_classifications(args.classification)
+    invalid_classifications: list[dict[str, str]] = []
+    validated: list[dict[str, Any]] = []
+    for memory_ref, classification in classifications.items():
+        if memory_ref not in allowed_by_ref:
+            invalid_classifications.append({"memory_ref": memory_ref, "classification": classification, "reason": "unknown_candidate"})
+            continue
+        if classification not in allowed_by_ref[memory_ref]:
+            invalid_classifications.append({"memory_ref": memory_ref, "classification": classification, "reason": "not_offered_for_candidate"})
+            continue
+        validated.append(
+            {
+                "memory_ref": memory_ref,
+                "classification": classification,
+                "accepted": True,
+                "resolution_effect": _SCHEDULED_EVIDENCE_BLOCKER_CLASSIFICATIONS[classification],
+            }
+        )
+    classified_refs = {item["memory_ref"] for item in validated}
+    unclassified_refs = [memory_ref for memory_ref in candidate_refs if memory_ref not in classified_refs]
+    pass_gate = not unclassified_refs and not invalid_classifications and bool(candidate_refs)
+
+    payload = {
+        "kind": "dogfood_scheduled_evidence_blocker_classification_validation",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "packet_path": str(packet_path),
+        "packet_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+        "validated_classifications": validated,
+        "classification_gate": {
+            "pass": pass_gate,
+            "decision": "all_evidence_blockers_classified_read_only" if pass_gate else "classification_validation_incomplete_or_invalid",
+            "evidence_collection_candidate_count": len(candidate_refs),
+            "classified_candidate_count": len(validated),
+            "unclassified_memory_refs": unclassified_refs,
+            "invalid_classifications": invalid_classifications,
+        },
+        "automation_policy": {
+            "broad_g4_apply_allowed": False,
+            "bounded_partial_automation_allowed": False,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "writes_memory_status": False,
+            "writes_retrieval_ranking": False,
+            "enables_background_or_unattended_apply": False,
+        },
+        "privacy": {
+            "raw_packet_included": False,
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+            "raw_candidate_content_included": False,
+        },
+        "suggested_next_steps": [
+            "Use this artifact as exact read-only classification evidence only.",
+            "Run a separate blocker-resolution follow-up before claiming any scheduled gate is resolved.",
+            "Keep memory status, retrieval ranking, and background/default automation unchanged.",
         ],
     }
     _write_json_report(args.output, payload)
@@ -25757,6 +25891,18 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--blocker-resolution", type=Path, required=True)
     dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--output", type=Path)
     dogfood_scheduled_evidence_blocker_packet_parser.add_argument("--min-candidates", type=int, default=1)
+    dogfood_scheduled_evidence_blocker_classification_validate_parser = dogfood_subparsers.add_parser(
+        "scheduled-evidence-blocker-classification-validate",
+        help="Validate exact human classifications over a scheduled evidence-blocker packet without mutating memory or automation authority.",
+    )
+    dogfood_scheduled_evidence_blocker_classification_validate_parser.add_argument("--packet", type=Path, required=True)
+    dogfood_scheduled_evidence_blocker_classification_validate_parser.add_argument("--output", type=Path)
+    dogfood_scheduled_evidence_blocker_classification_validate_parser.add_argument(
+        "--classification",
+        action="append",
+        default=[],
+        help="Exact classification in memory_ref=classification form; repeat for every packet candidate.",
+    )
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -27101,6 +27247,9 @@ def main() -> None:
             return
         if args.dogfood_action == "scheduled-evidence-blocker-packet":
             print(json.dumps(_dogfood_scheduled_evidence_blocker_packet_payload(args), indent=2))
+            return
+        if args.dogfood_action == "scheduled-evidence-blocker-classification-validate":
+            print(json.dumps(_dogfood_scheduled_evidence_blocker_classification_validation_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(
