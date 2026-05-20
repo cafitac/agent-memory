@@ -1,17 +1,17 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 08:19 KST
+Last updated: 2026-05-21 08:24 KST
 
 ## Current checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 
-- Current source is `develop` after pushed green `c899ae1 Record scheduled evidence packet CI result`; this local slice adds a read-only exact classification validation artifact over the existing scheduled evidence blocker packet.
+- Current source is `develop` after pushed `926de66 Add evidence blocker classification validation`; GitHub Actions CI run `26195646109` completed successfully.
 - The hard evidence-collection refs are still `fact:5` and `fact:6`. Treat both as evidence-collection/manual-classification candidates only; do not delete, collapse, deprecate, lower authority, or mutate ranking from decay score alone.
 - Existing live scheduled artifacts remain in `/tmp/agent-memory-decay-risk-next-check.json`, `/tmp/agent-memory-scheduled-dry-run-next-check.json`, `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json`, and `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json`.
 - Implemented `dogfood scheduled-evidence-blocker-classification-validate --packet <packet.json> --classification <ref>=<option> ...`. It validates every exact classification against the packet's offered options, rejects invalid choices, hash-binds the packet, and emits `dogfood_scheduled_evidence_blocker_classification_validation`.
 - The new artifact remains status-only/read-only: `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`, `writes_memory_status=false`, `writes_retrieval_ranking=false`, `bounded_partial_automation_allowed=false`, `broad_g4_apply_allowed=false`, and `enables_background_or_unattended_apply=false`.
 - Live smoke wrote `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json` using conservative keep-blocked classifications for both `fact:5` and `fact:6`. It reports `classification_gate.pass=true`, `classified_candidate_count=2`, empty unclassified/invalid lists, privacy flags false, and all automation authority false. This does not resolve the scheduled gate by itself.
-- TDD/verification so far: RED observed because the subcommand was missing; targeted validation test is green (`1 passed`); focused scheduled suite including packet and classification validation is green (`5 passed, 244 deselected`); `git diff --check` passes; full local suite is green (`438 passed, 1 xfailed in 219.33s`). Commit/push/CI remain pending.
+- TDD/verification: RED observed because the subcommand was missing; targeted validation test is green (`1 passed`); focused scheduled suite including packet and classification validation is green (`5 passed, 244 deselected`); `git diff --check` passes; full local suite is green (`438 passed, 1 xfailed in 219.33s`); GitHub Actions CI run `26195646109` is green.
 
 Current estimate:
 
@@ -21,10 +21,9 @@ Current estimate:
 
 Recommended next work now:
 
-1. Commit/push only tracked source/test/doc changes, then watch CI.
-2. Add a separate read-only blocker-resolution follow-up only if needed: it may consume the classification validation artifact as evidence, but it must not mutate memory status, retrieval ranking, default retrieval, collapse/delete, or background/default authority.
-3. Continue normal-turn dogfood and re-run decay-risk, scheduled-dry-run, scheduled-blocker-resolution, packet, and classification validation; only consider bounded partial automation green when evidence blockers are naturally resolved or safely classified through a reviewed follow-up and all other checks remain clean.
-4. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Add a separate read-only blocker-resolution follow-up only if needed: it may consume the classification validation artifact as evidence, but it must not mutate memory status, retrieval ranking, default retrieval, collapse/delete, or background/default authority.
+2. Continue normal-turn dogfood and re-run decay-risk, scheduled-dry-run, scheduled-blocker-resolution, packet, and classification validation; only consider bounded partial automation green when evidence blockers are naturally resolved or safely classified through a reviewed follow-up and all other checks remain clean.
+3. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: scheduled blocker resolution now distinguishes hard decay blockers from advisory monitor-only refs
 

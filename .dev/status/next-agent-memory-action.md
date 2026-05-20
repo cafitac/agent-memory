@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 08:19 KST
+Last updated: 2026-05-21 08:24 KST
 
 ## Current checkpoint: exact read-only classification validation artifact added
 
@@ -9,20 +9,19 @@ The latest live recheck is documented in `.dev/status/current-handoff.md` and `.
 
 Current live shape:
 
-- Source/CI: `develop` is currently based on pushed green `c899ae1 Record scheduled evidence packet CI result`; this local slice adds `scheduled-evidence-blocker-classification-validate` plus tests/docs. Full local verification is green; commit/push and CI are still pending for this slice.
+- Source/CI: `develop` includes pushed `926de66 Add evidence blocker classification validation`; GitHub Actions CI run `26195646109` completed successfully.
 - Tracked working tree: source/test/doc edits for the read-only exact classification validation artifact. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
 - Latest live artifacts: `/tmp/agent-memory-decay-risk-next-check.json`, `/tmp/agent-memory-scheduled-dry-run-next-check.json`, `/tmp/agent-memory-scheduled-blocker-resolution-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json`, `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json`, `/tmp/agent-memory-fact6-explain-next.txt`, `/tmp/agent-memory-fact6-history-next.txt`, and `/tmp/agent-memory-fact6-graph-next.json`.
 - Hard blockers remain `fact:5` and `fact:6`; both are approved/connected but low-activation evidence candidates. They are not deletion/collapse/deprecation/ranking-mutation candidates from this signal alone.
 - New operator UX change: `dogfood scheduled-evidence-blocker-classification-validate --packet <packet.json> --classification <ref>=<option> ...` validates exact classifications against the packet, hash-binds the packet, writes only a read-only validation artifact, and rejects invalid classifications. It does not mutate memory status/retrieval ranking/default retrieval or enable broad/default/background automation.
 - Live validation smoke used conservative keep-blocked classifications for both refs. Output: `classification_gate.pass=true`, `classified_candidate_count=2`, `unclassified_memory_refs=[]`, `invalid_classifications=[]`, automation policy all false, privacy flags false. This is exact read-only classification evidence only; scheduled bounded partial automation remains blocked until a separate blocker-resolution follow-up consumes the validation safely.
-- Verification so far: targeted validation test passes (`1 passed`); focused scheduled suite passes (`5 passed, 244 deselected`); `git diff --check` passes; full local suite passes (`438 passed, 1 xfailed`). Commit/push/CI pending.
+- Verification: targeted validation test passes (`1 passed`); focused scheduled suite passes (`5 passed, 244 deselected`); `git diff --check` passes; full local suite passes (`438 passed, 1 xfailed`); GitHub Actions CI passes (`26195646109`).
 - Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
 
 Next safe action:
 
-1. Commit/push only tracked source/test/doc changes and watch CI.
-2. After CI is green, either continue normal-turn observation for `fact:5`/`fact:6`, or add a separate read-only blocker-resolution follow-up that consumes the validation artifact. That follow-up must still not write memory status, mutate ranking, enable default retrieval changes, or grant background/unattended authority.
-3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Either continue normal-turn observation for `fact:5`/`fact:6`, or add a separate read-only blocker-resolution follow-up that consumes the validation artifact. That follow-up must still not write memory status, mutate ranking, enable default retrieval changes, or grant background/unattended authority.
+2. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 If `fact:5`/`fact:6` remain hard blockers after more observation, the next implementation slice should stay read-only: a validation-consumer/report-only resolution artifact that distinguishes keep-blocked classifications from harmless/stale manual-review outcomes without widening mutation authority.
 
