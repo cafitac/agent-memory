@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-20 19:41 KST
+Last updated: 2026-05-20 19:59 KST
 
 ## Current checkpoint: continue from two live evidence blockers with a new read-only classification packet
 
@@ -16,7 +16,7 @@ Current live shape:
 - Hard blockers: `fact:5` and `fact:6` are approved/connected but still have low recent activation evidence (`activation_count=1` and `activation_count=2`). They are not deletion/collapse/deprecation candidates from this signal alone.
 - Latest scheduler blocker state: trace quality resolved (`consider_g4_plan`), storage healthy, background warnings absent, but `decay_risk_above_threshold` still hard-blocks bounded partial automation because `evidence_collection_candidate_count=2`.
 - New operator UX change: `dogfood scheduled-evidence-blocker-packet --blocker-resolution <resolution.json>` emits a ref-safe human-classification packet for the current evidence blockers. It includes classification options and inspect commands, but `classification_gate.pass=false`, `classified_candidate_count=0`, and automation authority remains false.
-- Verification so far: targeted packet test passes; focused scheduled suite passes (`4 passed, 244 deselected`). Full suite and CI are still pending for this local packet slice.
+- Verification so far: targeted packet test passes; focused scheduled suite passes (`4 passed, 244 deselected`); full local suite passes (`437 passed, 1 xfailed`). Initial CI for `89bc353` failed on a Linux-only brittle retrieval-eval exact-delta assertion, now narrowed locally. Follow-up commit/push/CI rerun is pending.
 - Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
 
 Next safe action:

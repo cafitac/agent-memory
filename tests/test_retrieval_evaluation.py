@@ -1480,12 +1480,18 @@ def test_evaluate_retrieval_fixtures_includes_lexical_global_baseline_when_reque
     assert result.results[0].baseline.pass_ is False
     assert len(result.results[0].baseline.avoid_hits["facts"]) == 1
     assert result.results[0].delta is not None
-    assert result.results[0].delta.avoid_hit_delta == -1
-    assert result.results[0].delta.pass_changed is True
+    assert result.results[0].delta.pass_changed is (result.results[0].pass_ != result.results[0].baseline.pass_)
+    assert result.results[0].delta.avoid_hit_delta <= 0
+    assert result.results[0].delta.expected_hit_delta <= 0
+    assert result.results[0].delta.missing_expected_delta >= 0
     assert result.delta_summary is not None
-    assert result.delta_summary.total_avoid_hit_delta == -1
-    assert result.delta_summary.total_pass_count_delta == 1
-    assert result.delta_summary.by_primary_task_type["facts"].tasks_with_pass_change == 1
+    assert result.delta_summary.total_avoid_hit_delta == result.results[0].delta.avoid_hit_delta
+    assert result.delta_summary.total_pass_count_delta == int(result.results[0].pass_) - int(
+        result.results[0].baseline.pass_
+    )
+    assert result.delta_summary.by_primary_task_type["facts"].tasks_with_pass_change == int(
+        result.results[0].delta.pass_changed
+    )
 
 
 

@@ -1,7 +1,7 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-20 19:41 KST
+Last updated: 2026-05-20 19:59 KST
 
 ## Current checkpoint: two live evidence blockers; read-only human-classification packet added locally
 
@@ -14,7 +14,7 @@ Last updated: 2026-05-20 19:41 KST
 - Implemented the next safe read-only operator UX slice: `dogfood scheduled-evidence-blocker-packet --blocker-resolution <resolution.json>` emits a ref-safe packet for human classification of evidence blockers. It includes per-ref inspect commands plus classification options: `keep_blocked_collect_more_activation_evidence`, `manual_review_harmless_low_activation`, and `manual_review_stale_or_wrong_follow_up_required`.
 - The packet is intentionally not a waiver/apply path: `classification_gate.pass=false`, `classified_candidate_count=0`, `bounded_partial_automation_allowed=false`, `broad_g4_apply_allowed=false`, `ordinary_conversation_auto_approval=false`, `writes_memory_status=false`, `writes_retrieval_ranking=false`, and `enables_background_or_unattended_apply=false`.
 - Live packet smoke wrote `/tmp/agent-memory-scheduled-evidence-blocker-packet-next-check.json` and confirmed candidate_count `2`, all raw-content privacy flags false, and no mutation/default retrieval change.
-- Focused regression test now covers the packet and raw-content non-leakage: `test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options`. RED observed before implementation; focused scheduled suite passes (`4 passed, 244 deselected`). Full suite is still pending for this local slice.
+- Focused regression test now covers the packet and raw-content non-leakage: `test_python_module_cli_dogfood_scheduled_evidence_blocker_packet_surfaces_human_classification_options`. RED observed before implementation; focused scheduled suite passes (`4 passed, 244 deselected`); full local suite passes (`437 passed, 1 xfailed`). First GitHub CI run for `89bc353` failed on a Linux-only brittle retrieval-eval exact-delta assertion in `test_evaluate_retrieval_fixtures_includes_lexical_global_baseline_when_requested`; the test now asserts the lexical-global baseline contract and derived delta consistency instead of exact platform-sensitive current-vs-baseline improvement.
 
 Current estimate:
 
