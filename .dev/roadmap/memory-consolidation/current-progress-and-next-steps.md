@@ -1,15 +1,15 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:07 KST
+Last updated: 2026-05-21 10:24 KST
 
-## Current checkpoint: validation-consuming evidence-blocker resolution follow-up stays read-only and red
+## Current checkpoint: validation-consuming evidence-blocker resolution follow-up is pushed and CI-green
 
-- Current source is `develop` with a local TDD slice adding `dogfood scheduled-evidence-blocker-classification-resolution`. At the start of the slice, `origin/develop` was clean through `f182b4e Record classification validation CI result`; unrelated untracked harness/scratch dirs remain untouched.
+- Current source is `develop` after pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully. Unrelated untracked harness/scratch dirs remain untouched.
 - The command consumes a green `dogfood_scheduled_evidence_blocker_classification_validation` artifact, verifies it is read-only/default-retrieval-unchanged/privacy-safe/non-authoritative, hash-binds the source validation artifact, and emits `dogfood_scheduled_evidence_blocker_classification_resolution`.
 - It interprets exact classifications without mutating anything: `keep_blocked_collect_more_activation_evidence` remains a hard unresolved blocker, `manual_review_stale_or_wrong_follow_up_required` remains unresolved follow-up, and only `manual_review_harmless_low_activation` can be resolved for bounded partial automation evidence. It still writes no memory status, retrieval ranking, default retrieval, collapse/delete, or background/default authority.
 - Live smoke consumed `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json` and wrote `/tmp/agent-memory-scheduled-evidence-blocker-classification-resolution-next-check.json`. Because both `fact:5` and `fact:6` were classified `keep_blocked_collect_more_activation_evidence`, the result is intentionally red: `resolution_gate.pass=false`, `hard_blocked_memory_refs=[fact:5, fact:6]`, `bounded_partial_automation_allowed=false`, and all broad/default/background authority flags false.
-- Verification so far: RED observed because the new subcommand was missing; targeted test is green (`1 passed`); focused scheduled suite including dry-run/blocker/packet/classification/resolution is green (`6 passed, 244 deselected`). Full local suite is green (`439 passed, 1 xfailed in 250.70s`); commit/push and CI are still pending for this local checkpoint.
+- Verification complete: RED observed because the new subcommand was missing; targeted test is green (`1 passed`); focused scheduled suite including dry-run/blocker/packet/classification/resolution is green (`6 passed, 244 deselected`); full local suite is green (`439 passed, 1 xfailed in 250.70s`); GitHub Actions CI run `26199635897` is green.
 
 Current estimate:
 
@@ -19,8 +19,8 @@ Current estimate:
 
 Recommended next work now:
 
-1. Finish full verification (`git diff --check`, full `uv run pytest tests/ -q`, commit/push, GitHub Actions watch) for this read-only resolution follow-up.
-2. Continue normal-turn dogfood for `fact:5`/`fact:6`; re-run decay-risk, scheduled-dry-run, blocker-resolution, packet, classification validation, and classification resolution after another observation window.
+1. Continue normal-turn dogfood for `fact:5`/`fact:6`; re-run decay-risk, scheduled-dry-run, blocker-resolution, packet, classification validation, and classification resolution after another observation window.
+2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
 3. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact

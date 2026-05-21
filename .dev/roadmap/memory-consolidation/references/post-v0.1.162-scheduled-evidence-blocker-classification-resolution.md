@@ -1,7 +1,7 @@
 # post-v0.1.162 scheduled evidence blocker classification resolution
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:07 KST
+Last updated: 2026-05-21 10:24 KST
 
 ## Purpose
 
@@ -91,8 +91,11 @@ uv run pytest tests/ -q
 # 439 passed, 1 xfailed in 250.70s
 ```
 
-Full suite is green; CI is pending for this local checkpoint.
+Full suite and CI are green for commit `ec00c59`:
+
+- local full suite: `439 passed, 1 xfailed in 250.70s`
+- GitHub Actions CI run `26199635897`: success
 
 ## Next
 
-Finish full verification, commit/push, and watch CI. Then continue normal-turn observation for `fact:5`/`fact:6`; do not convert this report-only evidence into mutation authority while either ref remains keep-blocked.
+Continue normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain. Do not convert this report-only evidence into mutation authority while either ref remains keep-blocked.

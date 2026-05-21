@@ -1,18 +1,18 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:07 KST
+Last updated: 2026-05-21 10:24 KST
 
 ## Current checkpoint: classification validation now has a read-only resolution consumer
 
-- Current source has a local TDD slice after `f182b4e Record classification validation CI result`, adding `dogfood scheduled-evidence-blocker-classification-resolution`. Unrelated untracked harness/scratch dirs remain (`.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`) and should stay untouched unless explicitly requested.
+- Current source is `develop` after pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully. Unrelated untracked harness/scratch dirs remain (`.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`) and should stay untouched unless explicitly requested.
 - The command consumes a green `dogfood_scheduled_evidence_blocker_classification_validation` artifact, verifies it is read-only/default-retrieval-unchanged/privacy-safe and carries no mutation authority, hash-binds it, and emits `dogfood_scheduled_evidence_blocker_classification_resolution`.
 - It is deliberately report-only: `keep_blocked_collect_more_activation_evidence` remains unresolved/hard-blocking, `manual_review_stale_or_wrong_follow_up_required` remains unresolved follow-up, and only `manual_review_harmless_low_activation` can resolve an evidence blocker for bounded partial automation evidence. It still cannot write memory status, mutate retrieval ranking/default retrieval, collapse/delete, or grant background/default authority.
 - Live smoke consumed `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json` and wrote `/tmp/agent-memory-scheduled-evidence-blocker-classification-resolution-next-check.json`. Since both `fact:5` and `fact:6` were conservative keep-blocked classifications, the new resolution artifact correctly reports `resolution_gate.pass=false`, `hard_blocked_memory_refs=[fact:5, fact:6]`, `bounded_partial_automation_allowed=false`, and all broad/default/background authority flags false.
-- Verification so far: RED observed for missing `scheduled-evidence-blocker-classification-resolution`; targeted test `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_evidence_blocker_classification_resolution_consumes_validation_read_only -q` -> `1 passed`; focused scheduled suite `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run or scheduled_evidence_blocker"` -> `6 passed, 244 deselected`. Full local suite is green (`439 passed, 1 xfailed in 250.70s`); commit/push and CI are still pending for this local checkpoint.
+- Verification complete: RED observed for missing `scheduled-evidence-blocker-classification-resolution`; targeted test `uv run pytest tests/test_cli.py::test_python_module_cli_dogfood_scheduled_evidence_blocker_classification_resolution_consumes_validation_read_only -q` -> `1 passed`; focused scheduled suite `uv run pytest tests/test_cli.py -q -k "scheduled_blocker_resolution or scheduled_dry_run or scheduled_evidence_blocker"` -> `6 passed, 244 deselected`; full local suite `uv run pytest tests/ -q` -> `439 passed, 1 xfailed in 250.70s`; GitHub Actions CI run `26199635897` -> success.
 - Current progress framing: scoped local human-brain-like lifecycle remains 100% at the bounded/review-gated/local-first boundary. Operational confidence remains about `98%`: classification evidence and the consuming resolution artifact are now exact/hash-bound, but scheduled bounded partial automation remains blocked while `fact:5`/`fact:6` are explicitly keep-blocked.
 
-Next session should start from `.dev/status/next-agent-memory-action.md`: finish full verification/commit/push/CI for this read-only resolution consumer, then continue normal-turn observation for `fact:5`/`fact:6`.
+Next session should start from `.dev/status/next-agent-memory-action.md`: continue normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain. The resolution-consumer implementation, push, and CI are complete.
 
 Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
 

@@ -1,27 +1,27 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:07 KST
+Last updated: 2026-05-21 10:24 KST
 
-## Current checkpoint: read-only classification-resolution consumer added locally
+## Current checkpoint: read-only classification-resolution consumer is pushed and CI-green
 
-The latest local checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
+The latest completed checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
 
 Current live shape:
 
-- Source/CI: local `develop` now has an uncommitted TDD slice adding `dogfood scheduled-evidence-blocker-classification-resolution`, based on pushed `f182b4e Record classification validation CI result`. CI for this new slice is still pending.
-- Tracked working tree: source/test/doc edits for the read-only validation-consuming evidence-blocker resolution artifact. Leave unrelated untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/` alone unless explicitly asked.
+- Source/CI: `develop` includes pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully.
+- Tracked working tree: clean except intentionally untouched untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/`.
 - Latest live artifacts now include `/tmp/agent-memory-scheduled-evidence-blocker-classification-resolution-next-check.json` in addition to the prior decay-risk, scheduled-dry-run, blocker-resolution, packet, and classification-validation artifacts.
 - Hard blockers remain `fact:5` and `fact:6`; both were classified `keep_blocked_collect_more_activation_evidence` in the exact validation artifact and remain unresolved in the new resolution artifact. They are not deletion/collapse/deprecation/ranking-mutation candidates from this signal alone.
 - New operator UX change: `dogfood scheduled-evidence-blocker-classification-resolution --classification-validation <validation.json>` consumes the green validation artifact, verifies read-only/no-authority/privacy-safe boundaries, hash-binds it, and reports whether the classifications resolve evidence blockers for bounded partial automation evidence only.
 - Live resolution smoke result: `resolution_gate.pass=false`, `decision=scheduled_evidence_blockers_still_block`, `hard_blocked_memory_refs=[fact:5, fact:6]`, `follow_up_required_memory_refs=[]`, `bounded_partial_automation_allowed=false`, broad/default/background authority all false, privacy flags false.
-- Verification so far: targeted resolution test passes (`1 passed`); focused scheduled suite passes (`6 passed, 244 deselected`); full local suite passes (`439 passed, 1 xfailed in 250.70s`). Commit/push and GitHub Actions are still pending.
+- Verification complete: targeted resolution test passes (`1 passed`); focused scheduled suite passes (`6 passed, 244 deselected`); full local suite passes (`439 passed, 1 xfailed in 250.70s`); GitHub Actions CI run `26199635897` passes.
 - Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
 
 Next safe action:
 
-1. Finish this checkpoint: `git diff --check`, full `uv run pytest tests/ -q`, commit/push, and watch GitHub Actions.
-2. After CI is green, continue normal-turn observation for `fact:5`/`fact:6` and rerun the scheduled artifact chain.
+1. Continue normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
+2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
 3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 If `fact:5`/`fact:6` remain keep-blocked after more observation, the next implementation slice should stay read-only or focus on operator evidence collection, not mutation authority.
