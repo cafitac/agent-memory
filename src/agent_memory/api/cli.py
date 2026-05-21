@@ -17825,6 +17825,165 @@ def _dogfood_scheduled_evidence_blocker_classification_validation_payload(args: 
     return payload
 
 
+def _dogfood_scheduled_evidence_blocker_classification_resolution_payload(args: argparse.Namespace) -> dict[str, Any]:
+    validation_path = args.classification_validation.expanduser().resolve(strict=False)
+    raw_text = validation_path.read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    if not isinstance(raw, dict) or raw.get("kind") != "dogfood_scheduled_evidence_blocker_classification_validation":
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-resolution requires a dogfood_scheduled_evidence_blocker_classification_validation report"
+        )
+    if raw.get("mutated") is True or raw.get("default_retrieval_unchanged") is False:
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-resolution requires a read-only unchanged classification-validation report"
+        )
+    privacy = raw.get("privacy", {}) if isinstance(raw.get("privacy"), dict) else {}
+    if any(
+        privacy.get(key) is True
+        for key in (
+            "raw_validation_included",
+            "raw_packet_included",
+            "raw_conversation_content_included",
+            "sample_values_included",
+            "raw_query_text_included",
+            "raw_candidate_content_included",
+        )
+    ):
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-resolution refuses reports that claim raw/sample content exposure"
+        )
+
+    classification_gate = raw.get("classification_gate", {}) if isinstance(raw.get("classification_gate"), dict) else {}
+    if classification_gate.get("pass") is not True:
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-resolution requires a green classification validation gate"
+        )
+    automation_policy = raw.get("automation_policy", {}) if isinstance(raw.get("automation_policy"), dict) else {}
+    forbidden_policy = {
+        "broad_g4_apply_allowed": False,
+        "bounded_partial_automation_allowed": False,
+        "ordinary_conversation_auto_approval": False,
+        "writes_memory_status": False,
+        "writes_retrieval_ranking": False,
+        "enables_background_or_unattended_apply": False,
+    }
+    for key, expected in forbidden_policy.items():
+        if automation_policy.get(key) is not expected:
+            raise ValueError(
+                "dogfood scheduled-evidence-blocker-classification-resolution requires non-mutating validation automation policy"
+            )
+    if automation_policy.get("default_retrieval_policy") != "approved_only_unchanged":
+        raise ValueError(
+            "dogfood scheduled-evidence-blocker-classification-resolution requires approved-only default retrieval policy"
+        )
+
+    raw_classifications = raw.get("validated_classifications", [])
+    if not isinstance(raw_classifications, list):
+        raw_classifications = []
+    per_memory_resolution: list[dict[str, Any]] = []
+    hard_blocked_refs: list[str] = []
+    follow_up_refs: list[str] = []
+    harmless_refs: list[str] = []
+    unknown_refs: list[str] = []
+    for item in raw_classifications:
+        if not isinstance(item, dict):
+            continue
+        memory_ref = str(item.get("memory_ref", "")).strip()
+        classification = str(item.get("classification", "")).strip()
+        if not memory_ref:
+            continue
+        if item.get("accepted") is not True:
+            unknown_refs.append(memory_ref)
+            resolution = "classification_not_accepted"
+            resolved = False
+        elif classification == "keep_blocked_collect_more_activation_evidence":
+            hard_blocked_refs.append(memory_ref)
+            resolution = "keep_blocked_collect_more_activation_evidence"
+            resolved = False
+        elif classification == "manual_review_stale_or_wrong_follow_up_required":
+            follow_up_refs.append(memory_ref)
+            resolution = "manual_follow_up_required_before_resolution"
+            resolved = False
+        elif classification == "manual_review_harmless_low_activation":
+            harmless_refs.append(memory_ref)
+            resolution = "manual_review_harmless_low_activation_resolved_for_bounded_partial_automation_only"
+            resolved = True
+        else:
+            unknown_refs.append(memory_ref)
+            resolution = "unknown_classification_requires_follow_up"
+            resolved = False
+        per_memory_resolution.append(
+            {
+                "memory_ref": memory_ref,
+                "classification": classification,
+                "resolution": resolution,
+                "resolved_for_bounded_partial_automation": resolved,
+            }
+        )
+
+    unresolved_refs = sorted(set(hard_blocked_refs + follow_up_refs + unknown_refs))
+    evidence_count = _safe_int(classification_gate.get("evidence_collection_candidate_count"))
+    classified_count = _safe_int(classification_gate.get("classified_candidate_count"), len(per_memory_resolution))
+    pass_gate = bool(per_memory_resolution) and not unresolved_refs and classified_count == evidence_count
+    payload = {
+        "kind": "dogfood_scheduled_evidence_blocker_classification_resolution",
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "source_validation": {
+            "path": str(validation_path),
+            "sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+            "packet_path": raw.get("packet_path"),
+            "packet_sha256": raw.get("packet_sha256"),
+            "raw_validation_included": False,
+        },
+        "classification_summary": {
+            "evidence_collection_candidate_count": evidence_count,
+            "classified_candidate_count": classified_count,
+            "keep_blocked_count": len(hard_blocked_refs),
+            "manual_review_harmless_count": len(harmless_refs),
+            "manual_review_follow_up_count": len(follow_up_refs),
+            "unknown_classification_count": len(unknown_refs),
+        },
+        "per_memory_resolution": per_memory_resolution,
+        "resolution_gate": {
+            "pass": pass_gate,
+            "decision": (
+                "scheduled_evidence_blockers_resolved_for_bounded_partial_automation_only"
+                if pass_gate
+                else "scheduled_evidence_blockers_still_block"
+            ),
+            "unresolved_memory_refs": unresolved_refs,
+            "hard_blocked_memory_refs": sorted(set(hard_blocked_refs)),
+            "follow_up_required_memory_refs": sorted(set(follow_up_refs + unknown_refs)),
+        },
+        "automation_policy": {
+            "broad_g4_apply_allowed": False,
+            "bounded_partial_automation_allowed": pass_gate,
+            "ordinary_conversation_auto_approval": False,
+            "default_retrieval_policy": "approved_only_unchanged",
+            "writes_memory_status": False,
+            "writes_retrieval_ranking": False,
+            "enables_background_or_unattended_apply": False,
+        },
+        "privacy": {
+            "raw_validation_included": False,
+            "raw_packet_included": False,
+            "raw_conversation_content_included": False,
+            "sample_values_included": False,
+            "raw_query_text_included": False,
+            "raw_candidate_content_included": False,
+        },
+        "suggested_next_steps": [
+            "Use this only as a validation-consuming resolution artifact for scheduled evidence blockers.",
+            "Keep memory status, retrieval ranking, default retrieval, collapse/delete, and broad/background authority unchanged.",
+            "If any ref remains keep-blocked or follow-up-required, continue normal-turn evidence collection or manual review.",
+        ],
+    }
+    _write_json_report(args.output, payload)
+    return payload
+
+
 def _scheduled_dry_run_comparison_report(
     *,
     report_paths: list[Path],
@@ -25903,6 +26062,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Exact classification in memory_ref=classification form; repeat for every packet candidate.",
     )
+    dogfood_scheduled_evidence_blocker_classification_resolution_parser = dogfood_subparsers.add_parser(
+        "scheduled-evidence-blocker-classification-resolution",
+        help="Consume a green evidence-blocker classification validation artifact as a read-only scheduled blocker resolution follow-up.",
+    )
+    dogfood_scheduled_evidence_blocker_classification_resolution_parser.add_argument(
+        "--classification-validation",
+        type=Path,
+        required=True,
+    )
+    dogfood_scheduled_evidence_blocker_classification_resolution_parser.add_argument("--output", type=Path)
     dogfood_background_parser = dogfood_subparsers.add_parser(
         "background-dry-run",
         help="Evaluate G3 background dry-run reports with read-only dogfood quality gates before any G4 plan.",
@@ -27250,6 +27419,9 @@ def main() -> None:
             return
         if args.dogfood_action == "scheduled-evidence-blocker-classification-validate":
             print(json.dumps(_dogfood_scheduled_evidence_blocker_classification_validation_payload(args), indent=2))
+            return
+        if args.dogfood_action == "scheduled-evidence-blocker-classification-resolution":
+            print(json.dumps(_dogfood_scheduled_evidence_blocker_classification_resolution_payload(args), indent=2))
             return
         if args.dogfood_action == "background-dry-run":
             print(
