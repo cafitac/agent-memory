@@ -46,6 +46,7 @@ def _hook_options():
         max_guidelines=_optional_int_env("AGENT_MEMORY_HERMES_MAX_GUIDELINES"),
         include_reason_codes=_bool_env("AGENT_MEMORY_HERMES_REASON_CODES", default=True),
         record_trace=_bool_env("AGENT_MEMORY_HERMES_RECORD_TRACE", default=True),
+        followup_fallback=_bool_env("AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK", default=False),
     )
 
 

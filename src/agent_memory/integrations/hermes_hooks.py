@@ -110,6 +110,7 @@ class HermesPreLlmHookOptions(BaseModel):
     max_guidelines: int | None = None
     include_reason_codes: bool = True
     record_trace: bool = True
+    followup_fallback: bool = False
 
 
 class HermesHookConfigSnippetOptions(BaseModel):
@@ -681,16 +682,17 @@ def build_pre_llm_hook_context(
             )
 
         context = prepare_context(packet)
-        context = maybe_apply_agent_memory_followup_fallback(
-            db_path=options.db_path,
-            query=user_message,
-            preferred_scope=effective_preferred_scope,
-            limit=options.limit,
-            top_k=options.top_k,
-            prepare_context=prepare_context,
-            current_context=context,
-            cwd=payload.cwd,
-        ).context
+        if options.followup_fallback:
+            context = maybe_apply_agent_memory_followup_fallback(
+                db_path=options.db_path,
+                query=user_message,
+                preferred_scope=effective_preferred_scope,
+                limit=options.limit,
+                top_k=options.top_k,
+                prepare_context=prepare_context,
+                current_context=context,
+                cwd=payload.cwd,
+            ).context
     except Exception:
         return {}
 

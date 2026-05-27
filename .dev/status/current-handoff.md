@@ -1,21 +1,30 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 14:10 KST
+Last updated: 2026-05-27 15:57 KST
 
-## Current checkpoint: context-poor follow-up fallback pushed and CI-green
+## Current checkpoint: follow-up fallback is being demoted to explicit opt-in
 
-- Implemented and pushed a read-only Hermes runtime fallback for context-poor follow-up questions in the `agent-memory` repo. If normal retrieval returns no reliable top memory and the query looks like a follow-up/next-work/status question, `hermes-context` and `hermes-pre-llm-hook` retry with bounded agent-memory handoff terms and label the prompt with `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`
-- Scope remains intentionally narrow: normal reliable retrieval is unchanged; unrelated non-follow-up queries still return `verify_first` / `Top memory: none`; fallback retrieval uses `record_retrievals=False`; no memory status/ranking/collapse/delete/automation authority is changed.
-- New implementation files/edits: `src/agent_memory/integrations/followup_fallback.py`, `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, and focused tests in `tests/test_cli.py`.
-- New planning doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md`; `current-progress-and-next-steps.md` now points to this UX slice before returning to `fact:5`/`fact:6` observation work.
-- Verification: initial RED observed for `test_python_module_cli_hermes_context_expands_context_poor_korean_followup` (`should_answer_now` was false); focused GREEN tests passed; full `tests/test_cli.py` passed (`252 passed, 1 xfailed`); full suite passed with `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`; GitHub Actions CI run `26492750967` on commit `d29345b` passed.
-- Live smoke over `/Users/reddit/.agent-memory/memory.db` with exact query `그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?` from repo cwd no longer returns `Top memory: none`; it renders the fallback marker and retrieved approved memories. It currently retrieves `fact #4` as top memory plus `procedure #1`/`fact #1` alternatives, so this fixes the no-memory UX gap but does not by itself resolve `fact:5`/`fact:6` or broaden automation authority.
-- Working tree is clean for tracked files after pushed commit `d29345b`; pre-existing unrelated untracked paths remain untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+- User raised a valid concern that the context-poor follow-up fallback can make performance/function tests harder by masking a genuine `Top memory: none` baseline signal.
+- Decision: keep the fallback as a read-only diagnostic/operator escape hatch, but make normal `hermes-context`, `hermes-pre-llm-hook`, and Hermes plugin behavior default to raw retrieval results.
+- Desired runtime contract: context-poor follow-up prompts stay `verify_first` / `Top memory: none` unless the operator explicitly opts in with `--followup-fallback` or, for the plugin path, `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
+- The fallback marker remains visible when enabled: `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.` Fallback retrieval still uses `record_retrievals=False` and grants no memory status/ranking/collapse/delete/automation authority.
+- New decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
+- Implementation completed locally in `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, root `__init__.py`, and focused tests in `tests/test_cli.py`.
+- RED observed before implementation: default tests failed because fallback was implicit; opt-in tests failed because `--followup-fallback` did not exist.
+- Verification completed locally:
+  - four fallback CLI tests + plugin integration: `8 passed`
+  - broader CLI/plugin corridor: `258 passed, 1 xfailed`
+  - full suite: `444 passed, 1 xfailed`
+  - live `hermes-context` smoke without `--followup-fallback`: `verify_first`, `Top memory: none`, no fallback marker
+  - live `hermes-context` smoke with `--followup-fallback`: `cautious`, fallback marker present, retrieved approved handoff memory present
+- During full-suite verification, `tests/test_release_smoke.py::test_built_distributions_include_schema_sql` exposed a packaging compatibility failure from latest setuptools rejecting `project.license = "MIT"`; fixed `pyproject.toml` to `license = { text = "MIT" }`, then the release smoke and full suite passed.
+- Previous pushed checkpoint remains `e4e0c4f Update follow-up fallback handoff`; this default-off correction is not pushed yet.
+- Pre-existing unrelated untracked paths remain untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
 
-Next step: return to normal-turn dogfood for `fact:5`/`fact:6` and rerun the scheduled artifact chain.
+Next step: commit/push the default-off fallback correction plus packaging compatibility fix, watch CI, then return to scheduled evidence-chain work.
 
-Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`
 
 ## Previous checkpoint: classification validation now has a read-only resolution consumer
 

@@ -1,28 +1,30 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:24 KST
+Last updated: 2026-05-27 15:57 KST
 
-## Current checkpoint: validation-consuming evidence-blocker resolution follow-up is pushed and CI-green
+## Current checkpoint: follow-up fallback default-off correction in progress
 
-- Current source is `develop` after pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully. Unrelated untracked harness/scratch dirs remain untouched.
-- The command consumes a green `dogfood_scheduled_evidence_blocker_classification_validation` artifact, verifies it is read-only/default-retrieval-unchanged/privacy-safe/non-authoritative, hash-binds the source validation artifact, and emits `dogfood_scheduled_evidence_blocker_classification_resolution`.
-- It interprets exact classifications without mutating anything: `keep_blocked_collect_more_activation_evidence` remains a hard unresolved blocker, `manual_review_stale_or_wrong_follow_up_required` remains unresolved follow-up, and only `manual_review_harmless_low_activation` can be resolved for bounded partial automation evidence. It still writes no memory status, retrieval ranking, default retrieval, collapse/delete, or background/default authority.
-- Live smoke consumed `/tmp/agent-memory-scheduled-evidence-blocker-classification-validation-next-check.json` and wrote `/tmp/agent-memory-scheduled-evidence-blocker-classification-resolution-next-check.json`. Because both `fact:5` and `fact:6` were classified `keep_blocked_collect_more_activation_evidence`, the result is intentionally red: `resolution_gate.pass=false`, `hard_blocked_memory_refs=[fact:5, fact:6]`, `bounded_partial_automation_allowed=false`, and all broad/default/background authority flags false.
-- Verification complete: RED observed because the new subcommand was missing; targeted test is green (`1 passed`); focused scheduled suite including dry-run/blocker/packet/classification/resolution is green (`6 passed, 244 deselected`); full local suite is green (`439 passed, 1 xfailed in 250.70s`); GitHub Actions CI run `26199635897` is green.
+- User feedback clarified that implicit context-poor follow-up fallback is risky for performance/function tests because it can mask genuine baseline retrieval failures.
+- Decision: keep the fallback as a read-only explicit diagnostic/operator escape hatch, but restore default runtime behavior to raw retrieval results.
+- Implementation complete: `hermes-context` and `hermes-pre-llm-hook` only run the fallback with `--followup-fallback`; the root Hermes plugin only enables it through `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
+- The fallback remains marked and non-authoritative when enabled: `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`, `record_retrievals=False`, no retrieval-ranking/status/collapse/delete/background/default authority change.
+- Packaging compatibility fixed: latest setuptools rejected `project.license = "MIT"` during release smoke, so `pyproject.toml` now uses `license = { text = "MIT" }`.
+- Decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
+- RED observed: default context/hook tests failed because fallback was implicit; opt-in context/hook tests failed because `--followup-fallback` did not exist.
+- Verification complete locally: fallback/plugin focus `8 passed`; CLI/plugin corridor `258 passed, 1 xfailed`; release smoke passed after the license fix; full suite `444 passed, 1 xfailed`; live default/opt-in `hermes-context` smokes matched the expected default-off vs opt-in marker behavior.
 
 Current estimate:
 
 - Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
-- Operational confidence remains about `98%`: the system now has exact validation and validation-consuming resolution evidence, but scheduled bounded partial automation remains correctly red while `fact:5`/`fact:6` are keep-blocked.
+- Operational confidence remains about `98%+`, but default-off fallback verification must finish before pushing because test observability matters more than convenience fallback behavior.
 - Literal broad/unattended/default background mutation remains intentionally blocked and must not be enabled from this checkpoint.
 
 Recommended next work now:
 
-1. First address the live UX gap documented in `references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md`: context-poor Korean/English follow-up questions such as “그럼 이후에 할 작업은 뭐지?” can still return `Top memory: none` even while storage/traces are healthy. Add a read-only runtime fallback/query expansion for `agent-memory` handoff-style follow-ups, with RED tests and no mutation-authority changes.
-2. Then continue normal-turn dogfood for `fact:5`/`fact:6`; re-run decay-risk, scheduled-dry-run, blocker-resolution, packet, classification validation, and classification resolution after another observation window.
-3. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
-4. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Commit/push the fallback default-off correction and packaging compatibility fix, then watch CI.
+2. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background authority remains blocked.
+3. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 

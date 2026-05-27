@@ -1,28 +1,29 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 14:10 KST
+Last updated: 2026-05-27 15:57 KST
 
-## Current checkpoint: context-poor follow-up fallback is pushed and CI-green
+## Current checkpoint: follow-up fallback default-off correction in progress
 
-The latest pushed checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
+The latest pushed checkpoint is documented in `.dev/status/current-handoff.md`, but user feedback changed the immediate slice: the context-poor follow-up fallback should not be implicit because it can hide real retrieval baseline/performance failures.
 
-Current live shape:
+Current live/source shape:
 
-- Source/CI: `develop` includes pushed `d29345b Add agent-memory follow-up fallback`; GitHub Actions CI run `26492750967` completed successfully.
-- Tracked working tree is clean after the pushed fallback commit; unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
-- New behavior: when `hermes-context` / `hermes-pre-llm-hook` sees a context-poor follow-up in the `agent-memory` repo and normal retrieval has no reliable top memory, it retries with bounded handoff terms and marks the prompt with `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`
-- Boundaries: fallback does not change default retrieval ranking, memory statuses, collapse/delete, background/default/unattended apply, or ordinary auto-approval; fallback retrieval uses `record_retrievals=False`.
-- Verification: RED observed for the Korean follow-up test before implementation; focused GREEN tests passed; `uv run pytest tests/test_cli.py -q` -> `252 passed, 1 xfailed`; `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`; GitHub Actions CI run `26492750967` passed.
-- Live smoke: exact query `그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?` from repo cwd against `/Users/reddit/.agent-memory/memory.db` now renders the fallback marker instead of `Top memory: none`. Current top memory is `fact #4`, with `procedure #1` and `fact #1` alternatives; this is UX grounding only and does not resolve `fact:5`/`fact:6`.
+- Source/CI latest pushed: `develop` includes `e4e0c4f Update follow-up fallback handoff`; CI for the prior fallback checkpoint was green.
+- Local correction is implemented but not pushed yet: default runtime fallback is demoted to explicit opt-in.
+- Default contract after this slice: `hermes-context` and `hermes-pre-llm-hook` leave context-poor follow-up prompts as `verify_first` / `Top memory: none` unless `--followup-fallback` is supplied.
+- Plugin contract after this slice: root Hermes plugin keeps fallback disabled unless `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
+- Opt-in fallback remains read-only, marked, and non-authoritative: `record_retrievals=False`; no memory status/ranking/collapse/delete/default/background/unattended authority changes.
+- Packaging compatibility fix included: `pyproject.toml` now uses `license = { text = "MIT" }` because latest setuptools rejected the prior license string during release smoke.
+- Decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
+- RED/GREEN: default-blocking and opt-in fallback tests were added; RED failed as expected; final local verification passed with `8 passed` for fallback/plugin focus, `258 passed, 1 xfailed` for CLI/plugin corridor, and `444 passed, 1 xfailed` for full suite. Live default/opt-in `hermes-context` smokes matched the expected default-off vs opt-in marker behavior.
+- Pre-existing unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
 
 Next safe action:
 
-1. Return to normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
-2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
+1. Commit/push the fallback default-off correction and packaging compatibility fix, then watch CI.
+2. Then return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and a green `scheduled-blocker-resolution` for bounded partial automation evidence, but broad/default/background mutation authority remains blocked.
 3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
-
-If `fact:5`/`fact:6` remain keep-blocked after more observation, the next implementation slice should stay read-only or focus on operator evidence collection, not mutation authority.
 
 ## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 

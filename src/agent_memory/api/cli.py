@@ -24074,6 +24074,8 @@ def _render_memory_context_for_prompt(args: argparse.Namespace):
         )
 
     context = prepare_context(packet)
+    if not getattr(args, "followup_fallback", False):
+        return context
     return maybe_apply_agent_memory_followup_fallback(
         db_path=args.db_path,
         query=args.query,
@@ -26156,6 +26158,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_context_parser.add_argument("--max-alternatives", type=int)
     hermes_context_parser.add_argument("--max-guidelines", type=int)
     hermes_context_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_context_parser.add_argument(
+        "--followup-fallback",
+        action="store_true",
+        help="Opt in to the agent-memory repo context-poor follow-up fallback. Disabled by default for baseline retrieval testing.",
+    )
     hermes_context_parser.add_argument("--verification-results-json")
 
     codex_prompt_parser = subparsers.add_parser("codex-prompt")
@@ -26199,6 +26206,11 @@ def _build_parser() -> argparse.ArgumentParser:
     hermes_pre_llm_hook_parser.add_argument("--max-alternatives", type=int)
     hermes_pre_llm_hook_parser.add_argument("--max-guidelines", type=int)
     hermes_pre_llm_hook_parser.add_argument("--no-reason-codes", action="store_true")
+    hermes_pre_llm_hook_parser.add_argument(
+        "--followup-fallback",
+        action="store_true",
+        help="Opt in to the agent-memory repo context-poor follow-up fallback. Disabled by default for baseline retrieval testing.",
+    )
     hermes_pre_llm_hook_parser.add_argument(
         "--record-trace",
         action="store_true",
@@ -27545,6 +27557,7 @@ def main() -> None:
                 max_guidelines=args.max_guidelines,
                 include_reason_codes=not args.no_reason_codes,
                 record_trace=args.record_trace,
+                followup_fallback=args.followup_fallback,
             ),
         )
         print(json.dumps(hook_response, indent=2))
