@@ -1,43 +1,32 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 16:50 KST
+Last updated: 2026-05-27 18:55 KST
 
-## Current checkpoint: scheduled evidence-chain recheck complete on real live DB
+## Current checkpoint: copy-live one-item apply completed and verified on real data
 
-Source/CI evidence checkpoint `5a614a1 Record live scheduled evidence readiness` is pushed to `origin/develop`; GitHub Actions CI run `26498686779` completed successfully. This checkpoint changed documentation/evidence records only.
+Source/CI evidence checkpoint `05b215d Record live scheduled evidence CI` is pushed to `origin/develop`; this local pass adds real-data copy-live apply evidence and docs on top of that checkpoint.
 
-Live/source shape from real data:
+Completed next documented action:
 
-- Live evidence-chain artifacts from real `/Users/reddit/.agent-memory/memory.db` (no mocks):
-  - decay risk: `/tmp/agent-memory-next-real/decay-risk-20260527T074705Z.json`
-  - scheduled dry-run: `/tmp/agent-memory-next-real/scheduled-dry-run-20260527T074705Z.json`
-  - scheduled blocker resolution: `/tmp/agent-memory-next-real/scheduled-blocker-resolution-20260527T074705Z.json`
-  - storage health: `/tmp/agent-memory-next-real/storage-health-20260527T074705Z.json`
-  - trace quality: `/tmp/agent-memory-next-real/trace-quality-20260527T074705Z.json`
-  - live evidence bundle: `/tmp/agent-memory-next-real/live-evidence-bundle-20260527T074824Z/live-evidence-bundle.json`
-  - live evidence bundle comparison: `/tmp/agent-memory-next-real/live-evidence-bundle-compare-20260527T074906Z.json`
-  - automation policy readiness: `/tmp/agent-memory-next-real/automation-policy-readiness-20260527T075006Z.json`
-- Storage health: `healthy`, no warnings.
-- Trace quality: `healthy`, no warnings, recommendation `consider_g4_plan`.
-- Scheduled dry-run: strict gate still reports `quality_gate.pass=false` only because `decay_risk_above_threshold` is nonzero under `max_decay_risk=0`.
-- Decay decomposition: `candidate_count=6`, all `monitor_only_no_mutation`, max score `0.2`, no hard evidence-collection refs.
-- Scheduled blocker resolution with monitor-only allowance: `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`.
-- Live evidence bundle and comparison are green and raw-content-safe.
-- Automation policy readiness is green and classifies the next lane as exact narrow reviewed-candidate apply policy only.
-- Copy-live follow-through reached green bounded readiness: fresh epoch compare and telemetry reconciliation passed; G4 queue preview has all required gate artifacts green; `g4-apply-readiness` passed with `bounded_partial_apply_ready=true`.
-- Copy-live green readiness artifacts: `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
-- Final copy-live one-item apply rerun could not complete because the macOS volume had only hundreds of MiB free and `uv` hit `No space left on device`. Transient copy DBs/backups from this turn were removed; live DB was not mutated.
+- Disk pressure is cleared enough for the copy-live corridor: `df` reported about 34 GiB available.
+- Real copy-live run directory: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z`.
+- Exact one-item copy apply artifact: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z/apply-one.json`.
+- Post-apply verification artifact: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z/post-apply-verification.json`.
+- Selected queue id: `g4-review:reinforcement:2`.
+- Applied target on the copy: `fact:4`.
+- Apply result: `applied_count=1`, `memory_status_mutated=false`, `memory_reinforcement_mutated=true`, `default_retrieval_unchanged=true`.
+- Post-apply verification: `quality_gate.pass=true`, decision `g4_post_apply_verification_green_stop_before_next_mutation`.
+- Live DB was not the apply target. Because normal Hermes telemetry advanced during the session, file SHA changed; use targeted live table inspection rather than file SHA as the source-boundary evidence for this interactive run. Live G4 queue/application tables still contain only historical rows; fresh rows are copy-only.
 
 Next safe action:
 
-1. Clear disk pressure or point temp/copy artifacts to a larger volume, then rerun the exact one-item copy-live `g4-review-queue-apply` using the green readiness artifact and explicit `--queue-id` for one reviewed reinforcement item.
-2. Only after that copy-live apply and post-apply verification are green should a live one-item corridor be considered; it must use exact policy/approval phrase/backup/audit/reason-hash.
-3. Do not open broad/background/default mutation. Keep ordinary conversation auto-approval, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
-4. Keep using real live DB evidence and actual CLI reports; avoid mock-only confidence except for focused parser/regression tests if code changes become necessary.
+1. Decide whether to stop at copy-live verification or take a separate live one-item corridor.
+2. If proceeding live, first refresh storage/trace/scheduled/evidence-bundle/queue approval/readiness artifacts against the current live DB, then run exactly one reviewed queue id with live backup and immediate post-apply verification.
+3. Do not open broad/background/default mutation. Keep ordinary conversation auto-approval, default-ranking migration, collapse/delete, telemetry reset, repeated apply without fresh approval, and unreviewed promotion blocked.
+4. Continue to prefer real live DB/copy-live evidence over mocks; use focused tests only if code changes are made.
 
-Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-scheduled-evidence-chain-readiness.md`
-
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-copy-live-one-item-g4-apply-verification.md`
 
 ## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 

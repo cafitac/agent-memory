@@ -1,46 +1,34 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 16:50 KST
+Last updated: 2026-05-27 18:55 KST
 
-## Current checkpoint: live scheduled evidence-chain readiness is green for bounded partial automation evidence only
+## Current checkpoint: exact one-item copy-live G4 apply is green through post-apply verification
 
-- Returned to the scheduled evidence-chain after the follow-up fallback default-off correction and re-ran the chain against the real live DB (`/Users/reddit/.agent-memory/memory.db`) plus personal-oss Hermes config.
-- Live evidence-chain artifacts from real `/Users/reddit/.agent-memory/memory.db` (no mocks):
-  - decay risk: `/tmp/agent-memory-next-real/decay-risk-20260527T074705Z.json`
-  - scheduled dry-run: `/tmp/agent-memory-next-real/scheduled-dry-run-20260527T074705Z.json`
-  - scheduled blocker resolution: `/tmp/agent-memory-next-real/scheduled-blocker-resolution-20260527T074705Z.json`
-  - storage health: `/tmp/agent-memory-next-real/storage-health-20260527T074705Z.json`
-  - trace quality: `/tmp/agent-memory-next-real/trace-quality-20260527T074705Z.json`
-  - live evidence bundle: `/tmp/agent-memory-next-real/live-evidence-bundle-20260527T074824Z/live-evidence-bundle.json`
-  - live evidence bundle comparison: `/tmp/agent-memory-next-real/live-evidence-bundle-compare-20260527T074906Z.json`
-  - automation policy readiness: `/tmp/agent-memory-next-real/automation-policy-readiness-20260527T075006Z.json`
-- `dogfood storage-health` is healthy with warnings `[]`.
-- `dogfood trace-quality --since-hours 24` is healthy with warnings `[]` and recommendation `consider_g4_plan`.
-- `dogfood scheduled-dry-run` remains strict-red because `max_decay_risk=0` and there are 6 monitor-only decay candidates. The current decay decomposition has no evidence-collection refs: `resolution_hint_counts={'monitor_only_no_mutation': 6}`, max score `0.2`.
-- `dogfood scheduled-blocker-resolution --allow-monitor-only-decay --accept-ready-trace-quality` resolves the scheduled blocker for bounded partial automation evidence only: `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`, unresolved blockers `[]`.
-- `dogfood live-evidence-bundle` passed with no blocked reasons; it stayed read-only/non-mutating, kept default retrieval unchanged, and emitted no raw query/source/transcript/report content.
-- `dogfood live-evidence-bundle-compare` against the latest prior checked live bundle passed with decision `live_evidence_bundle_stable_for_next_read_only_automation_policy_slice`.
-- `dogfood automation-policy-readiness` passed and recommends only an exact narrow reviewed-candidate apply policy slice next. It keeps broad G4 apply, ordinary conversation auto-approval, telemetry reset apply, collapse/delete, default-ranking mutation, and repeated apply without new approval forbidden.
-- Continued into that next lane on copy-live evidence: fresh epoch compare passed, telemetry reconciliation passed with the fresh compare artifact, G4 queue preview passed with all required gate artifacts green, and `g4-apply-readiness` passed with `bounded_partial_apply_ready=true`.
-- Copy-live green readiness artifacts: `/tmp/agent-memory-next-real/fresh-epoch-compare-20260527T075303Z.json`, `/tmp/agent-memory-next-real/telemetry-reconciliation-with-fresh-compare-20260527T075318Z.json`, `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
-- A final exact one-item copy-live apply rerun was attempted, but `uv` failed with `No space left on device` while the macOS volume had only hundreds of MiB free. Transient copy DBs/backups from this turn were removed; no live DB mutation was performed.
-- Docs/evidence checkpoint `5a614a1 Record live scheduled evidence readiness` is pushed to `origin/develop`; GitHub Actions CI run `26498686779` passed.
+- Continued from the live scheduled evidence-chain readiness checkpoint and ran the next documented corridor on a copy of the real live DB (`/Users/reddit/.agent-memory/memory.db`). No mocks or synthetic fixtures were used for the apply evidence.
+- Run directory: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z`.
+- Exact apply audit: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z/apply-one.json`.
+- Post-apply verification: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z/post-apply-verification.json`.
+- The copy had two historical reviewed/applied G4 queue rows from the live DB. This pass inserted two fresh queue rows, approved the selected fresh reinforcement item, rejected the other fresh item, and applied only `g4-review:reinforcement:2` with `--max-apply 1`.
+- Copy apply result: `mutated=true`, `applied_count=1`, `already_applied_count=0`, `skipped_count=0`, `memory_status_mutated=false`, `memory_reinforcement_mutated=true`, `default_retrieval_unchanged=true`.
+- Applied target: `fact:4`; action `apply_reinforcement_marker`.
+- Post-apply verification passed: `quality_gate.pass=true`, decision `g4_post_apply_verification_green_stop_before_next_mutation`, backup integrity passed, rollback replay passed, and post-apply bundle passed.
+- Targeted real-data checks after apply: live storage health `healthy`; copy storage health `healthy`; copy 24h trace quality `healthy` / `consider_g4_plan`.
+- Source-boundary caveat: live DB file SHA changed during the interactive agent session because normal Hermes telemetry advanced, so SHA is not clean preservation evidence here. No apply command targeted live; targeted live inspection shows fresh queue/application rows are copy-only.
 
 Current estimate:
 
 - Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
-- Operational confidence is now `98%+` with the scheduled evidence-chain green for bounded partial automation evidence. The remaining gap is not storage/runtime health; it is whether to execute the next exact reviewed one-item/copy-live corridor.
+- Operational confidence is now `98%+` with the exact copy-live one-item corridor green through post-apply verification.
 - Literal broad/unattended/default background mutation remains intentionally blocked.
 
 Recommended next work now:
 
-1. Clear disk pressure or use a larger temp/report volume, then rerun exact one-item copy-live `g4-review-queue-apply` from the green readiness artifact.
-2. If live mutation is intentionally taken later, keep it one reviewed item, exact policy/approval phrase, backup/audit/reason-hash, and immediate post-apply verification only.
+1. Stop here unless an explicit live one-item corridor is desired.
+2. For any live one-item corridor, refresh all pre-apply evidence immediately first because live telemetry is advancing, then use exact queue id, approval phrase, backup, audit, reason hash, and immediate post-apply verification.
 3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
 
-Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-scheduled-evidence-chain-readiness.md`
-
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-copy-live-one-item-g4-apply-verification.md`
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 
