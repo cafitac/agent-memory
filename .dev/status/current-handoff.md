@@ -1,9 +1,23 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:24 KST
+Last updated: 2026-05-27 14:10 KST
 
-## Current checkpoint: classification validation now has a read-only resolution consumer
+## Current checkpoint: context-poor follow-up fallback implemented locally, not yet committed
+
+- Implemented a read-only Hermes runtime fallback for context-poor follow-up questions in the `agent-memory` repo. If normal retrieval returns no reliable top memory and the query looks like a follow-up/next-work/status question, `hermes-context` and `hermes-pre-llm-hook` retry with bounded agent-memory handoff terms and label the prompt with `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`
+- Scope remains intentionally narrow: normal reliable retrieval is unchanged; unrelated non-follow-up queries still return `verify_first` / `Top memory: none`; fallback retrieval uses `record_retrievals=False`; no memory status/ranking/collapse/delete/automation authority is changed.
+- New implementation files/edits: `src/agent_memory/integrations/followup_fallback.py`, `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, and focused tests in `tests/test_cli.py`.
+- New planning doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md`; `current-progress-and-next-steps.md` now points to this UX slice before returning to `fact:5`/`fact:6` observation work.
+- Verification: initial RED observed for `test_python_module_cli_hermes_context_expands_context_poor_korean_followup` (`should_answer_now` was false); focused GREEN tests passed; full `tests/test_cli.py` passed (`252 passed, 1 xfailed`); full suite passed with `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`.
+- Live smoke over `/Users/reddit/.agent-memory/memory.db` with exact query `그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?` from repo cwd no longer returns `Top memory: none`; it renders the fallback marker and retrieved approved memories. It currently retrieves `fact #4` as top memory plus `procedure #1`/`fact #1` alternatives, so this fixes the no-memory UX gap but does not by itself resolve `fact:5`/`fact:6` or broaden automation authority.
+- Working tree has intended tracked edits plus new untracked fallback/doc files. Pre-existing unrelated untracked paths remain untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+
+Next step: review the diff, commit the fallback/doc slice if acceptable, push `develop`, and watch CI. After that, return to normal-turn dogfood for `fact:5`/`fact:6` and rerun the scheduled artifact chain.
+
+Reference: `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`
+
+## Previous checkpoint: classification validation now has a read-only resolution consumer
 
 - Current source is `develop` after pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully. Unrelated untracked harness/scratch dirs remain (`.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`) and should stay untouched unless explicitly requested.
 - The command consumes a green `dogfood_scheduled_evidence_blocker_classification_validation` artifact, verifies it is read-only/default-retrieval-unchanged/privacy-safe and carries no mutation authority, hash-binds it, and emits `dogfood_scheduled_evidence_blocker_classification_resolution`.

@@ -1,28 +1,28 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-21 10:24 KST
+Last updated: 2026-05-27 14:10 KST
 
-## Current checkpoint: read-only classification-resolution consumer is pushed and CI-green
+## Current checkpoint: context-poor follow-up fallback is locally implemented and verified
 
-The latest completed checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
+The latest local checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
 
 Current live shape:
 
-- Source/CI: `develop` includes pushed `ec00c59 Add evidence blocker classification resolution`; GitHub Actions CI run `26199635897` completed successfully.
-- Tracked working tree: clean except intentionally untouched untracked `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, and `.worktrees/`.
-- Latest live artifacts now include `/tmp/agent-memory-scheduled-evidence-blocker-classification-resolution-next-check.json` in addition to the prior decay-risk, scheduled-dry-run, blocker-resolution, packet, and classification-validation artifacts.
-- Hard blockers remain `fact:5` and `fact:6`; both were classified `keep_blocked_collect_more_activation_evidence` in the exact validation artifact and remain unresolved in the new resolution artifact. They are not deletion/collapse/deprecation/ranking-mutation candidates from this signal alone.
-- New operator UX change: `dogfood scheduled-evidence-blocker-classification-resolution --classification-validation <validation.json>` consumes the green validation artifact, verifies read-only/no-authority/privacy-safe boundaries, hash-binds it, and reports whether the classifications resolve evidence blockers for bounded partial automation evidence only.
-- Live resolution smoke result: `resolution_gate.pass=false`, `decision=scheduled_evidence_blockers_still_block`, `hard_blocked_memory_refs=[fact:5, fact:6]`, `follow_up_required_memory_refs=[]`, `bounded_partial_automation_allowed=false`, broad/default/background authority all false, privacy flags false.
-- Verification complete: targeted resolution test passes (`1 passed`); focused scheduled suite passes (`6 passed, 244 deselected`); full local suite passes (`439 passed, 1 xfailed in 250.70s`); GitHub Actions CI run `26199635897` passes.
-- Progress estimate: scoped local brain-like lifecycle `100%`; operational confidence about `98%`; broad/unattended/default background mutation remains intentionally blocked.
+- Source: `develop` has local uncommitted fallback/doc/test edits; not yet pushed/CI-watched.
+- Tracked working tree: intended edits in `.dev/status/current-handoff.md`, `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`, `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, and `tests/test_cli.py`; intended new files are `.dev/roadmap/memory-consolidation/references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md` and `src/agent_memory/integrations/followup_fallback.py`.
+- Unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+- New behavior: when `hermes-context` / `hermes-pre-llm-hook` sees a context-poor follow-up in the `agent-memory` repo and normal retrieval has no reliable top memory, it retries with bounded handoff terms and marks the prompt with `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`
+- Boundaries: fallback does not change default retrieval ranking, memory statuses, collapse/delete, background/default/unattended apply, or ordinary auto-approval; fallback retrieval uses `record_retrievals=False`.
+- Verification: RED observed for the Korean follow-up test before implementation; focused GREEN tests passed; `uv run pytest tests/test_cli.py -q` -> `252 passed, 1 xfailed`; `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`.
+- Live smoke: exact query `그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?` from repo cwd against `/Users/reddit/.agent-memory/memory.db` now renders the fallback marker instead of `Top memory: none`. Current top memory is `fact #4`, with `procedure #1` and `fact #1` alternatives; this is UX grounding only and does not resolve `fact:5`/`fact:6`.
 
 Next safe action:
 
-1. Continue normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
-2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
-3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Review diff, commit the fallback/doc slice, push `develop`, and watch CI.
+2. After CI, return to normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
+3. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
+4. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 If `fact:5`/`fact:6` remain keep-blocked after more observation, the next implementation slice should stay read-only or focus on operator evidence collection, not mutation authority.
 

@@ -30,6 +30,7 @@ from agent_memory.storage.sqlite import (
     insert_experience_trace,
     insert_relation,
     list_experience_traces,
+    list_memory_activations,
     list_retrieval_observations,
     record_memory_retrieval,
     record_retrieval_observation,
@@ -8284,6 +8285,118 @@ def test_python_module_cli_hermes_context_outputs_adapter_context(tmp_path: Path
 
 
 
+def test_python_module_cli_hermes_context_expands_context_poor_korean_followup(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-context-followup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="handoff",
+        content=(
+            "agent-memory current handoff next action is context-poor follow-up runtime fallback. "
+            "The fallback is read-only and keeps default retrieval unchanged."
+        ),
+        metadata={"project": "agent-memory"},
+    )
+    next_action_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="agent-memory current handoff next action",
+        predicate="is",
+        object_ref_or_value="context-poor follow-up runtime fallback",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=next_action_fact.id)
+    activations_before = list_memory_activations(db_path)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?",
+            "--preferred-scope",
+            "project:agent-memory",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "12",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["context"]["should_answer_now"] is True
+    assert payload["context"]["should_verify_first"] is False
+    assert payload["context"]["payload"]["response_mode"] == "cautious"
+    prompt_text = payload["context"]["prompt_text"]
+    assert "Follow-up fallback: expanded context-poor query with agent-memory handoff terms." in prompt_text
+    assert "Retrieved fact #1: agent-memory current handoff next action | is | context-poor follow-up runtime fallback" in prompt_text
+    assert "raw" not in payload["context"]["payload"]
+    assert list_memory_activations(db_path) == activations_before
+
+
+
+def test_python_module_cli_hermes_context_keeps_unrelated_no_memory_query_blocked(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-context-no-fallback.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="handoff",
+        content="agent-memory current handoff next action is context-poor follow-up runtime fallback.",
+        metadata={"project": "agent-memory"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="agent-memory current handoff next action",
+        predicate="is",
+        object_ref_or_value="context-poor follow-up runtime fallback",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-context",
+            str(db_path),
+            "무관한 저녁 메뉴 추천해줘",
+            "--preferred-scope",
+            "project:agent-memory",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "12",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["context"]["should_answer_now"] is False
+    assert payload["context"]["should_verify_first"] is True
+    assert payload["context"]["payload"]["response_mode"] == "verify_first"
+    prompt_text = payload["context"]["prompt_text"]
+    assert "Top memory: none" in prompt_text
+    assert "Follow-up fallback:" not in prompt_text
+
+
+
 def test_python_module_cli_codex_prompt_outputs_plain_prompt_text(tmp_path: Path) -> None:
     db_path = tmp_path / "module-cli-codex-prompt.db"
     initialize_database(db_path)
@@ -9265,6 +9378,64 @@ def test_python_module_cli_hermes_pre_llm_hook_skips_synthetic_doctor_observatio
     observations_payload = json.loads(observations_result.stdout)
     assert observations_payload["observations"] == []
 
+
+
+def test_python_module_cli_hermes_pre_llm_hook_expands_context_poor_korean_followup(tmp_path: Path) -> None:
+    db_path = tmp_path / "module-cli-hermes-hook-followup.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="handoff",
+        content="agent-memory current handoff next action is context-poor follow-up runtime fallback.",
+        metadata={"project": "agent-memory"},
+    )
+    fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="agent-memory current handoff next action",
+        predicate="is",
+        object_ref_or_value="context-poor follow-up runtime fallback",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fact.id)
+
+    hook_payload = {
+        "hook_event_name": "pre_llm_call",
+        "session_id": "followup-session",
+        "cwd": str(tmp_path),
+        "extra": {
+            "user_message": "그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?",
+            "platform": "cli",
+        },
+    }
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "hermes-pre-llm-hook",
+            str(db_path),
+            "--preferred-scope",
+            "project:agent-memory",
+            "--top-k",
+            "1",
+            "--max-prompt-lines",
+            "12",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        input=json.dumps(hook_payload),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    context_text = json.loads(result.stdout)["context"]
+    assert "<agent_memory_context>" in context_text
+    assert "Follow-up fallback: expanded context-poor query with agent-memory handoff terms." in context_text
+    assert "Retrieved fact #1: agent-memory current handoff next action | is | context-poor follow-up runtime fallback" in context_text
 
 
 def test_python_module_cli_hermes_pre_llm_hook_injects_retrieved_memory_context(tmp_path: Path) -> None:

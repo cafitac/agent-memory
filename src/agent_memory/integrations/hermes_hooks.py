@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from agent_memory.adapters import prepare_hermes_memory_context
 from agent_memory.core.models import MemoryPacket
 from agent_memory.core.retrieval import retrieve_memory_packet
+from agent_memory.integrations.followup_fallback import maybe_apply_agent_memory_followup_fallback
 from agent_memory.storage.sqlite import initialize_database, insert_experience_trace
 
 
@@ -666,17 +667,30 @@ def build_pre_llm_hook_context(
             observation_surface=observation_surface,
             observation_metadata={"hook_event_name": payload.hook_event_name},
         )
-        context = prepare_hermes_memory_context(
-            packet,
+        def prepare_context(candidate_packet: MemoryPacket):
+            return prepare_hermes_memory_context(
+                candidate_packet,
+                top_k=options.top_k,
+                max_prompt_lines=options.max_prompt_lines,
+                max_prompt_chars=options.max_prompt_chars,
+                max_prompt_tokens=options.max_prompt_tokens,
+                max_verification_steps=options.max_verification_steps,
+                max_alternatives=options.max_alternatives,
+                max_guidelines=options.max_guidelines,
+                include_reason_codes=options.include_reason_codes,
+            )
+
+        context = prepare_context(packet)
+        context = maybe_apply_agent_memory_followup_fallback(
+            db_path=options.db_path,
+            query=user_message,
+            preferred_scope=effective_preferred_scope,
+            limit=options.limit,
             top_k=options.top_k,
-            max_prompt_lines=options.max_prompt_lines,
-            max_prompt_chars=options.max_prompt_chars,
-            max_prompt_tokens=options.max_prompt_tokens,
-            max_verification_steps=options.max_verification_steps,
-            max_alternatives=options.max_alternatives,
-            max_guidelines=options.max_guidelines,
-            include_reason_codes=options.include_reason_codes,
-        )
+            prepare_context=prepare_context,
+            current_context=context,
+            cwd=payload.cwd,
+        ).context
     except Exception:
         return {}
 

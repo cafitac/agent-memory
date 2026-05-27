@@ -19,9 +19,10 @@ Current estimate:
 
 Recommended next work now:
 
-1. Continue normal-turn dogfood for `fact:5`/`fact:6`; re-run decay-risk, scheduled-dry-run, blocker-resolution, packet, classification validation, and classification resolution after another observation window.
-2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
-3. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. First address the live UX gap documented in `references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md`: context-poor Korean/English follow-up questions such as “그럼 이후에 할 작업은 뭐지?” can still return `Top memory: none` even while storage/traces are healthy. Add a read-only runtime fallback/query expansion for `agent-memory` handoff-style follow-ups, with RED tests and no mutation-authority changes.
+2. Then continue normal-turn dogfood for `fact:5`/`fact:6`; re-run decay-risk, scheduled-dry-run, blocker-resolution, packet, classification validation, and classification resolution after another observation window.
+3. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
+4. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 

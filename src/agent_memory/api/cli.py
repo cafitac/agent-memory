@@ -21,6 +21,7 @@ from agent_memory.adapters import (
     apply_hermes_verification_results,
     prepare_hermes_memory_context,
 )
+from agent_memory.integrations.followup_fallback import maybe_apply_agent_memory_followup_fallback
 from agent_memory.integrations.hermes_hooks import (
     HermesHookConfigSnippetOptions,
     HermesHookInstallOptions,
@@ -24058,17 +24059,31 @@ def _retrieve_packet_for_prompt(args: argparse.Namespace):
 
 def _render_memory_context_for_prompt(args: argparse.Namespace):
     packet = _retrieve_packet_for_prompt(args)
-    return prepare_hermes_memory_context(
-        packet,
+
+    def prepare_context(candidate_packet):
+        return prepare_hermes_memory_context(
+            candidate_packet,
+            top_k=args.top_k,
+            max_prompt_lines=args.max_prompt_lines,
+            max_prompt_chars=args.max_prompt_chars,
+            max_prompt_tokens=args.max_prompt_tokens,
+            max_verification_steps=args.max_verification_steps,
+            max_alternatives=args.max_alternatives,
+            max_guidelines=args.max_guidelines,
+            include_reason_codes=not args.no_reason_codes,
+        )
+
+    context = prepare_context(packet)
+    return maybe_apply_agent_memory_followup_fallback(
+        db_path=args.db_path,
+        query=args.query,
+        preferred_scope=args.preferred_scope,
+        limit=args.limit,
         top_k=args.top_k,
-        max_prompt_lines=args.max_prompt_lines,
-        max_prompt_chars=args.max_prompt_chars,
-        max_prompt_tokens=args.max_prompt_tokens,
-        max_verification_steps=args.max_verification_steps,
-        max_alternatives=args.max_alternatives,
-        max_guidelines=args.max_guidelines,
-        include_reason_codes=not args.no_reason_codes,
-    )
+        prepare_context=prepare_context,
+        current_context=context,
+        cwd=Path.cwd(),
+    ).context
 
 
 def _render_external_agent_prompt_text(args: argparse.Namespace) -> str:
