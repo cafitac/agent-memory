@@ -13,6 +13,7 @@ Last updated: 2026-05-27 15:57 KST
 - Decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
 - RED observed: default context/hook tests failed because fallback was implicit; opt-in context/hook tests failed because `--followup-fallback` did not exist.
 - Verification complete locally: fallback/plugin focus `8 passed`; CLI/plugin corridor `258 passed, 1 xfailed`; release smoke passed after the license fix; full suite `444 passed, 1 xfailed`; live default/opt-in `hermes-context` smokes matched the expected default-off vs opt-in marker behavior.
+- Pushed source/docs checkpoint `513a61a Make follow-up fallback opt-in`; GitHub Actions CI run `26497292644` passed.
 
 Current estimate:
 
@@ -22,9 +23,8 @@ Current estimate:
 
 Recommended next work now:
 
-1. Commit/push the fallback default-off correction and packaging compatibility fix, then watch CI.
-2. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background authority remains blocked.
-3. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background authority remains blocked.
+2. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 

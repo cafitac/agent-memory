@@ -19,10 +19,10 @@ Last updated: 2026-05-27 15:57 KST
   - live `hermes-context` smoke without `--followup-fallback`: `verify_first`, `Top memory: none`, no fallback marker
   - live `hermes-context` smoke with `--followup-fallback`: `cautious`, fallback marker present, retrieved approved handoff memory present
 - During full-suite verification, `tests/test_release_smoke.py::test_built_distributions_include_schema_sql` exposed a packaging compatibility failure from latest setuptools rejecting `project.license = "MIT"`; fixed `pyproject.toml` to `license = { text = "MIT" }`, then the release smoke and full suite passed.
-- Previous pushed checkpoint remains `e4e0c4f Update follow-up fallback handoff`; this default-off correction is not pushed yet.
+- Previous pushed checkpoint is superseded by `513a61a Make follow-up fallback opt-in`, pushed to `origin/develop`; GitHub Actions CI run `26497292644` completed successfully.
 - Pre-existing unrelated untracked paths remain untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
 
-Next step: commit/push the default-off fallback correction plus packaging compatibility fix, watch CI, then return to scheduled evidence-chain work.
+Next step: return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background mutation authority remains blocked.
 
 Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`
 

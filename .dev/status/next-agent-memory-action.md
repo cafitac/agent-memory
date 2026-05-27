@@ -9,8 +9,8 @@ The latest pushed checkpoint is documented in `.dev/status/current-handoff.md`, 
 
 Current live/source shape:
 
-- Source/CI latest pushed: `develop` includes `e4e0c4f Update follow-up fallback handoff`; CI for the prior fallback checkpoint was green.
-- Local correction is implemented but not pushed yet: default runtime fallback is demoted to explicit opt-in.
+- Source/CI latest pushed: `develop` includes `513a61a Make follow-up fallback opt-in`; GitHub Actions CI run `26497292644` completed successfully.
+- Default runtime fallback is now explicit opt-in.
 - Default contract after this slice: `hermes-context` and `hermes-pre-llm-hook` leave context-poor follow-up prompts as `verify_first` / `Top memory: none` unless `--followup-fallback` is supplied.
 - Plugin contract after this slice: root Hermes plugin keeps fallback disabled unless `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
 - Opt-in fallback remains read-only, marked, and non-authoritative: `record_retrievals=False`; no memory status/ranking/collapse/delete/default/background/unattended authority changes.
@@ -21,9 +21,8 @@ Current live/source shape:
 
 Next safe action:
 
-1. Commit/push the fallback default-off correction and packaging compatibility fix, then watch CI.
-2. Then return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and a green `scheduled-blocker-resolution` for bounded partial automation evidence, but broad/default/background mutation authority remains blocked.
-3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and a green `scheduled-blocker-resolution` for bounded partial automation evidence, but broad/default/background mutation authority remains blocked.
+2. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 ## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 
