@@ -1,7 +1,29 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:09 KST
+Last updated: 2026-05-28 02:41 KST
+
+## Current checkpoint: exact live recurrent reinforcement after exhausted lifecycle queue is green
+
+- Continued from the fact:5 lifecycle apply stop state using real live DB evidence from `/Users/reddit/.agent-memory/memory.db`.
+- Primary run directory: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z`.
+- Pre storage health and trace quality were healthy: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/pre_storage_health.json`, `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/pre_trace_quality.json`.
+- Fresh lifecycle evidence was green: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-fresh-evidence-preview.json`, `post_apply_observation_count=7`.
+- Lifecycle refresh preview had no new normal review candidates: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-candidate-refresh-preview.json`, `new_unapplied_target_candidate_count=0`, `target_already_applied_count=7`.
+- Normal lifecycle apply readiness remained stopped: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-apply-readiness.json`, decision `no_exact_lifecycle_apply_candidates_ready`.
+- Scheduled dry-run/resolution remained read-only and blocked on decay risk: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/scheduled-dry-run.json`, `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/scheduled-blocker-resolution.json`, unresolved `decay_risk_above_threshold`; decomposition still has one `collect_more_activation_evidence_before_decay_action` candidate and six monitor-only refs.
+- Used the separately documented exact recurrent corridor only after fresh evidence: `dogfood lifecycle-recurrent-reinforcement-apply`, policy `g5-lifecycle-recurrent-reinforcement-apply-v1`, phrase `apply-approved-g5-lifecycle-recurrent-reinforcement-v1`, `--max-apply 1`.
+- Recurrent apply report: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-apply.json`, `quality_gate.pass=true`, `eligible_target_count=4`, `selected_target_count=1`, `applied_count=1`, candidate `g5-recurrent-reinforcement-ed3b8f726bd20131d8847452`, audit target `episode:1`, `fresh_observation_count=992`.
+- Recurrent apply backup: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-backup-memory.db`.
+- Measured live table deltas for the exact recurrent command: `g5_trace_candidate_applications +1`; `facts`, `procedures`, `episodes`, `relations`, `retrieval_observations`, `memory_activations`, `experience_traces`, and `g5_trace_candidate_reviews` unchanged.
+- Rollback replay, ranking-backed recurrent application audit, and recurrent post-apply verification are green: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/post-recurrent-rollback-replay.json`, `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/post-recurrent-application-audit.json`, `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-post-apply-verification.json`.
+- Recurrent verifier decision: `recurrent_reinforcement_post_apply_verification_green_stop`; `repeat_apply_authorized=false`.
+- Post live storage health and trace quality remain healthy.
+- Still blocked: broad G4/G5 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset apply, and unreviewed promotion.
+
+Next step: stop before further live mutation. If continuing, restart from read-only live evidence again; the concrete follow-up is scheduled/decay blocker review for the remaining `decay_risk_above_threshold` evidence-collection candidate, not another immediate apply.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-recurrent-reinforcement-after-fact5.md`
 
 ## Current checkpoint: live lifecycle reinforcement fact:5 apply is green; pending queue exhausted
 

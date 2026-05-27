@@ -1,7 +1,48 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:09 KST
+Last updated: 2026-05-28 02:41 KST
+
+## Current checkpoint: live recurrent reinforcement completed and verified on real data
+
+Completed the next safe path after the normal lifecycle queue was exhausted: read-only live checks first, then one exact-approved recurrent reinforcement apply because fresh post-apply evidence was available.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z`.
+- Read-only health checks:
+  - `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/pre_storage_health.json`: `status=healthy`.
+  - `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/pre_trace_quality.json`: `status=healthy`, recommendation `consider_g4_plan`.
+- Fresh evidence preview: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-fresh-evidence-preview.json`.
+  - `quality_gate.pass=true`, `post_apply_observation_count=7`.
+- Lifecycle refresh preview: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-candidate-refresh-preview.json`.
+  - `quality_gate.pass=false`, decision `no_new_lifecycle_review_persistence_ready`.
+  - `new_unapplied_target_candidate_count=0`, `target_already_applied_count=7`.
+- Normal apply readiness: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-apply-readiness.json`.
+  - no exact lifecycle candidates ready.
+- Scheduled dry-run/resolution:
+  - `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/scheduled-dry-run.json` and `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/scheduled-blocker-resolution.json` remain read-only and red on `decay_risk_above_threshold`.
+- Exact recurrent apply:
+  - Candidate: `g5-recurrent-reinforcement-ed3b8f726bd20131d8847452`.
+  - Audited target: `episode:1`.
+  - Policy: `g5-lifecycle-recurrent-reinforcement-apply-v1`.
+  - Backup: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-backup-memory.db`.
+  - Apply report: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-apply.json`.
+  - Result: `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Post-apply verification: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-post-apply-verification.json`.
+  - `quality_gate.pass=true`, decision `recurrent_reinforcement_post_apply_verification_green_stop`.
+  - `repeat_apply_authorized=false`.
+- Rollback replay, ranking-backed application audit, post storage health, and post trace quality are green/healthy.
+
+Next safe action:
+
+1. Stop before further live mutation.
+2. If continuing, restart from read-only live checks again.
+3. The concrete follow-up is scheduled/decay blocker review for the remaining `decay_risk_above_threshold` evidence-collection candidate; do not repeat recurrent apply without fresh verification.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, repeated apply without fresh verification, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-recurrent-reinforcement-after-fact5.md`
 
 ## Current checkpoint: live lifecycle reinforcement fact:5 apply completed and verified on real data
 

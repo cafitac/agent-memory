@@ -1,7 +1,35 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:09 KST
+Last updated: 2026-05-28 02:41 KST
+
+## Current checkpoint: exact live recurrent reinforcement after exhausted lifecycle queue is green
+
+- Continued from the fact:5 lifecycle apply checkpoint using real live DB evidence from `/Users/reddit/.agent-memory/memory.db`.
+- Primary run directory: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z`.
+- Storage and trace quality were healthy before the next step.
+- Fresh lifecycle evidence was green with `post_apply_observation_count=7`.
+- Normal lifecycle refresh/readiness showed the queue is exhausted: no new unapplied target candidates and no exact lifecycle candidates ready.
+- Scheduled dry-run/resolution remained read-only and blocked on `decay_risk_above_threshold`, with one evidence-collection candidate and six monitor-only refs.
+- Ran exactly one recurrent reinforcement apply through policy `g5-lifecycle-recurrent-reinforcement-apply-v1`, phrase `apply-approved-g5-lifecycle-recurrent-reinforcement-v1`, and `--max-apply 1`.
+- Live recurrent result: `mutated=true`, `applied_count=1`, selected candidate `g5-recurrent-reinforcement-ed3b8f726bd20131d8847452`, audited target `episode:1`, `fresh_observation_count=992`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Exact recurrent table deltas: `g5_trace_candidate_applications +1`; core memory rows, relation rows, review rows, and telemetry rows unchanged during the measured command.
+- Rollback replay is green, ranking-backed recurrent application audit is green, and recurrent post-apply verification is green: `/tmp/agent-memory-next-live-readonly-recurrent-20260527T174013Z/lifecycle-recurrent-reinforcement-post-apply-verification.json`, decision `recurrent_reinforcement_post_apply_verification_green_stop`.
+- Post live storage health and trace quality remain healthy.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
+- Operational confidence remains `98%+` with exact live G4 reinforcement, repeated exact reviewed G5 lifecycle reinforcement, and a fresh exact recurrent reinforcement corridor completed and post-apply verified on real data.
+- Literal broad/unattended/default background mutation remains intentionally blocked.
+
+Recommended next work now:
+
+1. Stop before additional mutation; the recurrent verifier is a stop gate and reports repeat apply is not authorized.
+2. If continuing, restart from read-only live evidence and focus on scheduled/decay blocker review for the remaining `decay_risk_above_threshold` evidence-collection candidate.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-recurrent-reinforcement-after-fact5.md`
 
 ## Current checkpoint: exact reviewed live lifecycle reinforcement fact:5 apply is green
 
