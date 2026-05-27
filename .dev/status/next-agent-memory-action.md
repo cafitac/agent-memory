@@ -1,7 +1,61 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:41 KST
+Last updated: 2026-05-28 02:58 KST
+
+
+## Current checkpoint: read-only automation-policy readiness is green; candidate lanes remain review-only
+
+- Continued after resolving the scheduled decay evidence blocker for bounded partial automation evidence only.
+- Generated a fresh live evidence bundle on the real live DB: `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle.json`, with output dir `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle`.
+- Bundle quality is green: `quality_gate.pass=true`, fixture task count `7`, rollback checked application count `14`, application audit count `7`, Hermes doctor `ok`, plugin enabled, hook occurrences `0`, duplicate context injection risk `false`.
+- Compared the bundle read-only: `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle-compare.json`, `quality_gate.pass=true`, no ranking baseline regressions.
+- Automation policy readiness is green as a classifier only: `/tmp/agent-memory-decay-followup-20260527T175543Z/automation-policy-readiness.json`, decision `automation_policy_readiness_classified_next_lanes`.
+- Lane output: narrow reviewed apply is eligible only for a future exact approval slice; reinforcement refinement, decay forgetting, and supersession are review-candidate lanes only; ordinary conversation auto-approval remains blocked; default ranking migration is exact-review-only.
+- Ran read-only next-lane previews: `/tmp/agent-memory-decay-followup-20260527T175543Z/reinforcement-refinement-preview.json` (`candidate_count=7`, green for human review) and `/tmp/agent-memory-decay-followup-20260527T175543Z/trace-candidate-generate.json` (`candidate_count=10`, green for reviewed candidate flow).
+- Existing pending trace-candidate inventory remains non-empty: `/tmp/agent-memory-decay-followup-20260527T175543Z/trace-candidate-list-pending.json`, `count=7`. These are not auto-approved and still require human fields/review before promotion/apply.
+- No apply, ranking mutation, status write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: review existing pending trace candidates or generated candidate skeletons and fill exact human fields if one should be promoted. Without that review, stop at read-only evidence; do not auto-promote ordinary-turn candidates.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-decay-blocker-classification-followup.md`
+
+## Current checkpoint: scheduled decay blocker resolved as harmless low activation; no lifecycle apply candidate ready
+
+Completed the documented follow-up after recurrent reinforcement: restarted from real live read-only evidence and reviewed the remaining `decay_risk_above_threshold` evidence-collection candidate.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-decay-followup-20260527T175543Z`.
+- Live health evidence:
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/storage-health.json`: `status=healthy`.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/trace-quality.json`: `status=healthy`, recommendation `consider_g4_plan`.
+- Scheduled dry-run/resolution:
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-dry-run.json`: read-only, strict gate still red on `decay_risk_above_threshold`; one evidence-collection candidate and six monitor-only refs.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-blocker-resolution.json`: pre-classification resolution remains red on the same blocker.
+- Evidence-blocker review:
+  - Packet: `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-evidence-blocker-packet.json`.
+  - Candidate: `fact:5`, score `0.45`, activation count `1`.
+  - Real DB inspection artifacts: `/tmp/agent-memory-decay-followup-20260527T175543Z/fact5-review-explain.json`, `/tmp/agent-memory-decay-followup-20260527T175543Z/fact5-review-history.json`, `/tmp/agent-memory-decay-followup-20260527T175543Z/fact5-graph-inspect.json`.
+  - Classification: `fact:5=manual_review_harmless_low_activation`.
+- Classification artifacts:
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-evidence-blocker-classification-validation.json`: `classification_gate.pass=true`.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-evidence-blocker-classification-resolution.json`: `resolution_gate.pass=true`, decision `scheduled_evidence_blockers_resolved_for_bounded_partial_automation_only`, no unresolved/hard/follow-up refs.
+- Lifecycle after classification:
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/lifecycle-fresh-evidence-preview.json`: `quality_gate.pass=true`, `post_apply_observation_count=13`.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/lifecycle-candidate-refresh-preview.json`: no new unapplied target candidates; `target_already_applied_count=7`.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/lifecycle-apply-readiness.json`: `no_exact_lifecycle_apply_candidates_ready`.
+  - `/tmp/agent-memory-decay-followup-20260527T175543Z/lifecycle-pending-reinforcement-list.json`: `count=0`.
+
+Next safe action:
+
+1. Feed the green classification-resolution artifact into the next read-only automation-policy / bounded partial automation readiness pass.
+2. If no exact reviewed candidate is produced, stop; the lifecycle queue is exhausted.
+3. Do not repeat recurrent reinforcement or lifecycle apply without fresh evidence, exact approval, backup/audit, ranking-backed audit, rollback replay, and post-apply verification.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, default-ranking migration, collapse/delete, telemetry reset, memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-decay-blocker-classification-followup.md`
 
 ## Current checkpoint: live recurrent reinforcement completed and verified on real data
 

@@ -1,7 +1,50 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:41 KST
+Last updated: 2026-05-28 02:58 KST
+
+
+## Current checkpoint: read-only automation-policy readiness is green; candidate lanes remain review-only
+
+- Continued after resolving the scheduled decay evidence blocker for bounded partial automation evidence only.
+- Generated a fresh live evidence bundle on the real live DB: `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle.json`, with output dir `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle`.
+- Bundle quality is green: `quality_gate.pass=true`, fixture task count `7`, rollback checked application count `14`, application audit count `7`, Hermes doctor `ok`, plugin enabled, hook occurrences `0`, duplicate context injection risk `false`.
+- Compared the bundle read-only: `/tmp/agent-memory-decay-followup-20260527T175543Z/live-evidence-bundle-compare.json`, `quality_gate.pass=true`, no ranking baseline regressions.
+- Automation policy readiness is green as a classifier only: `/tmp/agent-memory-decay-followup-20260527T175543Z/automation-policy-readiness.json`, decision `automation_policy_readiness_classified_next_lanes`.
+- Lane output: narrow reviewed apply is eligible only for a future exact approval slice; reinforcement refinement, decay forgetting, and supersession are review-candidate lanes only; ordinary conversation auto-approval remains blocked; default ranking migration is exact-review-only.
+- Ran read-only next-lane previews: `/tmp/agent-memory-decay-followup-20260527T175543Z/reinforcement-refinement-preview.json` (`candidate_count=7`, green for human review) and `/tmp/agent-memory-decay-followup-20260527T175543Z/trace-candidate-generate.json` (`candidate_count=10`, green for reviewed candidate flow).
+- Existing pending trace-candidate inventory remains non-empty: `/tmp/agent-memory-decay-followup-20260527T175543Z/trace-candidate-list-pending.json`, `count=7`. These are not auto-approved and still require human fields/review before promotion/apply.
+- No apply, ranking mutation, status write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: review existing pending trace candidates or generated candidate skeletons and fill exact human fields if one should be promoted. Without that review, stop at read-only evidence; do not auto-promote ordinary-turn candidates.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-decay-blocker-classification-followup.md`
+
+## Current checkpoint: scheduled decay blocker classified and resolved for bounded partial automation evidence
+
+- Continued from the exact live recurrent reinforcement stop state using real live DB evidence from `/Users/reddit/.agent-memory/memory.db`.
+- Primary run directory: `/tmp/agent-memory-decay-followup-20260527T175543Z`.
+- Live storage and trace quality remain healthy.
+- Scheduled dry-run is still strict-red on `decay_risk_above_threshold`, but the blocker set is narrowed to one evidence-collection candidate (`fact:5`) plus six monitor-only refs.
+- The evidence-blocker packet and real DB inspection showed `fact:5` is approved, default-visible, reviewed, graph-connected to its approval evidence, and semantically still valid; the only issue is low recent activation.
+- Classified `fact:5` as `manual_review_harmless_low_activation` through the read-only validation command.
+- Classification resolution is green for bounded partial automation evidence only: `/tmp/agent-memory-decay-followup-20260527T175543Z/scheduled-evidence-blocker-classification-resolution.json`, decision `scheduled_evidence_blockers_resolved_for_bounded_partial_automation_only`.
+- No mutation authority was widened: broad G4 apply, ordinary conversation auto-approval, memory-status writes, retrieval-ranking writes, default-ranking migration, collapse/delete, telemetry reset, and background/unattended apply remain blocked.
+- Lifecycle evidence after classification is fresh and green, but lifecycle refresh/readiness show no new unapplied target candidates, no pending reinforcement candidates, and no exact lifecycle apply candidates ready.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
+- Operational confidence remains `98%+`: the remaining scheduled decay blocker is now classified from real evidence and resolved for bounded partial automation evidence, but there is no fresh exact apply candidate.
+- Literal broad/unattended/default background mutation remains intentionally blocked.
+
+Recommended next work now:
+
+1. Use the green classification-resolution artifact as input to the next read-only automation-policy / bounded partial automation readiness pass.
+2. If the readiness pass finds no exact reviewed candidate, stop rather than persisting duplicates or inventing work.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-decay-blocker-classification-followup.md`
 
 ## Current checkpoint: exact live recurrent reinforcement after exhausted lifecycle queue is green
 
