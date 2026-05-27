@@ -36,6 +36,7 @@ After the follow-up fallback default-off correction, the next documented action 
   - G4 queue preview with all required gate artifacts: `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `provided_gate_artifacts_pass=true`, all artifact gates true
   - G4 apply readiness: `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`, `quality_gate.pass=true`, `bounded_partial_apply_ready=true`, required operator approval remains exact.
 - The actual one-item copy-live apply rerun did not complete because local disk space was exhausted. Transient copy DBs/backups were deleted. This should be treated as an environment blocker, not a policy/readiness blocker.
+- Docs/evidence checkpoint `5a614a1 Record live scheduled evidence readiness` was pushed to `origin/develop`; GitHub Actions CI run `26498686779` completed successfully.
 
 ## Decision
 

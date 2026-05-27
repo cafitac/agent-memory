@@ -5,7 +5,7 @@ Last updated: 2026-05-27 16:50 KST
 
 ## Current checkpoint: scheduled evidence-chain recheck complete on real live DB
 
-Source/CI latest pushed remains `develop` through `0f8c1c5 Record follow-up fallback opt-in CI`; working tree changes in this checkpoint are documentation/evidence updates only.
+Source/CI evidence checkpoint `5a614a1 Record live scheduled evidence readiness` is pushed to `origin/develop`; GitHub Actions CI run `26498686779` completed successfully. This checkpoint changed documentation/evidence records only.
 
 Live/source shape from real data:
 

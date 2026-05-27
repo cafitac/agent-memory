@@ -25,6 +25,7 @@ Last updated: 2026-05-27 16:50 KST
 - Continued into that next lane on copy-live evidence: fresh epoch compare passed, telemetry reconciliation passed with the fresh compare artifact, G4 queue preview passed with all required gate artifacts green, and `g4-apply-readiness` passed with `bounded_partial_apply_ready=true`.
 - Copy-live green readiness artifacts: `/tmp/agent-memory-next-real/fresh-epoch-compare-20260527T075303Z.json`, `/tmp/agent-memory-next-real/telemetry-reconciliation-with-fresh-compare-20260527T075318Z.json`, `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
 - A final exact one-item copy-live apply rerun was attempted, but `uv` failed with `No space left on device` while the macOS volume had only hundreds of MiB free. Transient copy DBs/backups from this turn were removed; no live DB mutation was performed.
+- Docs/evidence checkpoint `5a614a1 Record live scheduled evidence readiness` is pushed to `origin/develop`; GitHub Actions CI run `26498686779` passed.
 
 Current estimate:
 
