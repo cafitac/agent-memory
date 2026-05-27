@@ -1,8 +1,50 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:58 KST
+Last updated: 2026-05-28 03:39 KST
 
+
+
+## Current checkpoint: pending trace-candidate review queue cleaned without core memory mutation
+
+Completed the documented next trace-candidate review step against the real live DB.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-trace-review-20260527T183711Z`.
+- Pre health:
+  - `/tmp/agent-memory-trace-review-20260527T183711Z/pre-storage-health.json`: `status=healthy`.
+  - `/tmp/agent-memory-trace-review-20260527T183711Z/pre-trace-quality.json`: `status=healthy`.
+- Pending list before review: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-list-pending-before.json`, `count=7`.
+- Review evidence: `/tmp/agent-memory-trace-review-20260527T183711Z/pending-trace-candidate-review-evidence.json`.
+  - All pending rows belonged to cluster `8c1539941111ae54c5c2d2d1700782ccd126a40e01e641e5a0ec5f4970e92dab`.
+  - The same cluster was already represented by promoted fact/procedure/episode candidates.
+- Mutation performed: review-queue cleanup only.
+  - Rejected 7 stale duplicate pending rows with `reject-g5-trace-candidate-v1`.
+  - Update audit: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-reject-updates.ndjson`.
+- Summary: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-review-summary.json`.
+  - `pending_before_count=7`.
+  - `rejected_update_count=7`.
+  - `pending_after_count=0`.
+  - `default_retrieval_unchanged_all_updates=true`.
+  - `apply_supported_any_update=false`.
+  - Core memory/apply/telemetry table deltas were all `0`.
+- Post health:
+  - `/tmp/agent-memory-trace-review-20260527T183711Z/post-storage-health.json`: `status=healthy`.
+  - `/tmp/agent-memory-trace-review-20260527T183711Z/post-trace-quality.json`: `status=healthy`.
+- Fresh generated candidate skeletons: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-generate-after.json`, `candidate_count=6`.
+  - They remain generated-only review material.
+  - No persistence/promotion was done because exact human fields were not grounded by the available safe live evidence.
+
+Next safe action:
+
+1. Do not resurrect the seven rejected duplicate pending rows.
+2. If continuing trace-candidate work, review the six generated skeletons only with additional real evidence that can supply exact human fields.
+3. Do not promote generated candidates from empty summaries/query previews or ref co-occurrence alone.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, default-ranking mutation, collapse/delete, telemetry reset, memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-trace-candidate-pending-review.md`
 
 ## Current checkpoint: read-only automation-policy readiness is green; candidate lanes remain review-only
 

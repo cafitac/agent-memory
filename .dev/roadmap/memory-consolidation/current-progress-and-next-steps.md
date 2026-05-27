@@ -1,8 +1,27 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 02:58 KST
+Last updated: 2026-05-28 03:39 KST
 
+
+
+## Current checkpoint: pending trace-candidate review queue cleaned without core memory mutation
+
+- Continued from the read-only automation-policy checkpoint on the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or smoke DB was used.
+- Primary run directory: `/tmp/agent-memory-trace-review-20260527T183711Z`.
+- Pre-checks were healthy: `/tmp/agent-memory-trace-review-20260527T183711Z/pre-storage-health.json` and `/tmp/agent-memory-trace-review-20260527T183711Z/pre-trace-quality.json`.
+- Reviewed the pending trace-candidate queue: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-list-pending-before.json` had `count=7`.
+- Evidence review: `/tmp/agent-memory-trace-review-20260527T183711Z/pending-trace-candidate-review-evidence.json` showed all seven pending rows belonged to cluster `8c1539941111ae54c5c2d2d1700782ccd126a40e01e641e5a0ec5f4970e92dab`, which already had reviewed/promoted fact, procedure, and episode candidates (`candidate:29db0390b2f81bdb`, `candidate:3435fe1db562aaf2`, `candidate:4a35c03e7130fdec`).
+- Action taken: rejected the seven stale duplicate `trace_cluster_review` rows with `reject-g5-trace-candidate-v1`; update audit output is `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-reject-updates.ndjson`.
+- Review summary: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-review-summary.json` reports `pending_before_count=7`, `rejected_update_count=7`, `pending_after_count=0`, `rejected_after_count=7`, `default_retrieval_unchanged_all_updates=true`, `apply_supported_any_update=false`, `promotion_ready_any_update=false`, `raw_content_included_any_update=false`.
+- Core/live memory table counts did not change: `facts`, `procedures`, `episodes`, `relations`, `memory_status_transitions`, `g5_trace_candidate_applications`, `retrieval_observations`, `memory_activations`, and `experience_traces` all had delta `0`; review-row count also had delta `0` because only statuses/audit metadata changed.
+- Post-checks remained healthy: `/tmp/agent-memory-trace-review-20260527T183711Z/post-storage-health.json` and `/tmp/agent-memory-trace-review-20260527T183711Z/post-trace-quality.json`.
+- Fresh generated skeletons remain review-only: `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-generate-after.json` reports `candidate_count=6`, all missing human fields and no auto-promotion support. No generated skeleton was persisted or promoted because the live safe evidence has empty summaries/query previews and does not support exact durable human fields.
+- No apply, fact/procedure/episode promotion, ranking mutation, status write to core memories, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: if continuing, inspect the six generated candidate skeletons from `/tmp/agent-memory-trace-review-20260527T183711Z/trace-candidate-generate-after.json` only as review material. Promote none unless exact human fields can be grounded from additional real evidence; otherwise leave them generated-only and continue with fresh read-only live evidence/automation-policy checks.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-trace-candidate-pending-review.md`
 
 ## Current checkpoint: read-only automation-policy readiness is green; candidate lanes remain review-only
 
