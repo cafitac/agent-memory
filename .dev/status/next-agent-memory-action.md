@@ -1,9 +1,51 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 21:59 KST
+Last updated: 2026-05-27 22:53 KST
 
-## Current checkpoint: live one-item G4 apply completed and verified on real data
+## Current checkpoint: live bounded lifecycle reinforcement apply completed and verified on real data
+
+Completed the next real-data path after the live G4 apply checkpoint: refreshed live evidence, confirmed no second G4 apply-supported item, then used the green bounded automation-policy lane to persist, approve, and apply exactly one reviewed lifecycle reinforcement candidate.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-next-live-packet-20260527T134334Z`.
+- G4 operator packet: `/tmp/agent-memory-next-live-packet-20260527T134334Z/operator-apply-packet.json`.
+  - `quality_gate.pass=true`, but `apply_supported=false`; no second G4 apply was executed.
+- Scheduled blocker resolution: `/tmp/agent-memory-next-live-packet-20260527T134334Z/scheduled-blocker-resolution.json`.
+  - `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`, all decay candidates monitor-only/advisory.
+- Automation policy readiness: `/tmp/agent-memory-next-live-packet-20260527T134334Z/automation-policy-readiness.json`.
+  - `quality_gate.pass=true`, recommended only exact narrow reviewed-candidate apply.
+- Lifecycle candidate refresh preview: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-candidate-refresh-preview.json`.
+  - `preview_candidate_count=6`, `new_candidate_count=6`, `target_already_applied_count=4`, `new_unapplied_target_candidate_count=2`.
+- Lifecycle candidate persist: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-candidate-persist.json`.
+  - `mutated=true`, `inserted_count=2`, `skipped_applied_target_count=4`.
+- Exact approved live apply:
+  - Candidate: `g5-reinforcement-304c242d7006fabe1fbdc2a6`.
+  - Target: `fact:6`.
+  - Policy: `g5-lifecycle-reinforcement-apply-v1`.
+  - Backup: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-apply-backup-memory.db`.
+  - Apply report: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-apply-one.json`.
+  - Result: `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Corrected post-apply verification: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-post-apply-verification-corrected.json`.
+  - `quality_gate.pass=true`, decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Post-apply readiness returned to stop state: no approved ready candidates remain.
+- Post live storage health and trace quality remain healthy/warning-free.
+
+Important note:
+
+- The first lifecycle post-apply verifier attempt used the pre-apply readiness report and was correctly red with `readiness_report_has_remaining_ready_apply_candidates`. This was corrected by rerunning verification with the post-apply readiness artifact. No second apply was run.
+
+Next safe action:
+
+1. Stop before further live mutation.
+2. If continuing, refresh lifecycle evidence first. One pending reinforcement candidate (`fact:8`) remains from this pass, but applying it requires a new exact one-item backup/audit/post-apply-verification corridor.
+3. Keep broad/background/default mutation, ordinary conversation auto-approval, repeated apply without fresh verification, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+4. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-bounded-lifecycle-reinforcement-apply.md`
+
+## Previous checkpoint: live one-item G4 apply completed and verified on real data
 
 Completed the next documented action after copy-live verification: a single exact live G4 queue item was applied to `/Users/reddit/.agent-memory/memory.db` with backup, audit, reason hash, and immediate corrected post-apply verification.
 

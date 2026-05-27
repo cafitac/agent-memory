@@ -1,9 +1,32 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 21:59 KST
+Last updated: 2026-05-27 22:53 KST
 
-## Current checkpoint: exact one-item live G4 apply is green after corrected post-apply verification
+## Current checkpoint: live bounded lifecycle reinforcement apply is green after corrected post-apply verification
+
+- Continued from the live one-item G4 checkpoint using real live data from `/Users/reddit/.agent-memory/memory.db`, with speed prioritized but still bounded to exact reviewed corridors.
+- Primary run directory: `/tmp/agent-memory-next-live-packet-20260527T134334Z`.
+- Fresh G4 operator packet is green but did not support a second G4 apply: `/tmp/agent-memory-next-live-packet-20260527T134334Z/operator-apply-packet.json` reports `apply_supported=false`; no second G4 apply was executed.
+- Scheduled blocker resolution is now green for bounded partial automation evidence only: `/tmp/agent-memory-next-live-packet-20260527T134334Z/scheduled-blocker-resolution.json`, `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`, unresolved blockers `[]`.
+- Live evidence bundle comparison and automation policy readiness are green: `/tmp/agent-memory-next-live-packet-20260527T134334Z/live-evidence-bundle-compare.json`, `/tmp/agent-memory-next-live-packet-20260527T134334Z/automation-policy-readiness.json`. The recommended lane remains exact narrow reviewed-candidate apply only.
+- Lifecycle refresh preview found `preview_candidate_count=6`, `new_candidate_count=6`, `target_already_applied_count=4`, and `new_unapplied_target_candidate_count=2`.
+- Persisted exactly 2 new pending lifecycle reinforcement candidates and skipped 4 already-applied targets: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-candidate-persist.json`.
+- Approved and applied exactly one live lifecycle reinforcement candidate: `g5-reinforcement-304c242d7006fabe1fbdc2a6`, target `fact:6`, policy `g5-lifecycle-reinforcement-apply-v1`.
+- Live apply backup: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-apply-backup-memory.db`.
+- Live apply report: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-apply-one.json`, `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Measured live table deltas for the exact apply corridor: `g5_trace_candidate_applications +1`; `facts`, `procedures`, `episodes`, `relations`, `retrieval_observations`, `memory_activations`, and `experience_traces` row counts did not change during the measured corridor.
+- Rollback replay and application audit are green: `/tmp/agent-memory-next-live-packet-20260527T134334Z/post-lifecycle-rollback-replay.json`, `/tmp/agent-memory-next-live-packet-20260527T134334Z/post-lifecycle-application-audit.json`.
+- The first lifecycle post-apply verifier used the pre-apply readiness report and correctly stayed red with `readiness_report_has_remaining_ready_apply_candidates`. No second apply was run.
+- Corrected post-apply verification is green: `/tmp/agent-memory-next-live-packet-20260527T134334Z/lifecycle-post-apply-verification-corrected.json`, `quality_gate.pass=true`, decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Post live storage health remains healthy with no warnings; post live trace quality remains healthy/warning-free with recommendation `consider_g4_plan`.
+- Still blocked: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh evidence and post-apply verification, default-ranking mutation, collapse/delete, telemetry reset apply, and unreviewed promotion.
+
+Next step: stop before any further live mutation. If continuing, refresh lifecycle evidence first; one pending reinforcement candidate (`fact:8`) remains from this pass, but applying it requires a new exact one-item backup/audit/post-apply-verification corridor.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-bounded-lifecycle-reinforcement-apply.md`
+
+## Previous checkpoint: exact one-item live G4 apply is green after corrected post-apply verification
 
 - Continued from the copy-live checkpoint and took the documented live one-item corridor on the real live DB: `/Users/reddit/.agent-memory/memory.db`.
 - Primary run directory: `/tmp/agent-memory-live-one-item-20260527T125706Z`.
