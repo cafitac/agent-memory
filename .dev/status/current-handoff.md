@@ -1,9 +1,32 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 18:55 KST
+Last updated: 2026-05-27 21:59 KST
 
-## Current checkpoint: exact one-item copy-live G4 apply is green through post-apply verification
+## Current checkpoint: exact one-item live G4 apply is green after corrected post-apply verification
+
+- Continued from the copy-live checkpoint and took the documented live one-item corridor on the real live DB: `/Users/reddit/.agent-memory/memory.db`.
+- Primary run directory: `/tmp/agent-memory-live-one-item-20260527T125706Z`.
+- Corrected green evidence directory: `/tmp/agent-memory-live-one-item-20260527T125706Z/postfix-green-evidence`.
+- Live pre-corridor backup: `/tmp/agent-memory-live-one-item-20260527T125706Z/pre-live-corridor-memory.db`.
+- Live apply backup: `/tmp/agent-memory-live-one-item-20260527T125706Z/live-apply-backup-memory.db`.
+- Live apply audit: `/tmp/agent-memory-live-one-item-20260527T125706Z/apply-one-live.json`.
+- Corrected post-apply verification: `/tmp/agent-memory-live-one-item-20260527T125706Z/postfix-green-evidence/post-apply-verification.json`.
+- Exact selected queue id: `g4-review:reinforcement:2`.
+- Target: `fact:4`.
+- Action: `apply_reinforcement_marker`.
+- Apply result: `mutated=true`, `applied_count=1`, `already_applied_count=0`, `skipped_count=0`, `memory_status_mutated=false`, `memory_reinforcement_mutated=true`, `default_retrieval_unchanged=true`.
+- Live table deltas during the corridor: `g4_review_queue_items +2`, `g4_review_queue_applications +1`; `facts`, `procedures`, `episodes`, `relations`, `retrieval_observations`, `memory_activations`, and `experience_traces` row counts did not change during the run window.
+- The first pre/post evidence attempt correctly stayed red because it used `dogfood retrieval-ranking-gate` where the G4 contract expects `dogfood_retrieval_ranking_experiment`, and telemetry reconciliation lacked a fresh-epoch comparison artifact. No second apply was run. Evidence was immediately refreshed with the expected artifact kinds.
+- Corrected gates are green: telemetry reconciliation `quality_gate.pass=true`, apply readiness `quality_gate.pass=true`, post-apply verification `quality_gate.pass=true`, decision `g4_post_apply_verification_green_stop_before_next_mutation`, `verified_apply_mutated=true`.
+- Post live storage health remains healthy; post live trace quality remains warning-free with recommendation `consider_g4_plan`.
+- Still blocked: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh approval, default-ranking mutation, collapse/delete, telemetry reset apply, and unreviewed promotion.
+
+Next step: stop before any further mutation unless a fresh exact one-item approval is provided. Any future live one-item corridor must regenerate a new operator packet from current live evidence and use the expected G4 artifact kinds.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-one-item-g4-apply-verification.md`
+
+## Previous checkpoint: exact one-item copy-live G4 apply is green through post-apply verification
 
 - Continued from the documented next action after the live scheduled evidence-chain readiness checkpoint. The disk-space blocker is gone (`df` showed about 34 GiB available), so the exact one-item corridor was rerun on a copy of the real live DB, not on mocks or synthetic fixtures.
 - Run directory: `/tmp/agent-memory-next-real/copy-live-one-item-20260527T095441Z`.

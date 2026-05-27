@@ -1,9 +1,38 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 18:55 KST
+Last updated: 2026-05-27 21:59 KST
 
-## Current checkpoint: copy-live one-item apply completed and verified on real data
+## Current checkpoint: live one-item G4 apply completed and verified on real data
+
+Completed the next documented action after copy-live verification: a single exact live G4 queue item was applied to `/Users/reddit/.agent-memory/memory.db` with backup, audit, reason hash, and immediate corrected post-apply verification.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-live-one-item-20260527T125706Z`.
+- Corrected green evidence directory: `/tmp/agent-memory-live-one-item-20260527T125706Z/postfix-green-evidence`.
+- Live apply audit: `/tmp/agent-memory-live-one-item-20260527T125706Z/apply-one-live.json`.
+- Corrected post-apply verification: `/tmp/agent-memory-live-one-item-20260527T125706Z/postfix-green-evidence/post-apply-verification.json`.
+- Selected queue id: `g4-review:reinforcement:2`.
+- Applied target: `fact:4`.
+- Apply result: `applied_count=1`, `already_applied_count=0`, `skipped_count=0`, `memory_status_mutated=false`, `memory_reinforcement_mutated=true`, `default_retrieval_unchanged=true`.
+- Corrected post-apply verification: `quality_gate.pass=true`, decision `g4_post_apply_verification_green_stop_before_next_mutation`.
+- Post live storage/trace checks remain healthy/warning-free.
+
+Important note:
+
+- The initial post-apply verification attempt was red due to wrong preflight artifact shape (`dogfood_retrieval_ranking_gate` instead of `dogfood_retrieval_ranking_experiment`) and missing fresh-epoch comparison evidence for telemetry reconciliation. This was corrected without running another apply.
+
+Next safe action:
+
+1. Stop before further mutation.
+2. If another live item is requested, refresh all evidence and create a new exact operator packet first; do not reuse this packet or approval.
+3. Keep broad/background/default mutation, ordinary conversation auto-approval, repeated apply without fresh approval, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+4. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-one-item-g4-apply-verification.md`
+
+## Previous checkpoint: copy-live one-item apply completed and verified on real data
 
 Source/CI evidence checkpoint `05b215d Record live scheduled evidence CI` is pushed to `origin/develop`; this local pass adds real-data copy-live apply evidence and docs on top of that checkpoint.
 
