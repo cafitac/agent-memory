@@ -1,7 +1,33 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 01:53 KST
+Last updated: 2026-05-28 02:09 KST
+
+## Current checkpoint: exact reviewed live lifecycle reinforcement fact:5 apply is green
+
+- Continued from the fact:8 live lifecycle checkpoint using real live DB evidence from `/Users/reddit/.agent-memory/memory.db`.
+- Primary run directory: `/tmp/agent-memory-next-live-fact5-20260527T170907Z`.
+- Fresh lifecycle evidence was green with `post_apply_observation_count=12`.
+- Refresh preview found no new unapplied target candidates (`preview_candidate_count=7`, `new_unapplied_target_candidate_count=0`, `target_already_applied_count=6`) because the remaining `fact:5` candidate was already pending; no duplicate review-row persistence was performed.
+- Approved/applied exactly the documented pending candidate: `g5-reinforcement-b623589b1cd740c9dafb1062` targeting `fact:5`, policy `g5-lifecycle-reinforcement-apply-v1`.
+- Live apply result: `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Exact apply table deltas: `g5_trace_candidate_applications +1`; core memory rows, relation rows, review rows, and telemetry rows unchanged during the measured apply command.
+- Rollback replay is green, ranking-backed application audit is green, and post-apply verification is green: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-post-apply-verification-fact5.json`, decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Post live storage health and trace quality remain healthy.
+
+Current estimate:
+
+- Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
+- Operational confidence remains `98%+` with exact live G4 reinforcement and repeated exact reviewed G5 lifecycle reinforcement corridors completed and post-apply verified on real data.
+- Literal broad/unattended/default background mutation remains intentionally blocked.
+
+Recommended next work now:
+
+1. Stop before additional mutation; the previously pending `fact:5` reinforcement candidate is now applied and no approved ready lifecycle candidates remain.
+2. If continuing, restart from read-only live evidence and only open another exact corridor if new reviewed candidates or a separately green recurrent-reinforcement gate appear.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-lifecycle-reinforcement-fact5-apply.md`
 
 ## Current checkpoint: exact reviewed live lifecycle reinforcement fact:8 apply is green
 

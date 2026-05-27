@@ -1,7 +1,28 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 01:53 KST
+Last updated: 2026-05-28 02:09 KST
+
+## Current checkpoint: live lifecycle reinforcement fact:5 apply is green; pending queue exhausted
+
+- Continued from the fact:8 live lifecycle checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`, prioritizing speed while keeping the documented exact one-item corridor.
+- Primary run directory: `/tmp/agent-memory-next-live-fact5-20260527T170907Z`.
+- Fresh lifecycle evidence was green: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-fresh-evidence-preview.json`, with `post_apply_observation_count=12`.
+- Lifecycle refresh preview intentionally did not persist duplicates: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-candidate-refresh-preview.json` reported `quality_gate.pass=false`, `decision=no_new_lifecycle_review_persistence_ready`, `preview_candidate_count=7`, `new_unapplied_target_candidate_count=0`, and `target_already_applied_count=6` because the remaining `fact:5` review candidate was already pending.
+- Approved and applied exactly one live lifecycle reinforcement candidate: `g5-reinforcement-b623589b1cd740c9dafb1062`, target `fact:5`, policy `g5-lifecycle-reinforcement-apply-v1`.
+- Live apply backup: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-apply-fact5-backup-memory.db`.
+- Live apply report: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-apply-fact5.json`, `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Measured live table deltas for the exact apply command: `g5_trace_candidate_applications +1`; `facts`, `procedures`, `episodes`, `relations`, `retrieval_observations`, `memory_activations`, `experience_traces`, and `g5_trace_candidate_reviews` unchanged.
+- Post-apply readiness is back to stop state: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-apply-readiness-post.json` has no approved ready lifecycle candidates remaining.
+- Rollback replay is green: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/post-lifecycle-rollback-replay.json`, `quality_gate.pass=true`, `application_count=13`.
+- Ranking-backed application audit is green after live retrieval fixtures + read-only shadow ranking experiment: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/post-lifecycle-application-audit.json`, `quality_gate.pass=true`, policy application count `7`.
+- Post-apply verification is green: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-post-apply-verification-fact5.json`, `quality_gate.pass=true`, decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Post live storage health remains healthy; post live trace quality is healthy with recommendation `consider_g4_plan`.
+- Still blocked: broad G4/G5 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset apply, and unreviewed promotion.
+
+Next step: stop before any further live mutation. The previously pending reinforcement candidate (`fact:5`) is now applied and no approved ready lifecycle candidates remain. Any next work should restart from read-only live evidence and only open a new exact corridor if new reviewed candidates or a separately green recurrent-reinforcement gate appear.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-lifecycle-reinforcement-fact5-apply.md`
 
 ## Current checkpoint: live lifecycle reinforcement fact:8 apply is green after corrected ranking-backed audit
 

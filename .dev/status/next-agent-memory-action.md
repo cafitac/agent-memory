@@ -1,7 +1,42 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 01:53 KST
+Last updated: 2026-05-28 02:09 KST
+
+## Current checkpoint: live lifecycle reinforcement fact:5 apply completed and verified on real data
+
+Completed the documented remaining `fact:5` lifecycle reinforcement corridor on the real live DB after refreshing evidence.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-next-live-fact5-20260527T170907Z`.
+- Fresh lifecycle evidence preview: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-fresh-evidence-preview.json`.
+  - `quality_gate.pass=true`, `post_apply_observation_count=12`.
+- Lifecycle candidate refresh preview: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-candidate-refresh-preview.json`.
+  - `quality_gate.pass=false`, decision `no_new_lifecycle_review_persistence_ready`.
+  - `preview_candidate_count=7`, `new_unapplied_target_candidate_count=0`, `target_already_applied_count=6`.
+  - No duplicate persistence was needed because the remaining `fact:5` candidate already existed as a pending review row.
+- Exact approved live apply:
+  - Candidate: `g5-reinforcement-b623589b1cd740c9dafb1062`.
+  - Target: `fact:5`.
+  - Policy: `g5-lifecycle-reinforcement-apply-v1`.
+  - Backup: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-apply-fact5-backup-memory.db`.
+  - Apply report: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-apply-fact5.json`.
+  - Result: `mutated=true`, `applied_count=1`, `default_retrieval_unchanged=true`, `ordinary_conversation_auto_approval=false`.
+- Post-apply verification: `/tmp/agent-memory-next-live-fact5-20260527T170907Z/lifecycle-post-apply-verification-fact5.json`.
+  - `quality_gate.pass=true`, decision `lifecycle_post_apply_verification_green_for_one_candidate_stop`.
+- Post-apply readiness returned to stop state: no approved ready lifecycle candidates remain.
+- Ranking-backed application audit, rollback replay, storage health, and trace quality are green/healthy.
+
+Next safe action:
+
+1. Stop before further live mutation.
+2. The previously pending reinforcement candidate is now applied; do not apply again without fresh evidence and a new reviewed candidate/recurrent gate.
+3. Restart from read-only live checks if continuing: lifecycle fresh evidence, candidate refresh preview, storage/trace quality, and any relevant scheduled evidence gates.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, repeated apply without fresh verification, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-lifecycle-reinforcement-fact5-apply.md`
 
 ## Current checkpoint: live lifecycle reinforcement fact:8 apply completed and verified on real data
 
