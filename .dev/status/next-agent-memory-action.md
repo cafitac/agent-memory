@@ -3,26 +3,24 @@
 Status: AI-authored draft. Not yet human-approved.
 Last updated: 2026-05-27 14:10 KST
 
-## Current checkpoint: context-poor follow-up fallback is locally implemented and verified
+## Current checkpoint: context-poor follow-up fallback is pushed and CI-green
 
-The latest local checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
+The latest pushed checkpoint is documented in `.dev/status/current-handoff.md` and `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`. Start here if a new session has no chat context.
 
 Current live shape:
 
-- Source: `develop` has local uncommitted fallback/doc/test edits; not yet pushed/CI-watched.
-- Tracked working tree: intended edits in `.dev/status/current-handoff.md`, `.dev/roadmap/memory-consolidation/current-progress-and-next-steps.md`, `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, and `tests/test_cli.py`; intended new files are `.dev/roadmap/memory-consolidation/references/post-v0.1.162-context-poor-follow-up-runtime-fallback-plan.md` and `src/agent_memory/integrations/followup_fallback.py`.
-- Unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+- Source/CI: `develop` includes pushed `d29345b Add agent-memory follow-up fallback`; GitHub Actions CI run `26492750967` completed successfully.
+- Tracked working tree is clean after the pushed fallback commit; unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
 - New behavior: when `hermes-context` / `hermes-pre-llm-hook` sees a context-poor follow-up in the `agent-memory` repo and normal retrieval has no reliable top memory, it retries with bounded handoff terms and marks the prompt with `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`
 - Boundaries: fallback does not change default retrieval ranking, memory statuses, collapse/delete, background/default/unattended apply, or ordinary auto-approval; fallback retrieval uses `record_retrievals=False`.
-- Verification: RED observed for the Korean follow-up test before implementation; focused GREEN tests passed; `uv run pytest tests/test_cli.py -q` -> `252 passed, 1 xfailed`; `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`.
+- Verification: RED observed for the Korean follow-up test before implementation; focused GREEN tests passed; `uv run pytest tests/test_cli.py -q` -> `252 passed, 1 xfailed`; `uv run pytest tests/ -q` -> `442 passed, 1 xfailed in 241.14s`; GitHub Actions CI run `26492750967` passed.
 - Live smoke: exact query `그럼 이후에 할 작업은 뭐지? 개선이 필요한거 아니야?` from repo cwd against `/Users/reddit/.agent-memory/memory.db` now renders the fallback marker instead of `Top memory: none`. Current top memory is `fact #4`, with `procedure #1` and `fact #1` alternatives; this is UX grounding only and does not resolve `fact:5`/`fact:6`.
 
 Next safe action:
 
-1. Review diff, commit the fallback/doc slice, push `develop`, and watch CI.
-2. After CI, return to normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
-3. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
-4. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Return to normal-turn observation for `fact:5`/`fact:6`, then rerun the scheduled artifact chain: decay-risk, scheduled-dry-run, scheduled-blocker-resolution, evidence-blocker packet, classification validation, and classification resolution.
+2. Only consider bounded partial automation evidence green if evidence blockers naturally resolve or are manually classified harmless through the reviewed path and all storage/privacy/linkage/background/trace checks remain clean.
+3. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
 
 If `fact:5`/`fact:6` remain keep-blocked after more observation, the next implementation slice should stay read-only or focus on operator evidence collection, not mutation authority.
 
