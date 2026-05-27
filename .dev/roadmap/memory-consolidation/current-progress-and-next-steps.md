@@ -1,30 +1,45 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 15:57 KST
+Last updated: 2026-05-27 16:50 KST
 
-## Current checkpoint: follow-up fallback default-off correction in progress
+## Current checkpoint: live scheduled evidence-chain readiness is green for bounded partial automation evidence only
 
-- User feedback clarified that implicit context-poor follow-up fallback is risky for performance/function tests because it can mask genuine baseline retrieval failures.
-- Decision: keep the fallback as a read-only explicit diagnostic/operator escape hatch, but restore default runtime behavior to raw retrieval results.
-- Implementation complete: `hermes-context` and `hermes-pre-llm-hook` only run the fallback with `--followup-fallback`; the root Hermes plugin only enables it through `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
-- The fallback remains marked and non-authoritative when enabled: `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.`, `record_retrievals=False`, no retrieval-ranking/status/collapse/delete/background/default authority change.
-- Packaging compatibility fixed: latest setuptools rejected `project.license = "MIT"` during release smoke, so `pyproject.toml` now uses `license = { text = "MIT" }`.
-- Decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
-- RED observed: default context/hook tests failed because fallback was implicit; opt-in context/hook tests failed because `--followup-fallback` did not exist.
-- Verification complete locally: fallback/plugin focus `8 passed`; CLI/plugin corridor `258 passed, 1 xfailed`; release smoke passed after the license fix; full suite `444 passed, 1 xfailed`; live default/opt-in `hermes-context` smokes matched the expected default-off vs opt-in marker behavior.
-- Pushed source/docs checkpoint `513a61a Make follow-up fallback opt-in`; GitHub Actions CI run `26497292644` passed.
+- Returned to the scheduled evidence-chain after the follow-up fallback default-off correction and re-ran the chain against the real live DB (`/Users/reddit/.agent-memory/memory.db`) plus personal-oss Hermes config.
+- Live evidence-chain artifacts from real `/Users/reddit/.agent-memory/memory.db` (no mocks):
+  - decay risk: `/tmp/agent-memory-next-real/decay-risk-20260527T074705Z.json`
+  - scheduled dry-run: `/tmp/agent-memory-next-real/scheduled-dry-run-20260527T074705Z.json`
+  - scheduled blocker resolution: `/tmp/agent-memory-next-real/scheduled-blocker-resolution-20260527T074705Z.json`
+  - storage health: `/tmp/agent-memory-next-real/storage-health-20260527T074705Z.json`
+  - trace quality: `/tmp/agent-memory-next-real/trace-quality-20260527T074705Z.json`
+  - live evidence bundle: `/tmp/agent-memory-next-real/live-evidence-bundle-20260527T074824Z/live-evidence-bundle.json`
+  - live evidence bundle comparison: `/tmp/agent-memory-next-real/live-evidence-bundle-compare-20260527T074906Z.json`
+  - automation policy readiness: `/tmp/agent-memory-next-real/automation-policy-readiness-20260527T075006Z.json`
+- `dogfood storage-health` is healthy with warnings `[]`.
+- `dogfood trace-quality --since-hours 24` is healthy with warnings `[]` and recommendation `consider_g4_plan`.
+- `dogfood scheduled-dry-run` remains strict-red because `max_decay_risk=0` and there are 6 monitor-only decay candidates. The current decay decomposition has no evidence-collection refs: `resolution_hint_counts={'monitor_only_no_mutation': 6}`, max score `0.2`.
+- `dogfood scheduled-blocker-resolution --allow-monitor-only-decay --accept-ready-trace-quality` resolves the scheduled blocker for bounded partial automation evidence only: `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`, unresolved blockers `[]`.
+- `dogfood live-evidence-bundle` passed with no blocked reasons; it stayed read-only/non-mutating, kept default retrieval unchanged, and emitted no raw query/source/transcript/report content.
+- `dogfood live-evidence-bundle-compare` against the latest prior checked live bundle passed with decision `live_evidence_bundle_stable_for_next_read_only_automation_policy_slice`.
+- `dogfood automation-policy-readiness` passed and recommends only an exact narrow reviewed-candidate apply policy slice next. It keeps broad G4 apply, ordinary conversation auto-approval, telemetry reset apply, collapse/delete, default-ranking mutation, and repeated apply without new approval forbidden.
+- Continued into that next lane on copy-live evidence: fresh epoch compare passed, telemetry reconciliation passed with the fresh compare artifact, G4 queue preview passed with all required gate artifacts green, and `g4-apply-readiness` passed with `bounded_partial_apply_ready=true`.
+- Copy-live green readiness artifacts: `/tmp/agent-memory-next-real/fresh-epoch-compare-20260527T075303Z.json`, `/tmp/agent-memory-next-real/telemetry-reconciliation-with-fresh-compare-20260527T075318Z.json`, `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
+- A final exact one-item copy-live apply rerun was attempted, but `uv` failed with `No space left on device` while the macOS volume had only hundreds of MiB free. Transient copy DBs/backups from this turn were removed; no live DB mutation was performed.
 
 Current estimate:
 
 - Scoped local human-brain-like memory lifecycle remains effectively `100%` at the bounded/review-gated/local-first boundary.
-- Operational confidence remains about `98%+`, but default-off fallback verification must finish before pushing because test observability matters more than convenience fallback behavior.
-- Literal broad/unattended/default background mutation remains intentionally blocked and must not be enabled from this checkpoint.
+- Operational confidence is now `98%+` with the scheduled evidence-chain green for bounded partial automation evidence. The remaining gap is not storage/runtime health; it is whether to execute the next exact reviewed one-item/copy-live corridor.
+- Literal broad/unattended/default background mutation remains intentionally blocked.
 
 Recommended next work now:
 
-1. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background authority remains blocked.
-2. Continue blocking broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Clear disk pressure or use a larger temp/report volume, then rerun exact one-item copy-live `g4-review-queue-apply` from the green readiness artifact.
+2. If live mutation is intentionally taken later, keep it one reviewed item, exact policy/approval phrase, backup/audit/reason-hash, and immediate post-apply verification only.
+3. Keep broad ordinary conversation auto-approval, unattended default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-scheduled-evidence-chain-readiness.md`
+
 
 ## Previous checkpoint: evidence-blocker classifications now have exact read-only validation artifact
 

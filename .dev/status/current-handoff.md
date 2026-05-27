@@ -1,30 +1,36 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 15:57 KST
+Last updated: 2026-05-27 16:50 KST
 
-## Current checkpoint: follow-up fallback is being demoted to explicit opt-in
+## Current checkpoint: live scheduled evidence-chain is green for bounded partial automation evidence only
 
-- User raised a valid concern that the context-poor follow-up fallback can make performance/function tests harder by masking a genuine `Top memory: none` baseline signal.
-- Decision: keep the fallback as a read-only diagnostic/operator escape hatch, but make normal `hermes-context`, `hermes-pre-llm-hook`, and Hermes plugin behavior default to raw retrieval results.
-- Desired runtime contract: context-poor follow-up prompts stay `verify_first` / `Top memory: none` unless the operator explicitly opts in with `--followup-fallback` or, for the plugin path, `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
-- The fallback marker remains visible when enabled: `Follow-up fallback: expanded context-poor query with agent-memory handoff terms.` Fallback retrieval still uses `record_retrievals=False` and grants no memory status/ranking/collapse/delete/automation authority.
-- New decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
-- Implementation completed locally in `src/agent_memory/api/cli.py`, `src/agent_memory/integrations/hermes_hooks.py`, root `__init__.py`, and focused tests in `tests/test_cli.py`.
-- RED observed before implementation: default tests failed because fallback was implicit; opt-in tests failed because `--followup-fallback` did not exist.
-- Verification completed locally:
-  - four fallback CLI tests + plugin integration: `8 passed`
-  - broader CLI/plugin corridor: `258 passed, 1 xfailed`
-  - full suite: `444 passed, 1 xfailed`
-  - live `hermes-context` smoke without `--followup-fallback`: `verify_first`, `Top memory: none`, no fallback marker
-  - live `hermes-context` smoke with `--followup-fallback`: `cautious`, fallback marker present, retrieved approved handoff memory present
-- During full-suite verification, `tests/test_release_smoke.py::test_built_distributions_include_schema_sql` exposed a packaging compatibility failure from latest setuptools rejecting `project.license = "MIT"`; fixed `pyproject.toml` to `license = { text = "MIT" }`, then the release smoke and full suite passed.
-- Previous pushed checkpoint is superseded by `513a61a Make follow-up fallback opt-in`, pushed to `origin/develop`; GitHub Actions CI run `26497292644` completed successfully.
-- Pre-existing unrelated untracked paths remain untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+- Returned to the documented scheduled evidence-chain work after the follow-up fallback default-off correction.
+- Live evidence-chain artifacts from real `/Users/reddit/.agent-memory/memory.db` (no mocks):
+  - decay risk: `/tmp/agent-memory-next-real/decay-risk-20260527T074705Z.json`
+  - scheduled dry-run: `/tmp/agent-memory-next-real/scheduled-dry-run-20260527T074705Z.json`
+  - scheduled blocker resolution: `/tmp/agent-memory-next-real/scheduled-blocker-resolution-20260527T074705Z.json`
+  - storage health: `/tmp/agent-memory-next-real/storage-health-20260527T074705Z.json`
+  - trace quality: `/tmp/agent-memory-next-real/trace-quality-20260527T074705Z.json`
+  - live evidence bundle: `/tmp/agent-memory-next-real/live-evidence-bundle-20260527T074824Z/live-evidence-bundle.json`
+  - live evidence bundle comparison: `/tmp/agent-memory-next-real/live-evidence-bundle-compare-20260527T074906Z.json`
+  - automation policy readiness: `/tmp/agent-memory-next-real/automation-policy-readiness-20260527T075006Z.json`
+- Live storage health is `healthy` with warnings `[]`.
+- Live 24h trace quality is `healthy`, warnings `[]`, recommendation `consider_g4_plan`.
+- Scheduled dry-run remains strict-red on `decay_risk_above_threshold` because `max_decay_risk=0`, but the current decay set is advisory-only: `candidate_count=6`, `resolution_hint_counts={'monitor_only_no_mutation': 6}`, max score `0.2`, and no evidence-collection refs in the decomposition.
+- `scheduled-blocker-resolution --allow-monitor-only-decay --accept-ready-trace-quality` is now green for bounded partial automation evidence only: `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`, unresolved blockers `[]`.
+- Live evidence bundle passed (`quality_gate.pass=true`, no blocked reasons), stayed read-only/non-mutating, left default retrieval unchanged, and included no raw query/source/transcript/report content.
+- Live evidence bundle comparison against the latest prior checked bundle passed with decision `live_evidence_bundle_stable_for_next_read_only_automation_policy_slice`.
+- Automation policy readiness passed and recommends the next lane as an exact narrow reviewed-candidate apply policy slice only.
+- Followed the next lane on a copy-live DB, not the live DB: fresh epoch compare and telemetry reconciliation are green, G4 queue preview has all required gate artifacts green, and `g4-apply-readiness` is green with `bounded_partial_apply_ready=true` / decision `bounded_apply_ready_pending_exact_operator_approval`.
+- Copy-live artifacts: `/tmp/agent-memory-next-real/fresh-epoch-compare-20260527T075303Z.json`, `/tmp/agent-memory-next-real/telemetry-reconciliation-with-fresh-compare-20260527T075318Z.json`, `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
+- A final copy-live one-item apply rerun was stopped by local disk pressure (`No space left on device`); transient copy DBs/backups from this turn were deleted. Live DB SHA after cleanup was `0f9aa6bff879c1ef1cba3ac09fbfc91504da6fe1a547ba5fea1d9ea7e4eecfd8`, so no live mutation was performed.
+- Still blocked: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without new approval, default-ranking mutation, collapse/delete, telemetry reset apply, and unreviewed promotion.
 
-Next step: return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and green bounded-partial blocker resolution evidence, but broad/default/background mutation authority remains blocked.
+Next step: free disk or use a larger temp volume, then rerun the exact one-item copy-live `g4-review-queue-apply` from the green readiness artifact before considering any live one-item corridor.
 
-Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-scheduled-evidence-chain-readiness.md`
+
 
 ## Previous checkpoint: classification validation now has a read-only resolution consumer
 

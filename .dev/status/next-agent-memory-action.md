@@ -1,28 +1,43 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-27 15:57 KST
+Last updated: 2026-05-27 16:50 KST
 
-## Current checkpoint: follow-up fallback default-off correction in progress
+## Current checkpoint: scheduled evidence-chain recheck complete on real live DB
 
-The latest pushed checkpoint is documented in `.dev/status/current-handoff.md`, but user feedback changed the immediate slice: the context-poor follow-up fallback should not be implicit because it can hide real retrieval baseline/performance failures.
+Source/CI latest pushed remains `develop` through `0f8c1c5 Record follow-up fallback opt-in CI`; working tree changes in this checkpoint are documentation/evidence updates only.
 
-Current live/source shape:
+Live/source shape from real data:
 
-- Source/CI latest pushed: `develop` includes `513a61a Make follow-up fallback opt-in`; GitHub Actions CI run `26497292644` completed successfully.
-- Default runtime fallback is now explicit opt-in.
-- Default contract after this slice: `hermes-context` and `hermes-pre-llm-hook` leave context-poor follow-up prompts as `verify_first` / `Top memory: none` unless `--followup-fallback` is supplied.
-- Plugin contract after this slice: root Hermes plugin keeps fallback disabled unless `AGENT_MEMORY_HERMES_FOLLOWUP_FALLBACK=true`.
-- Opt-in fallback remains read-only, marked, and non-authoritative: `record_retrievals=False`; no memory status/ranking/collapse/delete/default/background/unattended authority changes.
-- Packaging compatibility fix included: `pyproject.toml` now uses `license = { text = "MIT" }` because latest setuptools rejected the prior license string during release smoke.
-- Decision doc: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-follow-up-fallback-default-off-decision.md`.
-- RED/GREEN: default-blocking and opt-in fallback tests were added; RED failed as expected; final local verification passed with `8 passed` for fallback/plugin focus, `258 passed, 1 xfailed` for CLI/plugin corridor, and `444 passed, 1 xfailed` for full suite. Live default/opt-in `hermes-context` smokes matched the expected default-off vs opt-in marker behavior.
-- Pre-existing unrelated untracked paths remain intentionally untouched: `.agent-learner/`, `.claude/`, `.dev/kb/retrieval-eval-m1-implementation-plan.md`, `.omc/`, `.worktrees/`.
+- Live evidence-chain artifacts from real `/Users/reddit/.agent-memory/memory.db` (no mocks):
+  - decay risk: `/tmp/agent-memory-next-real/decay-risk-20260527T074705Z.json`
+  - scheduled dry-run: `/tmp/agent-memory-next-real/scheduled-dry-run-20260527T074705Z.json`
+  - scheduled blocker resolution: `/tmp/agent-memory-next-real/scheduled-blocker-resolution-20260527T074705Z.json`
+  - storage health: `/tmp/agent-memory-next-real/storage-health-20260527T074705Z.json`
+  - trace quality: `/tmp/agent-memory-next-real/trace-quality-20260527T074705Z.json`
+  - live evidence bundle: `/tmp/agent-memory-next-real/live-evidence-bundle-20260527T074824Z/live-evidence-bundle.json`
+  - live evidence bundle comparison: `/tmp/agent-memory-next-real/live-evidence-bundle-compare-20260527T074906Z.json`
+  - automation policy readiness: `/tmp/agent-memory-next-real/automation-policy-readiness-20260527T075006Z.json`
+- Storage health: `healthy`, no warnings.
+- Trace quality: `healthy`, no warnings, recommendation `consider_g4_plan`.
+- Scheduled dry-run: strict gate still reports `quality_gate.pass=false` only because `decay_risk_above_threshold` is nonzero under `max_decay_risk=0`.
+- Decay decomposition: `candidate_count=6`, all `monitor_only_no_mutation`, max score `0.2`, no hard evidence-collection refs.
+- Scheduled blocker resolution with monitor-only allowance: `resolution_gate.pass=true`, decision `scheduled_blockers_resolved_for_bounded_partial_automation_only`.
+- Live evidence bundle and comparison are green and raw-content-safe.
+- Automation policy readiness is green and classifies the next lane as exact narrow reviewed-candidate apply policy only.
+- Copy-live follow-through reached green bounded readiness: fresh epoch compare and telemetry reconciliation passed; G4 queue preview has all required gate artifacts green; `g4-apply-readiness` passed with `bounded_partial_apply_ready=true`.
+- Copy-live green readiness artifacts: `/tmp/agent-memory-next-real/copy-g4-review-queue-preview-green-20260527T075504Z.json`, `/tmp/agent-memory-next-real/copy-g4-apply-readiness-green-20260527T075504Z.json`.
+- Final copy-live one-item apply rerun could not complete because the macOS volume had only hundreds of MiB free and `uv` hit `No space left on device`. Transient copy DBs/backups from this turn were removed; live DB was not mutated.
 
 Next safe action:
 
-1. Return to scheduled evidence-chain work. Latest read-only live check showed monitor-only decay candidates only and a green `scheduled-blocker-resolution` for bounded partial automation evidence, but broad/default/background mutation authority remains blocked.
-2. Keep blocked regardless of this slice: broad G4 apply, ordinary conversation auto-approval, unattended/default/background apply, repeated apply without fresh verification, default-ranking mutation, collapse/delete, telemetry reset, and unreviewed promotion.
+1. Clear disk pressure or point temp/copy artifacts to a larger volume, then rerun the exact one-item copy-live `g4-review-queue-apply` using the green readiness artifact and explicit `--queue-id` for one reviewed reinforcement item.
+2. Only after that copy-live apply and post-apply verification are green should a live one-item corridor be considered; it must use exact policy/approval phrase/backup/audit/reason-hash.
+3. Do not open broad/background/default mutation. Keep ordinary conversation auto-approval, default-ranking migration, collapse/delete, telemetry reset, and unreviewed promotion blocked.
+4. Keep using real live DB evidence and actual CLI reports; avoid mock-only confidence except for focused parser/regression tests if code changes become necessary.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-scheduled-evidence-chain-readiness.md`
+
 
 ## Previous checkpoint: scheduled blocker-resolution decision refinement complete
 
