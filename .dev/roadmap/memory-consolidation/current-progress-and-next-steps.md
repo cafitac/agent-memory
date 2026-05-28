@@ -1,12 +1,30 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 14:52 KST
+Last updated: 2026-05-28 15:14 KST
 
 
 
 
 
+
+## Current checkpoint: live ordinary-turn true-negative labels expanded; explicit remember-intent still absent
+
+- Continued from the positive-prioritized ordinary-turn label packet checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Primary run directory: `/tmp/agent-memory-ordinary-turn-live-20260528T061245Z`.
+- Storage health and trace quality remained healthy.
+- `remember-intent` over the latest 2000 traces found `ordinary_turn=2000`, `remember_intent=0`.
+- Ordinary-turn auto-approval readiness over 2000 traces remains blocked on `explicit_remember_intent_ready_count_below_minimum`: `explicit_remember_intent=0`, `review_ready_remember_intent=0`.
+- Pre-label classifier eval over 3000 traces still had the previous false-positive profile: `labeled_ordinary_turn=63`, `predicted_memory_worthy=3`, `false_positive=3`, `true_negative=60`.
+- Positive-prioritized label packet over 3000 traces produced 50 review refs with `blocked_secret_like_count=0`, `eligible_unlabeled_nonsecret_count=2932`, and no predicted-positive review items. Local review showed empty metadata-only default traces (`summary` unavailable, salience `0.1`, user emphasis `0.0`, retention `ephemeral`) with no exact durable human field.
+- Applied 50 exact `ordinary-turn-label-update` metadata labels with approval phrase `label-approved-ordinary-turn-v1`, all `expected_memory_worthy=false`.
+- Post-label classifier eval over 3000 traces: `labeled_ordinary_turn=113`, `true_negative=110`, `false_positive=3`, `false_negative=0`, `positive_prediction_count=3`, `precision_applicable=true`, `precision_percent=0`. Gate remains red on `false_positive_predictions_present` and `precision_below_minimum`.
+- Window summary now has `labeled_ordinary_turn_total=196`, `positive_prediction_total=6`, and `false_positive_total=6`; it remains red.
+- No fact/procedure/episode promotion, memory apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or auto-approval/default-background enablement was executed.
+
+Next step: keep ordinary conversation auto-approval and inferred/apply corridors blocked. Continue fast real live evidence collection after more natural turns. Use the positive-prioritized label packet so future predicted positives surface first, but require exact raw-reviewable durable human text before any positive label, inferred approval, or promotion corridor.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-ordinary-turn-empty-default-trace-labeling.md`
 
 ## Current checkpoint: live ordinary-turn positive hints reviewed as false positives; label packet now prioritizes positives
 
