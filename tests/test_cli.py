@@ -24070,6 +24070,72 @@ def test_dogfood_ordinary_turn_label_packet_emits_safe_review_refs_without_apply
 
 
 
+def test_dogfood_ordinary_turn_label_packet_prioritizes_positive_predictions(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-label-packet-priority.db"
+    output_path = tmp_path / "ordinary-turn-label-packet-priority.json"
+    initialize_database(db_path)
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="a" * 64,
+        summary="Please run tests only for this one turn.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    positive = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="turn",
+        content_sha256="b" * 64,
+        summary="User prefers concise step-by-step ops guidance.",
+        scope="project:g2",
+        retention_policy="ephemeral",
+        metadata={"ordinary_turn": True},
+    )
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-label-packet",
+            str(db_path),
+            "--limit",
+            "10",
+            "--max-items",
+            "1",
+            "--min-items",
+            "1",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["packet_counts"] == {
+        "review_item_count": 1,
+        "eligible_unlabeled_nonsecret_count": 2,
+        "blocked_secret_like_count": 0,
+        "already_labeled_count": 0,
+        "deferred_unlabeled_nonsecret_count": 1,
+    }
+    assert payload["review_items"][0]["trace_ref"] == f"experience_trace:{positive.id}"
+    assert payload["review_items"][0]["predicted_memory_worthy"] is True
+    assert payload["review_items"][0]["classified_reason"] == "ordinary_preference"
+
+
+
 def test_dogfood_ordinary_turn_label_update_marks_exact_ref_without_raw_output(
     tmp_path: Path,
 ) -> None:

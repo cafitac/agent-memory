@@ -13087,10 +13087,14 @@ def _dogfood_ordinary_turn_label_packet_payload(args: argparse.Namespace) -> dic
     unlabeled = [trace for trace in ordinary_turns if _metadata_bool(trace.metadata.get("expected_memory_worthy")) is None]
     blocked_secret_like = [trace for trace in unlabeled if _contains_secret_like_report_text(trace.summary)]
     eligible_unlabeled_nonsecret = [trace for trace in unlabeled if not _contains_secret_like_report_text(trace.summary)]
-    selected = eligible_unlabeled_nonsecret[: args.max_items]
-    review_items: list[dict[str, Any]] = []
-    for trace in selected:
+    review_candidates: list[tuple[Any, bool, str]] = []
+    for trace in eligible_unlabeled_nonsecret:
         predicted, reason = _ordinary_turn_memory_worthiness_classification_for_trace(trace)
+        review_candidates.append((trace, predicted, reason))
+    review_candidates.sort(key=lambda item: (not item[1],))
+    selected = review_candidates[: args.max_items]
+    review_items: list[dict[str, Any]] = []
+    for trace, predicted, reason in selected:
         summary_sha256 = hashlib.sha256((trace.summary or "").encode("utf-8")).hexdigest()
         item_ref = hashlib.sha256(f"ordinary-turn-label:{trace.id}:{trace.content_sha256}".encode("utf-8")).hexdigest()[:24]
         review_items.append(
