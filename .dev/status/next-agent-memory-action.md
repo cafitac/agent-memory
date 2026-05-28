@@ -1,10 +1,50 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 09:41 KST
+Last updated: 2026-05-28 10:18 KST
 
 
 
+
+## Current checkpoint: fresh read-only automation-policy pass complete; next lanes are review-only
+
+Completed the next documented fresh live read-only pass against the real live DB.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-fresh-readonly-20260528T101358Z`.
+- Summary: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/fresh-readonly-summary.json`.
+- Health:
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/storage-health.json`: `status=healthy`, warnings `[]`.
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/trace-quality.json`: `status=healthy`, warnings `[]`, recommendation `consider_g4_plan`.
+- Scheduled evidence:
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/scheduled-dry-run.json`: strict red on `decay_risk_above_threshold`; 1 evidence-collection candidate and 6 monitor-only refs.
+  - Evidence-collection candidate `fact:5` was inspected with real DB review/graph evidence and classified as `manual_review_harmless_low_activation`.
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/scheduled-evidence-blocker-classification-resolution.json`: green, `scheduled_evidence_blockers_resolved_for_bounded_partial_automation_only`; broad/default/background authority remains false.
+- Automation policy readiness:
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/live-evidence-bundle-fast.json`: green with 9 real approved-memory fixture tasks, 0 ranking baseline regressions, 14 rollback checked applications, and 3 application-audit rows.
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/live-evidence-bundle-compare-fast.json`: green.
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/automation-policy-readiness-fast.json`: green, `automation_policy_readiness_classified_next_lanes`.
+- Lifecycle:
+  - Fresh evidence is green.
+  - Refresh preview has `new_unapplied_target_candidate_count=0` and `target_already_applied_count=7`.
+  - Apply readiness remains `no_exact_lifecycle_apply_candidates_ready`.
+- Ordinary-turn auto-approval:
+  - `/tmp/agent-memory-fresh-readonly-20260528T101358Z/ordinary-turn-auto-approval-readiness.json`: red on `explicit_remember_intent_ready_count_below_minimum`.
+- Next-lane previews:
+  - reinforcement refinement: 7 review candidates.
+  - decay collapse: 1 review candidate.
+  - supersession: 1 review candidate.
+
+Next safe action:
+
+1. Inspect the concrete reinforcement/decay/supersession preview candidates as review material only.
+2. Open a separate bounded corridor only if exact human-review evidence supports a specific candidate.
+3. Do not persist duplicate lifecycle candidates; lifecycle refresh has no new unapplied targets.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, default-ranking mutation, collapse/delete, telemetry reset, core memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-fresh-readonly-automation-policy-check.md`
 
 ## Current checkpoint: generated trace-candidate skeletons reviewed and rejected as ungrounded
 

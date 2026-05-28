@@ -1,10 +1,30 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 09:41 KST
+Last updated: 2026-05-28 10:18 KST
 
 
 
+
+## Current checkpoint: fresh live read-only automation-policy checks green; lifecycle/apply lanes still stopped
+
+- Continued from the generated trace-candidate cleanup checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or smoke DB was used.
+- Primary run directory: `/tmp/agent-memory-fresh-readonly-20260528T101358Z`.
+- Summary artifact: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/fresh-readonly-summary.json`.
+- Health remained green: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/storage-health.json` reports `status=healthy` with no warnings, and `/tmp/agent-memory-fresh-readonly-20260528T101358Z/trace-quality.json` reports `status=healthy`, recommendation `consider_g4_plan`.
+- Strict scheduled dry-run is still red before classification: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/scheduled-dry-run.json`, blocked by `decay_risk_above_threshold` with 7 decay candidates: 1 evidence-collection candidate and 6 monitor-only refs.
+- Current evidence-collection candidate remains `fact:5`. Ref-safe real DB review artifacts are `/tmp/agent-memory-fresh-readonly-20260528T101358Z/fact5-review-explain.json`, `/tmp/agent-memory-fresh-readonly-20260528T101358Z/fact5-review-history.json`, and `/tmp/agent-memory-fresh-readonly-20260528T101358Z/fact5-graph-inspect.json`. They show `fact:5` is approved, default-visible, graph-linked to approval evidence, and semantically still valid; the only issue is low recent activation.
+- Classified `fact:5` again as `manual_review_harmless_low_activation`: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/scheduled-evidence-blocker-classification-validation.json` is green and `/tmp/agent-memory-fresh-readonly-20260528T101358Z/scheduled-evidence-blocker-classification-resolution.json` is green with decision `scheduled_evidence_blockers_resolved_for_bounded_partial_automation_only`.
+- Fast real-data bundle is green after using the current live approved-memory fixture size as the reliability floor: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/live-evidence-bundle-fast.json`, `fixture_task_count=9` (`facts=7`, `procedures=1`, `episodes=1`), ranking baseline regressions `0`, rollback checked applications `14`, application audit count `3`. The strict default bundle was also retained and is red only because the default `min_reliable_tasks=50` exceeds the current live fixture count.
+- Fast comparison and automation-policy readiness are green: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/live-evidence-bundle-compare-fast.json` and `/tmp/agent-memory-fresh-readonly-20260528T101358Z/automation-policy-readiness-fast.json`, decision `automation_policy_readiness_classified_next_lanes`.
+- Lifecycle remains stopped: fresh evidence is green, but `/tmp/agent-memory-fresh-readonly-20260528T101358Z/lifecycle-candidate-refresh-preview.json` reports `new_unapplied_target_candidate_count=0`, `target_already_applied_count=7`, and `no_new_unapplied_target_lifecycle_candidates`; `/tmp/agent-memory-fresh-readonly-20260528T101358Z/lifecycle-apply-readiness.json` reports `no_exact_lifecycle_apply_candidates_ready`.
+- Ordinary-turn auto-approval remains blocked: `/tmp/agent-memory-fresh-readonly-20260528T101358Z/ordinary-turn-auto-approval-readiness.json` is red on `explicit_remember_intent_ready_count_below_minimum`.
+- Read-only next-lane previews are available as review material only: reinforcement refinement has 7 candidates, decay collapse has 1 candidate, and supersession has 1 candidate. Artifacts are `/tmp/agent-memory-fresh-readonly-20260528T101358Z/reinforcement-refinement-preview.json`, `/tmp/agent-memory-fresh-readonly-20260528T101358Z/decay-collapse-preview.json`, and `/tmp/agent-memory-fresh-readonly-20260528T101358Z/supersession-preview.json`.
+- No apply, fact/procedure/episode promotion, ranking mutation, core memory-status write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: inspect the concrete reinforcement/decay/supersession preview candidates only as human-review material. Open a separate bounded corridor only if exact evidence supports a candidate; otherwise stop at read-only evidence and continue live dogfood. Do not persist duplicate lifecycle candidates because the refresh preview has no new unapplied targets.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-fresh-readonly-automation-policy-check.md`
 
 ## Current checkpoint: generated trace-candidate skeletons reviewed and rejected as ungrounded
 
