@@ -1,12 +1,57 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 15:14 KST
+Last updated: 2026-05-28 15:56 KST
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+## Current checkpoint: explicit remember-intent candidate cross-check found no promotion corridor
+
+- Continued from the explicit remember-intent reappearance checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Primary run directory remains `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z`.
+- Reviewed explicit remember-intent evidence from `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z/remember-intent.json`: 5 review-ready, non-secret samples under `project:agent-memory`.
+- Pending trace-candidate list after this evidence is empty: `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z/trace-candidate-list-pending-after-explicit-intent.json`, `count=0`.
+- Fresh read-only trace-candidate generation produced 20 human-review-only skeletons: `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z/trace-candidate-generate-after-explicit-intent.json`.
+- All generated candidates still require human fields (`subject`, `predicate`, `object`, `scope`, `confidence`) and report `mutation_supported=false`, `ordinary_conversation_auto_approval=false`, and `promotion_supported_without_human_fields=false`.
+- Cross-check artifact `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z/explicit-remember-intent-candidate-crosscheck.json` found `explicit_trace_candidate_hits=0` for trace IDs `3764`-`3768`; the current graph-cluster generator did not surface exact candidates grounded in the explicit remember-intent traces.
+- No candidate persistence, fact/procedure/episode promotion, memory apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or auto-approval/default-background enablement was executed.
+
+Next step: do not promote from the generated candidate set. Continue real live evidence collection and/or add a narrow report/candidate contract that surfaces explicit remember-intent traces directly as exact review material instead of relying on broad graph-cluster generation. Keep ordinary-turn auto-approval and inferred/apply corridors blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-explicit-intent-candidate-crosscheck-no-promotion.md`
+
+## Current checkpoint: explicit remember-intent reappeared; live ordinary-turn true-negative labels expanded again
+
+- Continued from the empty-default ordinary-turn labeling checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Primary run directory: `/tmp/agent-memory-ordinary-turn-live-20260528T154420Z`.
+- Storage health and trace quality remained healthy.
+- `remember-intent` over the latest 4000 traces now found `remember_intent=5`, `ordinary_turn=3995`, `review_ready_count=5`, `unsafe_sample_count=0`, all scoped to `project:agent-memory`.
+- The five explicit intent samples are concrete preference summaries: real downloaded-install QA, committed long-lived `.dev` docs, concise Korean progress checkpoints, risky automation behind explicit gates, and autonomous agent-memory progress when next steps are clear.
+- Ordinary-turn auto-approval readiness over 4000 traces is green as a measurement gate (`score_percent=100`) but still reports `ordinary_conversation_auto_approval=false` and recommends keeping auto-approval blocked.
+- Pre-label classifier eval over 4000 traces retained the previous false-positive profile: `labeled_ordinary_turn=113`, `predicted_memory_worthy=3`, `false_positive=3`, `true_negative=110`, gate red on `false_positive_predictions_present` and `precision_below_minimum`.
+- Positive-prioritized label packet over 4000 traces produced 100 review refs with `blocked_secret_like_count=0`, `eligible_unlabeled_nonsecret_count=3882`, and no predicted-positive review items. Fast local packet review showed empty non-secret low-salience traces (`summary_length_bucket=empty`, `classified_reason=none`, user emphasis `0`, retention `ephemeral`) with no exact durable human field.
+- Applied 100 exact `ordinary-turn-label-update` metadata labels with approval phrase `label-approved-ordinary-turn-v1`, all `expected_memory_worthy=false`.
+- Post-label classifier eval over 4000 traces: `labeled_ordinary_turn=213`, `true_negative=210`, `false_positive=3`, `false_negative=0`, `positive_prediction_count=3`, `precision_applicable=true`, `precision_percent=0`. Gate remains red on `false_positive_predictions_present` and `precision_below_minimum`.
+- Repeated-window summary now has `report_count=4`, `labeled_ordinary_turn_total=409`, `positive_prediction_total=9`, `false_positive_total=9`, `false_negative_total=0`, and remains red.
+- Inferred approval readiness remains blocked: `usable_for_readiness=false`, `ready_for_design=false`, `apply_supported=false`.
+- No fact/procedure/episode promotion, memory apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or auto-approval/default-background enablement was executed.
+
+Next step: use the five explicit remember-intent traces as exact human-review material for the next candidate/promotion lane, but keep ordinary-turn auto-approval and inferred/apply corridors blocked. Continue real live evidence only; inspect whether those explicit traces already produced reviewed candidates or can produce exact grounded candidates without relying on empty ordinary-turn metadata.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-ordinary-turn-explicit-intent-and-extended-true-negative-labeling.md`
 
 ## Current checkpoint: live ordinary-turn true-negative labels expanded; explicit remember-intent still absent
 
