@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 17:13 KST
+Last updated: 2026-05-28 18:15 KST
 
 
 
@@ -22,6 +22,22 @@ Last updated: 2026-05-28 17:13 KST
 
 
 
+
+## Current checkpoint: stable G4 review queue classified; apply still blocked on telemetry reconciliation
+
+- Continued from the persisted G4 review queue checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-g4-review-classify-20260528T085711Z`.
+- Reviewed the prior 8 pending G4 rows: approved 3 reinforcement-review rows and rejected 5 decay-risk rows whose proposed action was `monitor_only_no_mutation`.
+- Live gate refresh after review showed retrieval ranking, rollback confidence, and rollback replay green, but telemetry reconciliation red because fresh-epoch comparison is not green (`fresh_epoch_comparison_not_green`).
+- Found a pre-apply safety contract bug: ordinal queue IDs could drift across previews, and approval reports lacked reviewed-current-queue refs. Fixed it with target-stable queue IDs plus `reviewed_queue_refs` validation; stale human approval artifacts now fail closed.
+- Persisted the current stable-ID queue from real live evidence: `inserted_count=12`, then classified all 12 current rows. Final queue approval report has `total_count=24`, `approved_count=14`, `rejected_count=10`, `pending_count=0`, `human_review_queue_approval_pass=true`.
+- Latest stable preview has current queue review and human approval green, retrieval ranking green (`task_count=9`, `baseline_regression_count=0`), rollback confidence green, rollback replay green, but live telemetry reconciliation remains red.
+- G4 apply readiness and operator bundle remain blocked on `live_telemetry_reconciliation_pass`, `live_telemetry_reconciliation_pass_not_green`, and `queue_preview_artifact_gates_not_green`; `apply_supported=false`, `bounded_partial_apply_ready=false`.
+- No fact/procedure/episode promotion, memory apply, relation write, ranking/default retrieval mutation, core memory-status write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: do not run `g4-review-queue-apply` yet. Continue with real live telemetry evidence for the fresh-epoch comparison / telemetry reconciliation gate; if that gate cannot be made green from current real data, stop at telemetry evidence and keep apply blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-g4-stable-review-queue-classified-telemetry-blocked.md`
 
 ## Current checkpoint: G4 review queue persisted from real data; apply still blocked
 

@@ -20445,7 +20445,29 @@ def _read_g4_gate_artifact(path: Path | None, expected_kind: str) -> dict[str, A
     }
 
 
-def _g4_artifact_gate_evidence(args: argparse.Namespace) -> dict[str, Any]:
+def _g4_queue_review_refs(queue_entries: list[dict[str, Any]]) -> list[dict[str, str | None]]:
+    refs: list[dict[str, str | None]] = []
+    for entry in queue_entries:
+        refs.append(
+            {
+                "queue_id": str(entry.get("queue_id") or ""),
+                "proposal_type": str(entry.get("proposal_type") or ""),
+                "target_ref": str(entry.get("target_ref")) if entry.get("target_ref") is not None else None,
+            }
+        )
+    return refs
+
+
+def _g4_queue_review_key(ref: dict[str, Any]) -> tuple[str, str, str | None]:
+    target_ref = ref.get("target_ref")
+    return (
+        str(ref.get("queue_id") or ""),
+        str(ref.get("proposal_type") or ""),
+        str(target_ref) if target_ref is not None else None,
+    )
+
+
+def _g4_artifact_gate_evidence(args: argparse.Namespace, *, current_queue: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     reports = {
         "retrieval_ranking_gate_pass": _read_g4_gate_artifact(
             getattr(args, "retrieval_ranking_report", None), "dogfood_retrieval_ranking_experiment"
@@ -20463,6 +20485,29 @@ def _g4_artifact_gate_evidence(args: argparse.Namespace) -> dict[str, Any]:
     human_approval_report = _read_g4_gate_artifact(
         getattr(args, "human_review_approval_report", None), "dogfood_g4_review_queue_approval_report"
     )
+    if human_approval_report.get("provided") and current_queue is not None:
+        approval_path = getattr(args, "human_review_approval_report", None)
+        current_review_refs = _g4_queue_review_refs(current_queue)
+        try:
+            approval_payload = json.loads(Path(approval_path).read_text(encoding="utf-8")) if approval_path else {}
+        except Exception:
+            approval_payload = {}
+        reviewed_refs = approval_payload.get("reviewed_queue_refs") if isinstance(approval_payload, dict) else None
+        approval_blocked_reasons = list(human_approval_report.get("blocked_reasons", []))
+        if not isinstance(reviewed_refs, list):
+            approval_blocked_reasons.append("approval_report_missing_reviewed_queue_refs")
+        else:
+            reviewed_keys = {_g4_queue_review_key(ref) for ref in reviewed_refs if isinstance(ref, dict)}
+            missing_current_refs = [
+                ref for ref in current_review_refs
+                if _g4_queue_review_key(ref) not in reviewed_keys
+            ]
+            if missing_current_refs:
+                approval_blocked_reasons.append("approval_report_missing_current_queue_reviews")
+                human_approval_report["missing_current_queue_review_count"] = len(missing_current_refs)
+                human_approval_report["missing_current_queue_refs"] = missing_current_refs[:10]
+        human_approval_report["blocked_reasons"] = sorted(set(str(reason) for reason in approval_blocked_reasons if reason))
+        human_approval_report["pass"] = not human_approval_report["blocked_reasons"]
     gate_evidence = {key: report["pass"] is True for key, report in reports.items()}
     gate_evidence["human_review_queue_approval_pass"] = human_approval_report["pass"] is True
     missing = sorted(key for key, report in reports.items() if not report.get("provided"))
@@ -20528,7 +20573,7 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         reason_codes = ["reinforcement_review_candidate"] + [str(value) for value in candidate.get("signals", [])]
         queue_entries.append(
             _g4_review_queue_entry(
-                queue_id=f"g4-review:reinforcement:{index}",
+                queue_id=f"g4-review:reinforcement:{memory_ref}" if memory_ref else f"g4-review:reinforcement:index:{index}",
                 proposal_type="reinforcement_review",
                 memory_ref=str(memory_ref) if memory_ref is not None else None,
                 reason_codes=reason_codes,
@@ -20560,7 +20605,7 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         ] + [f"observation:{value}" for value in ref_safe.get("sample_observation_ids", [])]
         queue_entries.append(
             _g4_review_queue_entry(
-                queue_id=f"g4-review:decay-risk:{index}",
+                queue_id=f"g4-review:decay-risk:{memory_ref}" if memory_ref else f"g4-review:decay-risk:index:{index}",
                 proposal_type="decay_risk_review",
                 memory_ref=str(memory_ref) if memory_ref is not None else None,
                 reason_codes=["decay_risk_review_candidate"] + [str(value) for value in candidate.get("signals", [])],
@@ -20597,7 +20642,7 @@ def _dogfood_g4_review_queue_preview_payload(args: argparse.Namespace) -> dict[s
         "live_telemetry_reconciliation_pass",
         "human_review_queue_approval_pass",
     ]
-    artifact_gate_evidence = _g4_artifact_gate_evidence(args)
+    artifact_gate_evidence = _g4_artifact_gate_evidence(args, current_queue=queue_entries)
     broad_g4_decision = (
         "broad_g4_apply_still_blocked_pending_separate_apply_corridor"
         if artifact_gate_evidence["provided_gate_artifacts_pass"]
@@ -20935,6 +20980,17 @@ def _dogfood_g4_review_queue_approval_report_payload(args: argparse.Namespace) -
             }
             for row in rows
             if row["status"] == "approved"
+        ],
+        "reviewed_queue_refs": [
+            {
+                "queue_id": row["queue_id"],
+                "status": row["status"],
+                "proposal_type": row["proposal_type"],
+                "target_ref": row["target_ref"],
+                "source_preview_sha256": row["source_preview_sha256"],
+            }
+            for row in rows
+            if row["status"] in {"approved", "rejected", "conflict"}
         ],
         "quality_gate": {
             "pass": human_review_queue_approval_pass,

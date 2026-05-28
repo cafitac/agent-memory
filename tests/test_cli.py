@@ -4126,6 +4126,7 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_is_ref_safe_and_read_
     entry = payload["queue"][0]
     assert entry["proposal_type"] == "reinforcement_review"
     assert entry["target_ref"] == f"fact:{fact.id}"
+    assert entry["queue_id"] == f"g4-review:reinforcement:fact:{fact.id}"
     assert entry["policy"] == {
         "requires_human_review": True,
         "auto_apply_allowed": False,
@@ -4290,6 +4291,18 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_a
                 "mutated": False,
                 "default_retrieval_unchanged": True,
                 "human_review_queue_approval_pass": True,
+                "reviewed_queue_refs": [
+                    {
+                        "queue_id": f"g4-review:reinforcement:fact:{fact.id}",
+                        "proposal_type": "reinforcement_review",
+                        "target_ref": f"fact:{fact.id}",
+                    },
+                    {
+                        "queue_id": f"g4-review:decay-risk:fact:{fact.id}",
+                        "proposal_type": "decay_risk_review",
+                        "target_ref": f"fact:{fact.id}",
+                    },
+                ],
                 "quality_gate": {"pass": True, "blocked_reasons": []},
                 "privacy": {
                     "proposal_json_included": False,
@@ -4354,6 +4367,157 @@ def test_python_module_cli_dogfood_g4_review_queue_preview_consumes_green_gate_a
     assert reassessment["human_review_queue_approval_source"] == "artifact"
     assert payload["automation_policy"]["apply_supported"] is False
     assert "SHOULD_NOT_LEAK" not in result.stdout
+
+
+def test_python_module_cli_dogfood_g4_review_queue_preview_rejects_stale_human_approval_refs(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "g4-review-stale-approval.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="transcript",
+        content="G4 stale approval sensitive SHOULD_NOT_LEAK content.",
+        metadata={"project": "g4-review-stale-approval"},
+    )
+    current_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 stale current",
+        predicate="safe_gate",
+        object_ref_or_value="SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-review-stale-approval",
+        confidence=0.95,
+    )
+    stale_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G4 stale old",
+        predicate="safe_gate",
+        object_ref_or_value="STALE_SHOULD_NOT_LEAK",
+        evidence_ids=[source.id],
+        scope="project:g4-review-stale-approval",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=current_fact.id)
+    approve_fact(db_path=db_path, fact_id=stale_fact.id)
+    with sqlite3.connect(db_path) as connection:
+        for index in range(1, 4):
+            connection.execute(
+                """
+                INSERT INTO retrieval_observations (
+                    id, created_at, surface, query_sha256, query_preview, preferred_scope, limit_value,
+                    statuses_json, retrieved_memory_refs_json, top_memory_ref, response_mode, metadata_json
+                ) VALUES (?, '2026-05-14 10:30:00', 'hermes-pre-llm-hook', ?, '',
+                          'project:g4-review-stale-approval', 1, '["approved"]', ?, ?, 'direct', '{}')
+                """,
+                (
+                    index,
+                    hashlib.sha256(f"stale-approval-query-{index}".encode()).hexdigest(),
+                    json.dumps([f"fact:{current_fact.id}"]),
+                    f"fact:{current_fact.id}",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO memory_activations (
+                    id, created_at, surface, activation_kind, memory_ref, observation_id, trace_id, scope, strength, metadata_json
+                ) VALUES (?, '2026-05-14 10:30:00', 'hermes-pre-llm-hook', 'retrieved', ?, ?, ?,
+                          'project:g4-review-stale-approval', 1.0, '{}')
+                """,
+                (index, f"fact:{current_fact.id}", index, index),
+            )
+            connection.execute(
+                """
+                INSERT INTO experience_traces (
+                    id, created_at, surface, event_kind, content_sha256, summary, scope,
+                    related_memory_refs_json, related_observation_ids_json, retention_policy, metadata_json
+                ) VALUES (?, '2026-05-14 10:30:00', 'hermes-pre-llm-hook', 'turn', ?, NULL,
+                          'project:g4-review-stale-approval', ?, ?, 'ephemeral', ?)
+                """,
+                (
+                    index,
+                    hashlib.sha256(f"stale-approval-trace-{index}".encode()).hexdigest(),
+                    json.dumps([f"fact:{current_fact.id}"]),
+                    json.dumps([index]),
+                    json.dumps({"trace_recording": "default_metadata_only", "auto_approved": False}),
+                ),
+            )
+
+    reports = _write_green_g4_gate_reports(tmp_path)
+    stale_approval_report = tmp_path / "stale-human-approval.json"
+    stale_approval_report.write_text(
+        json.dumps(
+            {
+                "kind": "dogfood_g4_review_queue_approval_report",
+                "read_only": True,
+                "mutated": False,
+                "default_retrieval_unchanged": True,
+                "human_review_queue_approval_pass": True,
+                "reviewed_queue_refs": [
+                    {
+                        "queue_id": f"g4-review:reinforcement:fact:{current_fact.id}",
+                        "proposal_type": "reinforcement_review",
+                        "target_ref": f"fact:{stale_fact.id}",
+                    }
+                ],
+                "quality_gate": {"pass": True, "blocked_reasons": []},
+                "privacy": {
+                    "proposal_json_included": False,
+                    "raw_content_included": False,
+                    "raw_reason_included": False,
+                    "sample_values_included": False,
+                    "aggregate_or_ref_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "g4-review-queue-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--queue-limit",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--retrieval-ranking-report",
+            str(reports["ranking"]),
+            "--rollback-confidence-report",
+            str(reports["rollback_confidence"]),
+            "--rollback-replay-report",
+            str(reports["rollback_replay"]),
+            "--telemetry-reconciliation-report",
+            str(reports["telemetry"]),
+            "--human-review-approval-report",
+            str(stale_approval_report),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "PYTHONPATH": "src"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    reassessment = payload["broad_g4_apply_reassessment"]
+    human_report = reassessment["artifact_reports"]["human_review_queue_approval_pass"]
+    assert human_report["pass"] is False
+    assert "approval_report_missing_current_queue_reviews" in human_report["blocked_reasons"]
+    assert "human_review_queue_approval_pass" in reassessment["failed_gate_artifacts"]
+    assert reassessment["provided_gate_artifacts_pass"] is False
+    assert reassessment["artifact_gate_evidence"]["human_review_queue_approval_pass"] is False
+    assert reassessment["broad_g4_apply_allowed"] is False
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "STALE_SHOULD_NOT_LEAK" not in result.stdout
 
 
 def _write_green_g4_gate_reports(tmp_path: Path) -> dict[str, Path]:
@@ -4477,11 +4641,26 @@ def test_python_module_cli_dogfood_g4_operator_apply_bundle_is_ref_safe_read_onl
             ) VALUES (?, 'approved', 'reinforcement_review', ?, ?, 'preview-green', 'human-reviewer', ?, ?)
             """,
             (
-                "g4-review:reinforcement:operator-1",
+                f"g4-review:reinforcement:fact:{fact.id}",
                 f"fact:{fact.id}",
                 json.dumps({"secret": "SHOULD_NOT_LEAK", "reason_codes": ["frequent_activation"]}),
                 reason_sha256,
                 json.dumps([{"action": "approved", "reason_sha256": reason_sha256}]),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO g4_review_queue_items (
+                queue_id, status, proposal_type, target_ref, proposal_json,
+                source_preview_sha256, actor, reason_sha256, audit_json
+            ) VALUES (?, 'rejected', 'decay_risk_review', ?, ?, 'preview-green', 'human-reviewer', ?, ?)
+            """,
+            (
+                f"g4-review:decay-risk:fact:{fact.id}",
+                f"fact:{fact.id}",
+                json.dumps({"secret": "SHOULD_NOT_LEAK", "reason_codes": ["monitor_only_no_mutation"]}),
+                reason_sha256,
+                json.dumps([{"action": "rejected", "reason_sha256": reason_sha256}]),
             ),
         )
         for index in range(1, 4):
