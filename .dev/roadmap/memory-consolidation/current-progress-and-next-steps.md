@@ -1,7 +1,7 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 18:15 KST
+Last updated: 2026-05-28 19:15 KST
 
 
 
@@ -22,6 +22,23 @@ Last updated: 2026-05-28 18:15 KST
 
 
 
+
+## Current checkpoint: current live telemetry reconciliation green; bounded G4 manual apply preflight ready
+
+- Continued from the stable G4 review queue checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-telemetry-reconciliation-20260528T101539Z`.
+- First tried the stricter runway with the previous baseline fresh-epoch report plus the current report. It stayed red only because the older baseline report carried `high_epoch_empty_retrieval_ratio`: blocked reasons `['fresh_epoch_comparison_not_green', 'telemetry_reconciliation_not_green']`. No mutation was executed in this strict baseline attempt.
+- Current-only fresh live telemetry for epoch `2026-05-28 08:14:00` is green: fresh epoch pass=True, comparison pass=True, telemetry reconciliation pass=True; unresolved unknown empty-outcome total=0, trace coverage min=1.0, empty retrieval ratio max=0.4167.
+- Re-ran the G4 queue preview with current green telemetry plus the existing retrieval ranking, rollback confidence, and rollback replay artifacts. The current preview surfaced 12 rows and found 3 new current decay-risk review refs that were missing from the previous approval artifact: `g4-review:decay-risk:episode:1`, `g4-review:decay-risk:fact:8`, and `g4-review:decay-risk:procedure:1`.
+- Persisted those 3 current real-data queue refs only as G4 review metadata (`inserted_count=3`, `existing_count=9`), then rejected all 3 as `monitor_only_no_mutation` decay-risk items. No protected memory rows were applied or changed.
+- Current queue approval report is green: `total_count=27`, `approved_count=14`, `rejected_count=13`, `pending_count=0`, `human_review_queue_approval_pass=True`.
+- Current G4 preview, apply readiness, operator bundle, and readiness summary are green: preview pass=True, bounded apply readiness pass=True, operator bundle pass=True, readiness summary pass=True.
+- `apply_supported` remains `false` by design and `broad_g4_apply_allowed=false`; the state is only `bounded_partial_apply_ready=true` / `bounded_g4_preflight_summary_green_for_manual_operator_apply`, pending exact explicit operator approval phrase, backup, actor, reason, and max-apply bound.
+- No `g4-review-queue-apply`, fact/procedure/episode promotion, relation write, ranking/default retrieval mutation, core memory-status write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: stop before live G4 apply unless the operator explicitly approves the exact bounded apply command/phrase. If approved, use the current operator bundle artifact and keep `max_apply` bounded; otherwise keep dogfooding and refresh live evidence before any later apply attempt.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-g4-telemetry-reconciled-manual-apply-ready.md`
 
 ## Current checkpoint: stable G4 review queue classified; apply still blocked on telemetry reconciliation
 
@@ -3148,7 +3165,7 @@ Next after this release: handle `fact:1` isolated approved memory using relation
 ## G5i local checkpoint
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-13 11:08 KST
+Last updated: 2026-05-28 19:15 KST
 
 Runtime baseline remains `v0.1.146` at `/Users/reddit/.agent-memory/runtime/v0.1.146/.venv/bin/agent-memory`; fresh linkage evidence still includes `fresh_trace_linkage_gap_not_detected` and report directory `g4-v0138-20260512-132253`. Overall north-star: 72-74%.
 
