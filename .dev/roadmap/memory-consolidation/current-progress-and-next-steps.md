@@ -1,9 +1,31 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 03:39 KST
+Last updated: 2026-05-28 09:41 KST
 
 
+
+
+## Current checkpoint: generated trace-candidate skeletons reviewed and rejected as ungrounded
+
+- Continued from the pending trace-candidate cleanup checkpoint on the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or smoke DB was used.
+- Primary run directory: `/tmp/agent-memory-generated-trace-review-20260528T004039Z`.
+- Pre-checks were healthy: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pre-storage-health.json` and `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pre-trace-quality.json`.
+- Pending queue was already empty before this slice: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pending-before.json`, `count=0`.
+- Generated candidate review evidence: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-before.json` and `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-evidence-inspection.json`.
+- The generated set had `generated_candidate_count=7`; all seven lacked exact text evidence for durable human fields: `all_candidates_missing_exact_text_evidence=true`, `reviewable_with_exact_fields_count=0`, `insufficient_exact_human_fields_count=7`.
+- Evidence inspection found `trace_summary_nonempty_count=0` and `observation_query_nonempty_count=0` for every generated candidate. The candidates were based on memory-ref co-occurrence/metadata only, so they were not grounded enough for fact/procedure/episode promotion.
+- Action taken: persisted the generated skeletons only to make an explicit review decision, then rejected all seven with `reject-g5-trace-candidate-v1` rather than promoting from ref co-occurrence.
+- Persist artifact: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-candidate-persist.json`, `inserted_count=7`.
+- Reject audit: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-candidate-reject-updates.ndjson`, `rejected_update_count=7`.
+- Summary: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-trace-review-summary.json` reports `pending_after_reject_count=0`, `generated_after_reject_count=0`, `default_retrieval_unchanged_all_updates=true`, `apply_supported_any_update=false`, `promotion_ready_any_update=false`, and `raw_content_included_any_update=false`.
+- Core/live memory table counts did not change: `facts`, `procedures`, `episodes`, `relations`, `memory_status_transitions`, `g5_trace_candidate_applications`, `retrieval_observations`, `memory_activations`, and `experience_traces` all had delta `0`. Only `g5_trace_candidate_reviews` changed by `+7` to record explicit rejected review decisions.
+- Post-checks remained healthy: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/post-storage-health.json` and `/tmp/agent-memory-generated-trace-review-20260528T004039Z/post-trace-quality.json`.
+- No apply, fact/procedure/episode promotion, ranking mutation, core memory-status write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: the trace-candidate review lane is now clean (`pending=0`, generated candidates suppressed to `0` for this evidence window). Continue with fresh live read-only automation-policy/lifecycle/scheduled evidence checks. Do not promote future generated skeletons unless real evidence includes exact human fields beyond ref co-occurrence.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-generated-trace-candidate-no-promotion-review.md`
 
 ## Current checkpoint: pending trace-candidate review queue cleaned without core memory mutation
 

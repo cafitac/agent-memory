@@ -1,9 +1,50 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 03:39 KST
+Last updated: 2026-05-28 09:41 KST
 
 
+
+
+## Current checkpoint: generated trace-candidate skeletons reviewed and rejected as ungrounded
+
+Completed the next generated-candidate review step against the real live DB.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-generated-trace-review-20260528T004039Z`.
+- Pre health:
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pre-storage-health.json`: `status=healthy`.
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pre-trace-quality.json`: `status=healthy`.
+- Pending queue before this slice: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/pending-before.json`, `count=0`.
+- Generated skeleton review:
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-before.json`: `generated_candidate_count=7`.
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-evidence-inspection.json`: all seven candidates had `trace_summary_nonempty_count=0` and `observation_query_nonempty_count=0`.
+  - Decision: insufficient exact human fields; candidates were not promoted from ref co-occurrence.
+- Review-queue action:
+  - Persisted 7 generated skeletons for explicit review: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-candidate-persist.json`.
+  - Rejected all 7: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-candidate-reject-updates.ndjson`.
+- Summary: `/tmp/agent-memory-generated-trace-review-20260528T004039Z/generated-trace-review-summary.json`.
+  - `persist_inserted_count=7`.
+  - `rejected_update_count=7`.
+  - `pending_after_reject_count=0`.
+  - `generated_after_reject_count=0`.
+  - `default_retrieval_unchanged_all_updates=true`.
+  - `apply_supported_any_update=false`.
+  - Core memory/apply/telemetry table deltas were all `0`; only `g5_trace_candidate_reviews` changed by `+7` for rejected review decisions.
+- Post health:
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/post-storage-health.json`: `status=healthy`.
+  - `/tmp/agent-memory-generated-trace-review-20260528T004039Z/post-trace-quality.json`: `status=healthy`.
+
+Next safe action:
+
+1. Treat current trace-candidate lane as clean for this evidence window: pending `0`, generated after reject `0`.
+2. Continue with fresh live read-only automation-policy, lifecycle, and scheduled evidence checks.
+3. Do not promote generated candidates from ref co-occurrence, empty summaries, or empty query previews.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, default-ranking mutation, collapse/delete, telemetry reset, core memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+5. Continue to prefer real live DB/read-only or exact bounded live evidence over mocks; use focused tests only when code changes are made.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-generated-trace-candidate-no-promotion-review.md`
 
 ## Current checkpoint: pending trace-candidate review queue cleaned without core memory mutation
 
