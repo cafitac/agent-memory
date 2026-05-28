@@ -1,7 +1,7 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 16:43 KST
+Last updated: 2026-05-28 17:13 KST
 
 
 
@@ -19,6 +19,53 @@ Last updated: 2026-05-28 16:43 KST
 
 
 
+
+
+
+
+## Current checkpoint: G4 review queue persisted from real data; apply still blocked
+
+- Continued from the lifecycle/reinforcement read-only stop state using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-g4-readonly-20260528T081243Z`.
+- G4 review queue preview was read-only and green for manual review material: 12 ref-safe entries, with `reinforcement_review=6` and `decay_risk_review=6`; proposed actions were `review_reinforcement_signal_only=6` and `monitor_only_no_mutation=6`.
+- Initial apply readiness stayed red with `apply_supported=false`, blocked by missing/not-green human queue approval, telemetry reconciliation, retrieval ranking, rollback confidence, and rollback replay validation gates.
+- Existing queue before persistence had 4 rows (`approved=3`, `rejected=1`). Persisted current real-data G4 review material with actor `hermes-agent` and reason `persist current real-data g4 review material only; no apply`; `inserted_count=8`, `mutated=true`, `apply_supported=false`, `default_retrieval_unchanged=true`.
+- Queue after persistence has 12 rows: `pending=8`, `approved=3`, `rejected=1`; proposal counts are `reinforcement_review=6`, `decay_risk_review=6`.
+- G4 queue approval report is read-only and red on `pending_review_queue_items_present`. G4 preview and apply-readiness with the approval report attached still keep `apply_supported=false` and remain blocked by pending human review plus missing/not-green retrieval ranking, rollback confidence, rollback replay, and telemetry reconciliation gates.
+- No fact/procedure/episode promotion, memory apply, relation write, ranking/default retrieval mutation, core memory-status write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: use the persisted pending queue as the next exact review surface. Review/classify the 8 pending G4 queue rows with real DB evidence and keep apply blocked unless all required G4 gates are green: human review queue approval, retrieval ranking gate, rollback confidence, rollback replay validation, and live telemetry reconciliation. If those gates cannot be made green from current real data, stop at review evidence and do not apply.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-g4-review-queue-persisted-apply-blocked.md`
+
+## Current checkpoint: lifecycle/reinforcement read-only check found only already-applied targets
+
+- Continued from the exact remember-preferences corridor stop state using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-lifecycle-readonly-20260528T081030Z`.
+- Fresh lifecycle evidence is green: `post_apply_observation_count=161`, latest reinforcement application present at `2026-05-27 17:09:13`, surfaces `hermes-pre-llm-hook=161`, response modes `direct=98` and `verify_first=63`.
+- Reinforcement refresh preview produced `preview_candidate_count=6` and `new_candidate_count=6`, but all targets are already applied: `target_already_applied_count=6`, `new_unapplied_target_candidate_count=0`, source novelty `fresh_evidence_recycles_already_applied_targets`. Gate is red on `no_new_unapplied_target_lifecycle_candidates`.
+- Lifecycle apply readiness remains stopped: reinforcement has `promoted=7` and no approved/pending candidates; decay and supersession also have no approved candidates. Decision is `no_exact_lifecycle_apply_candidates_ready`.
+- Reinforcement refinement preview is green for human review only with `candidate_count=6`, but refresh readiness shows those targets are already applied, so there is no persistence/apply corridor.
+- No candidate persistence, candidate approval, lifecycle apply, fact/procedure/episode promotion, relation write, ranking/default retrieval mutation, core memory-status write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: do not continue lifecycle candidate persistence/apply from this window. The remaining fast live path is to check G4 review queue/readiness in read-only mode and proceed only if it surfaces exact current review material; otherwise stop and wait for new live evidence rather than inventing work from already-applied targets or empty ordinary-turn metadata.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-lifecycle-current-targets-already-applied.md`
+
+## Current checkpoint: exact remember-preferences corridor checked; no live eligible candidate
+
+- Continued from the ordinary-turn true-negative labeling checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used for the live decision.
+- Run directory: `/tmp/agent-memory-exact-approval-corridor-20260528T080743Z`.
+- Health remained green: storage `status=healthy`, trace quality `status=healthy`, warnings `[]`.
+- Direct explicit material remained exhausted: `review_ready_count=5`, `direct_material_count=5`, `eligible_count=0`, `skipped_count=5`, `blocked_count=0`, `reason_counts={"already_auto_approved": 5}`, `quality_gate.pass=true`.
+- Current `consolidation auto-approve remember-preferences` dry-run for `project:agent-memory` had `eligible_count=0`, `approved_count=0`, `blocked_count=0`, `deferred_count=0`, `skipped_count=5`; guardrails remained default-off and require apply plus actor/reason.
+- Read-only batch graduation check consumed three prior green one-at-a-time remember-preference post-apply verifiers: `report_count=3`, `green_verified_apply_count=3`, `verified_approved_count=3`. The gate is still red because the current dry-run has no eligible candidate: `current_dry_run_has_no_eligible_candidates`.
+- Read-only bounded-batch operator packet stayed red: blocked on `current_dry_run_has_no_eligible_candidates` and `graduation_readiness_gate_not_green`, with `apply_supported=false`, `apply_executed=false`, `eligible_count=0`, and `selected_preview_count=0`.
+- No fact/procedure/episode promotion, memory apply, candidate persistence, relation write, ranking/default retrieval mutation, core memory-status write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default auto-approval enablement was executed.
+
+Next step: stop the remember-preferences exact apply corridor until new explicit eligible `remember_intent` material appears. The next fast useful live path is to look for another exact review lane with current eligible material, starting read-only: fresh lifecycle/reinforcement or recurrent reinforcement readiness first, then G4 review queue/readiness only if preview outputs exact current material. Avoid more empty low-salience ordinary-turn labels unless predicted positives or exact durable human fields surface.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-exact-remember-preferences-corridor-no-eligible.md`
 
 ## Current checkpoint: ordinary-turn true-negative labels expanded to 363; inferred/apply still blocked
 
