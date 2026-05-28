@@ -13309,7 +13309,8 @@ def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> 
             false_negative += 1
         else:
             true_negative += 1
-    precision_percent = _percent(true_positive, true_positive + false_positive)
+    precision_denominator = true_positive + false_positive
+    precision_percent = _percent(true_positive, precision_denominator)
     recall_percent = _percent(true_positive, expected_positive_nonsecret)
     secret_block_rate_percent = _percent(blocked_secret_like, len(ordinary_turns))
     blocked_reasons: list[str] = []
@@ -13317,7 +13318,9 @@ def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> 
         blocked_reasons.append("labeled_ordinary_turn_count_below_minimum")
     if false_positive:
         blocked_reasons.append("false_positive_predictions_present")
-    if precision_percent < args.min_precision_percent:
+    if precision_denominator == 0:
+        blocked_reasons.append("positive_prediction_count_below_minimum")
+    elif precision_percent < args.min_precision_percent:
         blocked_reasons.append("precision_below_minimum")
     blocked_unique = sorted(set(blocked_reasons))
     payload = {
@@ -13344,6 +13347,8 @@ def _dogfood_ordinary_turn_classifier_eval_payload(args: argparse.Namespace) -> 
             "true_negative": true_negative,
             "false_negative": false_negative,
             "blocked_secret_like": blocked_secret_like,
+            "positive_prediction_count": precision_denominator,
+            "precision_applicable": precision_denominator > 0,
             "precision_percent": precision_percent,
             "recall_percent": recall_percent,
             "secret_block_rate_percent": secret_block_rate_percent,
@@ -13385,10 +13390,23 @@ def _load_ordinary_turn_eval_report_summary(report_path: Path) -> dict[str, Any]
     raw = json.loads(raw_text)
     if not isinstance(raw, dict):
         raise ValueError("ordinary_turn_eval_report_not_json_object")
-    trace_counts = raw.get("trace_counts") if isinstance(raw.get("trace_counts"), dict) else {}
-    evaluation = raw.get("evaluation") if isinstance(raw.get("evaluation"), dict) else {}
-    quality_gate = raw.get("quality_gate") if isinstance(raw.get("quality_gate"), dict) else {}
-    privacy = raw.get("privacy") if isinstance(raw.get("privacy"), dict) else {}
+    trace_counts_raw = raw.get("trace_counts")
+    evaluation_raw = raw.get("evaluation")
+    quality_gate_raw = raw.get("quality_gate")
+    privacy_raw = raw.get("privacy")
+    trace_counts: dict[str, Any] = trace_counts_raw if isinstance(trace_counts_raw, dict) else {}
+    evaluation: dict[str, Any] = evaluation_raw if isinstance(evaluation_raw, dict) else {}
+    quality_gate: dict[str, Any] = quality_gate_raw if isinstance(quality_gate_raw, dict) else {}
+    privacy: dict[str, Any] = privacy_raw if isinstance(privacy_raw, dict) else {}
+    precision_percent = int(evaluation.get("precision_percent", 0) or 0)
+    precision_applicable = bool(evaluation.get("precision_applicable", precision_percent > 0))
+    positive_prediction_count = int(
+        evaluation.get(
+            "positive_prediction_count",
+            int(evaluation.get("true_positive", 0) or 0) + int(evaluation.get("false_positive", 0) or 0),
+        )
+        or 0
+    )
     return {
         "report_path": str(report_path),
         "report_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
@@ -13400,7 +13418,9 @@ def _load_ordinary_turn_eval_report_summary(report_path: Path) -> dict[str, Any]
         "quality_gate_pass": bool(quality_gate.get("pass")),
         "quality_gate_blocked_reasons": [str(reason) for reason in quality_gate.get("blocked_reasons", [])],
         "labeled_ordinary_turn": int(trace_counts.get("labeled_ordinary_turn", 0) or 0),
-        "precision_percent": int(evaluation.get("precision_percent", 0) or 0),
+        "precision_percent": precision_percent,
+        "precision_applicable": precision_applicable,
+        "positive_prediction_count": positive_prediction_count,
         "false_positive": int(evaluation.get("false_positive", 0) or 0),
         "false_negative": int(evaluation.get("false_negative", 0) or 0),
         "privacy": privacy,
@@ -13431,7 +13451,9 @@ def _dogfood_ordinary_turn_eval_window_summary_payload(args: argparse.Namespace)
             blocked_reasons.append("eval_report_quality_gate_not_green")
         if summary["labeled_ordinary_turn"] < args.min_labeled_per_report:
             blocked_reasons.append("labeled_ordinary_turn_below_minimum")
-        if summary["precision_percent"] < args.min_precision_percent:
+        if summary["precision_applicable"] is not True:
+            blocked_reasons.append("positive_prediction_count_below_minimum")
+        elif summary["precision_percent"] < args.min_precision_percent:
             blocked_reasons.append("precision_below_minimum")
         if summary["false_positive"]:
             blocked_reasons.append("false_positive_predictions_present")
@@ -13452,6 +13474,7 @@ def _dogfood_ordinary_turn_eval_window_summary_payload(args: argparse.Namespace)
     precision_values = [summary["precision_percent"] for summary in summaries]
     false_positive_total = sum(summary["false_positive"] for summary in summaries)
     false_negative_total = sum(summary["false_negative"] for summary in summaries)
+    positive_prediction_total = sum(summary["positive_prediction_count"] for summary in summaries)
     payload = {
         "kind": "dogfood_ordinary_turn_eval_window_summary",
         "read_only": True,
@@ -13472,6 +13495,7 @@ def _dogfood_ordinary_turn_eval_window_summary_payload(args: argparse.Namespace)
             "labeled_ordinary_turn_max": max(labeled_values) if labeled_values else 0,
             "labeled_ordinary_turn_total": sum(labeled_values),
             "precision_percent_min": min(precision_values) if precision_values else 0,
+            "positive_prediction_total": positive_prediction_total,
             "false_positive_total": false_positive_total,
             "false_negative_total": false_negative_total,
         },
@@ -13481,6 +13505,8 @@ def _dogfood_ordinary_turn_eval_window_summary_payload(args: argparse.Namespace)
                 "report_sha256": summary["report_sha256"],
                 "quality_gate_pass": summary["quality_gate_pass"],
                 "labeled_ordinary_turn": summary["labeled_ordinary_turn"],
+                "precision_applicable": summary["precision_applicable"],
+                "positive_prediction_count": summary["positive_prediction_count"],
                 "precision_percent": summary["precision_percent"],
             }
             for summary in summaries

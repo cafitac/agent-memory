@@ -23809,6 +23809,8 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
         "true_negative": 1,
         "false_negative": 0,
         "blocked_secret_like": 1,
+        "positive_prediction_count": 2,
+        "precision_applicable": True,
         "precision_percent": 100,
         "recall_percent": 100,
         "secret_block_rate_percent": 25,
@@ -23842,6 +23844,71 @@ def test_dogfood_ordinary_turn_classifier_eval_scores_labeled_turns_without_appl
         "aggregate_only": True,
     }
     assert payload["recommended_next_step"] == "collect_more_labeled_ordinary_turn_windows_before_any_inferred_approval_corridor"
+    assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
+
+
+
+def test_dogfood_ordinary_turn_classifier_eval_reports_no_positive_predictions_separately(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "ordinary-turn-classifier-eval-no-positive.db"
+    output_path = tmp_path / "ordinary-turn-classifier-eval-no-positive.json"
+    initialize_database(db_path)
+    for index in range(3):
+        insert_experience_trace(
+            db_path,
+            surface="hermes-pre-llm-hook",
+            event_kind="turn",
+            content_sha256=str(index) * 64,
+            summary="Please run the local verification for this turn only.",
+            scope="project:g2",
+            retention_policy="ephemeral",
+            metadata={"ordinary_turn": True, "expected_memory_worthy": False},
+        )
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "ordinary-turn-classifier-eval",
+            str(db_path),
+            "--min-labeled",
+            "3",
+            "--min-precision-percent",
+            "95",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert payload["evaluation"] == {
+        "true_positive": 0,
+        "false_positive": 0,
+        "true_negative": 3,
+        "false_negative": 0,
+        "blocked_secret_like": 0,
+        "positive_prediction_count": 0,
+        "precision_applicable": False,
+        "precision_percent": 0,
+        "recall_percent": 0,
+        "secret_block_rate_percent": 0,
+    }
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "ordinary_turn_classifier_eval_not_ready_keep_auto_approval_blocked",
+        "blocked_reasons": ["positive_prediction_count_below_minimum"],
+    }
     assert _table_counts(db_path, ["experience_traces", "facts", "relations", "memory_status_transitions"]) == before_counts
 
 
@@ -24280,6 +24347,7 @@ def test_dogfood_ordinary_turn_eval_window_summary_requires_repeated_green_windo
         "labeled_ordinary_turn_max": 4,
         "labeled_ordinary_turn_total": 7,
         "precision_percent_min": 100,
+        "positive_prediction_total": 2,
         "false_positive_total": 0,
         "false_negative_total": 0,
     }
@@ -24306,7 +24374,19 @@ def test_dogfood_ordinary_turn_eval_window_summary_requires_repeated_green_windo
         "aggregate_only": True,
         "report_hashes_only": True,
     }
-    assert all(set(item) == {"report_path", "report_sha256", "quality_gate_pass", "labeled_ordinary_turn", "precision_percent"} for item in payload["report_summaries"])
+    assert all(
+        set(item)
+        == {
+            "report_path",
+            "report_sha256",
+            "quality_gate_pass",
+            "labeled_ordinary_turn",
+            "precision_applicable",
+            "positive_prediction_count",
+            "precision_percent",
+        }
+        for item in payload["report_summaries"]
+    )
 
 
 

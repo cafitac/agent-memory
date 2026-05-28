@@ -1,11 +1,30 @@
 # agent-memory current handoff
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 11:12 KST
+Last updated: 2026-05-28 12:45 KST
 
 
 
 
+
+
+## Current checkpoint: live ordinary-turn labels collected; classifier eval now distinguishes no-positive-prediction evidence
+
+- Continued from the live decay decision checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used for the live decision.
+- Primary run directory: `/tmp/agent-memory-ordinary-turn-live-20260528T033203Z`.
+- Storage health and trace quality remained healthy.
+- `remember-intent` over the latest 500 traces found `remember_intent=0`, `ordinary_turn=500`, `review_ready_count=0`, and `unsafe_sample_count=0`.
+- Ordinary-turn auto-approval readiness remains blocked on `explicit_remember_intent_ready_count_below_minimum`: `explicit_remember_intent=0`, `ordinary_turn=500`, `secret_like_ordinary_turns=0`, readiness score `75`.
+- Generated a live ordinary-turn label packet: 500 eligible non-secret unlabeled ordinary turns, 20 ref/hash-only review items, 480 deferred, 0 secret-like blocks.
+- Applied 20 exact `ordinary-turn-label-update` metadata labels with approval phrase `label-approved-ordinary-turn-v1` after conservative local review of empty-summary, non-secret, low-salience packet refs. This changed only experience-trace label metadata; it did not promote memories, apply memory changes, mutate ranking/default retrieval, write core memory status, collapse/delete, or enable auto-approval.
+- Live classifier eval after labeling has `labeled_ordinary_turn=20`, `true_negative=20`, `false_positive=0`, `false_negative=0`, `predicted_memory_worthy=0`, and `predicted_not_memory_worthy=500`.
+- Code change: `dogfood ordinary-turn-classifier-eval` now reports `positive_prediction_count` and `precision_applicable`, and blocks no-positive-prediction windows with `positive_prediction_count_below_minimum` instead of ambiguous `precision_below_minimum`. `ordinary-turn-eval-window-summary` propagates the same distinction and reports `positive_prediction_total`.
+- Post-fix live artifacts: `/tmp/agent-memory-ordinary-turn-live-20260528T033203Z/ordinary-turn-classifier-eval-post-contract.json` and `/tmp/agent-memory-ordinary-turn-live-20260528T033203Z/ordinary-turn-eval-window-summary-post-contract.json`. They are red because `positive_prediction_count=0`, not because of false positives or bad precision.
+- Focused verification: `uv run pytest tests/test_cli.py -q -k 'ordinary_turn_classifier_eval or ordinary_turn_eval_window_summary or ordinary_turn_inferred_approval_readiness'` passed (`6 passed, 253 deselected`).
+
+Next step: continue collecting/labeling real ordinary-turn evidence from the live DB. The current live window proves conservative true-negative behavior for low-salience turns, but there is still no positive-prediction evidence and no explicit remember-intent evidence. Keep ordinary conversation auto-approval, inferred approval/apply, broad/background/default mutation, default-ranking mutation, retrieval-ranking writes, core memory-status writes, collapse/delete/deprecate, telemetry reset, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-ordinary-turn-no-positive-predictions.md`
 
 ## Current checkpoint: live decay decision gate tightened; no reviewed decay candidate ready
 
