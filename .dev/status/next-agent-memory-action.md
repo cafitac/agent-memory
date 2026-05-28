@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 16:12 KST
+Last updated: 2026-05-28 16:43 KST
 
 
 
@@ -18,6 +18,24 @@ Last updated: 2026-05-28 16:12 KST
 
 
 
+
+
+## Current checkpoint: ordinary-turn true-negative labels expanded to 363; inferred/apply still blocked
+
+- Continued from the direct remember-intent review report checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used for the live decision.
+- Run directory: `/tmp/agent-memory-next-live-20260528T074021Z`.
+- Health remained green: storage `status=healthy`, trace quality `status=healthy`, warnings `[]`.
+- Latest live trace window had `total=4972`, `remember_intent=5`, `ordinary_turn=4967`; direct remember-intent review was unchanged with `review_ready_count=5`, `direct_material_count=5`, `eligible_count=0`, `skipped_count=5`, `blocked_count=0`, and `reason_counts={"already_auto_approved": 5}`.
+- Ordinary-turn label packet over the real live DB produced 150 review items from 4754 eligible unlabeled non-secret ordinary turns. All 150 were predicted non-memory-worthy, `classified_reason=none`, `retention_policy=ephemeral`, `summary_length_bucket=empty`, `secret_like=0`, `salience_band=low`, and `user_emphasis_band=zero`.
+- Applied 150 exact `ordinary-turn-label-update` metadata labels with approval phrase `label-approved-ordinary-turn-v1`, all `expected_memory_worthy=false`, because the surfaced evidence had no exact durable human field. This changed only `experience_traces.metadata_json` label metadata.
+- Post-label classifier eval over the live window: `labeled_ordinary_turn=363`, `true_negative=360`, `false_positive=3`, `false_negative=0`, `positive_prediction_count=3`, `precision_applicable=true`, `precision_percent=0`; gate remains red on `false_positive_predictions_present` and `precision_below_minimum`.
+- Repeated-window summary now has `report_count=5`, `labeled_ordinary_turn_total=772`, `positive_prediction_total=12`, `false_positive_total=12`, `false_negative_total=0`; gate remains red.
+- Inferred approval readiness remains blocked: `usable_for_readiness=false`, `ready_for_design=false`, `apply_supported=false`.
+- No fact/procedure/episode promotion, memory apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or auto-approval/default-background enablement was executed.
+
+Next step: do not keep spending time on empty low-salience ordinary-turn labels unless a future packet surfaces predicted positives or exact durable human fields. The next fast useful lane is a narrow exact-approval/apply corridor design or report contract that starts from already reviewed explicit material and stays separate from ordinary-turn auto-approval; if no exact candidate is surfaced, stop at read-only evidence rather than inventing promotion work.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-ordinary-turn-extended-false-labeling.md`
 
 ## Current checkpoint: direct remember-intent review report added; explicit traces already linked
 
