@@ -199,6 +199,98 @@ def _remember_intent_dogfood_report(db_path: Path, *, limit: int = 200, sample_l
     }
 
 
+
+def _remember_intent_direct_review_report(
+    db_path: Path,
+    *,
+    policy: str,
+    scope: str,
+    limit: int = 200,
+    sample_limit: int = 20,
+) -> dict[str, Any]:
+    if policy not in _REMEMBER_PREFERENCE_POLICIES:
+        raise ValueError("unsupported remember-intent direct review policy")
+    if not scope:
+        raise ValueError("--scope is required for remember-intent direct review")
+    traces = list_experience_traces(db_path, limit=limit, event_kind="remember_intent")
+    review_ready_traces = [trace for trace in traces if _remember_intent_trace_is_review_ready(trace)]
+    material: list[dict[str, Any]] = []
+    status_counts: Counter[str] = Counter()
+    reason_counts: Counter[str] = Counter()
+    for trace in review_ready_traces:
+        candidate = _remember_preference_auto_approval_candidate(db_path, trace, scope=scope)
+        decision = candidate.get("decision", "unknown")
+        status_counts[str(decision)] += 1
+        for reason_code in candidate.get("reason_codes", []):
+            reason_counts[str(reason_code)] += 1
+        item: dict[str, Any] = {
+            "trace_id": trace.id,
+            "trace_ref": f"experience_trace:{trace.id}",
+            "scope": trace.scope,
+            "summary": trace.summary if not _contains_secret_like_report_text(trace.summary) else None,
+            "decision": decision,
+            "reason_codes": candidate.get("reason_codes", []),
+            "candidate_policy": trace.metadata.get("candidate_policy"),
+            "auto_approved_metadata": trace.metadata.get("auto_approved"),
+            "secret_scan": trace.metadata.get("secret_scan"),
+        }
+        for key in ("proposed_fact", "memory_ref", "relation_id", "conflict_preflight"):
+            if key in candidate:
+                item[key] = candidate[key]
+        material.append(item)
+    selected_material = material[:sample_limit]
+    eligible_count = status_counts.get("eligible", 0)
+    skipped_count = status_counts.get("skipped", 0)
+    blocked_count = status_counts.get("blocked", 0)
+    quality_blockers: list[str] = []
+    if not review_ready_traces:
+        quality_blockers.append("no_review_ready_remember_intent_traces")
+    if blocked_count:
+        quality_blockers.append("blocked_direct_review_material_present")
+    if eligible_count:
+        next_step = "Review eligible direct trace material, then run the narrow one-at-a-time remember-preferences apply path if explicitly approved."
+    elif skipped_count == len(review_ready_traces) and review_ready_traces:
+        next_step = "All direct review-ready remember-intent traces are already linked to approved memories; stop before duplicate promotion."
+    else:
+        next_step = "Resolve blocked direct review material before any apply or promotion path."
+    return {
+        "kind": "remember_intent_direct_review_report",
+        "policy": policy,
+        "read_only": True,
+        "mutated": False,
+        "default_retrieval_unchanged": True,
+        "scope": scope,
+        "limit": limit,
+        "sample_limit": sample_limit,
+        "review_ready_count": len(review_ready_traces),
+        "direct_material_count": len(material),
+        "eligible_count": eligible_count,
+        "skipped_count": skipped_count,
+        "blocked_count": blocked_count,
+        "status_counts": dict(sorted(status_counts.items())),
+        "reason_counts": dict(sorted(reason_counts.items())),
+        "direct_review_material": selected_material,
+        "material_truncated_count": max(0, len(material) - len(selected_material)),
+        "quality_gate": {
+            "pass": not quality_blockers,
+            "decision": "remember_intent_direct_review_material_ready"
+            if not quality_blockers
+            else "fix_remember_intent_direct_review_material",
+            "blocked_reasons": quality_blockers,
+        },
+        "guardrails": {
+            "read_only_report_only": True,
+            "direct_trace_material_required": True,
+            "ordinary_turn_auto_approval": False,
+            "batch_apply_authorized": False,
+            "default_retrieval_ranking_mutation": False,
+            "secret_like_summaries_suppressed": True,
+        },
+        "next_step": next_step,
+    }
+
+
+
 _REMEMBER_PREFERENCE_POLICIES = {"remember-preferences-v1"}
 
 
@@ -24755,6 +24847,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dogfood_remember_parser.add_argument("db_path", type=Path)
     dogfood_remember_parser.add_argument("--limit", type=int, default=200)
     dogfood_remember_parser.add_argument("--sample-limit", type=int, default=10)
+    dogfood_remember_direct_parser = dogfood_subparsers.add_parser(
+        "remember-intent-direct-review",
+        help="Surface explicit remember-intent traces as direct reviewed-candidate material without graph clustering or mutation.",
+    )
+    dogfood_remember_direct_parser.add_argument("db_path", type=Path)
+    dogfood_remember_direct_parser.add_argument("--policy", default="remember-preferences-v1")
+    dogfood_remember_direct_parser.add_argument("--scope", required=True)
+    dogfood_remember_direct_parser.add_argument("--limit", type=int, default=200)
+    dogfood_remember_direct_parser.add_argument("--sample-limit", type=int, default=20)
     dogfood_storage_health_parser = dogfood_subparsers.add_parser(
         "storage-health",
         help="Build a read-only raw-content-safe storage health report for dogfood DB invariants before G4 automation.",
@@ -27048,6 +27149,24 @@ def main() -> None:
                 json.dumps(
                     _remember_intent_dogfood_report(
                         args.db_path,
+                        limit=args.limit,
+                        sample_limit=args.sample_limit,
+                    ),
+                    indent=2,
+                )
+            )
+            return
+        if args.dogfood_action == "remember-intent-direct-review":
+            if args.limit < 1:
+                raise ValueError("dogfood remember-intent-direct-review limit must be >= 1")
+            if args.sample_limit < 0:
+                raise ValueError("dogfood remember-intent-direct-review sample limit must be >= 0")
+            print(
+                json.dumps(
+                    _remember_intent_direct_review_report(
+                        args.db_path,
+                        policy=args.policy,
+                        scope=args.scope,
                         limit=args.limit,
                         sample_limit=args.sample_limit,
                     ),

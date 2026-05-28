@@ -12875,6 +12875,146 @@ def test_dogfood_remember_intent_report_summarizes_review_ready_traces_without_m
     assert _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"]) == before_counts
 
 
+def test_dogfood_remember_intent_direct_review_surfaces_direct_trace_material_without_mutation(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "remember-intent-direct-review.db"
+    initialize_database(db_path)
+    eligible_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="d" * 64,
+        summary="User prefers concise Korean progress checkpoints.",
+        scope="project:g1",
+        session_ref="session:eligible",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    skipped_trace = insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="e" * 64,
+        summary="User prefers real downloaded-install QA for releases.",
+        scope="project:g1",
+        session_ref="session:skipped",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={
+            "candidate_policy": "review_required",
+            "auto_approved": False,
+            "secret_scan": "passed",
+        },
+    )
+    source = ingest_source_text(
+        db_path,
+        source_type="remember_intent_trace",
+        content="User prefers real downloaded-install QA for releases.",
+        external_ref=f"experience_trace:{skipped_trace.id}",
+    )
+    fact = create_candidate_fact(
+        db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="real downloaded-install QA for releases",
+        evidence_ids=[source.id],
+        scope="project:g1",
+        confidence=0.8,
+    )
+    approved_fact = approve_memory(
+        db_path,
+        memory_type="fact",
+        memory_id=fact.id,
+        reason="direct review fixture",
+        actor="test",
+        evidence_ids=[source.id],
+    )
+    relation = insert_relation(
+        db_path,
+        from_ref=f"experience_trace:{skipped_trace.id}",
+        relation_type="auto_approved_as",
+        to_ref=f"fact:{approved_fact.id}",
+        evidence_ids=[source.id],
+        confidence=0.8,
+    )
+    insert_experience_trace(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        event_kind="remember_intent",
+        content_sha256="f" * 64,
+        summary="Project g2 prefers separate approval lanes.",
+        scope="project:g2",
+        session_ref="session:scope-blocked",
+        salience=1.0,
+        user_emphasis=1.0,
+        retention_policy="review",
+        metadata={"candidate_policy": "review_required", "auto_approved": False, "secret_scan": "passed"},
+    )
+
+    before_counts = _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"])
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "remember-intent-direct-review",
+            str(db_path),
+            "--policy",
+            "remember-preferences-v1",
+            "--scope",
+            "project:g1",
+            "--limit",
+            "20",
+            "--sample-limit",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "remember_intent_direct_review_report"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["review_ready_count"] == 3
+    assert payload["direct_material_count"] == 3
+    assert payload["eligible_count"] == 1
+    assert payload["skipped_count"] == 1
+    assert payload["blocked_count"] == 1
+    assert payload["status_counts"] == {"blocked": 1, "eligible": 1, "skipped": 1}
+    assert payload["reason_counts"]["already_auto_approved"] == 1
+    assert payload["reason_counts"]["scope_not_allowed"] == 1
+    by_trace_id = {item["trace_id"]: item for item in payload["direct_review_material"]}
+    assert by_trace_id[eligible_trace.id]["proposed_fact"] == {
+        "subject_ref": "user",
+        "predicate": "prefers",
+        "object_ref_or_value": "concise Korean progress checkpoints.",
+        "scope": "project:g1",
+    }
+    assert by_trace_id[skipped_trace.id]["memory_ref"] == f"fact:{approved_fact.id}"
+    assert by_trace_id[skipped_trace.id]["relation_id"] == relation.id
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "fix_remember_intent_direct_review_material",
+        "blocked_reasons": ["blocked_direct_review_material_present"],
+    }
+    assert _table_counts(db_path, ["experience_traces", "facts", "procedures", "episodes", "relations"]) == before_counts
+
+
 def test_consolidation_background_dry_run_writes_cron_friendly_read_only_report(tmp_path: Path) -> None:
     db_path = tmp_path / "background-dry-run.db"
     report_path = tmp_path / "reports" / "background-report.json"

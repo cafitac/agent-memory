@@ -1,7 +1,7 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 15:56 KST
+Last updated: 2026-05-28 16:12 KST
 
 
 
@@ -17,6 +17,23 @@ Last updated: 2026-05-28 15:56 KST
 
 
 
+
+
+## Current checkpoint: direct remember-intent review report added; explicit traces already linked
+
+- Continued from the explicit remember-intent candidate cross-check using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used for the live decision.
+- Run directory: `/tmp/agent-memory-explicit-remember-direct-20260528T160312Z`.
+- Added a narrow read-only CLI report, `dogfood remember-intent-direct-review`, to surface explicit `remember_intent` traces directly as review material instead of relying on broad graph-cluster generation.
+- Live `remember-intent` over the latest 5000 traces found `remember_intent=5`, `ordinary_turn=4948`, `review_ready_count=5`, and `unsafe_sample_count=0`.
+- Existing `consolidation auto-approve remember-preferences` dry-run showed `eligible_count=0`, `skipped_count=5`, `blocked_count=0`; every explicit trace was skipped because it was already linked through `auto_approved_as`.
+- New direct review report `/tmp/agent-memory-explicit-remember-direct-20260528T160312Z/remember-intent-direct-review.json` showed `review_ready_count=5`, `direct_material_count=5`, `eligible_count=0`, `skipped_count=5`, `blocked_count=0`, `reason_counts={"already_auto_approved": 5}`, and `quality_gate.pass=true`.
+- Direct trace links are `experience_trace:3768 -> fact:5`, `3767 -> fact:6`, `3766 -> fact:7`, `3765 -> fact:8`, and `3764 -> fact:9`.
+- Focused verification passed: `uv run pytest tests/test_cli.py -q -k 'remember_intent_direct_review or remember_intent_report'` (`2 passed, 259 deselected`).
+- No live mutation was executed in this slice: no candidate persistence, fact/procedure/episode promotion, memory apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or auto-approval/default-background enablement.
+
+Next step: stop the explicit remember-intent promotion lane for now because all five direct review-ready traces are already linked to approved facts. Do not duplicate-promote traces `3764`-`3768`; continue with real live evidence in another exact review lane only if `.dev` identifies new material, and keep ordinary-turn auto-approval/inferred apply blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-direct-remember-intent-review-report.md`
 
 ## Current checkpoint: explicit remember-intent candidate cross-check found no promotion corridor
 
