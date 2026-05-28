@@ -1,10 +1,27 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 10:43 KST
+Last updated: 2026-05-28 11:12 KST
 
 
 
+
+
+## Current checkpoint: live decay decision gate tightened; no reviewed decay candidate ready
+
+- Continued from the topic-aware supersession checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or copy-DB smoke was used for the live decision.
+- Primary run directory: `/tmp/agent-memory-next-live-readonly-20260528T110416`.
+- Fresh live read-only evidence confirmed health and current lane state: reinforcement preview still has 7 review-only candidates, lifecycle fresh evidence is green with `post_apply_observation_count=46`, lifecycle refresh has `new_unapplied_target_candidate_count=0` and `target_already_applied_count=7`, lifecycle apply readiness remains `no_exact_lifecycle_apply_candidates_ready`, and supersession has `candidate_count=0`.
+- Decay preview still has exactly one candidate, `fact:5`, with `resolution_hint=collect_more_activation_evidence_before_decay_action`; this is not a collapse/delete/deprecate approval.
+- Generated real live approved-memory retrieval fixtures only for evidence: 9 tasks (`facts=7`, `procedures=1`, `episodes=1`), retrieval diagnostics green, baseline regressions `0`.
+- Code change: `dogfood decay-collapse-decision` now reports `reviewed_deprecate_candidate_count`, `quality_gate`, `deprecate_apply_readiness`, and sets `allowed_next_policy=null` when no reviewed/approved decay candidate exists. This prevents a green decay preview from being misread as an actionable deprecate corridor.
+- Post-fix live artifact: `/tmp/agent-memory-next-live-readonly-20260528T110416/decay-collapse-decision-topic-aware-gate.json` reports `candidate_count=1`, `reviewed_deprecate_candidate_count=0`, `quality_gate.pass=false`, blocked reason `no_reviewed_approved_decay_candidates`, `deprecate_corridor=blocked_until_reviewed_approved_decay_candidate`, and `allowed_next_policy=null`.
+- Focused verification: `uv run pytest tests/test_cli.py -q -k 'decay_collapse_decision or decay_collapse_preview'` passed (`3 passed, 255 deselected`).
+- No apply, fact/procedure/episode promotion, ranking mutation, core memory-status write, relation write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: do not deprecate/collapse/delete `fact:5` from this evidence window. Continue with real live evidence; current reinforcement/lifecycle/supersession/decay lanes have no new exact apply candidate. The next fast useful path is read-only ordinary-turn readiness / explicit remember-intent evidence collection, or another report-contract tightening only if live evidence exposes ambiguity.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-decay-decision-no-reviewed-candidate.md`
 
 ## Current checkpoint: topic-aware supersession preview fixed; live supersession lane now has no exact candidate
 

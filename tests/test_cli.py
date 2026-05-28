@@ -15558,6 +15558,120 @@ def test_dogfood_decay_collapse_preview_reports_stale_weak_evidence_without_muta
     assert "query_preview" not in result.stdout
 
 
+def test_dogfood_decay_collapse_decision_blocks_deprecate_without_reviewed_candidate(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "decay-collapse-decision-no-reviewed.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5e decision source text and token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5e-decision"},
+    )
+    candidate_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5e decay decision",
+        predicate="needs",
+        object_ref_or_value="review before deprecate",
+        evidence_ids=[source.id],
+        scope="project:g5e-decision",
+        confidence=0.41,
+    )
+    fresh_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="G5e decay decision fresh",
+        predicate="needs",
+        object_ref_or_value="protected repeated evidence",
+        evidence_ids=[source.id],
+        scope="project:g5e-decision",
+        confidence=0.95,
+    )
+    approve_fact(db_path=db_path, fact_id=fresh_fact.id)
+    record_retrieval_observation(
+        db_path,
+        surface="hermes-pre-llm-hook",
+        query="SHOULD_NOT_LEAK candidate decay decision query",
+        preferred_scope="project:g5e-decision",
+        limit=5,
+        statuses=("approved", "candidate"),
+        retrieval_trace=[_fact_trace(candidate_fact.id, label="decision candidate")],
+        response_mode="verify_first",
+        metadata={"query_preview": "token=SHOULD_NOT_LEAK", "session_id": "g5e-decision-candidate"},
+    )
+    for index in range(4):
+        record_retrieval_observation(
+            db_path,
+            surface="cli",
+            query="SHOULD_NOT_LEAK fresh decay decision query",
+            preferred_scope="project:g5e-decision",
+            limit=5,
+            statuses=("approved",),
+            retrieval_trace=[_fact_trace(fresh_fact.id, label="fresh protected target")],
+            response_mode="verify_first",
+            metadata={"raw_prompt": "SHOULD_NOT_LEAK", "session_id": f"g5e-decision-fresh-{index}"},
+        )
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "decay-collapse-decision",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--frequent-threshold",
+            "3",
+            "--min-decay-score",
+            "0.5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_decay_collapse_decision"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["candidate_count"] == 1
+    assert payload["reviewed_deprecate_candidate_count"] == 0
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "decay_deprecate_corridor_blocked_or_collect_more_evidence",
+        "blocked_reasons": ["no_reviewed_approved_decay_candidates"],
+    }
+    assert payload["decision"]["deprecate_corridor"] == "blocked_until_reviewed_approved_decay_candidate"
+    assert payload["deprecate_apply_readiness"] == {
+        "policy": "g5-lifecycle-decay-deprecate-apply-v1",
+        "ready": False,
+        "reviewed_approved_decay_candidate_count": 0,
+        "mutation_allowed_by_decision_report": False,
+        "decision": "blocked_until_reviewed_approved_decay_candidate",
+    }
+    assert payload["allowed_next_policy"] is None
+    assert payload["collapse_equivalence_proof"]["collapse_apply_allowed"] is False
+    assert payload["collapse_equivalence_proof"]["delete_apply_allowed"] is False
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "source text" not in result.stdout
+    assert "query_preview" not in result.stdout
+
+
 
 def test_dogfood_decay_collapse_preview_handles_episode_source_ids_without_mutation(
     tmp_path: Path,

@@ -15542,20 +15542,47 @@ def _dogfood_decay_collapse_decision_payload(args: argparse.Namespace) -> dict[s
         if green_evidence_count > 0
         else "not_satisfied"
     )
+    preview_gate = preview.get("quality_gate", {})
+    reviewed_deprecate_ready = decay_review_count > 0
+    blocked_reasons: list[str] = []
+    if not bool(preview_gate.get("pass")):
+        blocked_reasons.append("decay_collapse_preview_not_green")
+    if not reviewed_deprecate_ready:
+        blocked_reasons.append("no_reviewed_approved_decay_candidates")
+    deprecate_decision = (
+        "supported_for_reviewed_approved_decay_candidates"
+        if reviewed_deprecate_ready
+        else "blocked_until_reviewed_approved_decay_candidate"
+    )
     payload = {
         "kind": "dogfood_decay_collapse_decision",
         "read_only": True,
         "mutated": False,
         "default_retrieval_unchanged": True,
         "candidate_count": candidate_count,
-        "preview_quality_gate": preview.get("quality_gate", {}),
+        "reviewed_deprecate_candidate_count": decay_review_count,
+        "preview_quality_gate": preview_gate,
+        "quality_gate": {
+            "pass": not blocked_reasons,
+            "decision": "decay_deprecate_corridor_ready_for_exact_reviewed_candidate"
+            if not blocked_reasons
+            else "decay_deprecate_corridor_blocked_or_collect_more_evidence",
+            "blocked_reasons": blocked_reasons,
+        },
         "decision": {
-            "deprecate_corridor": "supported_for_reviewed_approved_decay_candidates",
+            "deprecate_corridor": deprecate_decision,
             "collapse_corridor": "blocked_until_restore_replay_and_relation_equivalence_are_green",
             "delete_corridor": "blocked_no_delete_apply_path",
             "broader_background_apply": "blocked",
         },
-        "allowed_next_policy": "g5-lifecycle-decay-deprecate-apply-v1",
+        "deprecate_apply_readiness": {
+            "policy": "g5-lifecycle-decay-deprecate-apply-v1",
+            "ready": reviewed_deprecate_ready,
+            "reviewed_approved_decay_candidate_count": decay_review_count,
+            "mutation_allowed_by_decision_report": False,
+            "decision": deprecate_decision,
+        },
+        "allowed_next_policy": "g5-lifecycle-decay-deprecate-apply-v1" if reviewed_deprecate_ready else None,
         "blocked_policies": ["g5-lifecycle-collapse-apply-v1", "g5-lifecycle-delete-apply-v1"],
         "required_evidence_before_collapse": accepted_evidence,
         "collapse_equivalence_proof": {
