@@ -1,10 +1,34 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 10:18 KST
+Last updated: 2026-05-28 10:43 KST
 
 
 
+
+## Current checkpoint: topic-aware supersession preview fixed; next lanes remain bounded/read-only
+
+Completed the documented candidate inspection step against the real live DB.
+
+Completed work:
+
+- Run directory: `/tmp/agent-memory-next-candidate-review-20260528T103752Z`.
+- Live next-lane previews:
+  - reinforcement refinement: 7 review-only candidates; no preview-supported mutation path.
+  - decay collapse: 1 review-only candidate, `fact:5`, with `collect_more_activation_evidence_before_decay_action`.
+  - supersession: initial one-candidate result was a false positive caused by grouping independent `user prefers ...` facts only by broad claim slot.
+- Implemented topic-aware grouping in `dogfood supersession-preview` for `user/prefers` facts using the existing remember-preference topic key, and corrected its review command templates to existing `review explain` / `review history` / `review replacements` commands.
+- Post-fix live supersession artifact: `/tmp/agent-memory-next-candidate-review-20260528T103752Z/supersession-preview-topic-aware.json`, `candidate_count=0`, `read_only=true`, `mutated=false`, `default_retrieval_unchanged=true`.
+- Focused verification: `uv run pytest tests/test_cli.py -q -k 'supersession_preview'` passed (`3 passed, 254 deselected`).
+
+Next safe action:
+
+1. Do not create supersession/replacement edges for `fact:5` and `fact:9`; they are independent preference topics.
+2. Do not collapse/deprecate/delete `fact:5`; decay review still says collect more activation evidence.
+3. Continue from real live read-only evidence and only open a new bounded corridor if exact human-review evidence supports a specific candidate.
+4. Keep broad/background/default mutation, ordinary conversation auto-approval, default-ranking mutation, collapse/delete, telemetry reset, core memory-status writes, retrieval-ranking writes, and unreviewed promotion blocked.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-topic-aware-supersession-preview.md`
 
 ## Current checkpoint: fresh read-only automation-policy pass complete; next lanes are review-only
 

@@ -2862,14 +2862,21 @@ def _supersession_review_recommendation(review_score: dict[str, Any]) -> dict[st
     }
 
 
+def _supersession_group_key(fact) -> tuple[str, str, str, str | None]:
+    topic_key: str | None = None
+    if fact.subject_ref == "user" and fact.predicate == "prefers":
+        topic_key = _remember_preference_topic_key(fact.object_ref_or_value)
+    return (fact.subject_ref, fact.predicate, fact.scope, topic_key)
+
+
 def _same_claim_slot_supersession_candidates(db_path: Path, *, limit: int, top: int) -> list[dict[str, Any]]:
     facts = _list_supersession_preview_facts(db_path, limit=limit)
-    grouped: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str, str | None], list[Any]] = defaultdict(list)
     for fact in facts:
-        grouped[(fact.subject_ref, fact.predicate, fact.scope)].append(fact)
+        grouped[_supersession_group_key(fact)].append(fact)
 
     candidates: list[dict[str, Any]] = []
-    for (subject_ref, predicate, scope), slot_facts in grouped.items():
+    for (subject_ref, predicate, scope, topic_key), slot_facts in grouped.items():
         object_values = {fact.object_ref_or_value for fact in slot_facts}
         if len(slot_facts) < 2 or len(object_values) < 2:
             continue
@@ -2889,6 +2896,7 @@ def _same_claim_slot_supersession_candidates(db_path: Path, *, limit: int, top: 
                     "predicate": predicate,
                     "scope": scope,
                     "fact_count": len(slot_facts),
+                    "preference_topic_key": topic_key,
                 },
                 "older_fact_ref": _fact_review_ref(older_fact.id),
                 "newer_fact_ref": _fact_review_ref(newer_fact.id),
@@ -2912,8 +2920,9 @@ def _same_claim_slot_supersession_candidates(db_path: Path, *, limit: int, top: 
                 "review_score": review_score,
                 "review_recommendation": _supersession_review_recommendation(review_score),
                 "review_commands": {
-                    "review_older": f"agent-memory review fact {db_path} {older_fact.id}",
-                    "review_newer": f"agent-memory review fact {db_path} {newer_fact.id}",
+                    "review_older": f"agent-memory review explain fact {db_path} {older_fact.id}",
+                    "review_newer": f"agent-memory review explain fact {db_path} {newer_fact.id}",
+                    "review_history_older": f"agent-memory review history fact {db_path} {older_fact.id}",
                     "review_replacements_older": f"agent-memory review replacements fact {db_path} {older_fact.id}",
                     "future_guarded_apply": "not_supported_by_preview",
                 },

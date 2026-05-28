@@ -1,10 +1,27 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 10:18 KST
+Last updated: 2026-05-28 10:43 KST
 
 
 
+
+## Current checkpoint: topic-aware supersession preview fixed; live supersession lane now has no exact candidate
+
+- Continued from the fresh live read-only automation-policy checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB or smoke DB was used for the live decision.
+- Primary run directory: `/tmp/agent-memory-next-candidate-review-20260528T103752Z`.
+- Re-ran the concrete next-lane preview artifacts as review material only: reinforcement refinement, decay collapse, and supersession.
+- Reinforcement refinement remained review-only with 7 candidates: high-tier `procedure:1`, `fact:1`, `episode:1`, `fact:6`, `fact:4`, `fact:8`; low-tier `fact:5`. No mutation/apply path was supported by the preview.
+- Decay collapse remained review-only with 1 candidate, `fact:5`, whose resolution hint is `collect_more_activation_evidence_before_decay_action`; this does not support collapse/deprecation/delete.
+- The live supersession preview originally reported one high-tier `same_claim_slot_conflict` between `fact:5` and `fact:9`. Real DB review/history/graph evidence showed they are independent user preferences under the broad `(user, prefers, project:agent-memory)` slot, not a replacement/supersession pair.
+- Code change: `dogfood supersession-preview` now groups `user prefers ...` memories by the existing remember-preference topic key before treating them as same-slot supersession candidates, and its review command templates now use valid `review explain` / `review history` / `review replacements` commands. Independent preference topics no longer produce false positive supersession candidates; same-topic preference contradictions and non-preference same-slot conflicts remain reviewable.
+- Post-fix live artifact: `/tmp/agent-memory-next-candidate-review-20260528T103752Z/supersession-preview-topic-aware.json` reports `candidate_count=0`, `read_only=true`, `mutated=false`, and `default_retrieval_unchanged=true`; quality gate is red only on `no_supersession_candidates_ready`.
+- Focused verification: `uv run pytest tests/test_cli.py -q -k 'supersession_preview'` passed (`3 passed, 254 deselected`).
+- No apply, fact/procedure/episode promotion, ranking mutation, core memory-status write, relation write, collapse/delete, telemetry reset, or background/default automation was executed.
+
+Next step: do not open a supersession/replacement corridor from `fact:5`/`fact:9`. Continue with real live read-only evidence; reinforcement refinement still needs a separate guarded policy before any mutation, and `fact:5` decay remains collect-more-evidence only.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-topic-aware-supersession-preview.md`
 
 ## Current checkpoint: fresh live read-only automation-policy checks green; lifecycle/apply lanes still stopped
 

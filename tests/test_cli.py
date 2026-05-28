@@ -15737,6 +15737,7 @@ def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(
         "predicate": "uses_version",
         "scope": "project:g5f",
         "fact_count": 2,
+        "preference_topic_key": None,
     }
     assert candidate["older_fact_ref"] == f"fact:{old_fact.id}"
     assert candidate["newer_fact_ref"] == f"fact:{new_fact.id}"
@@ -15753,8 +15754,9 @@ def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(
         "mutation_supported": False,
     }
     assert candidate["review_commands"] == {
-        "review_older": f"agent-memory review fact {db_path} {old_fact.id}",
-        "review_newer": f"agent-memory review fact {db_path} {new_fact.id}",
+        "review_older": f"agent-memory review explain fact {db_path} {old_fact.id}",
+        "review_newer": f"agent-memory review explain fact {db_path} {new_fact.id}",
+        "review_history_older": f"agent-memory review history fact {db_path} {old_fact.id}",
         "review_replacements_older": f"agent-memory review replacements fact {db_path} {old_fact.id}",
         "future_guarded_apply": "not_supported_by_preview",
     }
@@ -15775,6 +15777,154 @@ def test_dogfood_supersession_preview_reports_claim_conflicts_without_mutation(
     assert "source text" not in result.stdout
     assert "v0.1.142" not in result.stdout
     assert "v0.1.143" not in result.stdout
+
+
+def test_dogfood_supersession_preview_keeps_independent_preferences_separate(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "supersession-preference-topics.db"
+    output_path = tmp_path / "supersession-preference-topics.json"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5f preference topic source text token=SHOULD_NOT_LEAK must not leak.",
+        metadata={"project": "g5f-supersession-preferences"},
+    )
+    release_qa = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="real downloaded-install QA for agent-memory milestone releases.",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.8,
+    )
+    autonomous_runs = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="autonomous agent-memory progress when next steps are clear.",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.8,
+    )
+    approve_fact(db_path=db_path, fact_id=release_qa.id)
+    approve_fact(db_path=db_path, fact_id=autonomous_runs.id)
+    before_counts = _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    )
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "supersession-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+            "--output",
+            str(output_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "dogfood_supersession_preview"
+    assert payload["read_only"] is True
+    assert payload["mutated"] is False
+    assert payload["default_retrieval_unchanged"] is True
+    assert payload["candidate_count"] == 0
+    assert payload["supersession_candidates"] == []
+    assert payload["quality_gate"] == {
+        "pass": False,
+        "decision": "continue_supersession_dogfooding_before_review",
+        "blocked_reasons": ["no_supersession_candidates_ready"],
+    }
+    assert output_path.exists()
+    assert json.loads(output_path.read_text()) == payload
+    assert _table_counts(
+        db_path,
+        ["experience_traces", "retrieval_observations", "memory_activations", "facts", "relations"],
+    ) == before_counts
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "downloaded-install" not in result.stdout
+    assert "autonomous agent-memory" not in result.stdout
+
+
+def test_dogfood_supersession_preview_reports_same_preference_topic_conflicts(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "supersession-same-preference-topic.db"
+    initialize_database(db_path)
+    source = ingest_source_text(
+        db_path=db_path,
+        source_type="note",
+        content="G5f same preference topic source text token=SHOULD_NOT_LEAK must not leak.",
+    )
+    old_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="manual release QA.",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.7,
+    )
+    new_fact = create_candidate_fact(
+        db_path=db_path,
+        subject_ref="user",
+        predicate="prefers",
+        object_ref_or_value="real downloaded-install QA for agent-memory milestone releases.",
+        evidence_ids=[source.id],
+        scope="project:agent-memory",
+        confidence=0.9,
+    )
+    approve_fact(db_path=db_path, fact_id=old_fact.id)
+    approve_fact(db_path=db_path, fact_id=new_fact.id)
+
+    env = {**os.environ, "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_memory.api.cli",
+            "dogfood",
+            "supersession-preview",
+            str(db_path),
+            "--limit",
+            "20",
+            "--top",
+            "5",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["candidate_count"] == 1
+    candidate = payload["supersession_candidates"][0]
+    assert candidate["claim_slot"]["predicate"] == "prefers"
+    assert candidate["claim_slot"]["scope"] == "project:agent-memory"
+    assert candidate["claim_slot"]["fact_count"] == 2
+    assert candidate["claim_slot"]["preference_topic_key"] == "release_qa"
+    assert candidate["older_fact_ref"] == f"fact:{old_fact.id}"
+    assert candidate["newer_fact_ref"] == f"fact:{new_fact.id}"
+    assert "SHOULD_NOT_LEAK" not in result.stdout
+    assert "downloaded-install" not in result.stdout
 
 
 def test_dogfood_lifecycle_candidate_registry_persists_lists_and_updates_supersession(
