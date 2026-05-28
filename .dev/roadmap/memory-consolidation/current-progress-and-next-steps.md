@@ -1,7 +1,7 @@
 # agent-memory memory-consolidation current progress and next steps
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-28 19:15 KST
+Last updated: 2026-05-28 19:43 KST
 
 
 
@@ -22,6 +22,22 @@ Last updated: 2026-05-28 19:15 KST
 
 
 
+
+## Current checkpoint: bounded live G4 one-item apply verified; stop before any further mutation
+
+- Continued from the live G4 telemetry-reconciled preflight checkpoint using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB and no copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-g4-live-apply-20260528T103930Z`.
+- Refreshed current real-data pre-apply gates from epoch `2026-05-28T08:14:00Z`: fresh epoch, fresh-epoch comparison, telemetry reconciliation, retrieval ranking shadow, rollback confidence, rollback replay, human queue approval, queue preview, apply readiness, operator bundle, and readiness summary all green.
+- Executed exactly one bounded live G4 review-queue apply with `max_apply=1`: queue id `g4-review:reinforcement:procedure:1`, target `procedure:1`, policy `g4-review-queue-apply-v1`, approval phrase `apply-approved-g4-review-queue-items-v1`.
+- Backup created before mutation: `/private/tmp/agent-memory-g4-live-apply-20260528T103930Z/memory-before-g4-review-queue-apply.sqlite3`, sha256 `8d255eaea690f75a2ecb7d19bbe3dc41de0b42512575510e8b425bcc53bfaf95`.
+- Apply result: `mutated=True`, `applied_count=1`, `already_applied_count=0`, `skipped_count=0`, action `apply_reinforcement_marker`, `memory_reinforcement_mutated=True`, `default_retrieval_unchanged=True`, `memory_status_mutated=False`, `ordinary_conversation_auto_approval=False`.
+- Targeted DB verification: `procedures.id=1` reinforcement_count is now `2132.0`; `g4_review_queue_applications` contains the new row for `g4-review:reinforcement:procedure:1`; pending G4 queue count is `0`; total G4 application rows are `4`.
+- Post-apply verification is green: rollback replay pass=True, post-apply operator bundle pass=True/read-only, `g4-post-apply-verification` decision `g4_post_apply_verification_green_stop_before_next_mutation`; storage health and trace quality are healthy with no warnings.
+- No broad G4/background apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: stop before any further live mutation. A second G4 apply requires fresh live evidence, a fresh operator packet, explicit approval, backup, actor, reason, and a new max-apply bound.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-g4-one-item-apply-verified.md`
 
 ## Current checkpoint: current live telemetry reconciliation green; bounded G4 manual apply preflight ready
 
