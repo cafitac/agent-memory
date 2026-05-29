@@ -1,7 +1,7 @@
 # agent-memory next action
 
 Status: AI-authored draft. Not yet human-approved.
-Last updated: 2026-05-29 20:25 KST
+Last updated: 2026-05-29 20:40 KST
 
 
 
@@ -23,6 +23,24 @@ Last updated: 2026-05-29 20:25 KST
 
 
 
+## Current checkpoint: bounded live G4 fact:5 one-item apply verified; stop before any further mutation
+
+- Continued from the bounded live G4 fact:8 one-item stop gate using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB and no copy-DB smoke was used.
+- Run directory: `/tmp/agent-memory-next-g4-seventh-20260529T113748Z`.
+- Refreshed current real-data pre-apply gates from epoch `2026-05-29T11:15:24Z`: fresh epoch, fresh-epoch comparison, telemetry reconciliation, live retrieval ranking fixtures plus retrieval ranking shadow, rollback confidence, rollback replay, human queue approval, queue preview, apply readiness, operator bundle, and readiness summary were green for a bounded manual G4 apply.
+- The fresh epoch had `observation_count=21`, `trace_count=21`, `activation_count=59`, trace coverage `1.0`, empty retrieval ratio `0.2381`, unresolved unknown empty outcomes `0`, and latest live evidence at `2026-05-29 11:36:39` before apply.
+- Retrieval ranking shadow used 9 live approved-memory fixtures with `baseline_regression_count=0`; default retrieval stayed `conservative_legacy`/approved-only unchanged.
+- Current G4 preview had `queue_count=14`; queue approval report had `approved_count=14`, `rejected_count=13`, `pending_count=0`.
+- Executed exactly one bounded live G4 review-queue apply with `max_apply=1`: queue id `g4-review:reinforcement:fact:5`, target `fact:5`, policy `g4-review-queue-apply-v1`, approval phrase `apply-approved-g4-review-queue-items-v1`.
+- Backup created before mutation: `/private/tmp/agent-memory-next-g4-seventh-20260529T113748Z/memory-before-g4-review-queue-apply-fact5.sqlite3`, sha256 `948e591aa7940b336be513ab89bf58865323d9fcef89bcd571bbd092e87399ff`.
+- Apply result: `mutated=True`, `applied_count=1`, `already_applied_count=0`, `skipped_count=0`, action `apply_reinforcement_marker`, `memory_reinforcement_mutated=True`, `default_retrieval_unchanged=True`, `memory_status_mutated=False`, `ordinary_conversation_auto_approval=False`.
+- Targeted DB verification: `facts.id=5` reinforcement_count moved from `133.0` to `134.0`; retrieval_count stayed `132`; status stayed `approved`. `g4_review_queue_applications` contains the new row for `g4-review:reinforcement:fact:5`; pending G4 queue count is `0`; total G4 application rows moved from `9` to `10`.
+- Post-apply verification is green: post rollback replay pass=True, post-apply operator bundle pass=True/read-only, `g4-post-apply-verification` decision `g4_post_apply_verification_green_stop_before_next_mutation`; post storage health reports `healthy` with warnings `[]`; post fresh-epoch and one-hour trace quality are both `healthy` with warnings `[]`.
+- No broad G4/background apply, ranking/default retrieval mutation, core memory-status write, relation write, collapse/delete/deprecate, telemetry reset, or ordinary-turn/background/default automation enablement was executed.
+
+Next step: stop before any further live mutation. An eighth G4 apply requires fresh live evidence, a fresh operator packet, explicit approval, backup, actor, reason, and a new max-apply bound. If continuing speed-first, restart from real live read-only gates and only apply one bounded reviewed queue item if the full preflight stays green.
+
+Reference: `.dev/roadmap/memory-consolidation/references/post-v0.1.162-live-g4-fact5-one-item-apply-verified.md`
 ## Current checkpoint: bounded live G4 fact:8 one-item apply verified; stop before any further mutation
 
 - Continued from the bounded live G4 fact:4 one-item stop gate using the real live DB `/Users/reddit/.agent-memory/memory.db`; no mock DB and no copy-DB smoke was used.
